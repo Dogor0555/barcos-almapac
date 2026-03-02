@@ -1,3 +1,5 @@
+// barco/[token]/page.js - Página principal para registro de viajes, lecturas de banda y bitácora de flujos por producto
+
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'

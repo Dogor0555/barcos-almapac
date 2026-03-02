@@ -1,3 +1,5 @@
+// admin/GenerarDashboardModal.js - Modal para generar y compartir el dashboard de un barco
+
 'use client'
 
 import { useState } from 'react'

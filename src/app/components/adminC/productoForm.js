@@ -1,3 +1,5 @@
+// components/adminC/ProductoForm.js - Formulario para crear o editar productos en el panel de administración
+
 'use client'
 
 import { useState, useEffect } from 'react'

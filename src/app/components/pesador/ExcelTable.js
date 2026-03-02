@@ -1,3 +1,5 @@
+// components/pesador/ExcelTable.js - Componente para mostrar el historial de viajes en un formato tipo Excel, con opciones de edición y eliminación
+
 'use client'
 
 import { useState } from 'react'

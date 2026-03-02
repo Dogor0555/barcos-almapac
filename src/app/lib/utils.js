@@ -1,3 +1,4 @@
+// lib/utils.js - Funciones de utilidad para formateo de datos, cálculos y asignación de colores e iconos por producto
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 dayjs.locale('es')

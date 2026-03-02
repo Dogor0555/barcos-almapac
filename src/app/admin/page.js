@@ -1,3 +1,4 @@
+// admin/page.js - Panel de administración completo con soporte para importación/exportación
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -5,240 +6,33 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 import { getCurrentUser, isAdmin, logout } from '../lib/auth'
 import { 
-  Plus, LogOut, Ship, Users, Package, Trash2, Eye, 
-  Copy, ExternalLink, Truck, Download, FileJson, Database,
-  Edit2, Grid, Scale, Activity, Clock, AlertCircle, X,
-  BookOpen, MessageSquare, Calendar, QrCode, CheckCircle  
+  Plus, LogOut, Ship, Users, Package, Trash2, Copy, 
+  ExternalLink, Truck, Download, Database, Edit2, Grid, 
+  Scale, Activity, Clock, AlertCircle, X, BookOpen, 
+  MessageSquare, Calendar, QrCode, CheckCircle, Import, 
+  Upload as Export,  // 👈 Esto renombra Upload a Export
+  Anchor, BarChart3, TrendingUp, Filter, Search,
+  Eye, RefreshCw, FileText, Settings, UserCog, Shield,
+  Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
-import ProductoForm from '../components/adminC/productoForm.js'
-import GenerarDashboardModal from '../admin/GenerarDashboardModal'
+import ProductoForm from '../components/adminC/productoForm'
+import GenerarDashboardModal from './GenerarDashboardModal'
 import Link from 'next/link'
 import dayjs from 'dayjs'
+import 'dayjs/locale/es'
+dayjs.locale('es')
 
-// Componente Modal para mostrar viajes en paso 1
-const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
-  const [viajesPaso1, setViajesPaso1] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [resumenPorProducto, setResumenPorProducto] = useState({})
-
-  useEffect(() => {
-    if (barco) {
-      cargarViajesPaso1()
-    }
-  }, [barco])
-
-  const cargarViajesPaso1 = async () => {
-    try {
-      setLoading(true)
-      
-      // Cargar viajes en estado 'incompleto' para este barco
-      const { data: viajes, error } = await supabase
-        .from('viajes')
-        .select(`
-          *,
-          producto:producto_id(codigo, nombre, icono),
-          destino:destino_id(codigo, nombre)
-        `)
-        .eq('barco_id', barco.id)
-        .eq('estado', 'incompleto')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      setViajesPaso1(viajes || [])
-
-      // Calcular resumen por producto
-      const resumen = {}
-      viajes?.forEach(viaje => {
-        const prodId = viaje.producto_id
-        if (!resumen[prodId]) {
-          resumen[prodId] = {
-            producto: viaje.producto,
-            cantidad: 0,
-            tonelajeTotal: 0,
-            viajes: []
-          }
-        }
-        resumen[prodId].cantidad++
-        resumen[prodId].tonelajeTotal += Number(viaje.peso_neto_updp_tm) || 0
-        resumen[prodId].viajes.push(viaje)
-      })
-
-      setResumenPorProducto(resumen)
-    } catch (error) {
-      console.error('Error cargando viajes paso 1:', error)
-      toast.error('Error al cargar viajes pendientes')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCompletarViaje = (viajeId) => {
-    // Abrir la página del barco en el token correspondiente
-    window.open(`/barco/${barco.token_compartido}`, '_blank')
-    toast.success('Abriendo registro para completar viaje')
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-yellow-500/20 p-3 rounded-xl">
-              <Clock className="w-8 h-8 text-yellow-400" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-white flex items-center gap-2">
-                Viajes en Paso 1 - {barco.nombre}
-              </h2>
-              <p className="text-blue-200 text-sm">
-                Viajes registrados que aún no tienen destino asignado
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
-          >
-            <X className="w-6 h-6 text-white" />
-          </button>
-        </div>
-
-        {/* Contenido */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-            </div>
-          ) : viajesPaso1.length === 0 ? (
-            <div className="bg-slate-900 rounded-2xl p-12 text-center">
-              <div className="bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-10 h-10 text-green-400" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">¡No hay viajes pendientes!</h3>
-              <p className="text-slate-400">Todos los viajes de {barco.nombre} han sido completados</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Resumen rápido */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 rounded-xl p-4 border border-yellow-500/20">
-                  <p className="text-xs text-slate-400">Total Viajes Pendientes</p>
-                  <p className="text-3xl font-black text-yellow-400">{viajesPaso1.length}</p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4 col-span-3">
-                  <p className="text-xs text-slate-400 mb-2">Resumen por Producto</p>
-                  <div className="flex flex-wrap gap-3">
-                    {Object.values(resumenPorProducto).map((item, idx) => (
-                      <div key={idx} className="bg-slate-800 px-3 py-2 rounded-lg flex items-center gap-2">
-                        <span className="text-xl">{item.producto?.icono || '📦'}</span>
-                        <div>
-                          <p className="text-sm font-bold text-white">{item.producto?.nombre}</p>
-                          <p className="text-xs text-yellow-400">{item.cantidad} viajes · {item.tonelajeTotal.toFixed(3)} TM</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Lista de viajes por producto */}
-              {Object.entries(resumenPorProducto).map(([productoId, item]) => (
-                <div key={productoId} className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
-                  <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{item.producto?.icono || '📦'}</span>
-                      <div>
-                        <h3 className="font-bold text-white">{item.producto?.nombre}</h3>
-                        <p className="text-xs text-slate-400">{item.producto?.codigo}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-sm text-slate-400">Viajes</p>
-                        <p className="text-xl font-bold text-yellow-400">{item.cantidad}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-slate-400">Tonelaje</p>
-                        <p className="text-xl font-bold text-blue-400">{item.tonelajeTotal.toFixed(3)} TM</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-800/50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase"># Viaje</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Placa</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Salida UPDP</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Entrada Almapac</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Peso Neto (TM)</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {item.viajes.map(viaje => (
-                          <tr key={viaje.id} className="hover:bg-white/5">
-                            <td className="px-4 py-3 font-bold text-white">#{viaje.viaje_numero}</td>
-                            <td className="px-4 py-3 text-slate-300">{dayjs(viaje.fecha).format('DD/MM/YYYY')}</td>
-                            <td className="px-4 py-3 font-mono text-blue-400">{viaje.placa}</td>
-                            <td className="px-4 py-3">{viaje.hora_salida_updp || '—'}</td>
-                            <td className="px-4 py-3">{viaje.hora_entrada_almapac || '—'}</td>
-                            <td className="px-4 py-3 font-bold text-green-400">{viaje.peso_neto_updp_tm?.toFixed(3) || '—'}</td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => handleCompletarViaje(viaje.id)}
-                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
-                              >
-                                <Truck className="w-3 h-3" />
-                                Completar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
-
-              {/* Instrucciones */}
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                <p className="text-sm text-blue-400 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  Para completar un viaje, haz clic en "Completar" y se abrirá la página de registro del barco. 
-                  Allí podrás asignar el destino, hora de salida y peso final.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-white/10 p-4 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Componente Modal para mostrar bitácora por producto
-const BitacoraProductoModal = ({ barco, onClose }) => {
-  const [bitacora, setBitacora] = useState([])
+// =====================================================
+// MODAL PARA VER EXPORTACIONES POR PRODUCTO
+// =====================================================
+const ExportacionesProductoModal = ({ barco, onClose }) => {
+  const [exportaciones, setExportaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [productos, setProductos] = useState([])
   const [productoSeleccionado, setProductoSeleccionado] = useState(null)
+  const [barcosDestino, setBarcosDestino] = useState({})
 
   useEffect(() => {
     if (barco) {
@@ -268,7 +62,20 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
       
       if (productosData?.length > 0) {
         setProductoSeleccionado(productosData[0].id)
-        await cargarBitacora(barco.id, productosData[0].id)
+        await cargarExportaciones(barco.id, productosData[0].id)
+      }
+
+      // Cargar barcos destino
+      const barcosDestinoIds = barco.metas_json?.barcos_destino || []
+      if (barcosDestinoIds.length > 0) {
+        const { data: barcosData } = await supabase
+          .from('barcos')
+          .select('id, nombre, codigo_barco')
+          .in('id', barcosDestinoIds)
+
+        const mapa = {}
+        barcosData?.forEach(b => { mapa[b.id] = b })
+        setBarcosDestino(mapa)
       }
     } catch (error) {
       console.error('Error cargando datos:', error)
@@ -276,23 +83,24 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
     }
   }
 
-  const cargarBitacora = async (barcoId, productoId) => {
+  const cargarExportaciones = async (barcoId, productoId) => {
     try {
       const { data, error } = await supabase
-        .from('bitacora_flujos')
+        .from('exportacion_banda')
         .select(`
           *,
-          producto:producto_id(codigo, nombre, icono)
+          producto:producto_id(codigo, nombre, icono),
+          destino_barco:destino_barco_id(id, nombre, codigo_barco)
         `)
         .eq('barco_id', barcoId)
         .eq('producto_id', productoId)
         .order('fecha_hora', { ascending: false })
 
       if (error) throw error
-      setBitacora(data || [])
+      setExportaciones(data || [])
     } catch (error) {
-      console.error('Error cargando bitácora:', error)
-      toast.error('Error al cargar bitácora')
+      console.error('Error cargando exportaciones:', error)
+      toast.error('Error al cargar exportaciones')
     } finally {
       setLoading(false)
     }
@@ -301,7 +109,7 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
   const handleProductoChange = async (productoId) => {
     setProductoSeleccionado(productoId)
     setLoading(true)
-    await cargarBitacora(barco.id, productoId)
+    await cargarExportaciones(barco.id, productoId)
   }
 
   const productoActual = productos.find(p => p.id === productoSeleccionado)
@@ -310,17 +118,17 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="bg-purple-500/20 p-3 rounded-xl">
-              <BookOpen className="w-8 h-8 text-purple-400" />
+            <div className="bg-blue-500/20 p-3 rounded-xl">
+              <Export className="w-8 h-8 text-blue-400" />
             </div>
             <div>
               <h2 className="text-2xl font-black text-white flex items-center gap-2">
-                Bitácora de Operaciones - {barco.nombre}
+                Exportaciones - {barco.nombre}
               </h2>
-              <p className="text-purple-200 text-sm">
-                Registros de eventos y observaciones por producto
+              <p className="text-blue-200 text-sm">
+                Registros de exportación por banda
               </p>
             </div>
           </div>
@@ -336,9 +144,9 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {productos.length === 0 ? (
             <div className="bg-slate-900 rounded-2xl p-12 text-center">
-              <BookOpen className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+              <Export className="w-16 h-16 text-slate-700 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-white mb-2">No hay productos configurados</h3>
-              <p className="text-slate-400">Este barco no tiene productos asociados para mostrar bitácora</p>
+              <p className="text-slate-400">Este barco no tiene productos asociados para exportación</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -354,7 +162,7 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
                       onClick={() => handleProductoChange(prod.id)}
                       className={`px-4 py-3 rounded-xl flex items-center gap-3 transition-all flex-1 min-w-[200px] ${
                         productoSeleccionado === prod.id
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-blue-500 text-white'
                           : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                       }`}
                     >
@@ -370,48 +178,54 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
 
               {/* Estadísticas rápidas */}
               {productoActual && !loading && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-xs text-slate-400">Total Registros</p>
-                    <p className="text-3xl font-black text-purple-400">{bitacora.length}</p>
+                    <p className="text-3xl font-black text-blue-400">{exportaciones.length}</p>
                   </div>
-                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
-                    <p className="text-xs text-slate-400">Primer Registro</p>
-                    <p className="text-sm font-bold text-white">
-                      {bitacora.length > 0 ? dayjs(bitacora[bitacora.length - 1].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
+                  <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
+                    <p className="text-xs text-slate-400">Total Exportado</p>
+                    <p className="text-3xl font-black text-green-400">
+                      {exportaciones[0]?.acumulado_tm?.toFixed(3) || '0.000'} TM
                     </p>
                   </div>
-                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
+                  <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
+                    <p className="text-xs text-slate-400">Primer Registro</p>
+                    <p className="text-sm font-bold text-white">
+                      {exportaciones.length > 0 ? dayjs(exportaciones[exportaciones.length - 1].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-xs text-slate-400">Último Registro</p>
                     <p className="text-sm font-bold text-white">
-                      {bitacora.length > 0 ? dayjs(bitacora[0].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
+                      {exportaciones.length > 0 ? dayjs(exportaciones[0].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Lista de bitácora */}
+              {/* Lista de exportaciones */}
               <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
                 <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-purple-400" />
+                    <BarChart3 className="w-4 h-4 text-blue-400" />
                     <h3 className="font-bold text-white">
-                      Registros de Bitácora - {productoActual?.nombre}
+                      Registros de Exportación - {productoActual?.nombre}
                     </h3>
                   </div>
                   <span className="text-xs text-slate-400">
-                    {bitacora.length} registro{bitacora.length !== 1 ? 's' : ''}
+                    {exportaciones.length} registro{exportaciones.length !== 1 ? 's' : ''}
                   </span>
                 </div>
 
                 {loading ? (
                   <div className="p-12 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent mx-auto"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto"></div>
                   </div>
-                ) : bitacora.length === 0 ? (
+                ) : exportaciones.length === 0 ? (
                   <div className="p-12 text-center">
-                    <BookOpen className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-                    <p className="text-slate-400">No hay registros en la bitácora para este producto</p>
+                    <Export className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                    <p className="text-slate-400">No hay registros de exportación para este producto</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -419,45 +233,109 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
                       <thead className="bg-slate-800/50">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha y Hora</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Comentarios</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Barco Destino</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Registrado por</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {bitacora.map((registro) => (
-                          <tr key={registro.id} className="hover:bg-white/5">
+                        {exportaciones.map((exp) => (
+                          <tr key={exp.id} className="hover:bg-white/5">
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-3 h-3 text-slate-500" />
                                 <span className="text-slate-300">
-                                  {dayjs(registro.fecha_hora).format('DD/MM/YYYY HH:mm')}
+                                  {dayjs(exp.fecha_hora).format('DD/MM/YYYY HH:mm')}
                                 </span>
                               </div>
                             </td>
+                            <td className="px-4 py-3 font-bold text-blue-400">
+                              {exp.acumulado_tm?.toFixed(3)} TM
+                            </td>
                             <td className="px-4 py-3">
-                              <p className="text-white max-w-xl whitespace-pre-wrap">
-                                {registro.comentarios || '—'}
-                              </p>
+                              {exp.destino_barco ? (
+                                <div>
+                                  <p className="text-white">{exp.destino_barco.nombre}</p>
+                                  {exp.destino_barco.codigo_barco && (
+                                    <p className="text-xs text-blue-400">{exp.destino_barco.codigo_barco}</p>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-400 max-w-xs truncate">
+                              {exp.observaciones || '—'}
                             </td>
                             <td className="px-4 py-3">
                               <span className="text-slate-400 text-sm">
-                                {registro.usuario_id ? 'Usuario ' + registro.usuario_id : 'Sistema'}
+                                {exp.created_by ? `ID: ${exp.created_by}` : 'Sistema'}
                               </span>
                             </td>
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot className="bg-slate-800">
+                        <tr>
+                          <td className="px-4 py-3 font-bold text-white">TOTAL</td>
+                          <td className="px-4 py-3 font-bold text-blue-400">
+                            {exportaciones[0]?.acumulado_tm?.toFixed(3) || '0.000'} TM
+                          </td>
+                          <td colSpan="3"></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}
               </div>
 
+              {/* Resumen por barco destino */}
+              {exportaciones.length > 0 && (
+                <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
+                  <h4 className="font-bold text-white mb-3 flex items-center gap-2">
+                    <Ship className="w-4 h-4 text-blue-400" />
+                    Resumen por Barco Destino
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(
+                      exportaciones.reduce((acc, exp) => {
+                        const id = exp.destino_barco_id
+                        if (!id) return acc
+                        if (!acc[id]) {
+                          acc[id] = {
+                            nombre: exp.destino_barco?.nombre || 'Desconocido',
+                            codigo: exp.destino_barco?.codigo_barco,
+                            total: 0,
+                            lecturas: 0
+                          }
+                        }
+                        acc[id].total = exp.acumulado_tm
+                        acc[id].lecturas++
+                        return acc
+                      }, {})
+                    ).map(([id, data]) => (
+                      <div key={id} className="bg-slate-800 rounded-lg p-3">
+                        <p className="font-bold text-white">{data.nombre}</p>
+                        {data.codigo && <p className="text-xs text-blue-400">{data.codigo}</p>}
+                        <div className="flex justify-between mt-2 text-sm">
+                          <span className="text-slate-400">Total:</span>
+                          <span className="font-bold text-green-400">{data.total.toFixed(3)} TM</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Lecturas:</span>
+                          <span className="text-white">{data.lecturas}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Nota informativa */}
-              <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
-                <p className="text-sm text-purple-400 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 flex-shrink-0" />
-                  La bitácora registra eventos importantes, observaciones y novedades durante la operación de descarga.
-                  Los registros se muestran del más reciente al más antiguo.
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                <p className="text-sm text-blue-400 flex items-center gap-2">
+                  <Export className="w-4 h-4 flex-shrink-0" />
+                  Los registros de exportación se crean cuando el barco envía producto a otros barcos (solo por banda).
+                  Cada lectura muestra el acumulado total exportado hasta ese momento.
                 </p>
               </div>
             </div>
@@ -478,23 +356,260 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
   )
 }
 
+// =====================================================
+// MODAL PARA VER DETALLE DE BARCO
+// =====================================================
+const DetalleBarcoModal = ({ barco, onClose }) => {
+  const [stats, setStats] = useState({
+    viajes: 0,
+    exportaciones: 0,
+    productos: [],
+    totalImportado: 0,
+    totalExportado: 0
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (barco) {
+      cargarEstadisticas()
+    }
+  }, [barco])
+
+  const cargarEstadisticas = async () => {
+    try {
+      setLoading(true)
+
+      // Cargar viajes
+      const { data: viajes } = await supabase
+        .from('viajes')
+        .select('*')
+        .eq('barco_id', barco.id)
+
+      // Cargar exportaciones
+      const { data: exportaciones } = await supabase
+        .from('exportacion_banda')
+        .select('*')
+        .eq('barco_id', barco.id)
+
+      // Cargar productos del barco
+      const productosBarco = barco.metas_json?.productos || []
+      const { data: productosData } = await supabase
+        .from('productos')
+        .select('*')
+        .in('codigo', productosBarco)
+
+      const viajesCompletos = viajes?.filter(v => v.estado === 'completo') || []
+      const totalImportado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+      
+      const totalExportado = exportaciones?.length > 0 
+        ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0 
+        : 0
+
+      setStats({
+        viajes: viajes?.length || 0,
+        viajesCompletos: viajesCompletos.length,
+        exportaciones: exportaciones?.length || 0,
+        productos: productosData || [],
+        totalImportado,
+        totalExportado,
+        ultimaExportacion: exportaciones?.length > 0 ? exportaciones[0] : null
+      })
+
+    } catch (error) {
+      console.error('Error cargando estadísticas:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-blue-500/20 p-3 rounded-xl">
+              <Ship className="w-8 h-8 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white">{barco.nombre}</h2>
+              <p className="text-blue-200 text-sm">
+                {barco.codigo_barco && `Código: ${barco.codigo_barco} · `}
+                {barco.tipo_operacion === 'exportacion' ? 'EXPORTACIÓN' : 'IMPORTACIÓN'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Información general */}
+              <div className="bg-slate-900 rounded-xl p-4">
+                <h3 className="font-bold text-white mb-3">Información General</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500">Fecha de atraque</p>
+                    <p className="font-bold text-white">
+                      {barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Estado</p>
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      barco.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
+                      barco.estado === 'finalizado' ? 'bg-red-500/20 text-red-400' :
+                      'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                      {barco.estado}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Tipo de operación</p>
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      barco.tipo_operacion === 'exportacion' 
+                        ? 'bg-blue-500/20 text-blue-400' 
+                        : 'bg-green-500/20 text-green-400'
+                    }`}>
+                      {barco.tipo_operacion === 'exportacion' ? 'EXPORTACIÓN' : 'IMPORTACIÓN'}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Token compartido</p>
+                    <code className="text-xs bg-slate-800 px-2 py-1 rounded">
+                      {barco.token_compartido}
+                    </code>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estadísticas */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-900 rounded-xl p-4 border border-green-500/20">
+                  <p className="text-xs text-slate-500">Total Importado</p>
+                  <p className="text-2xl font-bold text-green-400">
+                    {stats.totalImportado.toFixed(3)} TM
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {stats.viajesCompletos} viajes completos de {stats.viajes} totales
+                  </p>
+                </div>
+                <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
+                  <p className="text-xs text-slate-500">Total Exportado</p>
+                  <p className="text-2xl font-bold text-blue-400">
+                    {stats.totalExportado.toFixed(3)} TM
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {stats.exportaciones} lecturas de banda
+                  </p>
+                </div>
+              </div>
+
+              {/* Productos */}
+              <div className="bg-slate-900 rounded-xl p-4">
+                <h3 className="font-bold text-white mb-3">Productos</h3>
+                <div className="space-y-2">
+                  {stats.productos.map(prod => {
+                    const meta = barco.metas_json?.limites?.[prod.codigo] || 0
+                    return (
+                      <div key={prod.id} className="bg-slate-800 rounded-lg p-3 flex items-center gap-3">
+                        <span className="text-2xl">{prod.icono}</span>
+                        <div className="flex-1">
+                          <div className="flex justify-between">
+                            <div>
+                              <p className="font-bold text-white">{prod.nombre}</p>
+                              <p className="text-xs text-slate-400">{prod.codigo}</p>
+                            </div>
+                            {meta > 0 && (
+                              <p className="text-sm font-bold text-blue-400">{meta.toFixed(3)} TM</p>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Tipo: {prod.tipo_registro === 'mixto' ? 'Mixto' : 
+                                   prod.tipo_registro === 'banda' ? 'Banda' : 'Viajes'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Barcos destino (solo exportación) */}
+              {barco.tipo_operacion === 'exportacion' && barco.metas_json?.barcos_destino?.length > 0 && (
+                <div className="bg-slate-900 rounded-xl p-4">
+                  <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+                    <Ship className="w-4 h-4 text-blue-400" />
+                    Barcos Destino
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {barco.metas_json.barcos_destino.map(id => (
+                      <span key={id} className="bg-slate-800 px-3 py-1 rounded-full text-sm text-blue-400">
+                        ID: {id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Metadatos */}
+              <div className="bg-slate-900 rounded-xl p-4 text-xs text-slate-500">
+                <p>Creado: {dayjs(barco.created_at).format('DD/MM/YYYY HH:mm')}</p>
+                <p>Última actualización: {dayjs(barco.updated_at || barco.created_at).format('DD/MM/YYYY HH:mm')}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-white/10 p-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// COMPONENTE PRINCIPAL
+// =====================================================
 export default function AdminPage() {
   const router = useRouter()
   const [user, setUser] = useState(null)
   const [barcos, setBarcos] = useState([])
-  const [pesadores, setPesadores] = useState([])
+  const [usuarios, setUsuarios] = useState([]) // Todos los usuarios para estadísticas
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showBarcoForm, setShowBarcoForm] = useState(false)
   const [showProductoForm, setShowProductoForm] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null)
   const [exportando, setExportando] = useState(null)
-  const [vista, setVista] = useState('barcos') // 'barcos' o 'productos'
+  const [vista, setVista] = useState('barcos') // 'barcos', 'productos', 'estadisticas'
+  const [filtroTipo, setFiltroTipo] = useState('todos') // 'todos', 'importacion', 'exportacion'
+  const [searchTerm, setSearchTerm] = useState('')
   
   // Estado para los modales
   const [barcoSeleccionado, setBarcoSeleccionado] = useState(null)
   const [showViajesPaso1Modal, setShowViajesPaso1Modal] = useState(false)
   const [showBitacoraModal, setShowBitacoraModal] = useState(false)
+  const [showExportacionesModal, setShowExportacionesModal] = useState(false)
+  const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [showGenerarDashboardModal, setShowGenerarDashboardModal] = useState(false)
 
   useEffect(() => {
@@ -516,17 +631,17 @@ export default function AdminPage() {
         .from('barcos')
         .select(`
           *,
-          pesador:pesador_id(id, nombre, username),
-          viajes:viajes(count)
+          pesador:pesador_id(id, nombre, username, rol),
+          viajes:viajes(count),
+          exportaciones:exportacion_banda(count)
         `)
         .order('created_at', { ascending: false })
 
-      // Cargar pesadores
-      const { data: pesadoresData } = await supabase
+      // Cargar todos los usuarios para estadísticas
+      const { data: usuariosData } = await supabase
         .from('usuarios')
-        .select('id, nombre, username')
-        .eq('rol', 'pesador')
-        .eq('activo', true)
+        .select('id, nombre, username, rol, activo')
+        .order('nombre')
 
       // Cargar productos
       const { data: productosData } = await supabase
@@ -535,7 +650,7 @@ export default function AdminPage() {
         .order('codigo', { ascending: true })
 
       setBarcos(barcosData || [])
-      setPesadores(pesadoresData || [])
+      setUsuarios(usuariosData || [])
       setProductos(productosData || [])
     } catch (error) {
       console.error('Error cargando datos:', error)
@@ -556,14 +671,19 @@ export default function AdminPage() {
     window.open(`/dashboard/${barcoId}`, '_blank')
   }
 
-  const handleVerRegistroViajes = (token) => {
-    window.open(`/barco/${token}`, '_blank')
+  const handleVerRegistroViajes = (token, tipo) => {
+    if (tipo === 'exportacion') {
+      window.open(`/barco/${token}/exportacion`, '_blank')
+    } else {
+      window.open(`/barco/${token}`, '_blank')
+    }
   }
 
-  const handleCopiarLink = (token) => {
-    const link = `${window.location.origin}/barco/${token}`
+  const handleCopiarLink = (token, tipo) => {
+    const ruta = tipo === 'exportacion' ? `/barco/${token}/exportacion` : `/barco/${token}`
+    const link = `${window.location.origin}${ruta}`
     navigator.clipboard.writeText(link)
-    toast.success('Link de registro copiado', { icon: '📋' })
+    toast.success(`Link de ${tipo === 'exportacion' ? 'exportación' : 'registro'} copiado`, { icon: '📋' })
   }
 
   const handleEliminarBarco = async (barcoId, barcoNombre) => {
@@ -585,19 +705,57 @@ export default function AdminPage() {
     }
   }
 
-  // Función para abrir el modal de viajes paso 1
+  const handleCambiarEstado = async (barcoId, estadoActual) => {
+    const nuevoEstado = estadoActual === 'activo' ? 'finalizado' : 'activo'
+    const accion = nuevoEstado === 'activo' ? 'reanudar' : 'finalizar'
+    
+    if (!confirm(`¿Estás seguro de ${accion} la operación?`)) return
+
+    try {
+      const { error } = await supabase
+        .from('barcos')
+        .update({ estado: nuevoEstado })
+        .eq('id', barcoId)
+
+      if (error) throw error
+
+      toast.success(`Operación ${nuevoEstado === 'activo' ? 'reanudada' : 'finalizada'}`)
+      cargarDatos()
+    } catch (error) {
+      console.error('Error cambiando estado:', error)
+      toast.error('Error al cambiar estado')
+    }
+  }
+
+  // Funciones para abrir modales
   const handleVerViajesPaso1 = (barco) => {
+    if (barco.tipo_operacion === 'exportacion') {
+      toast.error('Esta operación no aplica para barcos de exportación')
+      return
+    }
     setBarcoSeleccionado(barco)
     setShowViajesPaso1Modal(true)
   }
 
-  // Función para abrir el modal de bitácora
   const handleVerBitacora = (barco) => {
     setBarcoSeleccionado(barco)
     setShowBitacoraModal(true)
   }
 
-  // Función para abrir el modal de generar dashboard (AHORA USA CODIGO_BARCO)
+  const handleVerExportaciones = (barco) => {
+    if (barco.tipo_operacion !== 'exportacion') {
+      toast.error('Este barco no tiene registros de exportación')
+      return
+    }
+    setBarcoSeleccionado(barco)
+    setShowExportacionesModal(true)
+  }
+
+  const handleVerDetalle = (barco) => {
+    setBarcoSeleccionado(barco)
+    setShowDetalleModal(true)
+  }
+
   const handleGenerarDashboard = (barco) => {
     if (!barco.codigo_barco) {
       toast.error('Este barco no tiene código de buque asignado')
@@ -613,7 +771,6 @@ export default function AdminPage() {
   const handleGuardarProducto = async (productoData) => {
     try {
       if (productoEditando) {
-        // Actualizar producto existente
         const { error } = await supabase
           .from('productos')
           .update(productoData)
@@ -622,7 +779,6 @@ export default function AdminPage() {
         if (error) throw error
         toast.success('Producto actualizado')
       } else {
-        // Crear nuevo producto
         const { error } = await supabase
           .from('productos')
           .insert(productoData)
@@ -667,45 +823,71 @@ export default function AdminPage() {
       setExportando(barco.id)
       toast.loading(`Exportando datos de ${barco.nombre}...`, { id: 'export' })
 
-      const { data: viajes, error: errorViajes } = await supabase
-        .from('viajes')
-        .select(`
-          *,
-          producto:producto_id(id, codigo, nombre, icono, tipo_registro),
-          destino:destino_id(id, codigo, nombre)
-        `)
-        .eq('barco_id', barco.id)
-        .order('viaje_numero', { ascending: true })
+      // Cargar datos según el tipo de operación
+      let viajes = []
+      let lecturasBanda = []
+      let exportaciones = []
+      let bitacora = []
 
-      if (errorViajes) throw errorViajes
+      if (barco.tipo_operacion !== 'exportacion') {
+        const { data: viajesData } = await supabase
+          .from('viajes')
+          .select(`
+            *,
+            producto:producto_id(id, codigo, nombre, icono, tipo_registro),
+            destino:destino_id(id, codigo, nombre)
+          `)
+          .eq('barco_id', barco.id)
+          .order('viaje_numero', { ascending: true })
+        viajes = viajesData || []
 
-      const { data: lecturasBanda, error: errorBanda } = await supabase
-        .from('lecturas_banda')
-        .select('*')
-        .eq('barco_id', barco.id)
-        .order('fecha_hora', { ascending: true })
+        const { data: bandaData } = await supabase
+          .from('lecturas_banda')
+          .select('*')
+          .eq('barco_id', barco.id)
+          .order('fecha_hora', { ascending: true })
+        lecturasBanda = bandaData || []
+      }
 
-      const { data: bitacora, error: errorBitacora } = await supabase
+      if (barco.tipo_operacion === 'exportacion') {
+        const { data: exportData } = await supabase
+          .from('exportacion_banda')
+          .select(`
+            *,
+            producto:producto_id(id, codigo, nombre, icono),
+            destino_barco:destino_barco_id(id, nombre, codigo_barco)
+          `)
+          .eq('barco_id', barco.id)
+          .order('fecha_hora', { ascending: true })
+        exportaciones = exportData || []
+      }
+
+      const { data: bitacoraData } = await supabase
         .from('bitacora_flujos')
         .select('*')
         .eq('barco_id', barco.id)
         .order('fecha_hora', { ascending: true })
+      bitacora = bitacoraData || []
 
       const totalKG = viajes?.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0) || 0
       const totalTM = totalKG / 1000
+      const totalExportado = exportaciones?.length > 0 ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0 : 0
       
       const resumenProductos = {}
       productos.forEach(prod => {
         const viajesProd = viajes?.filter(v => v.producto_id === prod.id) || []
+        const exportProd = exportaciones?.filter(e => e.producto_id === prod.id) || []
         const totalProdKG = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0)
-        const metaTM = barco.metas_json?.[prod.codigo] || 0
+        const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
         
         resumenProductos[prod.codigo] = {
           producto: prod.nombre,
           tipo: prod.tipo_registro,
           metaTM: metaTM,
           descargadoTM: totalProdKG / 1000,
+          exportadoTM: exportProd.length > 0 ? exportProd[exportProd.length - 1]?.acumulado_tm || 0 : 0,
           viajes: viajesProd.length,
+          exportaciones: exportProd.length,
           completado: metaTM > 0 ? (totalProdKG / 1000) >= metaTM : false
         }
       })
@@ -714,23 +896,25 @@ export default function AdminPage() {
         metadata: {
           fecha_exportacion: new Date().toISOString(),
           exportado_por: user?.nombre,
-          version: '1.0.0',
+          version: '2.0.0',
           app: 'Barcos Almapac'
         },
         barco: {
           id: barco.id,
           nombre: barco.nombre,
+          codigo_barco: barco.codigo_barco,
+          tipo_operacion: barco.tipo_operacion,
           fecha_llegada: barco.fecha_llegada,
           fecha_salida: barco.fecha_salida,
           estado: barco.estado,
           token_compartido: barco.token_compartido,
-          codigo_barco: barco.codigo_barco,
           metas: barco.metas_json || {},
           creado: barco.created_at,
           pesador_asignado: barco.pesador ? {
             id: barco.pesador.id,
             nombre: barco.pesador.nombre,
-            username: barco.pesador.username
+            username: barco.pesador.username,
+            rol: barco.pesador.rol
           } : null
         },
         catalogo_productos: productos,
@@ -738,9 +922,15 @@ export default function AdminPage() {
           total_viajes: viajes?.length || 0,
           total_kilogramos: totalKG,
           total_toneladas: totalTM,
+          total_exportado: totalExportado,
           resumen_productos: resumenProductos,
           viajes_por_dia: viajes?.reduce((acc, v) => {
             const fecha = dayjs(v.created_at).format('YYYY-MM-DD')
+            acc[fecha] = (acc[fecha] || 0) + 1
+            return acc
+          }, {}),
+          exportaciones_por_dia: exportaciones?.reduce((acc, e) => {
+            const fecha = dayjs(e.fecha_hora).format('YYYY-MM-DD')
             acc[fecha] = (acc[fecha] || 0) + 1
             return acc
           }, {})
@@ -748,6 +938,7 @@ export default function AdminPage() {
         datos: {
           viajes: viajes || [],
           lecturas_banda: lecturasBanda || [],
+          exportaciones: exportaciones || [],
           bitacora: bitacora || []
         }
       }
@@ -757,7 +948,8 @@ export default function AdminPage() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       
-      const nombreArchivo = `${barco.nombre.replace(/\s+/g, '_')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
+      const tipo = barco.tipo_operacion === 'exportacion' ? 'EXPORTACION' : 'IMPORTACION'
+      const nombreArchivo = `${tipo}_${barco.nombre.replace(/\s+/g, '_')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
       
       link.href = url
       link.download = nombreArchivo
@@ -767,7 +959,12 @@ export default function AdminPage() {
       URL.revokeObjectURL(url)
 
       toast.success(`✅ Datos de ${barco.nombre} exportados correctamente`, { id: 'export' })
-      toast.success(`📊 ${viajes?.length || 0} viajes · ${totalTM.toFixed(3)} TM totales`, { duration: 4000 })
+      
+      if (barco.tipo_operacion === 'exportacion') {
+        toast.success(`📊 ${exportaciones?.length || 0} exportaciones · ${totalExportado.toFixed(3)} TM totales`, { duration: 4000 })
+      } else {
+        toast.success(`📊 ${viajes?.length || 0} viajes · ${totalTM.toFixed(3)} TM totales`, { duration: 4000 })
+      }
 
     } catch (error) {
       console.error('Error exportando barco:', error)
@@ -777,16 +974,30 @@ export default function AdminPage() {
     }
   }
 
+  // Filtrar barcos
+  const barcosFiltrados = barcos.filter(barco => {
+    // Filtro por tipo
+    if (filtroTipo !== 'todos' && barco.tipo_operacion !== filtroTipo) return false
+    
+    // Búsqueda por nombre
+    if (searchTerm && !barco.nombre.toLowerCase().includes(searchTerm.toLowerCase())) return false
+    
+    return true
+  })
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-slate-400">Cargando panel de administración...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#0f172a] p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header */}
@@ -798,7 +1009,8 @@ export default function AdminPage() {
                 Panel de Administración
               </h1>
               <p className="text-blue-200 text-sm mt-1">
-                Bienvenido, <span className="font-bold">{user?.nombre}</span>
+                Bienvenido, <span className="font-bold">{user?.nombre}</span> · 
+                Último acceso: {dayjs().format('DD/MM/YYYY HH:mm')}
               </p>
             </div>
             <div className="flex gap-3">
@@ -813,17 +1025,25 @@ export default function AdminPage() {
                 Nuevo Barco
               </button>
               <button
+                onClick={cargarDatos}
+                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
+                title="Recargar datos"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden md:inline">Recargar</span>
+              </button>
+              <button
                 onClick={handleLogout}
                 className="bg-red-500/20 hover:bg-red-500/30 text-red-200 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
               >
                 <LogOut className="w-4 h-4" />
-                Salir
+                <span className="hidden md:inline">Salir</span>
               </button>
             </div>
           </div>
 
           {/* Selector de vista */}
-          <div className="flex gap-2 mt-6 border-t border-white/20 pt-4">
+          <div className="flex flex-wrap gap-2 mt-6 border-t border-white/20 pt-4">
             <button
               onClick={() => setVista('barcos')}
               className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
@@ -846,10 +1066,28 @@ export default function AdminPage() {
               <Package className="w-4 h-4" />
               Productos
             </button>
+            <Link
+              href="/admin/usuarios"
+              className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-purple-500 hover:bg-purple-600 text-white"
+            >
+              <Users className="w-4 h-4" />
+              Usuarios
+            </Link>
+            <button
+              onClick={() => setVista('estadisticas')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
+                vista === 'estadisticas' 
+                  ? 'bg-white text-blue-800' 
+                  : 'bg-white/10 hover:bg-white/20 text-white'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Estadísticas
+            </button>
           </div>
 
           {/* Stats rápidas */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-500/30 p-3 rounded-lg">
@@ -860,6 +1098,10 @@ export default function AdminPage() {
                   <p className="text-2xl font-black text-white">
                     {barcos.filter(b => b.estado === 'activo').length}
                   </p>
+                  <p className="text-xs text-blue-300">
+                    {barcos.filter(b => b.tipo_operacion === 'importacion' && b.estado === 'activo').length} Importación · 
+                    {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'activo').length} Exportación
+                  </p>
                 </div>
               </div>
             </div>
@@ -869,8 +1111,13 @@ export default function AdminPage() {
                   <Users className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <p className="text-blue-200 text-xs">Pesadores</p>
-                  <p className="text-2xl font-black text-white">{pesadores.length}</p>
+                  <p className="text-blue-200 text-xs">Usuarios</p>
+                  <p className="text-2xl font-black text-white">{usuarios.length}</p>
+                  <p className="text-xs text-blue-300">
+                    {usuarios.filter(u => u.rol === 'admin').length} Admin · 
+                    {usuarios.filter(u => u.rol === 'pesador').length} Pesador · 
+                    {usuarios.filter(u => u.rol === 'electricista').length} Electricista
+                  </p>
                 </div>
               </div>
             </div>
@@ -882,26 +1129,211 @@ export default function AdminPage() {
                 <div>
                   <p className="text-blue-200 text-xs">Productos</p>
                   <p className="text-2xl font-black text-white">{productos.length}</p>
+                  <p className="text-xs text-blue-300">
+                    {productos.filter(p => p.tipo_registro === 'mixto').length} Mixto · 
+                    {productos.filter(p => p.tipo_registro === 'banda').length} Banda · 
+                    {productos.filter(p => p.tipo_registro === 'viajes').length} Viajes
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-500/30 p-3 rounded-lg">
+                  <Activity className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Total Barcos</p>
+                  <p className="text-2xl font-black text-white">{barcos.length}</p>
+                  <p className="text-xs text-blue-300">
+                    {barcos.filter(b => b.tipo_operacion === 'importacion').length} Importación · 
+                    {barcos.filter(b => b.tipo_operacion === 'exportacion').length} Exportación
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
+        {/* VISTA DE ESTADÍSTICAS */}
+        {vista === 'estadisticas' && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-blue-400" />
+              Estadísticas Generales
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Tarjeta de importación */}
+              <div className="bg-slate-900 rounded-xl p-5 border border-green-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-green-500/20 p-2 rounded-lg">
+                    <Import className="w-5 h-5 text-green-400" />
+                  </div>
+                  <h3 className="font-bold text-white">Importación</h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Barcos activos:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'importacion' && b.estado === 'activo').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Barcos finalizados:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'importacion' && b.estado === 'finalizado').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'importacion').length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarjeta de exportación */}
+              <div className="bg-slate-900 rounded-xl p-5 border border-blue-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-blue-500/20 p-2 rounded-lg">
+                    <Export className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <h3 className="font-bold text-white">Exportación</h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Barcos activos:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'activo').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Barcos finalizados:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'finalizado').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total:</span>
+                    <span className="font-bold text-white">
+                      {barcos.filter(b => b.tipo_operacion === 'exportacion').length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarjeta de usuarios */}
+              <div className="bg-slate-900 rounded-xl p-5 border border-purple-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-purple-500/20 p-2 rounded-lg">
+                    <Users className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <h3 className="font-bold text-white">Usuarios</h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Administradores:</span>
+                    <span className="font-bold text-white">
+                      {usuarios.filter(u => u.rol === 'admin').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Pesadores:</span>
+                    <span className="font-bold text-white">
+                      {usuarios.filter(u => u.rol === 'pesador').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Electricistas:</span>
+                    <span className="font-bold text-white">
+                      {usuarios.filter(u => u.rol === 'electricista').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-white/10">
+                    <span className="text-slate-400">Total activos:</span>
+                    <span className="font-bold text-white">
+                      {usuarios.filter(u => u.activo).length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Accesos rápidos */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Link
+                href="/admin/usuarios"
+                className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <UserCog className="w-6 h-6" />
+                  <div>
+                    <p className="font-bold">Gestionar Usuarios</p>
+                    <p className="text-xs opacity-90">Crear, editar o desactivar usuarios</p>
+                  </div>
+                </div>
+                <span>→</span>
+              </Link>
+
+              <button
+                onClick={() => {
+                  setVista('productos')
+                  setShowProductoForm(true)
+                }}
+                className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <Package className="w-6 h-6" />
+                  <div>
+                    <p className="font-bold">Nuevo Producto</p>
+                    <p className="text-xs opacity-90">Agregar producto al catálogo</p>
+                  </div>
+                </div>
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* VISTA DE BARCOS */}
         {vista === 'barcos' && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
-            <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
-              <h2 className="font-black text-white flex items-center gap-2">
-                <Ship className="w-5 h-5 text-blue-400" />
-                Barcos Registrados
-                <span className="text-sm font-normal text-slate-400 ml-2">
-                  ({barcos.length} total)
-                </span>
-              </h2>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Database className="w-3 h-3" />
-                <span>Click en ⏳ para ver viajes pendientes · 📖 para bitácora</span>
+            <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h2 className="font-black text-white flex items-center gap-2">
+                  <Ship className="w-5 h-5 text-blue-400" />
+                  Barcos Registrados
+                  <span className="text-sm font-normal text-slate-400 ml-2">
+                    ({barcosFiltrados.length} de {barcos.length})
+                  </span>
+                </h2>
+                
+                <div className="flex flex-wrap gap-2">
+                  {/* Filtro por tipo */}
+                  <select
+                    value={filtroTipo}
+                    onChange={(e) => setFiltroTipo(e.target.value)}
+                    className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="todos">Todos los tipos</option>
+                    <option value="importacion">Solo importación</option>
+                    <option value="exportacion">Solo exportación</option>
+                  </select>
+
+                  {/* Buscador */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar barco..."
+                      className="bg-slate-800 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -911,17 +1343,19 @@ export default function AdminPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Barco</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Código</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Tipo</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Pesador</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Viajes</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Pendientes Paso 1</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bitácora</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Asignado a</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Registros</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Token</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {barcos.map((barco) => {
+                  {barcosFiltrados.map((barco) => {
+                    const viajesCount = barco.viajes?.[0]?.count || 0
+                    const exportacionesCount = barco.exportaciones?.[0]?.count || 0
+                    
                     return (
                       <tr key={barco.id} className="hover:bg-white/5 transition-colors">
                         <td className="px-6 py-4">
@@ -930,7 +1364,7 @@ export default function AdminPage() {
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                               <span>ID: {barco.id}</span>
                               <span>•</span>
-                              <span>{dayjs(barco.fecha_llegada).format('DD/MM/YYYY')}</span>
+                              <span>{barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}</span>
                             </div>
                           </div>
                         </td>
@@ -944,10 +1378,23 @@ export default function AdminPage() {
                           )}
                         </td>
                         <td className="px-6 py-4">
+                          {barco.tipo_operacion === 'exportacion' ? (
+                            <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
+                              <Export className="w-3 h-3" />
+                              EXPORTACIÓN
+                            </span>
+                          ) : (
+                            <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
+                              <Import className="w-3 h-3" />
+                              IMPORTACIÓN
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                             barco.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
-                            barco.estado === 'finalizado' ? 'bg-slate-500/20 text-slate-400' :
-                            'bg-blue-500/20 text-blue-400'
+                            barco.estado === 'finalizado' ? 'bg-red-500/20 text-red-400' :
+                            'bg-yellow-500/20 text-yellow-400'
                           }`}>
                             {barco.estado}
                           </span>
@@ -956,36 +1403,27 @@ export default function AdminPage() {
                           {barco.pesador ? (
                             <div>
                               <p className="text-white">{barco.pesador.nombre}</p>
-                              <p className="text-xs text-slate-500">@{barco.pesador.username}</p>
+                              <p className="text-xs text-slate-500">@{barco.pesador.username} · {barco.pesador.rol}</p>
                             </div>
                           ) : (
                             <span className="text-slate-500">No asignado</span>
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className="font-bold text-blue-400">{barco.viajes?.[0]?.count || 0}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {/* Botón para ver viajes en paso 1 */}
-                          <button
-                            onClick={() => handleVerViajesPaso1(barco)}
-                            className="bg-yellow-500/20 hover:bg-yellow-500/30 px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all group"
-                            title="Ver viajes que solo han pasado el paso 1"
-                          >
-                            <Clock className="w-4 h-4 text-yellow-400" />
-                            <span className="text-yellow-400 text-sm font-bold">Pendientes</span>
-                          </button>
-                        </td>
-                        <td className="px-6 py-4">
-                          {/* Botón para ver bitácora */}
-                          <button
-                            onClick={() => handleVerBitacora(barco)}
-                            className="bg-purple-500/20 hover:bg-purple-500/30 px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all group"
-                            title="Ver bitácora de operaciones por producto"
-                          >
-                            <BookOpen className="w-4 h-4 text-purple-400" />
-                            <span className="text-purple-400 text-sm font-bold">Bitácora</span>
-                          </button>
+                          <div className="space-y-1">
+                            {barco.tipo_operacion !== 'exportacion' && (
+                              <span className="block text-xs">
+                                <span className="text-blue-400 font-bold">{viajesCount}</span>
+                                <span className="text-slate-500"> viajes</span>
+                              </span>
+                            )}
+                            {barco.tipo_operacion === 'exportacion' && (
+                              <span className="block text-xs">
+                                <span className="text-blue-400 font-bold">{exportacionesCount}</span>
+                                <span className="text-slate-500"> exportaciones</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -993,7 +1431,7 @@ export default function AdminPage() {
                               {barco.token_compartido?.substring(0, 8)}...
                             </code>
                             <button
-                              onClick={() => handleCopiarLink(barco.token_compartido)}
+                              onClick={() => handleCopiarLink(barco.token_compartido, barco.tipo_operacion)}
                               className="text-blue-400 hover:text-blue-300 transition-colors"
                               title="Copiar link de registro"
                             >
@@ -1003,28 +1441,92 @@ export default function AdminPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1">
-                           
+                            {/* Botón Ver Detalle */}
+                            <button
+                              onClick={() => handleVerDetalle(barco)}
+                              className="p-2 hover:bg-slate-700 rounded-lg transition-colors group"
+                              title="Ver detalles del barco"
+                            >
+                              <Eye className="w-4 h-4 text-slate-400 group-hover:text-white" />
+                            </button>
                             
-                            {/* Botón Generar Dashboard Público (NUEVO - USA CODIGO_BARCO) */}
+                            {/* Botón Generar Dashboard */}
                             <button
                               onClick={() => handleGenerarDashboard(barco)}
                               className="p-2 hover:bg-indigo-500/20 rounded-lg transition-colors group"
-                              title="Generar Dashboard Público para Cliente"
+                              title="Generar Dashboard Público"
                             >
                               <ExternalLink className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300" />
                             </button>
                             
-                            {/* Botón Registrar Viajes */}
-                            <button
-                              onClick={() => handleVerRegistroViajes(barco.token_compartido)}
-                              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors group"
-                              title="Ir a Registrar Viajes"
-                            >
-                              <Truck className="w-4 h-4 text-green-400 group-hover:text-green-300" />
-                            </button>
-                          
+                            {/* Botón Registrar según tipo */}
+                            {barco.tipo_operacion === 'exportacion' ? (
+                              <button
+                                onClick={() => handleVerRegistroViajes(barco.token_compartido, 'exportacion')}
+                                className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
+                                title="Ir a Registrar Exportación"
+                              >
+                                <Export className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleVerRegistroViajes(barco.token_compartido, 'importacion')}
+                                className="p-2 hover:bg-green-500/20 rounded-lg transition-colors group"
+                                title="Ir a Registrar Viajes"
+                              >
+                                <Truck className="w-4 h-4 text-green-400 group-hover:text-green-300" />
+                              </button>
+                            )}
                             
-                            {/* Botón Exportar */}
+                            {/* Botón Ver viajes paso 1 (solo importación) */}
+                            {barco.tipo_operacion !== 'exportacion' && (
+                              <button
+                                onClick={() => handleVerViajesPaso1(barco)}
+                                className="p-2 hover:bg-yellow-500/20 rounded-lg transition-colors group"
+                                title="Ver viajes pendientes"
+                              >
+                                <Clock className="w-4 h-4 text-yellow-400 group-hover:text-yellow-300" />
+                              </button>
+                            )}
+                            
+                            {/* Botón Ver exportaciones (solo exportación) */}
+                            {barco.tipo_operacion === 'exportacion' && (
+                              <button
+                                onClick={() => handleVerExportaciones(barco)}
+                                className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
+                                title="Ver registros de exportación"
+                              >
+                                <BarChart3 className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
+                              </button>
+                            )}
+                            
+                            {/* Botón Ver bitácora */}
+                            <button
+                              onClick={() => handleVerBitacora(barco)}
+                              className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors group"
+                              title="Ver bitácora"
+                            >
+                              <BookOpen className="w-4 h-4 text-purple-400 group-hover:text-purple-300" />
+                            </button>
+                            
+                            {/* Botón Cambiar estado */}
+                            <button
+                              onClick={() => handleCambiarEstado(barco.id, barco.estado)}
+                              className={`p-2 rounded-lg transition-colors group ${
+                                barco.estado === 'activo' 
+                                  ? 'hover:bg-red-500/20' 
+                                  : 'hover:bg-green-500/20'
+                              }`}
+                              title={barco.estado === 'activo' ? 'Finalizar operación' : 'Reanudar operación'}
+                            >
+                              {barco.estado === 'activo' ? (
+                                <Power className="w-4 h-4 text-red-400 group-hover:text-red-300" />
+                              ) : (
+                                <Play className="w-4 h-4 text-green-400 group-hover:text-green-300" />
+                              )}
+                            </button>
+                            
+                            {/* Botón Exportar datos */}
                             <button
                               onClick={() => handleExportarBarco(barco)}
                               disabled={exportando === barco.id}
@@ -1033,7 +1535,7 @@ export default function AdminPage() {
                                   ? 'bg-amber-500/20 cursor-wait' 
                                   : 'hover:bg-amber-500/20'
                               }`}
-                              title="Exportar todos los datos del barco"
+                              title="Exportar todos los datos"
                             >
                               {exportando === barco.id ? (
                                 <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
@@ -1058,6 +1560,24 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+            
+            {barcosFiltrados.length === 0 && (
+              <div className="p-12 text-center">
+                <Ship className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-400">No se encontraron barcos</p>
+                {(filtroTipo !== 'todos' || searchTerm) && (
+                  <button
+                    onClick={() => {
+                      setFiltroTipo('todos')
+                      setSearchTerm('')
+                    }}
+                    className="mt-2 text-sm text-blue-400 hover:text-blue-300"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1118,8 +1638,8 @@ export default function AdminPage() {
                           'bg-green-500/20 text-green-400'
                         }`}>
                           {prod.tipo_registro === 'mixto' && <><Activity className="w-3 h-3" /> Mixto</>}
-                          {prod.tipo_registro === 'banda' && <><Scale className="w-3 h-3" /> Banda (Acumulado)</>}
-                          {prod.tipo_registro === 'viajes' && <><Truck className="w-3 h-3" /> Solo Viajes</>}
+                          {prod.tipo_registro === 'banda' && <><Scale className="w-3 h-3" /> Banda</>}
+                          {prod.tipo_registro === 'viajes' && <><Truck className="w-3 h-3" /> Viajes</>}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -1177,7 +1697,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Mixto</p>
-                <p className="text-slate-500 text-xs">Se registra por viajes y también tiene lecturas de banda acumuladas</p>
+                <p className="text-slate-500 text-xs">Se registra por viajes y también tiene lecturas de banda</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -1185,8 +1705,9 @@ export default function AdminPage() {
                 <Scale className="w-4 h-4 text-blue-400" />
               </div>
               <div>
-                <p className="font-bold text-white text-sm">Banda (Acumulado)</p>
+                <p className="font-bold text-white text-sm">Banda</p>
                 <p className="text-slate-500 text-xs">Solo lecturas de banda, se acumula el peso continuamente</p>
+                <p className="text-xs text-blue-400 mt-1">Usado para EXPORTACIÓN</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -1194,18 +1715,19 @@ export default function AdminPage() {
                 <Truck className="w-4 h-4 text-green-400" />
               </div>
               <div>
-                <p className="font-bold text-white text-sm">Solo Viajes</p>
+                <p className="font-bold text-white text-sm">Viajes</p>
                 <p className="text-slate-500 text-xs">Solo registro por viajes de camión</p>
+                <p className="text-xs text-green-400 mt-1">Usado para IMPORTACIÓN</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Modal Nuevo/Editar Barco */}
+      {/* Modales */}
       {showBarcoForm && (
         <BarcoForm
-          pesadores={pesadores}
+          pesadores={usuarios.filter(u => u.rol === 'pesador' || u.rol === 'electricista')}
           productos={productos}
           onClose={() => setShowBarcoForm(false)}
           onSuccess={() => {
@@ -1215,7 +1737,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Modal Nuevo/Editar Producto */}
       {showProductoForm && (
         <ProductoForm
           producto={productoEditando}
@@ -1227,7 +1748,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Modal de Viajes Paso 1 */}
       {showViajesPaso1Modal && barcoSeleccionado && (
         <ViajesPaso1Modal
           barco={barcoSeleccionado}
@@ -1241,7 +1761,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Modal de Bitácora por Producto */}
       {showBitacoraModal && barcoSeleccionado && (
         <BitacoraProductoModal
           barco={barcoSeleccionado}
@@ -1252,7 +1771,26 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Modal Generar Dashboard (NUEVO) */}
+      {showExportacionesModal && barcoSeleccionado && (
+        <ExportacionesProductoModal
+          barco={barcoSeleccionado}
+          onClose={() => {
+            setShowExportacionesModal(false)
+            setBarcoSeleccionado(null)
+          }}
+        />
+      )}
+
+      {showDetalleModal && barcoSeleccionado && (
+        <DetalleBarcoModal
+          barco={barcoSeleccionado}
+          onClose={() => {
+            setShowDetalleModal(false)
+            setBarcoSeleccionado(null)
+          }}
+        />
+      )}
+
       {showGenerarDashboardModal && barcoSeleccionado && (
         <GenerarDashboardModal
           barco={barcoSeleccionado}

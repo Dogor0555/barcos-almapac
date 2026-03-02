@@ -1,3 +1,5 @@
+// compartido/[token]/page-client.js - Componente cliente para validar el token y mostrar el dashboard compartido
+
 "use client";
 
 import { useEffect, useState } from 'react'

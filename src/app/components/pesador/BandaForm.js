@@ -1,3 +1,5 @@
+// components/pesador/BandaForm.js - Formulario para registrar una nueva lectura de banda en el componente de pesador
+
 'use client'
 
 import { useState } from 'react'

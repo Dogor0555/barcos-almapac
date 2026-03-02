@@ -1,3 +1,4 @@
+// compartido/[token]/page.js - Página para compartir el dashboard de un barco con un token único
 'use client'
 
 import * as React from 'react'

@@ -1,3 +1,4 @@
+// compartido/[token]/DashboardCompartido.js - Componente principal del dashboard compartido, ahora con código de barco dinámico
 "use client";
 
 /**
