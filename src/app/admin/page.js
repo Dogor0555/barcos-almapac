@@ -10,7 +10,7 @@ import {
   ExternalLink, Truck, Download, Database, Edit2, Grid, 
   Scale, Activity, Clock, AlertCircle, X, BookOpen, 
   MessageSquare, Calendar, QrCode, CheckCircle, Import, 
-  Upload as Export,  // 👈 Esto renombra Upload a Export
+  Upload as Export,
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
   Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus
@@ -587,21 +587,464 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
 }
 
 // =====================================================
+// MODAL PARA VER VIAJES EN PASO 1 (IMPORTACIÓN)
+// =====================================================
+const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
+  const [viajesPaso1, setViajesPaso1] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [resumenPorProducto, setResumenPorProducto] = useState({})
+
+  useEffect(() => {
+    if (barco) {
+      cargarViajesPaso1()
+    }
+  }, [barco])
+
+  const cargarViajesPaso1 = async () => {
+    try {
+      setLoading(true)
+      
+      const { data: viajes, error } = await supabase
+        .from('viajes')
+        .select(`
+          *,
+          producto:producto_id(codigo, nombre, icono),
+          destino:destino_id(codigo, nombre)
+        `)
+        .eq('barco_id', barco.id)
+        .eq('estado', 'incompleto')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setViajesPaso1(viajes || [])
+
+      const resumen = {}
+      viajes?.forEach(viaje => {
+        const prodId = viaje.producto_id
+        if (!resumen[prodId]) {
+          resumen[prodId] = {
+            producto: viaje.producto,
+            cantidad: 0,
+            tonelajeTotal: 0,
+            viajes: []
+          }
+        }
+        resumen[prodId].cantidad++
+        resumen[prodId].tonelajeTotal += Number(viaje.peso_neto_updp_tm) || 0
+        resumen[prodId].viajes.push(viaje)
+      })
+
+      setResumenPorProducto(resumen)
+    } catch (error) {
+      console.error('Error cargando viajes paso 1:', error)
+      toast.error('Error al cargar viajes pendientes')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCompletarViaje = (viajeId) => {
+    window.open(`/barco/${barco.token_compartido}`, '_blank')
+    toast.success('Abriendo registro para completar viaje')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-yellow-500/20 p-3 rounded-xl">
+              <Clock className="w-8 h-8 text-yellow-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white flex items-center gap-2">
+                Viajes en Paso 1 - {barco.nombre}
+              </h2>
+              <p className="text-blue-200 text-sm">
+                Viajes registrados que aún no tienen destino asignado
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+            </div>
+          ) : viajesPaso1.length === 0 ? (
+            <div className="bg-slate-900 rounded-2xl p-12 text-center">
+              <div className="bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-10 h-10 text-green-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">¡No hay viajes pendientes!</h3>
+              <p className="text-slate-400">Todos los viajes de {barco.nombre} han sido completados</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Resumen rápido */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-900 rounded-xl p-4 border border-yellow-500/20">
+                  <p className="text-xs text-slate-400">Total Viajes Pendientes</p>
+                  <p className="text-3xl font-black text-yellow-400">{viajesPaso1.length}</p>
+                </div>
+                <div className="bg-slate-900 rounded-xl p-4 col-span-3">
+                  <p className="text-xs text-slate-400 mb-2">Resumen por Producto</p>
+                  <div className="flex flex-wrap gap-3">
+                    {Object.values(resumenPorProducto).map((item, idx) => (
+                      <div key={idx} className="bg-slate-800 px-3 py-2 rounded-lg flex items-center gap-2">
+                        <span className="text-xl">{item.producto?.icono || '📦'}</span>
+                        <div>
+                          <p className="text-sm font-bold text-white">{item.producto?.nombre}</p>
+                          <p className="text-xs text-yellow-400">{item.cantidad} viajes · {item.tonelajeTotal.toFixed(3)} TM</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de viajes por producto */}
+              {Object.entries(resumenPorProducto).map(([productoId, item]) => (
+                <div key={productoId} className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
+                  <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{item.producto?.icono || '📦'}</span>
+                      <div>
+                        <h3 className="font-bold text-white">{item.producto?.nombre}</h3>
+                        <p className="text-xs text-slate-400">{item.producto?.codigo}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-slate-400">Viajes</p>
+                        <p className="text-xl font-bold text-yellow-400">{item.cantidad}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-slate-400">Tonelaje</p>
+                        <p className="text-xl font-bold text-blue-400">{item.tonelajeTotal.toFixed(3)} TM</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800/50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase"># Viaje</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Placa</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Salida UPDP</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Entrada Almapac</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Peso Neto (TM)</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {item.viajes.map(viaje => (
+                          <tr key={viaje.id} className="hover:bg-white/5">
+                            <td className="px-4 py-3 font-bold text-white">#{viaje.viaje_numero}</td>
+                            <td className="px-4 py-3 text-slate-300">{dayjs(viaje.fecha).format('DD/MM/YYYY')}</td>
+                            <td className="px-4 py-3 font-mono text-blue-400">{viaje.placa}</td>
+                            <td className="px-4 py-3">{viaje.hora_salida_updp || '—'}</td>
+                            <td className="px-4 py-3">{viaje.hora_entrada_almapac || '—'}</td>
+                            <td className="px-4 py-3 font-bold text-green-400">{viaje.peso_neto_updp_tm?.toFixed(3) || '—'}</td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => handleCompletarViaje(viaje.id)}
+                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
+                              >
+                                <Truck className="w-3 h-3" />
+                                Completar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-white/10 p-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// MODAL PARA VER BITÁCORA POR PRODUCTO
+// =====================================================
+const BitacoraProductoModal = ({ barco, onClose }) => {
+  const [bitacora, setBitacora] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [productos, setProductos] = useState([])
+  const [productoSeleccionado, setProductoSeleccionado] = useState(null)
+
+  useEffect(() => {
+    if (barco) {
+      cargarDatos()
+    }
+  }, [barco])
+
+  const cargarDatos = async () => {
+    try {
+      setLoading(true)
+      
+      const productosBarco = barco.metas_json?.productos || []
+      
+      if (productosBarco.length === 0) {
+        setProductos([])
+        return
+      }
+
+      const { data: productosData } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('activo', true)
+        .in('codigo', productosBarco)
+
+      setProductos(productosData || [])
+      
+      if (productosData?.length > 0) {
+        setProductoSeleccionado(productosData[0].id)
+        await cargarBitacora(barco.id, productosData[0].id)
+      }
+    } catch (error) {
+      console.error('Error cargando datos:', error)
+      toast.error('Error al cargar datos')
+    }
+  }
+
+  const cargarBitacora = async (barcoId, productoId) => {
+    try {
+      const { data, error } = await supabase
+        .from('bitacora_flujos')
+        .select(`
+          *,
+          producto:producto_id(codigo, nombre, icono)
+        `)
+        .eq('barco_id', barcoId)
+        .eq('producto_id', productoId)
+        .order('fecha_hora', { ascending: false })
+
+      if (error) throw error
+      setBitacora(data || [])
+    } catch (error) {
+      console.error('Error cargando bitácora:', error)
+      toast.error('Error al cargar bitácora')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleProductoChange = async (productoId) => {
+    setProductoSeleccionado(productoId)
+    setLoading(true)
+    await cargarBitacora(barco.id, productoId)
+  }
+
+  const productoActual = productos.find(p => p.id === productoSeleccionado)
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-purple-500/20 p-3 rounded-xl">
+              <BookOpen className="w-8 h-8 text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white flex items-center gap-2">
+                Bitácora de Operaciones - {barco.nombre}
+              </h2>
+              <p className="text-purple-200 text-sm">
+                Registros de eventos y observaciones por producto
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {productos.length === 0 ? (
+            <div className="bg-slate-900 rounded-2xl p-12 text-center">
+              <BookOpen className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">No hay productos configurados</h3>
+              <p className="text-slate-400">Este barco no tiene productos asociados para mostrar bitácora</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Selector de producto */}
+              <div className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                <label className="block text-sm font-bold text-slate-400 mb-3">
+                  Seleccionar Producto:
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  {productos.map(prod => (
+                    <button
+                      key={prod.id}
+                      onClick={() => handleProductoChange(prod.id)}
+                      className={`px-4 py-3 rounded-xl flex items-center gap-3 transition-all flex-1 min-w-[200px] ${
+                        productoSeleccionado === prod.id
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      <span className="text-2xl">{prod.icono}</span>
+                      <div className="text-left">
+                        <p className="font-bold">{prod.nombre}</p>
+                        <p className="text-xs opacity-80">{prod.codigo}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Estadísticas rápidas */}
+              {productoActual && !loading && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
+                    <p className="text-xs text-slate-400">Total Registros</p>
+                    <p className="text-3xl font-black text-purple-400">{bitacora.length}</p>
+                  </div>
+                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
+                    <p className="text-xs text-slate-400">Primer Registro</p>
+                    <p className="text-sm font-bold text-white">
+                      {bitacora.length > 0 ? dayjs(bitacora[bitacora.length - 1].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
+                    <p className="text-xs text-slate-400">Último Registro</p>
+                    <p className="text-sm font-bold text-white">
+                      {bitacora.length > 0 ? dayjs(bitacora[0].fecha_hora).format('DD/MM/YYYY HH:mm') : '—'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de bitácora */}
+              <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
+                <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-purple-400" />
+                    <h3 className="font-bold text-white">
+                      Registros de Bitácora - {productoActual?.nombre}
+                    </h3>
+                  </div>
+                  <span className="text-xs text-slate-400">
+                    {bitacora.length} registro{bitacora.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                {loading ? (
+                  <div className="p-12 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent mx-auto"></div>
+                  </div>
+                ) : bitacora.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <BookOpen className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                    <p className="text-slate-400">No hay registros en la bitácora para este producto</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800/50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha y Hora</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Comentarios</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Registrado por</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {bitacora.map((registro) => (
+                          <tr key={registro.id} className="hover:bg-white/5">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-3 h-3 text-slate-500" />
+                                <span className="text-slate-300">
+                                  {dayjs(registro.fecha_hora).format('DD/MM/YYYY HH:mm')}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-white max-w-xl whitespace-pre-wrap">
+                                {registro.comentarios || '—'}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-slate-400 text-sm">
+                                {registro.usuario_id ? 'Usuario ' + registro.usuario_id : 'Sistema'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-white/10 p-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
 export default function AdminPage() {
   const router = useRouter()
   const [user, setUser] = useState(null)
   const [barcos, setBarcos] = useState([])
-  const [usuarios, setUsuarios] = useState([]) // Todos los usuarios para estadísticas
+  const [usuarios, setUsuarios] = useState([])
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showBarcoForm, setShowBarcoForm] = useState(false)
   const [showProductoForm, setShowProductoForm] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null)
   const [exportando, setExportando] = useState(null)
-  const [vista, setVista] = useState('barcos') // 'barcos', 'productos', 'estadisticas'
-  const [filtroTipo, setFiltroTipo] = useState('todos') // 'todos', 'importacion', 'exportacion'
+  const [vista, setVista] = useState('barcos')
+  const [filtroTipo, setFiltroTipo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   
   // Estado para los modales
@@ -626,18 +1069,47 @@ export default function AdminPage() {
     try {
       setLoading(true)
       
-      // Cargar barcos
-      const { data: barcosData } = await supabase
+      // Cargar barcos - CORREGIDO: eliminar las relaciones complejas
+      const { data: barcosData, error: barcosError } = await supabase
         .from('barcos')
-        .select(`
-          *,
-          pesador:pesador_id(id, nombre, username, rol),
-          viajes:viajes(count),
-          exportaciones:exportacion_banda(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
-      // Cargar todos los usuarios para estadísticas
+      if (barcosError) throw barcosError
+
+      // Para cada barco, obtener el nombre del pesador si existe
+      const barcosConPesador = await Promise.all((barcosData || []).map(async (barco) => {
+        if (barco.pesador_id) {
+          const { data: pesador } = await supabase
+            .from('usuarios')
+            .select('id, nombre, username, rol')
+            .eq('id', barco.pesador_id)
+            .single()
+          return { ...barco, pesador }
+        }
+        return { ...barco, pesador: null }
+      }))
+
+      // Obtener conteo de viajes para cada barco
+      const barcosConConteos = await Promise.all(barcosConPesador.map(async (barco) => {
+        const { count: viajesCount } = await supabase
+          .from('viajes')
+          .select('*', { count: 'exact', head: true })
+          .eq('barco_id', barco.id)
+
+        const { count: exportacionesCount } = await supabase
+          .from('exportacion_banda')
+          .select('*', { count: 'exact', head: true })
+          .eq('barco_id', barco.id)
+
+        return {
+          ...barco,
+          viajes: [{ count: viajesCount || 0 }],
+          exportaciones: [{ count: exportacionesCount || 0 }]
+        }
+      }))
+
+      // Cargar todos los usuarios
       const { data: usuariosData } = await supabase
         .from('usuarios')
         .select('id, nombre, username, rol, activo')
@@ -649,9 +1121,11 @@ export default function AdminPage() {
         .select('*')
         .order('codigo', { ascending: true })
 
-      setBarcos(barcosData || [])
+      setBarcos(barcosConConteos || [])
       setUsuarios(usuariosData || [])
       setProductos(productosData || [])
+      
+      console.log('Barcos cargados:', barcosConConteos) // Para debug
     } catch (error) {
       console.error('Error cargando datos:', error)
       toast.error('Error al cargar datos')
@@ -976,12 +1450,8 @@ export default function AdminPage() {
 
   // Filtrar barcos
   const barcosFiltrados = barcos.filter(barco => {
-    // Filtro por tipo
     if (filtroTipo !== 'todos' && barco.tipo_operacion !== filtroTipo) return false
-    
-    // Búsqueda por nombre
     if (searchTerm && !barco.nombre.toLowerCase().includes(searchTerm.toLowerCase())) return false
-    
     return true
   })
 
