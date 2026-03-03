@@ -1,4 +1,4 @@
-// barco/[token]/exportacion/page.js - Página para registro de exportación (solo para electricistas)
+// barco/[token]/exportacion/page.js - Página para registro de exportación (carga a bodega del barco)
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
@@ -11,18 +11,31 @@ import {
 import { 
   Save, RefreshCw, Scale, Ship, Target, CheckCircle, 
   Package, Clock, AlertCircle, Edit2, Trash2, MapPin,
-  TrendingUp, LineChart, BookOpen, X, Download
+  TrendingUp, LineChart, BookOpen, X, Download, Layers
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import dayjs from 'dayjs'
+
+// =====================================================
+// CONFIGURACIÓN DE BODEGAS DEL BARCO
+// =====================================================
+const BODEGAS_BARCO = [
+  { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01', capacidad: 5000 },
+  { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02', capacidad: 5000 },
+  { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03', capacidad: 5000 },
+  { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04', capacidad: 5000 },
+  { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05', capacidad: 5000 },
+  { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06', capacidad: 5000 },
+  { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07', capacidad: 5000 },
+  { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08', capacidad: 5000 },
+]
 
 export default function ExportacionPage() {
   const { token } = useParams()
   const [loading, setLoading] = useState(true)
   const [barco, setBarco] = useState(null)
   const [productos, setProductos] = useState([])
-  const [barcosDestino, setBarcosDestino] = useState([])
   const [exportaciones, setExportaciones] = useState([])
   const [bitacora, setBitacora] = useState([])
   const [productoActivo, setProductoActivo] = useState(null)
@@ -32,7 +45,7 @@ export default function ExportacionPage() {
   const [nuevaExportacion, setNuevaExportacion] = useState({
     fecha_hora: '',
     acumulado_tm: '',
-    destino_barco_id: '',
+    bodega_id: '', // Cambiado de destino_barco_id a bodega_id
     observaciones: ''
   })
 
@@ -109,26 +122,12 @@ export default function ExportacionPage() {
         setProductos(productosData || [])
       }
 
-      // Cargar barcos destino (IDs guardados en metas_json)
-      const barcosDestinoIds = barcoData.metas_json?.barcos_destino || []
-      
-      if (barcosDestinoIds.length > 0) {
-        const { data: barcosDestinoData } = await supabase
-          .from('barcos')
-          .select('id, nombre, codigo_barco')
-          .in('id', barcosDestinoIds)
-          .eq('estado', 'activo')
-
-        setBarcosDestino(barcosDestinoData || [])
-      }
-
-      // Cargar exportaciones
+      // Cargar exportaciones (ahora con bodega_id)
       const { data: exportData } = await supabase
         .from('exportacion_banda')
         .select(`
           *,
-          producto:producto_id(id, codigo, nombre, icono),
-          destino_barco:destino_barco_id(id, nombre, codigo_barco)
+          producto:producto_id(id, codigo, nombre, icono)
         `)
         .eq('barco_id', barcoData.id)
         .order('fecha_hora', { ascending: false })
@@ -200,15 +199,18 @@ export default function ExportacionPage() {
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    return exportacionesProd.map(e => ({
-      hora: dayjs(e.fecha_hora).format('DD/MM HH:mm'),
-      acumulado: e.acumulado_tm,
-      destino: e.destino_barco?.nombre || '—'
-    }))
+    return exportacionesProd.map(e => {
+      const bodega = BODEGAS_BARCO.find(b => b.id === e.bodega_id)
+      return {
+        hora: dayjs(e.fecha_hora).format('DD/MM HH:mm'),
+        acumulado: e.acumulado_tm,
+        bodega: bodega?.nombre || '—'
+      }
+    })
   }, [exportaciones, productoActivo])
 
-  // Resumen por barco destino
-  const resumenPorDestino = useMemo(() => {
+  // Resumen por bodega
+  const resumenPorBodega = useMemo(() => {
     if (!productoActivo) return []
 
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
@@ -216,12 +218,15 @@ export default function ExportacionPage() {
     const mapa = {}
     
     exportacionesProd.forEach(e => {
-      const key = e.destino_barco_id
+      const key = e.bodega_id
+      if (!key) return
+      
       if (!mapa[key]) {
         mapa[key] = {
-          barco_id: key,
-          nombre: e.destino_barco?.nombre || 'Desconocido',
-          codigo: e.destino_barco?.codigo_barco || '',
+          bodega_id: key,
+          nombre: BODEGAS_BARCO.find(b => b.id === key)?.nombre || `Bodega ${key}`,
+          codigo: BODEGAS_BARCO.find(b => b.id === key)?.codigo || `BDG-${key}`,
+          capacidad: BODEGAS_BARCO.find(b => b.id === key)?.capacidad || 0,
           totalTM: 0,
           lecturas: 0,
           ultimaLectura: null
@@ -244,7 +249,7 @@ export default function ExportacionPage() {
     setNuevaExportacion({
       fecha_hora: getHoraActual(),
       acumulado_tm: '',
-      destino_barco_id: '',
+      bodega_id: '',
       observaciones: ''
     })
     setBitacoraActual({
@@ -284,8 +289,8 @@ export default function ExportacionPage() {
         return
       }
 
-      if (!nuevaExportacion.destino_barco_id) {
-        toast.error('Selecciona un barco destino')
+      if (!nuevaExportacion.bodega_id) {
+        toast.error('Selecciona una bodega')
         return
       }
 
@@ -299,7 +304,7 @@ export default function ExportacionPage() {
         fecha_hora: nuevaExportacion.fecha_hora,
         producto_id: productoActivo.id,
         acumulado_tm: parseFloat(nuevaExportacion.acumulado_tm),
-        destino_barco_id: parseInt(nuevaExportacion.destino_barco_id),
+        bodega_id: parseInt(nuevaExportacion.bodega_id), // Cambiado
         observaciones: nuevaExportacion.observaciones || null,
         created_by: user?.id || null
       }
@@ -336,7 +341,7 @@ export default function ExportacionPage() {
       setNuevaExportacion({
         fecha_hora: getHoraActual(),
         acumulado_tm: '',
-        destino_barco_id: '',
+        bodega_id: '',
         observaciones: ''
       })
 
@@ -421,7 +426,7 @@ export default function ExportacionPage() {
     setNuevaExportacion({
       fecha_hora: exp.fecha_hora.slice(0, 16),
       acumulado_tm: exp.acumulado_tm,
-      destino_barco_id: exp.destino_barco_id,
+      bodega_id: exp.bodega_id || '',
       observaciones: exp.observaciones || ''
     })
   }
@@ -455,7 +460,7 @@ export default function ExportacionPage() {
         setNuevaExportacion({
           fecha_hora: getHoraActual(),
           acumulado_tm: '',
-          destino_barco_id: '',
+          bodega_id: '',
           observaciones: ''
         })
       }
@@ -500,7 +505,7 @@ export default function ExportacionPage() {
     setNuevaExportacion({
       fecha_hora: getHoraActual(),
       acumulado_tm: '',
-      destino_barco_id: '',
+      bodega_id: '',
       observaciones: ''
     })
     setBitacoraActual({
@@ -573,7 +578,7 @@ export default function ExportacionPage() {
                 </span>
               </div>
               <p className="text-blue-200 text-sm mt-1">
-                Registro de Exportación por Banda · {new Date().toLocaleDateString()}
+                Registro de Carga a Bodega del Barco por Banda · {new Date().toLocaleDateString()}
               </p>
             </div>
             <div className="flex gap-2">
@@ -605,7 +610,6 @@ export default function ExportacionPage() {
           <div className="flex overflow-x-auto">
             {productos.map(prod => {
               const activo = productoActivo?.id === prod.id
-              const stats = estadisticasProducto
               
               return (
                 <button
@@ -643,7 +647,7 @@ export default function ExportacionPage() {
                 <div>
                   <h2 className="text-2xl font-bold text-white">{productoActivo.nombre}</h2>
                   <p className="text-slate-400 flex items-center gap-2">
-                    {productoActivo.codigo} · Exportación por Banda
+                    {productoActivo.codigo} · Carga a Bodega del Barco
                   </p>
                 </div>
               </div>
@@ -666,13 +670,13 @@ export default function ExportacionPage() {
             {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">Cantidad a Exportar</p>
+                  <p className="text-xs text-slate-500">Cantidad a Cargar</p>
                   <p className="text-xl font-bold text-white">
                     {barco.metas_json.limites[productoActivo.codigo].toFixed(3)} TM
                   </p>
                 </div>
                 <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">Exportado</p>
+                  <p className="text-xs text-slate-500">Cargado</p>
                   <p className="text-xl font-bold text-blue-400">
                     {estadisticasProducto.totalTM.toFixed(3)} TM
                   </p>
@@ -699,7 +703,7 @@ export default function ExportacionPage() {
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <LineChart className="w-5 h-5 text-blue-400" />
-              Tendencia de Exportación - {productoActivo.nombre}
+              Tendencia de Carga - {productoActivo.nombre}
             </h3>
             
             <div className="h-80 w-full">
@@ -726,49 +730,66 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Resumen por barco destino */}
-        {productoActivo && resumenPorDestino.length > 0 && (
+        {/* Resumen por bodega */}
+        {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Ship className="w-5 h-5 text-green-400" />
-              Exportación por Barco Destino
+              <Layers className="w-5 h-5 text-green-400" />
+              Carga por Bodega del Barco
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resumenPorDestino.map(dest => (
-                <div key={dest.barco_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="bg-blue-500/20 p-2 rounded-lg">
-                      <Ship className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">{dest.nombre}</p>
-                      {dest.codigo && (
-                        <p className="text-xs text-blue-400">{dest.codigo}</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Total exportado:</span>
-                      <span className="font-bold text-green-400">{dest.totalTM.toFixed(3)} TM</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Lecturas:</span>
-                      <span className="font-bold text-white">{dest.lecturas}</span>
-                    </div>
-                    {dest.ultimaLectura && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Última lectura:</span>
-                        <span className="font-bold text-white">
-                          {dayjs(dest.ultimaLectura.fecha_hora).format('DD/MM HH:mm')}
-                        </span>
+              {resumenPorBodega.map(bodega => {
+                const porcentaje = bodega.capacidad > 0 ? (bodega.totalTM / bodega.capacidad) * 100 : 0
+                
+                return (
+                  <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="bg-green-500/20 p-2 rounded-lg">
+                        <Layers className="w-4 h-4 text-green-400" />
                       </div>
-                    )}
+                      <div>
+                        <p className="font-bold text-white">{bodega.nombre}</p>
+                        <p className="text-xs text-green-400">{bodega.codigo}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-slate-400">Capacidad:</span>
+                          <span className="font-bold text-white">{bodega.capacidad.toFixed(0)} TM</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">Cargado:</span>
+                          <span className="font-bold text-green-400">{bodega.totalTM.toFixed(3)} TM</span>
+                        </div>
+                      </div>
+                      
+                      {/* Barra de progreso */}
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-500">Ocupación</span>
+                          <span className="text-white">{porcentaje.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 rounded-full transition-all"
+                            style={{ width: `${Math.min(porcentaje, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between text-xs text-slate-500 pt-2 border-t border-white/10">
+                        <span>Lecturas: {bodega.lecturas}</span>
+                        {bodega.ultimaLectura && (
+                          <span>Última: {dayjs(bodega.ultimaLectura.fecha_hora).format('HH:mm')}</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -778,7 +799,7 @@ export default function ExportacionPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Scale className="w-5 h-5 text-blue-400" />
-              {editandoExportacion ? 'Editar Registro de Exportación' : 'Nuevo Registro de Exportación'} - {productoActivo?.nombre}
+              {editandoExportacion ? 'Editar Registro de Carga' : 'Nuevo Registro de Carga'} - {productoActivo?.nombre}
             </h2>
             {editandoExportacion && (
               <button
@@ -825,18 +846,18 @@ export default function ExportacionPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Barco Destino *</label>
+              <label className="block text-xs text-slate-400 mb-1">Bodega *</label>
               <select
-                name="destino_barco_id"
-                value={nuevaExportacion.destino_barco_id}
+                name="bodega_id"
+                value={nuevaExportacion.bodega_id}
                 onChange={handleExportacionChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                 disabled={barco.estado === 'finalizado'}
               >
-                <option value="">Seleccionar barco destino</option>
-                {barcosDestino.map(b => (
+                <option value="">Seleccionar bodega</option>
+                {BODEGAS_BARCO.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.nombre} {b.codigo_barco ? `(${b.codigo_barco})` : ''}
+                    {b.nombre} ({b.codigo}) - Cap. {b.capacidad} TM
                   </option>
                 ))}
               </select>
@@ -860,7 +881,7 @@ export default function ExportacionPage() {
                 disabled={barco.estado === 'finalizado'}
               >
                 <Save className="w-4 h-4" />
-                {editandoExportacion ? 'Actualizar Registro' : 'Guardar Exportación'}
+                {editandoExportacion ? 'Actualizar Registro' : 'Guardar Carga'}
               </button>
               {editandoExportacion && (
                 <button
@@ -880,7 +901,7 @@ export default function ExportacionPage() {
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
               <h3 className="font-bold text-white">
-                Historial de Exportaciones - {productoActivo?.nombre} ({exportacionesFiltradas.length})
+                Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length})
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -889,45 +910,49 @@ export default function ExportacionPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Barco Destino</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {exportacionesFiltradas.map(exp => (
-                    <tr key={exp.id} className="hover:bg-white/5">
-                      <td className="px-4 py-3">{formatFechaHora(exp.fecha_hora)}</td>
-                      <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="text-white">{exp.destino_barco?.nombre}</p>
-                          {exp.destino_barco?.codigo_barco && (
-                            <p className="text-xs text-blue-400">{exp.destino_barco.codigo_barco}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditarExportacion(exp)}
-                            className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4 text-blue-400" />
-                          </button>
-                          <button
-                            onClick={() => handleEliminarExportacion(exp.id)}
-                            className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {exportacionesFiltradas.map(exp => {
+                    const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+                    
+                    return (
+                      <tr key={exp.id} className="hover:bg-white/5">
+                        <td className="px-4 py-3">{formatFechaHora(exp.fecha_hora)}</td>
+                        <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
+                        <td className="px-4 py-3">
+                          {bodega ? (
+                            <div>
+                              <p className="text-white">{bodega.nombre}</p>
+                              <p className="text-xs text-green-400">{bodega.codigo}</p>
+                            </div>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditarExportacion(exp)}
+                              className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4 text-blue-400" />
+                            </button>
+                            <button
+                              onClick={() => handleEliminarExportacion(exp.id)}
+                              className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot className="bg-slate-900">
                   <tr>
@@ -948,7 +973,7 @@ export default function ExportacionPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-purple-400" />
-              Bitácora de Exportación - {productoActivo?.nombre}
+              Bitácora de Carga - {productoActivo?.nombre}
             </h2>
             {editandoBitacora && (
               <button
