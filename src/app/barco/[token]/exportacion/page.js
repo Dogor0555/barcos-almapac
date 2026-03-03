@@ -18,17 +18,17 @@ import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, R
 import dayjs from 'dayjs'
 
 // =====================================================
-// CONFIGURACIÓN DE BODEGAS DEL BARCO
+// CONFIGURACIÓN DE BODEGAS DEL BARCO (SIN CAPACIDAD)
 // =====================================================
 const BODEGAS_BARCO = [
-  { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01', capacidad: 5000 },
-  { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02', capacidad: 5000 },
-  { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03', capacidad: 5000 },
-  { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04', capacidad: 5000 },
-  { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05', capacidad: 5000 },
-  { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06', capacidad: 5000 },
-  { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07', capacidad: 5000 },
-  { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08', capacidad: 5000 },
+  { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01' },
+  { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02' },
+  { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03' },
+  { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04' },
+  { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05' },
+  { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06' },
+  { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07' },
+  { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
 ]
 
 export default function ExportacionPage() {
@@ -45,7 +45,7 @@ export default function ExportacionPage() {
   const [nuevaExportacion, setNuevaExportacion] = useState({
     fecha_hora: '',
     acumulado_tm: '',
-    bodega_id: '', // Cambiado de destino_barco_id a bodega_id
+    bodega_id: '', // ID de la bodega del barco
     observaciones: ''
   })
 
@@ -122,7 +122,7 @@ export default function ExportacionPage() {
         setProductos(productosData || [])
       }
 
-      // Cargar exportaciones (ahora con bodega_id)
+      // Cargar exportaciones
       const { data: exportData } = await supabase
         .from('exportacion_banda')
         .select(`
@@ -226,7 +226,6 @@ export default function ExportacionPage() {
           bodega_id: key,
           nombre: BODEGAS_BARCO.find(b => b.id === key)?.nombre || `Bodega ${key}`,
           codigo: BODEGAS_BARCO.find(b => b.id === key)?.codigo || `BDG-${key}`,
-          capacidad: BODEGAS_BARCO.find(b => b.id === key)?.capacidad || 0,
           totalTM: 0,
           lecturas: 0,
           ultimaLectura: null
@@ -304,7 +303,7 @@ export default function ExportacionPage() {
         fecha_hora: nuevaExportacion.fecha_hora,
         producto_id: productoActivo.id,
         acumulado_tm: parseFloat(nuevaExportacion.acumulado_tm),
-        bodega_id: parseInt(nuevaExportacion.bodega_id), // Cambiado
+        bodega_id: parseInt(nuevaExportacion.bodega_id),
         observaciones: nuevaExportacion.observaciones || null,
         created_by: user?.id || null
       }
@@ -739,57 +738,38 @@ export default function ExportacionPage() {
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resumenPorBodega.map(bodega => {
-                const porcentaje = bodega.capacidad > 0 ? (bodega.totalTM / bodega.capacidad) * 100 : 0
-                
-                return (
-                  <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="bg-green-500/20 p-2 rounded-lg">
-                        <Layers className="w-4 h-4 text-green-400" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-white">{bodega.nombre}</p>
-                        <p className="text-xs text-green-400">{bodega.codigo}</p>
-                      </div>
+              {resumenPorBodega.map(bodega => (
+                <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-green-500/20 p-2 rounded-lg">
+                      <Layers className="w-4 h-4 text-green-400" />
                     </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-slate-400">Capacidad:</span>
-                          <span className="font-bold text-white">{bodega.capacidad.toFixed(0)} TM</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-slate-400">Cargado:</span>
-                          <span className="font-bold text-green-400">{bodega.totalTM.toFixed(3)} TM</span>
-                        </div>
-                      </div>
-                      
-                      {/* Barra de progreso */}
-                      <div>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-500">Ocupación</span>
-                          <span className="text-white">{porcentaje.toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-green-500 rounded-full transition-all"
-                            style={{ width: `${Math.min(porcentaje, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="flex justify-between text-xs text-slate-500 pt-2 border-t border-white/10">
-                        <span>Lecturas: {bodega.lecturas}</span>
-                        {bodega.ultimaLectura && (
-                          <span>Última: {dayjs(bodega.ultimaLectura.fecha_hora).format('HH:mm')}</span>
-                        )}
-                      </div>
+                    <div>
+                      <p className="font-bold text-white">{bodega.nombre}</p>
+                      <p className="text-xs text-green-400">{bodega.codigo}</p>
                     </div>
                   </div>
-                )
-              })}
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Total cargado:</span>
+                      <span className="font-bold text-green-400">{bodega.totalTM.toFixed(3)} TM</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Lecturas:</span>
+                      <span className="font-bold text-white">{bodega.lecturas}</span>
+                    </div>
+                    {bodega.ultimaLectura && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Última lectura:</span>
+                        <span className="font-bold text-white">
+                          {dayjs(bodega.ultimaLectura.fecha_hora).format('DD/MM HH:mm')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -857,7 +837,7 @@ export default function ExportacionPage() {
                 <option value="">Seleccionar bodega</option>
                 {BODEGAS_BARCO.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.nombre} ({b.codigo}) - Cap. {b.capacidad} TM
+                    {b.nombre} ({b.codigo})
                   </option>
                 ))}
               </select>
