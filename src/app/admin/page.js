@@ -25,14 +25,14 @@ import 'dayjs/locale/es'
 dayjs.locale('es')
 
 // =====================================================
-// MODAL PARA VER EXPORTACIONES POR PRODUCTO
+// MODAL PARA VER EXPORTACIONES POR PRODUCTO (RECIBIDAS)
 // =====================================================
 const ExportacionesProductoModal = ({ barco, onClose }) => {
   const [exportaciones, setExportaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [productos, setProductos] = useState([])
   const [productoSeleccionado, setProductoSeleccionado] = useState(null)
-  const [barcosDestino, setBarcosDestino] = useState({})
+  const [barcosOrigen, setBarcosOrigen] = useState({})
 
   useEffect(() => {
     if (barco) {
@@ -65,17 +65,17 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         await cargarExportaciones(barco.id, productosData[0].id)
       }
 
-      // Cargar barcos destino
-      const barcosDestinoIds = barco.metas_json?.barcos_destino || []
-      if (barcosDestinoIds.length > 0) {
+      // Cargar barcos origen (desde donde se exportó)
+      const barcosOrigenIds = [...new Set(exportaciones.map(e => e.destino_barco_id).filter(Boolean))]
+      if (barcosOrigenIds.length > 0) {
         const { data: barcosData } = await supabase
           .from('barcos')
           .select('id, nombre, codigo_barco')
-          .in('id', barcosDestinoIds)
+          .in('id', barcosOrigenIds)
 
         const mapa = {}
         barcosData?.forEach(b => { mapa[b.id] = b })
-        setBarcosDestino(mapa)
+        setBarcosOrigen(mapa)
       }
     } catch (error) {
       console.error('Error cargando datos:', error)
@@ -90,7 +90,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         .select(`
           *,
           producto:producto_id(codigo, nombre, icono),
-          destino_barco:destino_barco_id(id, nombre, codigo_barco)
+          barco_origen:destino_barco_id(id, nombre, codigo_barco)
         `)
         .eq('barco_id', barcoId)
         .eq('producto_id', productoId)
@@ -125,10 +125,10 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
             </div>
             <div>
               <h2 className="text-2xl font-black text-white flex items-center gap-2">
-                Exportaciones - {barco.nombre}
+                Exportaciones Recibidas - {barco.nombre}
               </h2>
               <p className="text-blue-200 text-sm">
-                Registros de exportación por banda
+                Registros de producto recibido por banda desde otros barcos
               </p>
             </div>
           </div>
@@ -184,7 +184,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                     <p className="text-3xl font-black text-blue-400">{exportaciones.length}</p>
                   </div>
                   <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
-                    <p className="text-xs text-slate-400">Total Exportado</p>
+                    <p className="text-xs text-slate-400">Total Recibido</p>
                     <p className="text-3xl font-black text-green-400">
                       {exportaciones[0]?.acumulado_tm?.toFixed(3) || '0.000'} TM
                     </p>
@@ -204,13 +204,13 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 </div>
               )}
 
-              {/* Lista de exportaciones */}
+              {/* Lista de exportaciones recibidas */}
               <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
                 <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-blue-400" />
                     <h3 className="font-bold text-white">
-                      Registros de Exportación - {productoActual?.nombre}
+                      Producto Recibido - {productoActual?.nombre}
                     </h3>
                   </div>
                   <span className="text-xs text-slate-400">
@@ -234,7 +234,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha y Hora</th>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
-                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Barco Destino</th>
+                          <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Barco Origen</th>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
                           <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Registrado por</th>
                         </tr>
@@ -254,11 +254,11 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                               {exp.acumulado_tm?.toFixed(3)} TM
                             </td>
                             <td className="px-4 py-3">
-                              {exp.destino_barco ? (
+                              {exp.barco_origen ? (
                                 <div>
-                                  <p className="text-white">{exp.destino_barco.nombre}</p>
-                                  {exp.destino_barco.codigo_barco && (
-                                    <p className="text-xs text-blue-400">{exp.destino_barco.codigo_barco}</p>
+                                  <p className="text-white">{exp.barco_origen.nombre}</p>
+                                  {exp.barco_origen.codigo_barco && (
+                                    <p className="text-xs text-blue-400">{exp.barco_origen.codigo_barco}</p>
                                   )}
                                 </div>
                               ) : '—'}
@@ -288,12 +288,12 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 )}
               </div>
 
-              {/* Resumen por barco destino */}
+              {/* Resumen por barco origen */}
               {exportaciones.length > 0 && (
                 <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
                   <h4 className="font-bold text-white mb-3 flex items-center gap-2">
                     <Ship className="w-4 h-4 text-blue-400" />
-                    Resumen por Barco Destino
+                    Resumen por Barco Origen
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {Object.entries(
@@ -302,8 +302,8 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                         if (!id) return acc
                         if (!acc[id]) {
                           acc[id] = {
-                            nombre: exp.destino_barco?.nombre || 'Desconocido',
-                            codigo: exp.destino_barco?.codigo_barco,
+                            nombre: exp.barco_origen?.nombre || 'Desconocido',
+                            codigo: exp.barco_origen?.codigo_barco,
                             total: 0,
                             lecturas: 0
                           }
@@ -317,7 +317,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                         <p className="font-bold text-white">{data.nombre}</p>
                         {data.codigo && <p className="text-xs text-blue-400">{data.codigo}</p>}
                         <div className="flex justify-between mt-2 text-sm">
-                          <span className="text-slate-400">Total:</span>
+                          <span className="text-slate-400">Total recibido:</span>
                           <span className="font-bold text-green-400">{data.total.toFixed(3)} TM</span>
                         </div>
                         <div className="flex justify-between text-xs">
@@ -334,8 +334,8 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-sm text-blue-400 flex items-center gap-2">
                   <Export className="w-4 h-4 flex-shrink-0" />
-                  Los registros de exportación se crean cuando el barco envía producto a otros barcos (solo por banda).
-                  Cada lectura muestra el acumulado total exportado hasta ese momento.
+                  Este barco RECIBE producto por banda desde otros barcos (origen). 
+                  Cada lectura muestra el acumulado total recibido hasta ese momento.
                 </p>
               </div>
             </div>
@@ -365,7 +365,7 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
     exportaciones: 0,
     productos: [],
     totalImportado: 0,
-    totalExportado: 0
+    totalRecibido: 0
   })
   const [loading, setLoading] = useState(true)
 
@@ -375,52 +375,90 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
     }
   }, [barco])
 
-  const cargarEstadisticas = async () => {
-    try {
-      setLoading(true)
+const cargarEstadisticas = async () => {
+  try {
+    setLoading(true)
 
-      // Cargar viajes
-      const { data: viajes } = await supabase
+    let viajes = []
+    if (barco.tipo_operacion !== 'exportacion') {
+      const { data: viajesData } = await supabase
         .from('viajes')
         .select('*')
         .eq('barco_id', barco.id)
-
-      // Cargar exportaciones
-      const { data: exportaciones } = await supabase
-        .from('exportacion_banda')
-        .select('*')
-        .eq('barco_id', barco.id)
-
-      // Cargar productos del barco
-      const productosBarco = barco.metas_json?.productos || []
-      const { data: productosData } = await supabase
-        .from('productos')
-        .select('*')
-        .in('codigo', productosBarco)
-
-      const viajesCompletos = viajes?.filter(v => v.estado === 'completo') || []
-      const totalImportado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-      
-      const totalExportado = exportaciones?.length > 0 
-        ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0 
-        : 0
-
-      setStats({
-        viajes: viajes?.length || 0,
-        viajesCompletos: viajesCompletos.length,
-        exportaciones: exportaciones?.length || 0,
-        productos: productosData || [],
-        totalImportado,
-        totalExportado,
-        ultimaExportacion: exportaciones?.length > 0 ? exportaciones[0] : null
-      })
-
-    } catch (error) {
-      console.error('Error cargando estadísticas:', error)
-    } finally {
-      setLoading(false)
+      viajes = viajesData || []
     }
+
+    const { data: exportaciones } = await supabase
+      .from('exportacion_banda')
+      .select('*')
+      .eq('barco_id', barco.id)
+
+    const productosBarco = barco.metas_json?.productos || []
+    const { data: productosData } = await supabase
+      .from('productos')
+      .select('*')
+      .in('codigo', productosBarco)
+
+    // Cargar última lectura de banda POR CADA PRODUCTO
+    let bandasPorProducto = {}
+    if (barco.tipo_operacion !== 'exportacion' && productosData?.length > 0) {
+      for (const prod of productosData) {
+        const { data: bandaData } = await supabase
+          .from('lecturas_banda')
+          .select('acumulado_tm')
+          .eq('barco_id', barco.id)
+          .eq('producto_id', prod.id)
+          .order('fecha_hora', { ascending: false })
+          .limit(1)
+        bandasPorProducto[prod.id] = bandaData?.[0]?.acumulado_tm || 0
+      }
+    }
+
+    const viajesCompletos = viajes?.filter(v => v.estado === 'completo') || []
+
+    // Resumen por producto
+    const resumenProductos = (productosData || []).map(prod => {
+      const viajesProd = viajesCompletos.filter(v => v.producto_id === prod.id)
+      const tmViajes = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+      const tmBanda = bandasPorProducto[prod.id] || 0
+      const tmTotal = tmViajes + tmBanda
+
+      return {
+        ...prod,
+        tmViajes,
+        tmBanda,
+        tmTotal,
+        cantViajes: viajesProd.length
+      }
+    })
+
+    const totalImportado = resumenProductos.reduce((sum, p) => sum + p.tmTotal, 0)
+    const totalImportadoViajes = resumenProductos.reduce((sum, p) => sum + p.tmViajes, 0)
+    const totalBanda = resumenProductos.reduce((sum, p) => sum + p.tmBanda, 0)
+
+    const totalRecibido = exportaciones?.length > 0
+      ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0
+      : 0
+
+    setStats({
+      viajes: viajes?.length || 0,
+      viajesCompletos: viajesCompletos.length,
+      exportaciones: exportaciones?.length || 0,
+      productos: productosData || [],
+      resumenProductos,
+      totalImportado,
+      totalImportadoViajes,
+      totalBanda,
+      totalRecibido,
+      ultimaExportacion: exportaciones?.length > 0 ? exportaciones[0] : null
+    })
+
+  } catch (error) {
+    console.error('Error cargando estadísticas:', error)
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -435,7 +473,7 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
               <h2 className="text-2xl font-black text-white">{barco.nombre}</h2>
               <p className="text-blue-200 text-sm">
                 {barco.codigo_barco && `Código: ${barco.codigo_barco} · `}
-                {barco.tipo_operacion === 'exportacion' ? 'EXPORTACIÓN' : 'IMPORTACIÓN'}
+                {barco.tipo_operacion === 'exportacion' ? 'EXPORTACIÓN ' : 'IMPORTACIÓN'}
               </p>
             </div>
           </div>
@@ -494,27 +532,112 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
                 </div>
               </div>
 
-              {/* Estadísticas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-900 rounded-xl p-4 border border-green-500/20">
-                  <p className="text-xs text-slate-500">Total Importado</p>
-                  <p className="text-2xl font-bold text-green-400">
-                    {stats.totalImportado.toFixed(3)} TM
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {stats.viajesCompletos} viajes completos de {stats.viajes} totales
-                  </p>
+            {/* Estadísticas */}
+<div className="space-y-3">
+  {barco.tipo_operacion !== 'exportacion' && (
+    <>
+      {/* Total general */}
+      <div className="bg-slate-900 rounded-xl p-4 border border-green-500/20">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <p className="text-xs text-slate-500">Total Importado (todos los productos)</p>
+            <p className="text-2xl font-bold text-green-400">
+              {stats.totalImportado?.toFixed(3) || '0.000'} TM
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-500">
+            <p>{stats.viajesCompletos} viajes completos</p>
+            <p>de {stats.viajes} totales</p>
+          </div>
+        </div>
+        <div className="flex gap-4 pt-2 border-t border-white/10">
+          <div>
+            <p className="text-xs text-slate-500">Suma viajes</p>
+            <p className="text-sm font-bold text-blue-400">
+              {stats.totalImportadoViajes?.toFixed(3) || '0.000'} TM
+            </p>
+          </div>
+          <div className="border-l border-white/10 pl-4">
+            <p className="text-xs text-slate-500">Suma banda</p>
+            <p className="text-sm font-bold text-purple-400">
+              {stats.totalBanda?.toFixed(3) || '0.000'} TM
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Desglose por producto */}
+      {stats.resumenProductos?.map(prod => (
+        <div key={prod.id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">{prod.icono}</span>
+            <div className="flex-1">
+              <p className="font-bold text-white">{prod.nombre}</p>
+              <p className="text-xs text-slate-500">{prod.codigo} · {prod.tipo_registro}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Total</p>
+              <p className="text-lg font-black text-green-400">{prod.tmTotal.toFixed(3)} TM</p>
+            </div>
+          </div>
+
+          {/* Según el tipo de producto, mostrar lo que aplica */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+            {(prod.tipo_registro === 'viajes' || prod.tipo_registro === 'mixto') && (
+              <div className="bg-slate-800 rounded-lg p-2">
+                <p className="text-xs text-slate-500">Por viajes</p>
+                <p className="text-sm font-bold text-blue-400">{prod.tmViajes.toFixed(3)} TM</p>
+                <p className="text-xs text-slate-600">{prod.cantViajes} viajes</p>
+              </div>
+            )}
+            {(prod.tipo_registro === 'banda' || prod.tipo_registro === 'mixto') && (
+              <div className="bg-slate-800 rounded-lg p-2">
+                <p className="text-xs text-slate-500">Por banda</p>
+                <p className="text-sm font-bold text-purple-400">{prod.tmBanda.toFixed(3)} TM</p>
+                <p className="text-xs text-slate-600">acumulado</p>
+              </div>
+            )}
+          </div>
+
+          {/* Meta del producto si existe */}
+          {(() => {
+            const meta = barco.metas_json?.limites?.[prod.codigo] || 0
+            if (meta <= 0) return null
+            const pct = Math.min((prod.tmTotal / meta) * 100, 100)
+            return (
+              <div className="mt-2 pt-2 border-t border-white/10">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-500">Progreso vs meta</span>
+                  <span className={pct >= 100 ? 'text-green-400 font-bold' : 'text-slate-400'}>
+                    {pct.toFixed(1)}% de {meta.toFixed(3)} TM
+                  </span>
                 </div>
-                <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
-                  <p className="text-xs text-slate-500">Total Exportado</p>
-                  <p className="text-2xl font-bold text-blue-400">
-                    {stats.totalExportado.toFixed(3)} TM
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {stats.exportaciones} lecturas de banda
-                  </p>
+                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-400' : 'bg-blue-500'}`}
+                    style={{ width: `${pct}%` }}
+                  />
                 </div>
               </div>
+            )
+          })()}
+        </div>
+      ))}
+    </>
+  )}
+
+  {barco.tipo_operacion === 'exportacion' && (
+    <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
+      <p className="text-xs text-slate-500">Total Recibido</p>
+      <p className="text-2xl font-bold text-blue-400">
+        {stats.totalRecibido?.toFixed(3) || '0.000'} TM
+      </p>
+      <p className="text-xs text-slate-500 mt-1">
+        {stats.exportaciones} lecturas de banda recibidas
+      </p>
+    </div>
+  )}
+</div>
 
               {/* Productos */}
               <div className="bg-slate-900 rounded-xl p-4">
@@ -546,15 +669,15 @@ const DetalleBarcoModal = ({ barco, onClose }) => {
                 </div>
               </div>
 
-              {/* Barcos destino (solo exportación) */}
-              {barco.tipo_operacion === 'exportacion' && barco.metas_json?.barcos_destino?.length > 0 && (
+              {/* Barcos origen (desde donde recibe producto) */}
+              {barco.tipo_operacion === 'exportacion' && barco.metas_json?.barcos_origen?.length > 0 && (
                 <div className="bg-slate-900 rounded-xl p-4">
                   <h3 className="font-bold text-white mb-3 flex items-center gap-2">
                     <Ship className="w-4 h-4 text-blue-400" />
-                    Barcos Destino
+                    Barcos Origen (desde donde recibe)
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {barco.metas_json.barcos_destino.map(id => (
+                    {barco.metas_json.barcos_origen.map(id => (
                       <span key={id} className="bg-slate-800 px-3 py-1 rounded-full text-sm text-blue-400">
                         ID: {id}
                       </span>
@@ -1069,7 +1192,7 @@ export default function AdminPage() {
     try {
       setLoading(true)
       
-      // Cargar barcos - CORREGIDO: eliminar las relaciones complejas
+      // Cargar barcos
       const { data: barcosData, error: barcosError } = await supabase
         .from('barcos')
         .select('*')
@@ -1125,7 +1248,7 @@ export default function AdminPage() {
       setUsuarios(usuariosData || [])
       setProductos(productosData || [])
       
-      console.log('Barcos cargados:', barcosConConteos) // Para debug
+      console.log('Barcos cargados:', barcosConConteos)
     } catch (error) {
       console.error('Error cargando datos:', error)
       toast.error('Error al cargar datos')
@@ -1157,7 +1280,7 @@ export default function AdminPage() {
     const ruta = tipo === 'exportacion' ? `/barco/${token}/exportacion` : `/barco/${token}`
     const link = `${window.location.origin}${ruta}`
     navigator.clipboard.writeText(link)
-    toast.success(`Link de ${tipo === 'exportacion' ? 'exportación' : 'registro'} copiado`, { icon: '📋' })
+    toast.success(`Link de ${tipo === 'exportacion' ? 'registro de recepción' : 'registro'} copiado`, { icon: '📋' })
   }
 
   const handleEliminarBarco = async (barcoId, barcoNombre) => {
@@ -1218,7 +1341,7 @@ export default function AdminPage() {
 
   const handleVerExportaciones = (barco) => {
     if (barco.tipo_operacion !== 'exportacion') {
-      toast.error('Este barco no tiene registros de exportación')
+      toast.error('Este barco no tiene registros de exportación recibida')
       return
     }
     setBarcoSeleccionado(barco)
@@ -1290,163 +1413,180 @@ export default function AdminPage() {
   }
 
   // =====================================================
-  // EXPORTACIÓN DE BARCO
+  // EXPORTACIÓN DE BARCO (DESCARGAR DATOS)
   // =====================================================
-  const handleExportarBarco = async (barco) => {
-    try {
-      setExportando(barco.id)
-      toast.loading(`Exportando datos de ${barco.nombre}...`, { id: 'export' })
+ const handleExportarBarco = async (barco) => {
+  try {
+    setExportando(barco.id)
+    toast.loading(`Exportando datos de ${barco.nombre}...`, { id: 'export' })
 
-      // Cargar datos según el tipo de operación
-      let viajes = []
-      let lecturasBanda = []
-      let exportaciones = []
-      let bitacora = []
+    let viajes = []
+    let lecturasBanda = []
+    let exportaciones = []
+    let bitacora = []
 
-      if (barco.tipo_operacion !== 'exportacion') {
-        const { data: viajesData } = await supabase
-          .from('viajes')
-          .select(`
-            *,
-            producto:producto_id(id, codigo, nombre, icono, tipo_registro),
-            destino:destino_id(id, codigo, nombre)
-          `)
-          .eq('barco_id', barco.id)
-          .order('viaje_numero', { ascending: true })
-        viajes = viajesData || []
+    if (barco.tipo_operacion !== 'exportacion') {
+      const { data: viajesData } = await supabase
+        .from('viajes')
+        .select(`
+          *,
+          producto:producto_id(id, codigo, nombre, icono, tipo_registro),
+          destino:destino_id(id, codigo, nombre)
+        `)
+        .eq('barco_id', barco.id)
+        .order('viaje_numero', { ascending: true })
+      viajes = viajesData || []
 
-        const { data: bandaData } = await supabase
-          .from('lecturas_banda')
-          .select('*')
-          .eq('barco_id', barco.id)
-          .order('fecha_hora', { ascending: true })
-        lecturasBanda = bandaData || []
-      }
-
-      if (barco.tipo_operacion === 'exportacion') {
-        const { data: exportData } = await supabase
-          .from('exportacion_banda')
-          .select(`
-            *,
-            producto:producto_id(id, codigo, nombre, icono),
-            destino_barco:destino_barco_id(id, nombre, codigo_barco)
-          `)
-          .eq('barco_id', barco.id)
-          .order('fecha_hora', { ascending: true })
-        exportaciones = exportData || []
-      }
-
-      const { data: bitacoraData } = await supabase
-        .from('bitacora_flujos')
+      const { data: bandaData } = await supabase
+        .from('lecturas_banda')
         .select('*')
         .eq('barco_id', barco.id)
         .order('fecha_hora', { ascending: true })
-      bitacora = bitacoraData || []
-
-      const totalKG = viajes?.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0) || 0
-      const totalTM = totalKG / 1000
-      const totalExportado = exportaciones?.length > 0 ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0 : 0
-      
-      const resumenProductos = {}
-      productos.forEach(prod => {
-        const viajesProd = viajes?.filter(v => v.producto_id === prod.id) || []
-        const exportProd = exportaciones?.filter(e => e.producto_id === prod.id) || []
-        const totalProdKG = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0)
-        const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
-        
-        resumenProductos[prod.codigo] = {
-          producto: prod.nombre,
-          tipo: prod.tipo_registro,
-          metaTM: metaTM,
-          descargadoTM: totalProdKG / 1000,
-          exportadoTM: exportProd.length > 0 ? exportProd[exportProd.length - 1]?.acumulado_tm || 0 : 0,
-          viajes: viajesProd.length,
-          exportaciones: exportProd.length,
-          completado: metaTM > 0 ? (totalProdKG / 1000) >= metaTM : false
-        }
-      })
-
-      const exportData = {
-        metadata: {
-          fecha_exportacion: new Date().toISOString(),
-          exportado_por: user?.nombre,
-          version: '2.0.0',
-          app: 'Barcos Almapac'
-        },
-        barco: {
-          id: barco.id,
-          nombre: barco.nombre,
-          codigo_barco: barco.codigo_barco,
-          tipo_operacion: barco.tipo_operacion,
-          fecha_llegada: barco.fecha_llegada,
-          fecha_salida: barco.fecha_salida,
-          estado: barco.estado,
-          token_compartido: barco.token_compartido,
-          metas: barco.metas_json || {},
-          creado: barco.created_at,
-          pesador_asignado: barco.pesador ? {
-            id: barco.pesador.id,
-            nombre: barco.pesador.nombre,
-            username: barco.pesador.username,
-            rol: barco.pesador.rol
-          } : null
-        },
-        catalogo_productos: productos,
-        estadisticas: {
-          total_viajes: viajes?.length || 0,
-          total_kilogramos: totalKG,
-          total_toneladas: totalTM,
-          total_exportado: totalExportado,
-          resumen_productos: resumenProductos,
-          viajes_por_dia: viajes?.reduce((acc, v) => {
-            const fecha = dayjs(v.created_at).format('YYYY-MM-DD')
-            acc[fecha] = (acc[fecha] || 0) + 1
-            return acc
-          }, {}),
-          exportaciones_por_dia: exportaciones?.reduce((acc, e) => {
-            const fecha = dayjs(e.fecha_hora).format('YYYY-MM-DD')
-            acc[fecha] = (acc[fecha] || 0) + 1
-            return acc
-          }, {})
-        },
-        datos: {
-          viajes: viajes || [],
-          lecturas_banda: lecturasBanda || [],
-          exportaciones: exportaciones || [],
-          bitacora: bitacora || []
-        }
-      }
-
-      const jsonString = JSON.stringify(exportData, null, 2)
-      const blob = new Blob([jsonString], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      
-      const tipo = barco.tipo_operacion === 'exportacion' ? 'EXPORTACION' : 'IMPORTACION'
-      const nombreArchivo = `${tipo}_${barco.nombre.replace(/\s+/g, '_')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
-      
-      link.href = url
-      link.download = nombreArchivo
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-
-      toast.success(`✅ Datos de ${barco.nombre} exportados correctamente`, { id: 'export' })
-      
-      if (barco.tipo_operacion === 'exportacion') {
-        toast.success(`📊 ${exportaciones?.length || 0} exportaciones · ${totalExportado.toFixed(3)} TM totales`, { duration: 4000 })
-      } else {
-        toast.success(`📊 ${viajes?.length || 0} viajes · ${totalTM.toFixed(3)} TM totales`, { duration: 4000 })
-      }
-
-    } catch (error) {
-      console.error('Error exportando barco:', error)
-      toast.error('Error al exportar los datos', { id: 'export' })
-    } finally {
-      setExportando(null)
+      lecturasBanda = bandaData || []
     }
+
+    if (barco.tipo_operacion === 'exportacion') {
+      const { data: exportData } = await supabase
+        .from('exportacion_banda')
+        .select(`
+          *,
+          producto:producto_id(id, codigo, nombre, icono),
+          barco_origen:destino_barco_id(id, nombre, codigo_barco)
+        `)
+        .eq('barco_id', barco.id)
+        .order('fecha_hora', { ascending: true })
+      exportaciones = exportData || []
+    }
+
+    const { data: bitacoraData } = await supabase
+      .from('bitacora_flujos')
+      .select('*')
+      .eq('barco_id', barco.id)
+      .order('fecha_hora', { ascending: true })
+    bitacora = bitacoraData || []
+
+    // Calcular totales sumando viajes + banda
+    const totalKG = viajes?.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0) || 0
+    const totalViajeTM = totalKG / 1000
+    const ultimaBanda = lecturasBanda?.length > 0
+      ? lecturasBanda[lecturasBanda.length - 1]?.acumulado_tm || 0
+      : 0
+    const totalTM = totalViajeTM + ultimaBanda
+    const totalRecibido = exportaciones?.length > 0
+      ? exportaciones[exportaciones.length - 1]?.acumulado_tm || 0
+      : 0
+
+    const resumenProductos = {}
+    productos.forEach(prod => {
+      const viajesProd = viajes?.filter(v => v.producto_id === prod.id) || []
+      const exportProd = exportaciones?.filter(e => e.producto_id === prod.id) || []
+      const totalProdKG = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0)
+      const bandaProd = lecturasBanda?.filter(l => l.producto_id === prod.id) || []
+      const ultimaBandaProd = bandaProd.length > 0
+        ? bandaProd[bandaProd.length - 1]?.acumulado_tm || 0
+        : 0
+      const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
+      const totalProdTM = (totalProdKG / 1000) + ultimaBandaProd
+
+      resumenProductos[prod.codigo] = {
+        producto: prod.nombre,
+        tipo: prod.tipo_registro,
+        metaTM,
+        descargadoTM: totalProdKG / 1000,
+        bandaTM: ultimaBandaProd,
+        totalTM: totalProdTM,
+        recibidoTM: exportProd.length > 0
+          ? exportProd[exportProd.length - 1]?.acumulado_tm || 0
+          : 0,
+        viajes: viajesProd.length,
+        exportaciones: exportProd.length,
+        completado: metaTM > 0 ? totalProdTM >= metaTM : false
+      }
+    })
+
+    const exportData = {
+      metadata: {
+        fecha_exportacion: new Date().toISOString(),
+        exportado_por: user?.nombre,
+        version: '2.0.0',
+        app: 'Barcos Almapac'
+      },
+      barco: {
+        id: barco.id,
+        nombre: barco.nombre,
+        codigo_barco: barco.codigo_barco,
+        tipo_operacion: barco.tipo_operacion,
+        fecha_llegada: barco.fecha_llegada,
+        fecha_salida: barco.fecha_salida,
+        estado: barco.estado,
+        token_compartido: barco.token_compartido,
+        metas: barco.metas_json || {},
+        creado: barco.created_at,
+        pesador_asignado: barco.pesador ? {
+          id: barco.pesador.id,
+          nombre: barco.pesador.nombre,
+          username: barco.pesador.username,
+          rol: barco.pesador.rol
+        } : null
+      },
+      catalogo_productos: productos,
+      estadisticas: {
+        total_viajes: viajes?.length || 0,
+        total_kilogramos_viajes: totalKG,
+        total_tm_viajes: totalViajeTM,
+        total_tm_banda: ultimaBanda,
+        total_toneladas: totalTM,
+        total_recibido: totalRecibido,
+        resumen_productos: resumenProductos,
+        viajes_por_dia: viajes?.reduce((acc, v) => {
+          const fecha = dayjs(v.created_at).format('YYYY-MM-DD')
+          acc[fecha] = (acc[fecha] || 0) + 1
+          return acc
+        }, {}),
+        exportaciones_por_dia: exportaciones?.reduce((acc, e) => {
+          const fecha = dayjs(e.fecha_hora).format('YYYY-MM-DD')
+          acc[fecha] = (acc[fecha] || 0) + 1
+          return acc
+        }, {})
+      },
+      datos: {
+        viajes: viajes || [],
+        lecturas_banda: lecturasBanda || [],
+        exportaciones_recibidas: exportaciones || [],
+        bitacora: bitacora || []
+      }
+    }
+
+    const jsonString = JSON.stringify(exportData, null, 2)
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    const tipo = barco.tipo_operacion === 'exportacion' ? 'RECEPCION' : 'IMPORTACION'
+    const nombreArchivo = `${tipo}_${barco.nombre.replace(/\s+/g, '_')}_${dayjs().format('YYYYMMDD_HHmm')}.json`
+
+    link.href = url
+    link.download = nombreArchivo
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast.success(`✅ Datos de ${barco.nombre} exportados correctamente`, { id: 'export' })
+
+    if (barco.tipo_operacion === 'exportacion') {
+      toast.success(`📊 ${exportaciones?.length || 0} registros de recepción · ${totalRecibido.toFixed(3)} TM totales`, { duration: 4000 })
+    } else {
+      toast.success(`📊 ${viajes?.length || 0} viajes · ${totalViajeTM.toFixed(3)} TM viajes + ${ultimaBanda.toFixed(3)} TM banda = ${totalTM.toFixed(3)} TM totales`, { duration: 4000 })
+    }
+
+  } catch (error) {
+    console.error('Error exportando barco:', error)
+    toast.error('Error al exportar los datos', { id: 'export' })
+  } finally {
+    setExportando(null)
   }
+}
 
   // Filtrar barcos
   const barcosFiltrados = barcos.filter(barco => {
@@ -1570,7 +1710,7 @@ export default function AdminPage() {
                   </p>
                   <p className="text-xs text-blue-300">
                     {barcos.filter(b => b.tipo_operacion === 'importacion' && b.estado === 'activo').length} Importación · 
-                    {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'activo').length} Exportación
+                    {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'activo').length} Exportación (reciben)
                   </p>
                 </div>
               </div>
@@ -1617,7 +1757,7 @@ export default function AdminPage() {
                   <p className="text-2xl font-black text-white">{barcos.length}</p>
                   <p className="text-xs text-blue-300">
                     {barcos.filter(b => b.tipo_operacion === 'importacion').length} Importación · 
-                    {barcos.filter(b => b.tipo_operacion === 'exportacion').length} Exportación
+                    {barcos.filter(b => b.tipo_operacion === 'exportacion').length} Exportación (reciben)
                   </p>
                 </div>
               </div>
@@ -1640,7 +1780,7 @@ export default function AdminPage() {
                   <div className="bg-green-500/20 p-2 rounded-lg">
                     <Import className="w-5 h-5 text-green-400" />
                   </div>
-                  <h3 className="font-bold text-white">Importación</h3>
+                  <h3 className="font-bold text-white">Importación (reciben)</h3>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between">
@@ -1664,7 +1804,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Tarjeta de exportación */}
+              {/* Tarjeta de exportación (recepción) */}
               <div className="bg-slate-900 rounded-xl p-5 border border-blue-500/20">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-blue-500/20 p-2 rounded-lg">
@@ -1890,7 +2030,7 @@ export default function AdminPage() {
                             {barco.tipo_operacion === 'exportacion' && (
                               <span className="block text-xs">
                                 <span className="text-blue-400 font-bold">{exportacionesCount}</span>
-                                <span className="text-slate-500"> exportaciones</span>
+                                <span className="text-slate-500"> recepciones</span>
                               </span>
                             )}
                           </div>
@@ -1934,7 +2074,7 @@ export default function AdminPage() {
                               <button
                                 onClick={() => handleVerRegistroViajes(barco.token_compartido, 'exportacion')}
                                 className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
-                                title="Ir a Registrar Exportación"
+                                title="Ir a Registrar Recepción"
                               >
                                 <Export className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
                               </button>
@@ -1959,12 +2099,12 @@ export default function AdminPage() {
                               </button>
                             )}
                             
-                            {/* Botón Ver exportaciones (solo exportación) */}
+                            {/* Botón Ver exportaciones recibidas (solo exportación) */}
                             {barco.tipo_operacion === 'exportacion' && (
                               <button
                                 onClick={() => handleVerExportaciones(barco)}
                                 className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
-                                title="Ver registros de exportación"
+                                title="Ver producto recibido"
                               >
                                 <BarChart3 className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
                               </button>
@@ -2177,7 +2317,6 @@ export default function AdminPage() {
               <div>
                 <p className="font-bold text-white text-sm">Banda</p>
                 <p className="text-slate-500 text-xs">Solo lecturas de banda, se acumula el peso continuamente</p>
-                <p className="text-xs text-blue-400 mt-1">Usado para EXPORTACIÓN</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -2187,7 +2326,6 @@ export default function AdminPage() {
               <div>
                 <p className="font-bold text-white text-sm">Viajes</p>
                 <p className="text-slate-500 text-xs">Solo registro por viajes de camión</p>
-                <p className="text-xs text-green-400 mt-1">Usado para IMPORTACIÓN</p>
               </div>
             </div>
           </div>

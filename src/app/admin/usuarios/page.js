@@ -1,5 +1,3 @@
-// admin/usuarios/page.js - Página de gestión de usuarios para administradores
-
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -9,9 +7,10 @@ import { getCurrentUser, isAdmin } from '../../lib/auth'
 import { 
   Users, Plus, Edit2, Trash2, X, Check, 
   UserPlus, Shield, User as UserIcon, Loader2, AlertCircle,
-  RefreshCw, ToggleLeft, ToggleRight, Save
+  RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import Link from 'next/link'
 
 // Modal para crear/editar usuario
 const UsuarioModal = ({ user, onClose, onSave }) => {
@@ -31,15 +30,18 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
     setError('')
 
     try {
+      // Verificar que quien ejecuta la acción es admin
+      if (!isAdmin()) {
+        throw new Error('No tienes permisos para realizar esta acción')
+      }
+
       const currentUser = getCurrentUser()
-      
-      // Validaciones
+
       if (!formData.nombre.trim()) throw new Error('El nombre es requerido')
       if (!formData.username.trim()) throw new Error('El username es requerido')
       if (!user && !formData.password.trim()) throw new Error('La contraseña es requerida para nuevos usuarios')
-      
+
       if (user) {
-        // ACTUALIZAR USUARIO
         const { data, error } = await supabase
           .rpc('actualizar_usuario', {
             p_user_id: user.id,
@@ -52,14 +54,10 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           })
 
         if (error) throw error
-        
-        if (!data || !data.success) {
-          throw new Error(data?.error || 'Error al actualizar usuario')
-        }
-        
+        if (!data || !data.success) throw new Error(data?.error || 'Error al actualizar usuario')
+
         toast.success('✅ Usuario actualizado correctamente')
       } else {
-        // CREAR NUEVO USUARIO
         const { data, error } = await supabase
           .rpc('crear_usuario', {
             p_nombre: formData.nombre,
@@ -70,11 +68,8 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           })
 
         if (error) throw error
+        if (!data || !data.success) throw new Error(data?.error || 'Error al crear usuario')
 
-        if (!data || !data.success) {
-          throw new Error(data?.error || 'Error al crear usuario')
-        }
-        
         toast.success('✅ Usuario creado correctamente')
       }
 
@@ -91,7 +86,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -102,8 +96,8 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
                 {user ? 'Editar Usuario' : 'Nuevo Usuario'}
               </h2>
             </div>
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
             >
               <X className="w-5 h-5 text-white" />
@@ -111,7 +105,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           </div>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2">
@@ -121,9 +114,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           )}
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
-              Nombre Completo
-            </label>
+            <label className="block text-sm font-bold text-slate-400 mb-1">Nombre Completo</label>
             <input
               type="text"
               value={formData.nombre}
@@ -135,9 +126,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
-              Username
-            </label>
+            <label className="block text-sm font-bold text-slate-400 mb-1">Username</label>
             <input
               type="text"
               value={formData.username}
@@ -163,9 +152,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
-              Rol
-            </label>
+            <label className="block text-sm font-bold text-slate-400 mb-1">Rol</label>
             <select
               value={formData.rol}
               onChange={(e) => setFormData({...formData, rol: e.target.value})}
@@ -179,9 +166,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
 
           {user && (
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1">
-                Estado
-              </label>
+              <label className="block text-sm font-bold text-slate-400 mb-1">Estado</label>
               <div className="flex gap-4">
                 <label className="flex-1 cursor-pointer">
                   <input
@@ -192,16 +177,12 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
                     className="hidden"
                   />
                   <div className={`p-3 rounded-lg border-2 text-center transition-all ${
-                    formData.activo === true 
-                      ? 'border-green-500 bg-green-500/20' 
+                    formData.activo === true
+                      ? 'border-green-500 bg-green-500/20'
                       : 'border-white/10 bg-slate-800'
                   }`}>
-                    <ToggleRight className={`w-5 h-5 mx-auto mb-1 ${
-                      formData.activo === true ? 'text-green-400' : 'text-slate-400'
-                    }`} />
-                    <span className={`text-xs font-bold ${
-                      formData.activo === true ? 'text-green-400' : 'text-slate-400'
-                    }`}>
+                    <ToggleRight className={`w-5 h-5 mx-auto mb-1 ${formData.activo === true ? 'text-green-400' : 'text-slate-400'}`} />
+                    <span className={`text-xs font-bold ${formData.activo === true ? 'text-green-400' : 'text-slate-400'}`}>
                       Activo
                     </span>
                   </div>
@@ -215,16 +196,12 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
                     className="hidden"
                   />
                   <div className={`p-3 rounded-lg border-2 text-center transition-all ${
-                    formData.activo === false 
-                      ? 'border-red-500 bg-red-500/20' 
+                    formData.activo === false
+                      ? 'border-red-500 bg-red-500/20'
                       : 'border-white/10 bg-slate-800'
                   }`}>
-                    <ToggleLeft className={`w-5 h-5 mx-auto mb-1 ${
-                      formData.activo === false ? 'text-red-400' : 'text-slate-400'
-                    }`} />
-                    <span className={`text-xs font-bold ${
-                      formData.activo === false ? 'text-red-400' : 'text-slate-400'
-                    }`}>
+                    <ToggleLeft className={`w-5 h-5 mx-auto mb-1 ${formData.activo === false ? 'text-red-400' : 'text-slate-400'}`} />
+                    <span className={`text-xs font-bold ${formData.activo === false ? 'text-red-400' : 'text-slate-400'}`}>
                       Inactivo
                     </span>
                   </div>
@@ -239,11 +216,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
               disabled={loading}
               className="flex-1 bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white font-bold py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {user ? 'Actualizar' : 'Crear Usuario'}
             </button>
             <button
@@ -260,7 +233,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
   )
 }
 
-// Componente de confirmación
+// Modal de confirmación
 const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message }) => {
   if (!isOpen) return null
 
@@ -307,10 +280,19 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     const currentUser = getCurrentUser()
-    if (!currentUser || !isAdmin()) {
+
+    // Verificar autenticación Y que sea admin
+    if (!currentUser) {
       router.push('/')
       return
     }
+
+    if (!isAdmin()) {
+      toast.error('No tienes permisos para acceder a esta sección')
+      router.push('/admin')
+      return
+    }
+
     cargarUsuarios()
   }, [router])
 
@@ -318,14 +300,10 @@ export default function UsuariosPage() {
     try {
       setLoading(true)
       setError(null)
-      
-      const currentUser = getCurrentUser()
-      
-      if (!currentUser || !currentUser.id) {
-        throw new Error('Usuario no autenticado')
-      }
 
-      // Cargar usuarios directamente desde la tabla
+      const currentUser = getCurrentUser()
+      if (!currentUser || !currentUser.id) throw new Error('Usuario no autenticado')
+
       const { data, error } = await supabase
         .from('usuarios')
         .select('id, nombre, username, rol, activo, created_at')
@@ -334,7 +312,6 @@ export default function UsuariosPage() {
       if (error) throw error
 
       setUsuarios(data || [])
-      
     } catch (error) {
       console.error('Error cargando usuarios:', error)
       setError(error.message)
@@ -347,19 +324,16 @@ export default function UsuariosPage() {
   const handleCambiarEstado = async (userId, userName, estadoActual) => {
     const nuevoEstado = !estadoActual
     const accion = nuevoEstado ? 'activar' : 'desactivar'
-    
+
     try {
       setAccionEnProgreso(userId)
-      
+
       const currentUser = getCurrentUser()
-      
-      // Verificar que no se está desactivando a sí mismo
       if (userId === currentUser.id && !nuevoEstado) {
         toast.error('No puedes desactivar tu propio usuario')
         return
       }
 
-      // Actualizar estado directamente
       const { error } = await supabase
         .from('usuarios')
         .update({ activo: nuevoEstado })
@@ -369,7 +343,6 @@ export default function UsuariosPage() {
 
       toast.success(`Usuario ${accion}do correctamente`)
       await cargarUsuarios()
-      
     } catch (error) {
       console.error('Error:', error)
       toast.error(error.message)
@@ -392,10 +365,7 @@ export default function UsuariosPage() {
 
     try {
       setAccionEnProgreso(usuarioEliminar.id)
-      
-      const currentUser = getCurrentUser()
 
-      // Desactivar usuario (soft delete)
       const { error } = await supabase
         .from('usuarios')
         .update({ activo: false })
@@ -405,7 +375,6 @@ export default function UsuariosPage() {
 
       toast.success(`Usuario "${usuarioEliminar.nombre}" desactivado`)
       await cargarUsuarios()
-      
     } catch (error) {
       console.error('Error:', error)
       toast.error(error.message)
@@ -417,7 +386,7 @@ export default function UsuariosPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-purple-500 animate-spin mx-auto mb-4" />
           <p className="text-slate-400">Cargando usuarios...</p>
@@ -427,27 +396,35 @@ export default function UsuariosPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#0f172a] p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-2xl p-6 text-white shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-black flex items-center gap-2">
-                <Users className="w-8 h-8" />
-                Gestión de Usuarios
-              </h1>
-              <p className="text-purple-200 text-sm mt-1">
-                Administra pesadores, chequeros y administradores del sistema
-              </p>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/admin"
+                className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+                title="Volver al panel"
+              >
+                <ArrowLeft className="w-5 h-5 text-white" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-black flex items-center gap-2">
+                  <Users className="w-8 h-8" />
+                  Gestión de Usuarios
+                </h1>
+                <p className="text-purple-200 text-sm mt-1">
+                  Administra pesadores, chequeros y administradores del sistema
+                </p>
+              </div>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={cargarUsuarios}
                 disabled={loading}
                 className="bg-purple-500/20 hover:bg-purple-500/30 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-                title="Recargar usuarios"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 Recargar
@@ -465,34 +442,29 @@ export default function UsuariosPage() {
             </div>
           </div>
 
-          {/* Stats rápidas */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Total Usuarios</p>
               <p className="text-2xl font-black text-white">{usuarios.length}</p>
+              <p className="text-xs text-purple-300">{usuarios.filter(u => u.activo).length} activos</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Administradores</p>
-              <p className="text-2xl font-black text-white">
-                {usuarios.filter(u => u.rol === 'admin').length}
-              </p>
+              <p className="text-2xl font-black text-white">{usuarios.filter(u => u.rol === 'admin').length}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Pesadores</p>
-              <p className="text-2xl font-black text-white">
-                {usuarios.filter(u => u.rol === 'pesador').length}
-              </p>
+              <p className="text-2xl font-black text-white">{usuarios.filter(u => u.rol === 'pesador').length}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Chequeros</p>
-              <p className="text-2xl font-black text-white">
-                {usuarios.filter(u => u.rol === 'chequero').length}
-              </p>
+              <p className="text-2xl font-black text-white">{usuarios.filter(u => u.rol === 'chequero').length}</p>
             </div>
           </div>
         </div>
 
-        {/* Mensaje de error */}
+        {/* Error */}
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
@@ -509,7 +481,7 @@ export default function UsuariosPage() {
           </div>
         )}
 
-        {/* Tabla de usuarios */}
+        {/* Tabla */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
           <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
             <h2 className="font-bold text-white flex items-center gap-2">
@@ -545,13 +517,13 @@ export default function UsuariosPage() {
                     const currentUser = getCurrentUser()
                     const esUsuarioActual = user.id === currentUser?.id
                     const estaCargando = accionEnProgreso === user.id
-                    
+
                     return (
                       <tr key={user.id} className="hover:bg-white/5 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-bold">
-                              {user.nombre.charAt(0)}
+                            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                              {user.nombre.charAt(0).toUpperCase()}
                             </div>
                             <div>
                               <p className="font-bold text-white">
@@ -578,7 +550,7 @@ export default function UsuariosPage() {
                           }`}>
                             {user.rol === 'admin' && <Shield className="w-3 h-3" />}
                             {user.rol === 'pesador' && <UserIcon className="w-3 h-3" />}
-                            {user.rol === 'chequero' && '📋'}
+                            {user.rol === 'chequero' && <span>📋</span>}
                             <span className="capitalize">{user.rol}</span>
                           </span>
                         </td>
@@ -587,13 +559,13 @@ export default function UsuariosPage() {
                             onClick={() => handleCambiarEstado(user.id, user.nombre, user.activo)}
                             disabled={estaCargando || (esUsuarioActual && user.activo)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                              user.activo 
-                                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
+                              user.activo
+                                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                                 : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                             } ${(esUsuarioActual && user.activo) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             title={
-                              esUsuarioActual && user.activo 
-                                ? 'No puedes desactivar tu propio usuario' 
+                              esUsuarioActual && user.activo
+                                ? 'No puedes desactivar tu propio usuario'
                                 : `Click para ${user.activo ? 'desactivar' : 'activar'}`
                             }
                           >
@@ -604,9 +576,7 @@ export default function UsuariosPage() {
                             ) : (
                               <ToggleLeft className="w-4 h-4" />
                             )}
-                            <span>
-                              {user.activo ? 'Activo' : 'Inactivo'}
-                            </span>
+                            {user.activo ? 'Activo' : 'Inactivo'}
                           </button>
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-sm">
@@ -634,10 +604,10 @@ export default function UsuariosPage() {
                               disabled={estaCargando || !user.activo || esUsuarioActual}
                               className="p-2 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-30"
                               title={
-                                esUsuarioActual 
-                                  ? 'No puedes eliminar tu propio usuario' 
-                                  : !user.activo 
-                                    ? 'Usuario ya inactivo' 
+                                esUsuarioActual
+                                  ? 'No puedes eliminar tu propio usuario'
+                                  : !user.activo
+                                    ? 'Usuario ya inactivo'
                                     : 'Desactivar Usuario'
                               }
                             >
@@ -692,7 +662,7 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Modal para crear/editar usuario */}
+      {/* Modal crear/editar */}
       {showModal && (
         <UsuarioModal
           user={usuarioEditando}
@@ -708,7 +678,7 @@ export default function UsuariosPage() {
         />
       )}
 
-      {/* Modal de confirmación para eliminar */}
+      {/* Modal confirmación eliminar */}
       <ConfirmDialog
         isOpen={!!usuarioEliminar}
         onClose={() => setUsuarioEliminar(null)}
