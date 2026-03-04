@@ -1,20 +1,20 @@
-// compartido/[token]/DashboardCompartido.js - Componente principal del dashboard compartido
+// compartido/[token]/DashboardCompartido.js - Componente principal del dashboard compartido, ahora con código de barco dinámico
 "use client";
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v23 · DISEÑO PREMIUM
- *  ⚡ CORREGIDO: Ocultar viajes en productos solo banda
- *  ⚡ MEJORADO: Texto dinámico según tipo de operación (carga/descarga)
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v22 · DISEÑO PREMIUM
+ *  ⚡ CORREGIDO: Acumulado solo de viajes COMPLETOS y usando PESO DESTINO
+ *  ⚡ AHORA DINÁMICO: Usa el código de barco recibido como parámetro
  * ═══════════════════════════════════════════════════════════════
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
-  AreaChart, Area, BarChart, Bar,
+  AreaChart, Area, BarChart, Bar, RadialBarChart, RadialBar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, ComposedChart, Line
+  PieChart, Pie, Cell, Legend, LineChart, Line, ComposedChart
 } from "recharts";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
@@ -51,7 +51,7 @@ const COLORES_FALLBACK = [
 ];
 
 // ============================================================================
-// HOOK PRINCIPAL
+// HOOK PRINCIPAL - AHORA RECIBE EL CÓDIGO DE BARCO
 // ============================================================================
 function useBarcoData(codigoBarco) {
   const [data, setData] = useState({
@@ -223,12 +223,8 @@ function getMetaProducto(metas_json, producto) {
 // ============================================================================
 // COMPONENTE: Panel de Tendencias y Predicciones para Banda
 // ============================================================================
-function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacion }) {
+function PanelPrediccionesBanda({ producto, lecturas, viajes, meta }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
-
-  // Determinar texto según tipo de operación
-  const textoAccion = tipoOperacion === 'exportacion' ? 'CARGAR' : 'DESCARGAR';
-  const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
 
   // Ordenar lecturas por fecha
   const lecturasOrdenadas = useMemo(() => {
@@ -474,7 +470,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 
           {/* FALTANTE */}
           <div className="alm-pred-metrica">
-            <span className="alm-pred-label">{textoFaltante}</span>
+            <span className="alm-pred-label">📦 FALTANTE POR DESCARGAR</span>
             <span className="alm-pred-valor">{fmtTM(faltante, 2)} T</span>
           </div>
         </div>
@@ -536,20 +532,21 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (CORREGIDO)
 // ============================================================================
-function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
+function PanelPrediccionesViajes({ producto, viajes, meta }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
-
-  // Determinar texto según tipo de operación
-  const textoAccion = tipoOperacion === 'exportacion' ? 'CARGAR' : 'DESCARGAR';
-  const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
-  const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
   // Filtrar solo viajes completos para cálculos de rendimiento
   const viajesCompletos = useMemo(() => {
     return viajes.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
   }, [viajes]);
+
+  // Log para depuración
+  useEffect(() => {
+    console.log(`Viajes para ${producto.nombre}:`, viajes.length);
+    console.log(`Viajes completos:`, viajesCompletos.length);
+  }, [viajes, viajesCompletos, producto]);
 
   // Ordenar viajes por fecha
   const viajesOrdenados = useMemo(() => {
@@ -743,11 +740,12 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [viajesOrdenados]);
 
-  // Datos para gráfico de tendencia de viajes
+  // Datos para gráfico de tendencia de viajes (mostrar todos, incluso incompletos, pero acumulado solo de completos)
   const datosViajes = useMemo(() => {
     const viajesParaGrafico = viajes.slice(-15);
 
     return viajesParaGrafico.map((v, i, arr) => {
+      // Acumulado solo de viajes completos hasta este punto (usando peso destino)
       const viajesCompletosHastaAhora = viajes
         .slice(0, viajes.indexOf(v) + 1)
         .filter(v2 => v2.estado === 'completo');
@@ -806,7 +804,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <span className="alm-pred-label">📊 TOTAL VIAJES COMPLETOS</span>
             <span className="alm-pred-valor-grande">{totalViajes}</span>
             <span className="alm-pred-sub">
-              {fmtTM(totalToneladasViajes, 2)} {textoUnidad}
+              {fmtTM(totalToneladasViajes, 2)} T totales
             </span>
           </div>
 
@@ -842,7 +840,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
           {/* Viajes faltantes estimados */}
           {viajesFaltantes > 0 && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
-              <span className="alm-pred-label">📦 {textoFaltante}</span>
+              <span className="alm-pred-label">📦 VIAJES FALTANTES</span>
               <span className="alm-pred-valor">{viajesFaltantes} viajes</span>
               <span className="alm-pred-sub">
                 {fmtTM(meta - totalToneladasViajes, 2)} T por transportar
@@ -1080,10 +1078,9 @@ function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, activo, on
 // ============================================================================
 // COMPONENTE: Finalización General
 // ============================================================================
-function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, tipoOperacion }) {
+function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda }) {
   if (!metaGlobal || metaGlobal === 0) return null;
 
-  const textoAccion = tipoOperacion === 'exportacion' ? 'CARGA' : 'DESCARGA';
   const faltante = Math.max(0, metaGlobal - totalGlobal);
   if (faltante <= 0) return null;
 
@@ -1146,7 +1143,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, t
         <span style={{ fontSize: '20px' }}>⚓</span>
         <div>
           <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>
-            FINALIZACIÓN DE {textoAccion}
+            FINALIZACIÓN GENERAL
           </div>
           <div style={{ fontSize: '16px', fontWeight: '700', color: '#fff' }}>
             {fechaEstimada.format("DD/MM/YYYY")} <span style={{ color: '#3b82f6' }}>{fechaEstimada.format("HH:mm")}</span>
@@ -1171,13 +1168,9 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, t
 // COMPONENTE: Vista General PREMIUM con Gráficos
 // ============================================================================
 function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProducto }) {
-  const tipoOperacion = barco.tipo_operacion || 'importacion';
-  const textoAccion = tipoOperacion === 'exportacion' ? 'Cargado' : 'Descargado';
-  const textoFaltante = tipoOperacion === 'exportacion' ? 'Faltante por cargar' : 'Faltante por descargar';
-  const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
-
   const totales = useMemo(() => {
     return productos.map((producto) => {
+      // Filtrar viajes completos para este producto
       const vp = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
       const lp = lecturasBanda.filter((l) => l.producto_id === producto.id);
       const totalCamiones = vp.reduce((s, v) => s + v.peso_destino_tm, 0);
@@ -1221,12 +1214,12 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
 
       {/* ── KPIs ─────────────────────────────────────── */}
       <div className="alm-kpis-row">
-        <KpiCard label={`Total ${textoAccion}`} value={`${fmtTM(totalGlobal, 2)} TM`}
+        <KpiCard label="Total Descargado" value={`${fmtTM(totalGlobal, 2)} TM`}
           sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} icon="⚓" accent="#3b82f6" animate />
         <KpiCard label="Cantidad Manifestada Total" value={`${fmtTM(metaGlobal, 2)} TM`}
           sub={`${productos.length} productos`} icon="🎯" accent="#10b981" />
-        <KpiCard label={textoFaltante} value={`${fmtTM(faltanteGlobal, 2)} TM`}
-          sub="por procesar" icon="⏳" accent="#ef4444" />
+        <KpiCard label="Faltante Total" value={`${fmtTM(faltanteGlobal, 2)} TM`}
+          sub="por descargar" icon="⏳" accent="#ef4444" />
         <KpiCard label="Viajes Completos" value={viajes.filter(v => v.estado === 'completo').length}
           sub="camiones pesados" icon="🚛" accent="#f59e0b" />
         <KpiCard label="Lecturas Banda" value={lecturasBanda.length}
@@ -1237,7 +1230,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
       <div className="alm-progress-hero">
         <div className="alm-progress-hero-header">
           <div>
-            <h3 className="alm-section-title">Progreso Global de {tipoOperacion === 'exportacion' ? 'Carga' : 'Descarga'}</h3>
+            <h3 className="alm-section-title">Progreso Global de Descarga</h3>
             <p className="alm-section-sub">{barco.nombre} · {barco.codigo_barco}</p>
           </div>
           <div className="alm-progress-pct">{progresoGlobal.toFixed(1)}%</div>
@@ -1256,7 +1249,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
         {/* Faltante */}
         {faltanteGlobal > 0 && (
           <div style={{ marginTop: '16px', fontSize: '13px', color: '#ef4444' }}>
-            ⏳ {textoFaltante}: <strong>{fmtTM(faltanteGlobal, 2)} TM</strong>
+            ⏳ Faltante: <strong>{fmtTM(faltanteGlobal, 2)} TM</strong>
           </div>
         )}
       </div>
@@ -1299,7 +1292,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
                   totalGlobal={totalGlobal}
                   viajes={viajes}
                   lecturasBanda={lecturasBanda}
-                  tipoOperacion={tipoOperacion}
                 />
               </div>
             </div>
@@ -1311,7 +1303,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
               border: '1px solid #334155'
             }}>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                {textoFaltante.toUpperCase()}
+                FALTANTE
               </div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>
                 {fmtTM(faltanteGlobal, 2)} TM
@@ -1397,7 +1389,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
       <div className="alm-comparativa-section">
         <div className="alm-comparativa-header">
           <h3 className="alm-section-title">⚖️ Comparativa Banda vs Viajes por Producto</h3>
-          <p className="alm-section-sub">Distribución porcentual de toneladas por tipo de operación</p>
+          <p className="alm-section-sub">Distribución porcentual de toneladas por tipo de descarga</p>
         </div>
 
         <div className="alm-comparativa-grid">
@@ -1405,9 +1397,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
             const pctBanda = total > 0 ? (totalBanda / total) * 100 : 0;
             const pctCamiones = total > 0 ? (totalCamiones / total) * 100 : 0;
             const color = producto.color_accent;
-
-            // Solo mostrar si el producto no es exclusivamente de banda
-            if (producto.tipo_registro === 'banda') return null;
 
             return (
               <div key={producto.id} className="alm-comparativa-card" style={{ borderColor: color }}>
@@ -1800,7 +1789,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL - AHORA SE LLAMA DashboardCompartido
 // ============================================================================
 export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
@@ -1856,7 +1845,6 @@ export default function DashboardCompartido({ codigoBarco }) {
   if (!barco) return null;
 
   const productoActivo = productos.find((p) => p.id === productoSeleccionado);
-  const tipoOperacion = barco.tipo_operacion || 'importacion';
 
   return (
     <>
@@ -3325,66 +3313,26 @@ export default function DashboardCompartido({ codigoBarco }) {
                 style={{ background: `linear-gradient(135deg, ${productoActivo.color_accent}, ${productoActivo.color_accent}cc)` }}
               >
                 <h2>{productoActivo.icono} {productoActivo.nombre}</h2>
-                <p>
-                  Código: {productoActivo.codigo} · Tipo: {
-                    productoActivo.tipo_registro === 'banda' ? '⚡ Solo Banda' : 
-                    productoActivo.tipo_registro === 'camiones' ? '🚛 Solo Camiones' : 
-                    '📊 Mixto (Banda + Camiones)'
-                  } · Operación: {tipoOperacion === 'exportacion' ? 'EXPORTACIÓN (Carga)' : 'IMPORTACIÓN (Descarga)'}
-                </p>
+                <p>Código: {productoActivo.codigo} · Tipo: {productoActivo.tipo_registro}</p>
               </div>
 
-              {/* Panel de Tendencias de Banda - SIEMPRE visible si hay lecturas */}
+              {/* Panel de Tendencias de Banda */}
               <PanelPrediccionesBanda
                 producto={productoActivo}
                 lecturas={lecturasFiltradas}
                 viajes={viajesFiltrados}
                 meta={getMetaProducto(barco.metas_json, productoActivo)}
-                tipoOperacion={tipoOperacion}
               />
 
-              {/* Panel de Tendencias de Viajes - SOLO si NO es solo banda */}
-              {productoActivo.tipo_registro !== 'banda' && (
-                <PanelPrediccionesViajes
-                  producto={productoActivo}
-                  viajes={viajesFiltrados}
-                  meta={getMetaProducto(barco.metas_json, productoActivo)}
-                  tipoOperacion={tipoOperacion}
-                />
-              )}
+              {/* Panel de Tendencias de Viajes */}
+              <PanelPrediccionesViajes
+                producto={productoActivo}
+                viajes={viajesFiltrados}
+                meta={getMetaProducto(barco.metas_json, productoActivo)}
+              />
 
-              {/* Tabla de Viajes - SOLO si NO es solo banda */}
-              {productoActivo.tipo_registro !== 'banda' && (
-                <TablaViajes viajes={viajesFiltrados} producto={productoActivo} />
-              )}
-
-              {/* Tabla de Lecturas de Banda - SIEMPRE visible si hay lecturas */}
+              <TablaViajes viajes={viajesFiltrados} producto={productoActivo} />
               <TablaBanda lecturas={lecturasFiltradas} producto={productoActivo} />
-
-              {/* Mensaje informativo si es solo banda */}
-              {productoActivo.tipo_registro === 'banda' && (
-                <div className="alm-info-box" style={{
-                  background: '#1e293b',
-                  border: '1px solid #3b82f6',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  marginTop: '12px',
-                  color: '#94a3b8'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '24px' }}>⚡</span>
-                    <div>
-                      <p style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
-                        Producto exclusivo de banda transportadora
-                      </p>
-                      <p style={{ fontSize: '13px' }}>
-                        Este producto se registra únicamente a través de lecturas de banda. 
-                        No se utilizan viajes de camiones para su control.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           ) : null}
 
