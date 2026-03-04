@@ -483,9 +483,9 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
               <span className="alm-pred-valor">{horasTranscurridas.toFixed(1)} horas</span>
-              <span className="alm-pred-sub">
+             {/*  <span className="alm-pred-sub">
                 {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")} → {dayjs.utc(ultimaLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
-              </span>
+              </span>*/}
             </div>
           )}
 
