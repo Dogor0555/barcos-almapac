@@ -1,4 +1,4 @@
-// app/page.js (LoginPage actualizado)
+// app/page.js
 'use client'
 
 import { useState } from 'react'
@@ -22,11 +22,14 @@ export default function LoginPage() {
     if (result.success) {
       toast.success('¡Bienvenido!')
       
-      // Redirigir según el rol
       if (result.user.rol === 'admin') {
         router.push('/admin')
       } else if (result.user.rol === 'pesador') {
-        router.push('/dashboard/pesador') // Nueva ruta para pesadores
+        router.push('/barco/seleccionar')
+      } else if (result.user.rol === 'electricista') {
+        router.push('/barco/seleccionar')
+      } else if (result.user.rol === 'chequero') {
+        router.push('/registroatrasos')
       } else {
         router.push('/dashboard')
       }
@@ -38,15 +41,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0f172a]">
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse animation-delay-2000"></div>
       </div>
 
       <div className="relative w-full max-w-md">
-        <div className="bg-[#0f172a] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
-          {/* Header */}
+        <div className="bg-[#1e293b] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-8 py-6 text-center">
             <div className="flex justify-center mb-4">
               <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
@@ -54,10 +56,9 @@ export default function LoginPage() {
               </div>
             </div>
             <h1 className="text-3xl font-black text-white">BARCOS ALMAPAC</h1>
-            <p className="text-blue-200 text-sm mt-2">Sistema de gestión de descarga</p>
+            <p className="text-blue-200 text-sm mt-2">Sistema de gestión portuaria</p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div>
               <label className="block text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">

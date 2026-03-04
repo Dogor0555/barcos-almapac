@@ -1,4 +1,4 @@
-// admin/page.js - Panel de administración completo con soporte para importación/exportación
+// admin/page.js - Panel de administración completo con soporte para importación/exportación y edición de barcos
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
+import EditarBarcoModal from '../components/adminC/EditarBarcoModal'
 import ProductoForm from '../components/adminC/productoForm'
 import GenerarDashboardModal from './GenerarDashboardModal'
 import Link from 'next/link'
@@ -1163,6 +1164,8 @@ export default function AdminPage() {
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showBarcoForm, setShowBarcoForm] = useState(false)
+  const [showEditarBarcoModal, setShowEditarBarcoModal] = useState(false)
+  const [barcoEditando, setBarcoEditando] = useState(null)
   const [showProductoForm, setShowProductoForm] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null)
   const [exportando, setExportando] = useState(null)
@@ -1281,6 +1284,11 @@ export default function AdminPage() {
     const link = `${window.location.origin}${ruta}`
     navigator.clipboard.writeText(link)
     toast.success(`Link de ${tipo === 'exportacion' ? 'registro de recepción' : 'registro'} copiado`, { icon: '📋' })
+  }
+
+  const handleEditarBarco = (barco) => {
+    setBarcoEditando(barco)
+    setShowEditarBarcoModal(true)
   }
 
   const handleEliminarBarco = async (barcoId, barcoNombre) => {
@@ -1634,6 +1642,14 @@ export default function AdminPage() {
                 <Plus className="w-4 h-4" />
                 Nuevo Barco
               </button>
+
+              <Link
+                href="/registroatrasos"
+                className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <Clock className="w-4 h-4" />
+                Registro de Atrasos
+              </Link>
               <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -2059,6 +2075,15 @@ export default function AdminPage() {
                             >
                               <Eye className="w-4 h-4 text-slate-400 group-hover:text-white" />
                             </button>
+
+                            {/* Botón Editar (NUEVO) */}
+                            <button
+                              onClick={() => handleEditarBarco(barco)}
+                              className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors group"
+                              title="Editar Barco"
+                            >
+                              <Edit2 className="w-4 h-4 text-amber-400 group-hover:text-amber-300" />
+                            </button>
                             
                             {/* Botón Generar Dashboard */}
                             <button
@@ -2340,6 +2365,23 @@ export default function AdminPage() {
           onClose={() => setShowBarcoForm(false)}
           onSuccess={() => {
             setShowBarcoForm(false)
+            cargarDatos()
+          }}
+        />
+      )}
+
+      {showEditarBarcoModal && barcoEditando && (
+        <EditarBarcoModal
+          barco={barcoEditando}
+          pesadores={usuarios.filter(u => u.rol === 'pesador' || u.rol === 'electricista')}
+          productos={productos}
+          onClose={() => {
+            setShowEditarBarcoModal(false)
+            setBarcoEditando(null)
+          }}
+          onSuccess={() => {
+            setShowEditarBarcoModal(false)
+            setBarcoEditando(null)
             cargarDatos()
           }}
         />

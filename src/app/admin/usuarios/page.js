@@ -1,3 +1,4 @@
+// app/admin/usuarios/page.js - Gestión de usuarios con soporte para chequeros
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,7 +8,7 @@ import { getCurrentUser, isAdmin } from '../../lib/auth'
 import { 
   Users, Plus, Edit2, Trash2, X, Check, 
   UserPlus, Shield, User as UserIcon, Loader2, AlertCircle,
-  RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft
+  RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft, Clock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -41,8 +42,11 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
       if (!formData.username.trim()) throw new Error('El username es requerido')
       if (!user && !formData.password.trim()) throw new Error('La contraseña es requerida para nuevos usuarios')
 
+      let result
+
       if (user) {
-        const { data, error } = await supabase
+        // Actualizar usuario existente
+        result = await supabase
           .rpc('actualizar_usuario', {
             p_user_id: user.id,
             p_admin_id: currentUser.id,
@@ -53,12 +57,13 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
             p_activo: formData.activo
           })
 
-        if (error) throw error
-        if (!data || !data.success) throw new Error(data?.error || 'Error al actualizar usuario')
+        if (result.error) throw result.error
+        if (!result.data.success) throw new Error(result.data.error || 'Error al actualizar usuario')
 
         toast.success('✅ Usuario actualizado correctamente')
       } else {
-        const { data, error } = await supabase
+        // Crear nuevo usuario
+        result = await supabase
           .rpc('crear_usuario', {
             p_nombre: formData.nombre,
             p_username: formData.username,
@@ -67,8 +72,8 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
             p_admin_id: currentUser.id
           })
 
-        if (error) throw error
-        if (!data || !data.success) throw new Error(data?.error || 'Error al crear usuario')
+        if (result.error) throw result.error
+        if (!result.data.success) throw new Error(result.data.error || 'Error al crear usuario')
 
         toast.success('✅ Usuario creado correctamente')
       }
@@ -86,6 +91,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
+        {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -105,6 +111,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           </div>
         </div>
 
+        {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2">
@@ -160,8 +167,15 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
             >
               <option value="admin">Administrador</option>
               <option value="pesador">Pesador</option>
+              <option value="electricista">Electricista</option>
               <option value="chequero">Chequero</option>
             </select>
+            <p className="text-xs text-slate-500 mt-1">
+              {formData.rol === 'chequero' && 'Los chequeros solo pueden acceder al módulo de registro de atrasos'}
+              {formData.rol === 'pesador' && 'Los pesadores pueden registrar viajes y lecturas de banda'}
+              {formData.rol === 'electricista' && 'Los electricistas pueden registrar exportaciones por banda'}
+              {formData.rol === 'admin' && 'Los administradores tienen acceso total al sistema'}
+            </p>
           </div>
 
           {user && (
@@ -281,7 +295,6 @@ export default function UsuariosPage() {
   useEffect(() => {
     const currentUser = getCurrentUser()
 
-    // Verificar autenticación Y que sea admin
     if (!currentUser) {
       router.push('/')
       return
@@ -416,7 +429,7 @@ export default function UsuariosPage() {
                   Gestión de Usuarios
                 </h1>
                 <p className="text-purple-200 text-sm mt-1">
-                  Administra pesadores, chequeros y administradores del sistema
+                  Administra pesadores, electricistas, chequeros y administradores del sistema
                 </p>
               </div>
             </div>
@@ -546,11 +559,13 @@ export default function UsuariosPage() {
                           <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${
                             user.rol === 'admin' ? 'bg-purple-500/20 text-purple-400' :
                             user.rol === 'pesador' ? 'bg-green-500/20 text-green-400' :
-                            'bg-blue-500/20 text-blue-400'
+                            user.rol === 'electricista' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-orange-500/20 text-orange-400'
                           }`}>
                             {user.rol === 'admin' && <Shield className="w-3 h-3" />}
                             {user.rol === 'pesador' && <UserIcon className="w-3 h-3" />}
-                            {user.rol === 'chequero' && <span>📋</span>}
+                            {user.rol === 'electricista' && <span>⚡</span>}
+                            {user.rol === 'chequero' && <Clock className="w-3 h-3" />}
                             <span className="capitalize">{user.rol}</span>
                           </span>
                         </td>
@@ -624,13 +639,13 @@ export default function UsuariosPage() {
           </div>
         </div>
 
-        {/* Leyenda */}
+        {/* Leyenda de roles */}
         <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 text-xs">
           <h3 className="font-bold text-white mb-2 flex items-center gap-2">
             <Shield className="w-4 h-4 text-purple-400" />
             Roles del Sistema
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-start gap-2">
               <div className="bg-purple-500/20 p-2 rounded-lg">
                 <Shield className="w-4 h-4 text-purple-400" />
@@ -646,16 +661,25 @@ export default function UsuariosPage() {
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Pesador</p>
-                <p className="text-slate-500 text-xs">Puede registrar viajes y lecturas de banda</p>
+                <p className="text-slate-500 text-xs">Puede registrar viajes y lecturas de banda (importación)</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
               <div className="bg-blue-500/20 p-2 rounded-lg">
-                <span className="text-blue-400 text-sm">📋</span>
+                <span className="text-blue-400 text-sm">⚡</span>
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">Electricista</p>
+                <p className="text-slate-500 text-xs">Puede registrar exportaciones por banda</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="bg-orange-500/20 p-2 rounded-lg">
+                <Clock className="w-4 h-4 text-orange-400" />
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Chequero</p>
-                <p className="text-slate-500 text-xs">Puede ver información pero no modificar</p>
+                <p className="text-slate-500 text-xs">Registra atrasos y paros, solo acceso a /registroatrasos</p>
               </div>
             </div>
           </div>

@@ -8,7 +8,6 @@ export const login = async (username, password) => {
   try {
     console.log('🔐 Intentando login:', username)
     
-    // Primero obtener el usuario por username
     const { data: users, error } = await supabase
       .from('usuarios')
       .select('id, nombre, username, password, rol, activo')
@@ -28,7 +27,6 @@ export const login = async (username, password) => {
 
     const user = users[0]
     
-    // Verificar la contraseña con bcrypt
     const passwordMatch = await bcrypt.compare(password, user.password)
     console.log('🔑 Verificación de password:', passwordMatch)
 
@@ -38,7 +36,6 @@ export const login = async (username, password) => {
 
     console.log('✅ Usuario autenticado:', user.nombre)
     
-    // Crear objeto de usuario (sin la contraseña)
     const userData = {
       id: user.id,
       nombre: user.nombre,
@@ -47,14 +44,12 @@ export const login = async (username, password) => {
       loginTime: Date.now()
     }
     
-    // Guardar en cookie (expira en 8 horas)
     Cookies.set('session', JSON.stringify(userData), { 
-      expires: 1/3, // 8 horas
+      expires: 1/3,
       path: '/',
       sameSite: 'strict'
     })
     
-    // También guardar en sessionStorage
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('user', JSON.stringify(userData))
     }
@@ -133,7 +128,12 @@ export const isElectricista = () => {
   return user?.rol === 'electricista'
 }
 
+export const isChequero = () => {
+  const user = getCurrentUser()
+  return user?.rol === 'chequero'
+}
+
 export const isPesadorOrAdmin = () => {
   const user = getCurrentUser()
-  return user && (user.rol === 'admin' || user.rol === 'pesador' || user.rol === 'electricista')
+  return user && (user.rol === 'admin' || user.rol === 'pesador' || user.rol === 'electricista' || user.rol === 'chequero')
 }

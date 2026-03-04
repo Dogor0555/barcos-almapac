@@ -1,4 +1,4 @@
-// components/adminC/BarcoForm.js
+// components/adminC/EditarBarcoModal.js
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,69 +6,54 @@ import { supabase } from '../../lib/supabase'
 import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Ship, Calendar, User, Package, Save, Anchor, Hash, 
-  ChevronDown, ChevronUp, Import, Upload as Export, Layers
+  ChevronDown, ChevronUp, Import, Upload as Export, Layers,Edit2,
+  AlertCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) {
+export default function EditarBarcoModal({ barco, pesadores, productos, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false)
   const [productosExpandido, setProductosExpandido] = useState(true)
   const [bodegasExpandido, setBodegasExpandido] = useState(true)
   const [formData, setFormData] = useState({
     nombre: '',
     codigo_barco: '',
-    fecha_llegada: new Date().toISOString().split('T')[0],
+    fecha_llegada: '',
     pesador_id: '',
     tipo_operacion: 'importacion',
     productos_seleccionados: {},
     metas: {}
   })
 
-  const [bodegas, setBodegas] = useState([
-    { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01', activa: true },
-    { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02', activa: true },
-    { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03', activa: true },
-    { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04', activa: true },
-    { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05', activa: true },
-    { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06', activa: true },
-    { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07', activa: true },
-    { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08', activa: true },
-  ])
+  const [bodegas, setBodegas] = useState([])
 
+  // Cargar datos del barco
   useEffect(() => {
-    if (productos && productos.length > 0) {
-      const seleccionados = {}
-      const metas = {}
-      productos.forEach(p => {
-        seleccionados[p.codigo] = false
-        metas[p.codigo] = ''
+    if (barco) {
+      // Información básica
+      setFormData({
+        nombre: barco.nombre || '',
+        codigo_barco: barco.codigo_barco || '',
+        fecha_llegada: barco.fecha_llegada || '',
+        pesador_id: barco.pesador_id || '',
+        tipo_operacion: barco.tipo_operacion || 'importacion',
+        productos_seleccionados: {},
+        metas: barco.metas_json?.limites || {}
       })
-      setFormData(prev => ({ 
-        ...prev, 
-        productos_seleccionados: seleccionados,
-        metas: metas 
-      }))
-    }
-  }, [productos])
 
-  const generarCodigo = () => {
-    if (formData.nombre) {
-      const palabras = formData.nombre.split(' ')
-      let prefijo = ''
-      palabras.forEach(p => {
-        if (p.length > 0 && p.toUpperCase() !== 'MV' && p.toUpperCase() !== 'MS') {
-          prefijo += p[0].toUpperCase()
-        }
+      // Cargar bodegas del barco
+      const bodegasBarco = barco.bodegas_json || []
+      setBodegas(bodegasBarco.map(b => ({ ...b, activa: true })))
+
+      // Inicializar productos seleccionados
+      const productosDelBarco = barco.metas_json?.productos || []
+      const seleccionados = {}
+      productos.forEach(p => {
+        seleccionados[p.codigo] = productosDelBarco.includes(p.codigo)
       })
-      if (!prefijo) {
-        prefijo = formData.nombre.substring(0, 3).toUpperCase()
-      }
-      const numero = Math.floor(Math.random() * 9000 + 1000)
-      setFormData(prev => ({ ...prev, codigo_barco: `${prefijo}-${numero}` }))
-    } else {
-      toast.error('Primero ingresa el nombre del barco')
+      setFormData(prev => ({ ...prev, productos_seleccionados: seleccionados }))
     }
-  }
+  }, [barco, productos])
 
   const toggleProducto = (codigo) => {
     setFormData(prev => ({
@@ -144,11 +129,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     setLoading(true)
 
     try {
-      console.log('📝 Iniciando creación de barco...')
-      
       const user = getCurrentUser()
-      console.log('👤 Usuario actual:', user)
-      
       if (!user) {
         toast.error('No hay usuario autenticado')
         setLoading(false)
@@ -171,7 +152,6 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         return
       }
 
-      // Verificar que haya al menos una bodega activa
       const bodegasActivas = bodegas.filter(b => b.activa)
       if (bodegasActivas.length === 0) {
         toast.error('Debes seleccionar al menos una bodega')
@@ -187,7 +167,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         }
       })
 
-      const datosInsertar = {
+      const datosActualizar = {
         nombre: formData.nombre.trim(),
         codigo_barco: formData.codigo_barco?.trim() || null,
         fecha_llegada: formData.fecha_llegada || null,
@@ -202,56 +182,25 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
           nombre: b.nombre,
           codigo: b.codigo
         })),
-        estado: 'activo',
-        created_by: user.id,
-        created_at: new Date().toISOString()
+        updated_at: new Date().toISOString()
       }
 
-      console.log('📦 Datos a insertar:', datosInsertar)
+      console.log('📦 Datos a actualizar:', datosActualizar)
 
       const { data, error } = await supabase
         .from('barcos')
-        .insert([datosInsertar])
+        .update(datosActualizar)
+        .eq('id', barco.id)
         .select()
 
       if (error) {
         console.error('❌ Error de Supabase:', error)
-        
-        if (error.code === '42501') {
-          toast.error('Error de permisos. Verifica las políticas RLS en Supabase')
-        } else if (error.code === '23502') {
-          toast.error('Falta un campo obligatorio')
-        } else if (error.message?.includes('violates row-level security')) {
-          toast.error('Error de seguridad. Las políticas RLS están bloqueando la inserción')
-        } else {
-          toast.error(`Error: ${error.message || 'Error desconocido'}`)
-        }
+        toast.error(`Error: ${error.message || 'Error desconocido'}`)
         return
       }
 
-      console.log('✅ Barco creado:', data)
-
-      if (data && data.length > 0) {
-        const barcoCreado = data[0]
-        
-        toast.success(`✅ Barco "${formData.nombre}" creado con código ${barcoCreado.codigo_barco || 'sin código'}`)
-        
-        if (barcoCreado?.token_compartido) {
-          const link = `${window.location.origin}/barco/${barcoCreado.token_compartido}`
-          toast.success(`🔗 Link de acceso copiado al portapapeles`, {
-            duration: 5000,
-            icon: '🔗'
-          })
-          
-          try {
-            await navigator.clipboard.writeText(link)
-            console.log('✅ Link copiado al portapapeles')
-          } catch (clipError) {
-            console.warn('No se pudo copiar automáticamente:', clipError)
-          }
-        }
-      }
-
+      console.log('✅ Barco actualizado:', data)
+      toast.success(`✅ Barco "${formData.nombre}" actualizado correctamente`)
       onSuccess()
     } catch (error) {
       console.error('🔥 Error detallado:', error)
@@ -267,10 +216,10 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4 sticky top-0 flex items-center justify-between z-10">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4 sticky top-0 flex items-center justify-between z-10">
           <h3 className="text-xl font-black text-white flex items-center gap-2">
-            <Anchor className="w-5 h-5" />
-            Registrar Nuevo Barco
+            <Edit2 className="w-5 h-5" />
+            Editar Barco: {barco.nombre}
           </h3>
           <button
             type="button"
@@ -278,7 +227,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             disabled={loading}
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
@@ -292,23 +241,21 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
-                  <Ship className="w-4 h-4" />
+                <label className="block text-sm font-bold text-slate-400 mb-2">
                   Nombre del Barco <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: MV. ATLANTIC HALO"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white"
                   required
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
+                <label className="block text-sm font-bold text-slate-400 mb-2">
                   Tipo de Operación
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -318,14 +265,13 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                     className={`p-4 rounded-xl border-2 flex items-center justify-center gap-3 transition-all ${
                       formData.tipo_operacion === 'importacion'
                         ? 'border-green-500 bg-green-500/20'
-                        : 'border-white/10 bg-slate-800 hover:bg-slate-700'
+                        : 'border-white/10 bg-slate-800'
                     }`}
                   >
                     <Import className={`w-5 h-5 ${formData.tipo_operacion === 'importacion' ? 'text-green-400' : 'text-slate-400'}`} />
                     <span className={`font-bold ${formData.tipo_operacion === 'importacion' ? 'text-green-400' : 'text-slate-400'}`}>
                       IMPORTACIÓN
                     </span>
-                    <span className="text-xs text-slate-400 ml-1">(descarga)</span>
                   </button>
                   <button
                     type="button"
@@ -333,74 +279,55 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                     className={`p-4 rounded-xl border-2 flex items-center justify-center gap-3 transition-all ${
                       formData.tipo_operacion === 'exportacion'
                         ? 'border-blue-500 bg-blue-500/20'
-                        : 'border-white/10 bg-slate-800 hover:bg-slate-700'
+                        : 'border-white/10 bg-slate-800'
                     }`}
                   >
                     <Export className={`w-5 h-5 ${formData.tipo_operacion === 'exportacion' ? 'text-blue-400' : 'text-slate-400'}`} />
                     <span className={`font-bold ${formData.tipo_operacion === 'exportacion' ? 'text-blue-400' : 'text-slate-400'}`}>
                       EXPORTACIÓN
                     </span>
-                    <span className="text-xs text-blue-400 ml-1">(carga)</span>
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  {formData.tipo_operacion === 'importacion' 
-                    ? 'Importación: El barco DESCARGA producto a tierra'
-                    : 'Exportación: El barco CARGA producto desde ALMAPAC'}
-                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
-                  <Hash className="w-4 h-4" />
-                  Código del Barco <span className="text-blue-400">(opcional)</span>
+                <label className="block text-sm font-bold text-slate-400 mb-2">
+                  Código del Barco
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.codigo_barco}
-                    onChange={(e) => setFormData({ ...formData, codigo_barco: e.target.value })}
-                    className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: ATL-001"
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={generarCodigo}
-                    className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-4 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap"
-                    disabled={loading}
-                  >
-                    Generar
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={formData.codigo_barco}
+                  onChange={(e) => setFormData({ ...formData, codigo_barco: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white"
+                  placeholder="Ej: ATL-001"
+                  disabled={loading}
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
+                <label className="block text-sm font-bold text-slate-400 mb-2">
                   Fecha de Atraque
                 </label>
                 <input
                   type="date"
                   value={formData.fecha_llegada}
                   onChange={(e) => setFormData({ ...formData, fecha_llegada: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white"
                   disabled={loading}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-2 flex items-center gap-2">
-                  <User className="w-4 h-4" />
+                <label className="block text-sm font-bold text-slate-400 mb-2">
                   Asignar a
                 </label>
                 <select
                   value={formData.pesador_id}
                   onChange={(e) => setFormData({ ...formData, pesador_id: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white"
                   disabled={loading}
                 >
-                  <option value="">Sin asignar (acceso público)</option>
+                  <option value="">Sin asignar</option>
                   {pesadores?.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.nombre} (@{p.username}) - {p.rol}
@@ -434,7 +361,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             {bodegasExpandido && (
               <>
                 <p className="text-xs text-slate-400 mb-3 mt-2">
-                  Selecciona y personaliza las bodegas de este barco
+                  Personaliza las bodegas de este barco
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-2">
@@ -488,14 +415,14 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                   <button
                     type="button"
                     onClick={activarTodasBodegas}
-                    className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1.5 rounded-lg transition-all"
+                    className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1.5 rounded-lg"
                   >
                     Activar todas
                   </button>
                   <button
                     type="button"
                     onClick={desactivarTodasBodegas}
-                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
+                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg"
                   >
                     Desactivar todas
                   </button>
@@ -533,14 +460,14 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                     <button
                       type="button"
                       onClick={seleccionarTodos}
-                      className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1.5 rounded-lg transition-all"
+                      className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1.5 rounded-lg"
                     >
                       Seleccionar todos
                     </button>
                     <button
                       type="button"
                       onClick={deseleccionarTodos}
-                      className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
+                      className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg"
                     >
                       Deseleccionar todos
                     </button>
@@ -571,17 +498,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                                 <span className="text-xl">{producto.icono || '📦'}</span>
                                 <div>
                                   <p className="font-bold text-white text-sm">{producto.nombre}</p>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-500">{producto.codigo}</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                                      producto.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
-                                      producto.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
-                                      'bg-green-500/20 text-green-400'
-                                    }`}>
-                                      {producto.tipo_registro === 'mixto' ? '🚛+📊' :
-                                       producto.tipo_registro === 'banda' ? '📊 BANDA' : '🚛 CAMIONES'}
-                                    </span>
-                                  </div>
+                                  <span className="text-xs text-slate-500">{producto.codigo}</span>
                                 </div>
                               </div>
                               
@@ -594,8 +511,8 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                                       min="0"
                                       value={formData.metas[producto.codigo] || ''}
                                       onChange={(e) => handleMetaChange(producto.codigo, e.target.value)}
-                                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      placeholder={formData.tipo_operacion === 'exportacion' ? "Cantidad a cargar (TM)" : "Cantidad a descargar (TM)"}
+                                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm pr-12"
+                                      placeholder="Meta en TM"
                                       disabled={loading}
                                     />
                                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs font-bold">
@@ -615,100 +532,31 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             </div>
           )}
 
-          {/* Resumen */}
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
-            <h4 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-              Resumen del Barco
-            </h4>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-slate-500 text-xs">Barco:</p>
-                <p className="font-bold text-white truncate">{formData.nombre || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">Código:</p>
-                <p className="font-bold text-white">{formData.codigo_barco || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">Tipo:</p>
-                <p className={`font-bold ${formData.tipo_operacion === 'exportacion' ? 'text-blue-400' : 'text-green-400'}`}>
-                  {formData.tipo_operacion === 'exportacion' ? 'EXPORTACIÓN' : 'IMPORTACIÓN'}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">Fecha:</p>
-                <p className="font-bold text-white">
-                  {formData.fecha_llegada ? new Date(formData.fecha_llegada).toLocaleDateString() : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">Responsable:</p>
-                <p className="font-bold text-white">
-                  {pesadores?.find(p => p.id == formData.pesador_id)?.nombre || 'Sin asignar'}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">Productos:</p>
-                <p className="font-bold text-white">{productosSeleccionadosCount} seleccionados</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-slate-500 text-xs">Bodegas:</p>
-                <p className="font-bold text-white">{bodegasActivasCount} activas</p>
-              </div>
-            </div>
-          </div>
-
+          {/* Botones */}
           <div className="flex gap-3 pt-4 border-t border-white/10">
             <button
               type="submit"
               disabled={loading}
-              className={`flex-1 bg-gradient-to-r ${
-                formData.tipo_operacion === 'exportacion'
-                  ? 'from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800'
-                  : 'from-green-500 to-green-700 hover:from-green-600 hover:to-green-800'
-              } text-white font-bold py-3 px-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
+              className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Creando Barco...</span>
-                </>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  <span>Crear Barco</span>
-                </>
+                <Save className="w-4 h-4" />
               )}
+              Actualizar Barco
             </button>
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-xl transition-all disabled:opacity-50"
+              className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-xl transition-all"
             >
               Cancelar
             </button>
           </div>
         </form>
       </div>
-
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #1e293b;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #475569;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #64748b;
-        }
-      `}</style>
     </div>
   )
 }
