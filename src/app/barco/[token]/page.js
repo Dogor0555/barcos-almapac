@@ -1,5 +1,4 @@
 // barco/[token]/page.js - Página principal para registro de viajes, lecturas de banda y bitácora de flujos por producto
-
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
@@ -15,7 +14,7 @@ import {
   Clock, AlertCircle, Play, CheckSquare, XCircle,
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
-  Pencil, Search, X, Lock, Unlock
+  Pencil, Search, X, Lock, Unlock, Anchor, StopCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -148,55 +147,6 @@ const [searchTerm, setSearchTerm] = useState('')
     setViajeSeleccionado(null)
     toast.success('Editando viaje en Paso 1')
   }
-
-
-  const handleFinalizarOperacion = async () => {
-  if (!confirm('¿Estás seguro de finalizar la operación? No se podrán registrar más datos hasta que se reanude.')) {
-    return
-  }
-
-  try {
-    setLoading(true)
-    const { error } = await supabase
-      .from('barcos')
-      .update({ estado: 'finalizado' })
-      .eq('id', barco.id)
-
-    if (error) throw error
-
-    toast.success('Operación finalizada correctamente')
-    await cargarDatos() // Recargar para actualizar el estado
-  } catch (error) {
-    console.error('Error finalizando operación:', error)
-    toast.error('Error al finalizar la operación')
-  } finally {
-    setLoading(false)
-  }
-}
-
-const handleReanudarOperacion = async () => {
-  if (!confirm('¿Estás seguro de reanudar la operación?')) {
-    return
-  }
-
-  try {
-    setLoading(true)
-    const { error } = await supabase
-      .from('barcos')
-      .update({ estado: 'activo' })
-      .eq('id', barco.id)
-
-    if (error) throw error
-
-    toast.success('Operación reanudada correctamente')
-    await cargarDatos() // Recargar para actualizar el estado
-  } catch (error) {
-    console.error('Error reanudando operación:', error)
-    toast.error('Error al reanudar la operación')
-  } finally {
-    setLoading(false)
-  }
-}
 
   // Datos para gráfica de flujo acumulado por hora
   const datosGraficoFlujo = useMemo(() => {
@@ -550,9 +500,9 @@ const viajesFiltrados = useMemo(() => {
       
       const { data: barcoData, error: barcoError } = await supabase
         .from('barcos')
-        .select('*')
+        .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
         .eq('token_compartido', token)
-        .single() // ❌ Quitamos el filtro .eq('estado', 'activo') para poder ver barcos finalizados
+        .single()
 
       if (barcoError || !barcoData) {
         toast.error('Link inválido')
@@ -1207,77 +1157,256 @@ const viajesFiltrados = useMemo(() => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header */}
-<div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-6 text-white">
-  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div>
-      <div className="flex items-center gap-3 mb-1">
-        <h1 className="text-3xl font-black flex items-center gap-2">
-          <Truck className="w-8 h-8" />
-          {barco.nombre}
-        </h1>
-        {barco.codigo_barco && (
-          <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-mono">
-            {barco.codigo_barco}
-          </span>
-        )}
-        {/* Badge de estado */}
-        <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-          barco.estado === 'activo' 
-            ? 'bg-green-500/20 text-green-400' 
-            : barco.estado === 'finalizado'
-            ? 'bg-red-500/20 text-red-400'
-            : 'bg-yellow-500/20 text-yellow-400'
-        }`}>
-          {barco.estado === 'activo' && <Play className="w-3 h-3" />}
-          {barco.estado === 'finalizado' && <Lock className="w-3 h-3" />}
-          {barco.estado === 'planeado' && <Clock className="w-3 h-3" />}
-          {barco.estado.toUpperCase()}
-        </span>
-      </div>
-      <p className="text-blue-200 text-sm mt-1">
-        Registro de Operaciones · {new Date().toLocaleDateString()}
-      </p>
-    </div>
-    <div className="flex gap-2">
-      {viajesIncompletos.length > 0 && barco.estado === 'activo' && (
-        <div className="bg-yellow-500/20 text-yellow-400 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
-          <Clock className="w-4 h-4" />
-          {viajesIncompletos.length} pendientes
-        </div>
-      )}
-      
-      {/* Botón de finalizar/reanudar - Solo visible cuando hay un usuario autenticado (asumiendo que el pesador puede hacer esto) */}
-      {/* Por ahora lo dejamos visible para todos, pero idealmente deberías verificar el rol */}
-      {barco.estado === 'activo' ? (
-        <button
-          onClick={handleFinalizarOperacion}
-          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
-          title="Finalizar operación - No permitir más registros"
-        >
-          <Lock className="w-4 h-4" />
-          Finalizar Operación
-        </button>
-      ) : barco.estado === 'finalizado' ? (
-        <button
-          onClick={handleReanudarOperacion}
-          className="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
-          title="Reanudar operación - Permitir registros nuevamente"
-        >
-          <Unlock className="w-4 h-4" />
-          Reanudar Operación
-        </button>
-      ) : null}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-6 text-white">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-3xl font-black flex items-center gap-2">
+                  <Truck className="w-8 h-8" />
+                  {barco.nombre}
+                </h1>
+                {barco.codigo_barco && (
+                  <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-mono">
+                    {barco.codigo_barco}
+                  </span>
+                )}
+                {/* Badge de estado */}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
+                  barco.estado === 'activo' 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : barco.estado === 'finalizado'
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  {barco.estado === 'activo' && <Play className="w-3 h-3" />}
+                  {barco.estado === 'finalizado' && <Lock className="w-3 h-3" />}
+                  {barco.estado === 'planeado' && <Clock className="w-3 h-3" />}
+                  {barco.estado.toUpperCase()}
+                </span>
+              </div>
+              <p className="text-blue-200 text-sm mt-1">
+                Registro de Operaciones · {new Date().toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {viajesIncompletos.length > 0 && barco.estado === 'activo' && (
+                <div className="bg-yellow-500/20 text-yellow-400 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  {viajesIncompletos.length} pendientes
+                </div>
+              )}
+              
+              {/* ✅ ELIMINADOS: Botones de finalizar/reanudar operación */}
 
-      <button
-        onClick={cargarDatos}
-        className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
-      >
-        <RefreshCw className="w-4 h-4" />
-        Actualizar
-      </button>
-    </div>
-  </div>
-</div>
+              <button
+                onClick={cargarDatos}
+                className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Actualizar
+              </button>
+            </div>
+          </div>
+
+          {/* ✅ NUEVO: Indicadores de inicio/fin de descarga (SOLO VISUALIZACIÓN) */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Estado de Inicio de Descarga */}
+            <div className={`rounded-xl p-4 ${
+              barco.operacion_iniciada_at 
+                ? 'bg-green-500/20 border border-green-500/30' 
+                : 'bg-yellow-500/20 border border-yellow-500/30 animate-pulse'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  barco.operacion_iniciada_at 
+                    ? 'bg-green-500/30' 
+                    : 'bg-yellow-500/30'
+                }`}>
+                  <Play className={`w-5 h-5 ${
+                    barco.operacion_iniciada_at 
+                      ? 'text-green-400' 
+                      : 'text-yellow-400'
+                  }`} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-white">INICIO DE DESCARGA</p>
+                    {!barco.operacion_iniciada_at && (
+                      <span className="text-[10px] bg-yellow-500/30 text-yellow-400 px-2 py-0.5 rounded-full font-bold">
+                        PENDIENTE
+                      </span>
+                    )}
+                  </div>
+                  {barco.operacion_iniciada_at ? (
+                    <div>
+                      <p className="text-lg font-black text-green-400">
+                        {new Date(barco.operacion_iniciada_at).toLocaleString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                      {barco.operacion_iniciada_por && (
+                        <p className="text-xs text-green-300">
+                          Iniciado por: ID {barco.operacion_iniciada_por}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-yellow-400 font-medium">
+                      La descarga aún no ha iniciado
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Estado de Fin de Descarga */}
+            <div className={`rounded-xl p-4 ${
+              barco.operacion_finalizada_at 
+                ? 'bg-red-500/20 border border-red-500/30' 
+                : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                ? 'bg-blue-500/20 border border-blue-500/30'
+                : 'bg-slate-700/50 border border-white/10'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  barco.operacion_finalizada_at 
+                    ? 'bg-red-500/30' 
+                    : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                    ? 'bg-blue-500/30'
+                    : 'bg-slate-600'
+                }`}>
+                  <StopCircle className={`w-5 h-5 ${
+                    barco.operacion_finalizada_at 
+                      ? 'text-red-400' 
+                      : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                      ? 'text-blue-400'
+                      : 'text-slate-400'
+                  }`} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-white">FIN DE DESCARGA</p>
+                    {barco.operacion_finalizada_at && (
+                      <span className="text-[10px] bg-red-500/30 text-red-400 px-2 py-0.5 rounded-full font-bold">
+                        FINALIZADO
+                      </span>
+                    )}
+                    {!barco.operacion_finalizada_at && barco.operacion_iniciada_at && (
+                      <span className="text-[10px] bg-blue-500/30 text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                        EN CURSO
+                      </span>
+                    )}
+                  </div>
+                  {barco.operacion_finalizada_at ? (
+                    <div>
+                      <p className="text-lg font-black text-red-400">
+                        {new Date(barco.operacion_finalizada_at).toLocaleString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                      {barco.operacion_motivo_finalizacion && (
+                        <p className="text-xs text-red-300 mt-1">
+                          Motivo: {barco.operacion_motivo_finalizacion}
+                        </p>
+                      )}
+                    </div>
+                  ) : barco.operacion_iniciada_at ? (
+                    <p className="text-blue-400 font-medium">
+                      Descarga en progreso...
+                    </p>
+                  ) : (
+                    <p className="text-slate-400 font-medium">
+                      Esperando inicio de descarga
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ✅ Si hay tiempos de Arribo/Ataque/Recibido, mostrarlos también */}
+          {(barco.tiempo_arribo || barco.tiempo_ataque || barco.tiempo_recibido) && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {barco.tiempo_arribo && (
+                <div className="bg-blue-500/10 rounded-xl p-3 border border-blue-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Anchor className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-bold text-blue-400">ARRIBO</span>
+                    {barco.tiempo_arribo_editado && (
+                      <span className="text-[8px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-white">
+                    {new Date(barco.tiempo_arribo).toLocaleString('es-ES', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              )}
+              
+              {barco.tiempo_ataque && (
+                <div className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Target className="w-4 h-4 text-yellow-400" />
+                    <span className="text-xs font-bold text-yellow-400">ATAQUE</span>
+                    {barco.tiempo_ataque_editado && (
+                      <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-white">
+                    {new Date(barco.tiempo_ataque).toLocaleString('es-ES', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              )}
+              
+              {barco.tiempo_recibido && (
+                <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Inbox className="w-4 h-4 text-green-400" />
+                    <span className="text-xs font-bold text-green-400">RECIBIDO</span>
+                    {barco.tiempo_recibido_editado && (
+                      <span className="text-[8px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-white">
+                    {new Date(barco.tiempo_recibido).toLocaleString('es-ES', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ✅ Si hay motivo de finalización y está finalizado, mostrarlo destacado */}
+          {barco.estado === 'finalizado' && barco.operacion_motivo_finalizacion && (
+            <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <span className="text-sm text-red-400">
+                  <span className="font-bold">Motivo de finalización:</span> {barco.operacion_motivo_finalizacion}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Alerta de operación finalizada */}
         {barco.estado === 'finalizado' && (
