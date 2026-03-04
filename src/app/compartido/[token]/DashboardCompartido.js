@@ -295,7 +295,7 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Exportación
+// COMPONENTE: Panel de Tendencias y Predicciones para Exportación - CORREGIDO
 // ============================================================================
 function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -311,16 +311,56 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     );
   }, [lecturas]);
 
-  // ===== FLUJO PROMEDIO GENERAL =====
+  // ===== CALCULAR TOTAL GENERAL (suma de acumulados por bodega) =====
+  const totalGeneral = useMemo(() => {
+    if (lecturasOrdenadas.length === 0) return 0;
+    
+    // Agrupar por bodega y tomar el último valor de cada una
+    const ultimosPorBodega = {};
+    
+    lecturasOrdenadas.forEach(lectura => {
+      if (lectura.bodega_id) {
+        ultimosPorBodega[lectura.bodega_id] = lectura.acumulado_tm;
+      }
+    });
+    
+    // Sumar todos los últimos valores
+    return Object.values(ultimosPorBodega).reduce((sum, val) => sum + val, 0);
+  }, [lecturasOrdenadas]);
+
+  // ===== FLUJO PROMEDIO GENERAL (basado en total general) =====
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
 
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
 
-    const acumuladoInicial = primeraLectura.acumulado_tm || 0;
-    const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
-    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
+    // Calcular totales en esos momentos
+    const acumuladosPrimera = {};
+    const acumuladosUltima = {};
+    
+    // Obtener acumulados hasta la primera lectura
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(primeraLectura.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosPrimera[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    // Obtener acumulados hasta la última lectura
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(ultimaLectura.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosUltima[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    const totalInicial = Object.values(acumuladosPrimera).reduce((sum, val) => sum + val, 0);
+    const totalFinal = Object.values(acumuladosUltima).reduce((sum, val) => sum + val, 0);
+    
+    const diferenciaTotal = totalFinal - totalInicial;
 
     if (diferenciaTotal <= 0) return 0;
 
@@ -347,12 +387,35 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
 
     if (lecturasRecientes.length < 2) return flujoPromedioGeneral;
 
+    // Calcular totales al inicio y final del período reciente
     const primeraReciente = lecturasRecientes[0];
     const ultimaReciente = lecturasRecientes[lecturasRecientes.length - 1];
-
-    const acumuladoInicial = primeraReciente.acumulado_tm || 0;
-    const acumuladoFinal = ultimaReciente.acumulado_tm || 0;
-    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
+    
+    const acumuladosInicio = {};
+    const acumuladosFin = {};
+    
+    // Obtener acumulados hasta la primera lectura reciente
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(primeraReciente.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosInicio[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    // Obtener acumulados hasta la última lectura reciente
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(ultimaReciente.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosFin[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    const totalInicio = Object.values(acumuladosInicio).reduce((sum, val) => sum + val, 0);
+    const totalFin = Object.values(acumuladosFin).reduce((sum, val) => sum + val, 0);
+    
+    const diferenciaTotal = totalFin - totalInicio;
 
     if (diferenciaTotal <= 0) return flujoPromedioGeneral;
 
@@ -366,19 +429,63 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas, flujoPromedioGeneral]);
 
-  // Calcular total actual
-  const totalActual = useMemo(() => {
-    const ultimaLectura = lecturasOrdenadas.length > 0
-      ? lecturasOrdenadas[lecturasOrdenadas.length - 1]
-      : null;
-    return ultimaLectura?.acumulado_tm || 0;
+  // ===== FLUJO ÚLTIMA HORA =====
+  const flujoUltimaHora = useMemo(() => {
+    if (lecturasOrdenadas.length < 2) return 0;
+
+    const ahora = dayjs();
+    const hace1Hora = ahora.subtract(1, 'hour');
+
+    const lecturasUltimaHora = lecturasOrdenadas.filter(l =>
+      dayjs.utc(l.fecha_hora).isAfter(hace1Hora)
+    );
+
+    if (lecturasUltimaHora.length < 2) return 0;
+
+    const primera = lecturasUltimaHora[0];
+    const ultima = lecturasUltimaHora[lecturasUltimaHora.length - 1];
+    
+    const acumuladosInicio = {};
+    const acumuladosFin = {};
+    
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(primera.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosInicio[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).isSameOrBefore(dayjs.utc(ultima.fecha_hora))) {
+        if (l.bodega_id) {
+          acumuladosFin[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    const totalInicio = Object.values(acumuladosInicio).reduce((sum, val) => sum + val, 0);
+    const totalFin = Object.values(acumuladosFin).reduce((sum, val) => sum + val, 0);
+    
+    const diferenciaTotal = totalFin - totalInicio;
+
+    if (diferenciaTotal <= 0) return 0;
+
+    const horaInicial = dayjs.utc(primera.fecha_hora);
+    const horaFinal = dayjs.utc(ultima.fecha_hora);
+
+    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+
+    if (horasTranscurridas <= 0) return 0;
+
+    return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas]);
 
   const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
   const ultimaLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1] : null;
 
-  const faltante = Math.max(0, meta - totalActual);
-  const progreso = pct(totalActual, meta);
+  const faltante = Math.max(0, meta - totalGeneral);
+  const progreso = pct(totalGeneral, meta);
 
   // ===== TIEMPO ESTIMADO DE FINALIZACIÓN =====
   const tiempoRestante = useMemo(() => {
@@ -419,13 +526,27 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [primeraLectura, ultimaLectura]);
 
-  // Datos para gráfico de evolución
+  // Datos para gráfico de evolución (usando total general)
   const datosEvolucion = useMemo(() => {
-    return lecturasOrdenadas.slice(-10).map(l => ({
-      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
-      acumulado: l.acumulado_tm,
-      meta: meta
-    }));
+    // Calcular total general en cada punto
+    const puntos = [];
+    const acumuladosPorBodega = {};
+    
+    lecturasOrdenadas.forEach(l => {
+      if (l.bodega_id) {
+        acumuladosPorBodega[l.bodega_id] = l.acumulado_tm;
+      }
+      
+      const totalEnPunto = Object.values(acumuladosPorBodega).reduce((sum, val) => sum + val, 0);
+      
+      puntos.push({
+        hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
+        acumulado: totalEnPunto,
+        meta: meta
+      });
+    });
+    
+    return puntos.slice(-10);
   }, [lecturasOrdenadas, meta]);
 
   // Tooltip personalizado
@@ -439,7 +560,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
           if (p.dataKey === 'acumulado') {
             return (
               <p key={i} style={{ color: p.color }} className="alm-tooltip-value">
-                Acumulado: <strong>{fmtTM(p.value, 2)} T</strong>
+                Total General: <strong>{fmtTM(p.value, 2)} T</strong>
               </p>
             );
           } else if (p.dataKey === 'meta') {
@@ -483,9 +604,9 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
               <span className="alm-pred-valor">{horasTranscurridas.toFixed(1)} horas</span>
-             {/*  <span className="alm-pred-sub">
+              <span className="alm-pred-sub">
                 {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")} → {dayjs.utc(ultimaLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
-              </span>*/}
+              </span>
             </div>
           )}
 
@@ -494,16 +615,27 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
             <span className="alm-pred-label">📊 FLUJO PROMEDIO GENERAL</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPromedioGeneral, 2)} T/h</span>
             <span className="alm-pred-sub">
-              ({fmtTM(ultimaLectura?.acumulado_tm || 0, 0)} - {fmtTM(primeraLectura?.acumulado_tm || 0, 0)}) / {horasTranscurridas.toFixed(1)}h
+              {fmtTM(totalGeneral, 0)} T totales / {horasTranscurridas.toFixed(1)}h
             </span>
           </div>
+
+          {/* FLUJO ÚLTIMA HORA - NUEVO */}
+          {flujoUltimaHora > 0 && (
+            <div className="alm-pred-metrica" style={{ borderColor: '#10b981' }}>
+              <span className="alm-pred-label">⚡ FLUJO ÚLTIMA HORA</span>
+              <span className="alm-pred-valor-grande" style={{ color: '#10b981' }}>{fmtTM(flujoUltimaHora, 2)} T/h</span>
+              <span className="alm-pred-sub">
+                Basado en registros de la última hora
+              </span>
+            </div>
+          )}
 
           {/* PROGRESO */}
           <div className="alm-pred-metrica">
             <span className="alm-pred-label">🎯 PROGRESO ACTUAL</span>
             <span className="alm-pred-valor">{progreso.toFixed(1)}%</span>
             <span className="alm-pred-sub">
-              {fmtTM(totalActual, 2)} T de {fmtTM(meta, 2)} T
+              {fmtTM(totalGeneral, 2)} T de {fmtTM(meta, 2)} T
             </span>
           </div>
 
@@ -531,14 +663,14 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
                 />
                 <Tooltip content={<CustomTooltip />} />
 
-                {/* Área de acumulado */}
+                {/* Área de acumulado (total general) */}
                 <Area
                   type="monotone"
                   dataKey="acumulado"
                   stroke={producto.color_accent}
                   fill={`${producto.color_accent}30`}
                   strokeWidth={2}
-                  name="Acumulado"
+                  name="Total General"
                 />
 
                 {/* Línea de meta (Cantidad Manifestada) */}
@@ -556,7 +688,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
             <div className="alm-pred-leyenda">
               <span className="alm-leyenda-item">
                 <span className="alm-leyenda-color" style={{ background: producto.color_accent }} />
-                Acumulado
+                Total General
               </span>
               <span className="alm-leyenda-item">
                 <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
@@ -567,7 +699,37 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
         )}
       </div>
 
-      {/* Resumen de flujo */}
+      {/* Resumen de flujos */}
+      {(flujoPromedioGeneral > 0 || flujoUltimaHora > 0) && (
+        <div className="alm-recomendaciones">
+          <h5 className="alm-recomendaciones-titulo">📊 Resumen de Flujos</h5>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Promedio General</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{fmtTM(flujoPromedioGeneral, 2)} T/h</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                {fmtTM(totalGeneral, 0)} T / {horasTranscurridas.toFixed(1)} h
+              </div>
+            </div>
+            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Reciente (2h)</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#3b82f6' }}>{fmtTM(flujoReciente, 2)} T/h</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                Basado en últimas 2 horas
+              </div>
+            </div>
+            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Última Hora</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>{fmtTM(flujoUltimaHora, 2)} T/h</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                Basado en última hora
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tiempo estimado de finalización */}
       {tiempoRestante && (
         <div className="alm-recomendaciones">
           <h5 className="alm-recomendaciones-titulo">⏱️ Tiempo estimado de finalización</h5>
