@@ -3,9 +3,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v24 · DISEÑO PREMIUM
- *  ⚡ CORREGIDO: Mostrar exportaciones en vista general
- *  ⚡ CORREGIDO: Texto dinámico según tipo de operación (carga/descarga)
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v25 · DISEÑO PREMIUM
+ *  ⚡ CORREGIDO: Cálculos correctos para importación y exportación
+ *  ⚡ CORREGIDO: Vista general muestra valores correctos
+ *  ⚡ CORREGIDO: Panel de producto muestra valores correctos
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -51,7 +52,7 @@ const COLORES_FALLBACK = [
 ];
 
 // ============================================================================
-// HOOK PRINCIPAL - CORREGIDO PARA CARGAR EXPORTACIONES
+// HOOK PRINCIPAL
 // ============================================================================
 function useBarcoData(codigoBarco) {
   const [data, setData] = useState({
@@ -60,7 +61,7 @@ function useBarcoData(codigoBarco) {
     destinos: [], 
     viajes: [],
     lecturasBanda: [], 
-    lecturasExportacion: [], // ✅ NUEVO: lecturas de exportación
+    lecturasExportacion: [],
     loading: true, 
     error: null, 
     lastUpdate: null,
@@ -105,13 +106,11 @@ function useBarcoData(codigoBarco) {
         .order("viaje_numero", { ascending: true });
       if (errorViajes) throw new Error(`Error viajes: ${errorViajes.message}`);
 
-      // ✅ Cargar lecturas de banda (para importación)
       const { data: lecturas, error: errorBanda } = await supabase
         .from("lecturas_banda").select("*").eq("barco_id", barco.id)
         .order("fecha_hora", { ascending: false });
       if (errorBanda) throw new Error(`Error lecturas: ${errorBanda.message}`);
 
-      // ✅ Cargar exportaciones (para exportación)
       const { data: exportaciones, error: errorExportacion } = await supabase
         .from("exportacion_banda")
         .select(`
@@ -205,7 +204,6 @@ function useBarcoData(codigoBarco) {
         };
       });
 
-      // ✅ Enriquecer exportaciones
       const exportacionesEnriquecidas = (exportaciones || []).map((e, index, array) => {
         let flujo = 0;
         const exportacionesOrdenadas = [...array].sort(
@@ -252,7 +250,7 @@ function useBarcoData(codigoBarco) {
         destinos: destinos || [],
         viajes: viajesEnriquecidos, 
         lecturasBanda: lecturasEnriquecidas,
-        lecturasExportacion: exportacionesEnriquecidas, // ✅ Guardar exportaciones
+        lecturasExportacion: exportacionesEnriquecidas,
         loading: false, 
         error: null, 
         lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV),
@@ -300,138 +298,165 @@ function getMetaProducto(metas_json, producto) {
 function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
-  // Determinar texto según tipo de operación
   const textoAccion = 'CARGAR';
   const textoFaltante = 'FALTANTE POR CARGAR';
 
-  // Ordenar lecturas por fecha
   const lecturasOrdenadas = useMemo(() => {
     return [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
   }, [lecturas]);
 
-  // ===== FLUJO PROMEDIO GENERAL =====
+  const totalGeneral = useMemo(() => {
+    if (lecturasOrdenadas.length === 0) return 0;
+    const ultimosPorBodega = {};
+    lecturasOrdenadas.forEach(lectura => {
+      if (lectura.bodega_id) {
+        ultimosPorBodega[lectura.bodega_id] = lectura.acumulado_tm;
+      }
+    });
+    return Object.values(ultimosPorBodega).reduce((sum, val) => sum + (val || 0), 0);
+  }, [lecturasOrdenadas]);
+
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
-
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-
-    const acumuladoInicial = primeraLectura.acumulado_tm || 0;
-    const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
-    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-
-    if (diferenciaTotal <= 0) return 0;
-
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
     const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
+    
+    const acumuladosInicio = {};
+    const acumuladosFinal = {};
+    
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(primeraLectura.fecha_hora).unix()) {
+        if (l.bodega_id) {
+          acumuladosInicio[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(ultimaLectura.fecha_hora).unix()) {
+        if (l.bodega_id) {
+          acumuladosFinal[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    const totalInicial = Object.values(acumuladosInicio).reduce((sum, val) => sum + (val || 0), 0);
+    const totalFinal = Object.values(acumuladosFinal).reduce((sum, val) => sum + (val || 0), 0);
+    const diferenciaTotal = totalFinal - totalInicial;
 
+    if (diferenciaTotal <= 0) return 0;
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+    if (horasTranscurridas <= 0) return 0;
+    return diferenciaTotal / horasTranscurridas;
+  }, [lecturasOrdenadas]);
 
+  const flujoUltimaHora = useMemo(() => {
+    if (lecturasOrdenadas.length < 2) return 0;
+    const ahora = dayjs();
+    const hace1Hora = ahora.subtract(1, 'hour');
+    const lecturaReciente = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+    
+    if (dayjs.utc(lecturaReciente.fecha_hora).isBefore(hace1Hora)) return 0;
+    
+    const lecturasUltimaHora = lecturasOrdenadas.filter(l =>
+      dayjs.utc(l.fecha_hora).isAfter(hace1Hora)
+    );
+    if (lecturasUltimaHora.length === 0) return 0;
+    
+    const lecturasAntes = lecturasOrdenadas.filter(l =>
+      dayjs.utc(l.fecha_hora).isBefore(hace1Hora)
+    );
+    
+    let fechaBase;
+    if (lecturasAntes.length > 0) {
+      fechaBase = lecturasAntes[lecturasAntes.length - 1].fecha_hora;
+    } else {
+      fechaBase = hace1Hora.toISOString();
+    }
+
+    const acumuladosBase = {};
+    const acumuladosActual = {};
+    
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(fechaBase).unix()) {
+        if (l.bodega_id) {
+          acumuladosBase[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+    
+    lecturasOrdenadas.forEach(l => {
+      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(lecturaReciente.fecha_hora).unix()) {
+        if (l.bodega_id) {
+          acumuladosActual[l.bodega_id] = l.acumulado_tm;
+        }
+      }
+    });
+
+    const totalBase = Object.values(acumuladosBase).reduce((sum, val) => sum + (val || 0), 0);
+    const totalActual = Object.values(acumuladosActual).reduce((sum, val) => sum + (val || 0), 0);
+    const diferenciaTotal = totalActual - totalBase;
+    if (diferenciaTotal <= 0) return 0;
+
+    const horasTranscurridas = dayjs.utc(lecturaReciente.fecha_hora).diff(dayjs.utc(fechaBase), 'hour', true);
     if (horasTranscurridas <= 0) return 0;
 
     return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas]);
 
-  // ===== FLUJO RECIENTE (últimas 2 horas) =====
-  const flujoReciente = useMemo(() => {
-    if (lecturasOrdenadas.length < 2) return flujoPromedioGeneral;
-
-    const ahora = dayjs();
-    const hace2Horas = ahora.subtract(2, 'hour');
-
-    const lecturasRecientes = lecturasOrdenadas.filter(l =>
-      dayjs.utc(l.fecha_hora).isAfter(hace2Horas)
-    );
-
-    if (lecturasRecientes.length < 2) return flujoPromedioGeneral;
-
-    const primeraReciente = lecturasRecientes[0];
-    const ultimaReciente = lecturasRecientes[lecturasRecientes.length - 1];
-
-    const acumuladoInicial = primeraReciente.acumulado_tm || 0;
-    const acumuladoFinal = ultimaReciente.acumulado_tm || 0;
-    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-
-    if (diferenciaTotal <= 0) return flujoPromedioGeneral;
-
-    const horaInicial = dayjs.utc(primeraReciente.fecha_hora);
-    const horaFinal = dayjs.utc(ultimaReciente.fecha_hora);
-
-    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
-    if (horasTranscurridas <= 0) return flujoPromedioGeneral;
-
-    return diferenciaTotal / horasTranscurridas;
-  }, [lecturasOrdenadas, flujoPromedioGeneral]);
-
-  // Calcular total actual
-  const totalActual = useMemo(() => {
-    const ultimaLectura = lecturasOrdenadas.length > 0
-      ? lecturasOrdenadas[lecturasOrdenadas.length - 1]
-      : null;
-    return ultimaLectura?.acumulado_tm || 0;
-  }, [lecturasOrdenadas]);
-
   const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
   const ultimaLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1] : null;
 
-  const faltante = Math.max(0, meta - totalActual);
-  const progreso = pct(totalActual, meta);
+  const faltante = Math.max(0, meta - totalGeneral);
+  const progreso = pct(totalGeneral, meta);
 
-  // ===== TIEMPO ESTIMADO DE FINALIZACIÓN =====
   const tiempoRestante = useMemo(() => {
-    if (flujoReciente <= 0 || faltante <= 0) return null;
-
-    const horas = faltante / flujoReciente;
+    if (flujoUltimaHora <= 0 || faltante <= 0) return null;
+    const horas = faltante / flujoUltimaHora;
     const fechaEstimada = dayjs().add(horas, 'hour');
-
     const dias = Math.floor(horas / 24);
     const horasRestantes = horas % 24;
     const minutos = Math.round((horas - Math.floor(horas)) * 60);
 
     let tiempoFormateado = '';
-    if (dias > 0) {
-      tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
-    }
-    if (horasRestantes > 0 || dias === 0) {
-      tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
-    }
-    if (minutos > 0 && dias === 0) {
-      tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
-    }
+    if (dias > 0) tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
+    if (horasRestantes > 0 || dias === 0) tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
+    if (minutos > 0 && dias === 0) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
 
     return {
       horas,
       fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
       tiempoFormateado: tiempoFormateado.trim()
     };
-  }, [faltante, flujoReciente]);
+  }, [faltante, flujoUltimaHora]);
 
-  // ===== HORAS TOTALES TRANSCURRIDAS =====
   const horasTranscurridas = useMemo(() => {
     if (!primeraLectura || !ultimaLectura) return 0;
-
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
     const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
-
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [primeraLectura, ultimaLectura]);
 
-  // Datos para gráfico de evolución
   const datosEvolucion = useMemo(() => {
-    return lecturasOrdenadas.slice(-10).map(l => ({
-      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
-      acumulado: l.acumulado_tm,
-      meta: meta
-    }));
+    const puntos = [];
+    const acumuladosPorBodega = {};
+    lecturasOrdenadas.forEach(l => {
+      if (l.bodega_id) {
+        acumuladosPorBodega[l.bodega_id] = l.acumulado_tm;
+      }
+      const totalEnPunto = Object.values(acumuladosPorBodega).reduce((sum, val) => sum + (val || 0), 0);
+      puntos.push({
+        hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
+        acumulado: totalEnPunto,
+        meta: meta
+      });
+    });
+    return puntos.slice(-10);
   }, [lecturasOrdenadas, meta]);
 
-  // Tooltip personalizado
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
-
     return (
       <div className="alm-tooltip">
         <p className="alm-tooltip-label">{label}</p>
@@ -439,7 +464,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
           if (p.dataKey === 'acumulado') {
             return (
               <p key={i} style={{ color: p.color }} className="alm-tooltip-value">
-                Acumulado: <strong>{fmtTM(p.value, 2)} T</strong>
+                Total General: <strong>{fmtTM(p.value, 2)} T</strong>
               </p>
             );
           } else if (p.dataKey === 'meta') {
@@ -476,107 +501,88 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
       </div>
 
       <div className="alm-predicciones-grid">
-        {/* Tarjetas de métricas */}
         <div className="alm-pred-metricas">
-          {/* Período de operación */}
           {primeraLectura && ultimaLectura && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
               <span className="alm-pred-valor">{horasTranscurridas.toFixed(1)} horas</span>
-             {/*  <span className="alm-pred-sub">
+              <span className="alm-pred-sub">
                 {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")} → {dayjs.utc(ultimaLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
-              </span>*/}
+              </span>
             </div>
           )}
 
-          {/* FLUJO PROMEDIO GENERAL */}
           <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${producto.color_accent}20`, borderColor: producto.color_accent }}>
             <span className="alm-pred-label">📊 FLUJO PROMEDIO GENERAL</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPromedioGeneral, 2)} T/h</span>
             <span className="alm-pred-sub">
-              ({fmtTM(ultimaLectura?.acumulado_tm || 0, 0)} - {fmtTM(primeraLectura?.acumulado_tm || 0, 0)}) / {horasTranscurridas.toFixed(1)}h
+              {fmtTM(totalGeneral, 0)} T totales / {horasTranscurridas.toFixed(1)}h
             </span>
           </div>
 
-          {/* PROGRESO */}
+          {flujoUltimaHora > 0 && (
+            <div className="alm-pred-metrica" style={{ borderColor: '#10b981' }}>
+              <span className="alm-pred-label">⚡ FLUJO ÚLTIMA HORA</span>
+              <span className="alm-pred-valor-grande" style={{ color: '#10b981' }}>{fmtTM(flujoUltimaHora, 2)} T/h</span>
+              <span className="alm-pred-sub">Basado en registros de la última hora</span>
+            </div>
+          )}
+
           <div className="alm-pred-metrica">
             <span className="alm-pred-label">🎯 PROGRESO ACTUAL</span>
             <span className="alm-pred-valor">{progreso.toFixed(1)}%</span>
-            <span className="alm-pred-sub">
-              {fmtTM(totalActual, 2)} T de {fmtTM(meta, 2)} T
-            </span>
+            <span className="alm-pred-sub">{fmtTM(totalGeneral, 2)} T de {fmtTM(meta, 2)} T</span>
           </div>
 
-          {/* FALTANTE */}
           <div className="alm-pred-metrica">
             <span className="alm-pred-label">{textoFaltante}</span>
             <span className="alm-pred-valor">{fmtTM(faltante, 2)} T</span>
           </div>
         </div>
 
-        {/* Gráfico de evolución */}
         {datosEvolucion.length > 1 && (
           <div className="alm-pred-grafico">
             <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={datosEvolucion} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="hora"
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                />
-                <YAxis
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  domain={[0, meta * 1.1]}
-                  tickFormatter={(v) => fmtTM(v, 0)}
-                />
+                <XAxis dataKey="hora" tick={{ fontSize: 9, fill: "#64748b" }} />
+                <YAxis tick={{ fontSize: 9, fill: "#64748b" }} domain={[0, meta * 1.1]} tickFormatter={(v) => fmtTM(v, 0)} />
                 <Tooltip content={<CustomTooltip />} />
-
-                {/* Área de acumulado */}
-                <Area
-                  type="monotone"
-                  dataKey="acumulado"
-                  stroke={producto.color_accent}
-                  fill={`${producto.color_accent}30`}
-                  strokeWidth={2}
-                  name="Acumulado"
-                />
-
-                {/* Línea de meta (Cantidad Manifestada) */}
-                <Line
-                  type="monotone"
-                  dataKey="meta"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={false}
-                  name="Cantidad Manifestada"
-                />
+                <Area type="monotone" dataKey="acumulado" stroke={producto.color_accent} fill={`${producto.color_accent}30`} strokeWidth={2} name="Total General" />
+                <Line type="monotone" dataKey="meta" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Cantidad Manifestada" />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: producto.color_accent }} />
-                Acumulado
-              </span>
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
-                Cantidad Manifestada ({fmtTM(meta, 0)} T)
-              </span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Total General</span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Cantidad Manifestada ({fmtTM(meta, 0)} T)</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Resumen de flujo */}
+      <div className="alm-recomendaciones">
+        <h5 className="alm-recomendaciones-titulo">📊 Resumen de Flujos</h5>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Promedio General</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{fmtTM(flujoPromedioGeneral, 2)} T/h</div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{fmtTM(totalGeneral, 0)} T / {horasTranscurridas.toFixed(1)} h</div>
+          </div>
+          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Última Hora</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>{fmtTM(flujoUltimaHora, 2)} T/h</div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{flujoUltimaHora > 0 ? 'Basado en última hora' : 'Sin datos suficientes'}</div>
+          </div>
+        </div>
+      </div>
+
       {tiempoRestante && (
         <div className="alm-recomendaciones">
           <h5 className="alm-recomendaciones-titulo">⏱️ Tiempo estimado de finalización</h5>
           <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Completado en aproximadamente</div>
             <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{tiempoRestante.tiempoFormateado}</div>
-            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-              {tiempoRestante.fecha}
-            </div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{tiempoRestante.fecha}</div>
           </div>
         </div>
       )}
@@ -585,89 +591,66 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Banda (Importación)
+// COMPONENTE: Panel de Tendencias y Predicciones para Banda (Importación) - ORIGINAL
 // ============================================================================
 function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
-  // Determinar texto según tipo de operación
   const textoAccion = tipoOperacion === 'exportacion' ? 'CARGAR' : 'DESCARGAR';
   const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
 
-  // Ordenar lecturas por fecha
   const lecturasOrdenadas = useMemo(() => {
     return [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
   }, [lecturas]);
 
-  // ===== FLUJO PROMEDIO GENERAL =====
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
-
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-
     const acumuladoInicial = primeraLectura.acumulado_tm || 0;
     const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
     const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-
     if (diferenciaTotal <= 0) return 0;
-
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
     const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return 0;
-
     return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas]);
 
-  // ===== FLUJO RECIENTE (últimas 2 horas) =====
   const flujoReciente = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return flujoPromedioGeneral;
-
     const ahora = dayjs();
     const hace2Horas = ahora.subtract(2, 'hour');
-
     const lecturasRecientes = lecturasOrdenadas.filter(l =>
       dayjs.utc(l.fecha_hora).isAfter(hace2Horas)
     );
-
     if (lecturasRecientes.length < 2) return flujoPromedioGeneral;
-
     const primeraReciente = lecturasRecientes[0];
     const ultimaReciente = lecturasRecientes[lecturasRecientes.length - 1];
-
     const acumuladoInicial = primeraReciente.acumulado_tm || 0;
     const acumuladoFinal = ultimaReciente.acumulado_tm || 0;
     const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-
     if (diferenciaTotal <= 0) return flujoPromedioGeneral;
-
     const horaInicial = dayjs.utc(primeraReciente.fecha_hora);
     const horaFinal = dayjs.utc(ultimaReciente.fecha_hora);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return flujoPromedioGeneral;
-
     return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas, flujoPromedioGeneral]);
 
-  // Filtrar viajes completos para el total
   const viajesCompletos = useMemo(() => {
     return viajes.filter(v => v.estado === 'completo');
   }, [viajes]);
 
-  // Calcular total actual (banda + camiones completos con peso destino)
   const totalActual = useMemo(() => {
     const ultimaLectura = lecturasOrdenadas.length > 0
       ? lecturasOrdenadas[lecturasOrdenadas.length - 1]
       : null;
     const totalBanda = ultimaLectura?.acumulado_tm || 0;
-    const totalCamiones = viajesCompletos.reduce((sum, v) => sum + v.peso_destino_tm, 0);
+    const totalCamiones = viajesCompletos.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
     return totalBanda + totalCamiones;
   }, [lecturasOrdenadas, viajesCompletos]);
 
@@ -677,28 +660,17 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
   const faltante = Math.max(0, meta - totalActual);
   const progreso = pct(totalActual, meta);
 
-  // ===== TIEMPO ESTIMADO DE FINALIZACIÓN =====
   const tiempoRestante = useMemo(() => {
     if (flujoReciente <= 0 || faltante <= 0) return null;
-
     const horas = faltante / flujoReciente;
     const fechaEstimada = dayjs().add(horas, 'hour');
-
     const dias = Math.floor(horas / 24);
     const horasRestantes = horas % 24;
     const minutos = Math.round((horas - Math.floor(horas)) * 60);
-
     let tiempoFormateado = '';
-    if (dias > 0) {
-      tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
-    }
-    if (horasRestantes > 0 || dias === 0) {
-      tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
-    }
-    if (minutos > 0 && dias === 0) {
-      tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
-    }
-
+    if (dias > 0) tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
+    if (horasRestantes > 0 || dias === 0) tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
+    if (minutos > 0 && dias === 0) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
     return {
       horas,
       fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
@@ -706,17 +678,13 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
     };
   }, [faltante, flujoReciente]);
 
-  // ===== HORAS TOTALES TRANSCURRIDAS =====
   const horasTranscurridas = useMemo(() => {
     if (!primeraLectura || !ultimaLectura) return 0;
-
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
     const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
-
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [primeraLectura, ultimaLectura]);
 
-  // Datos para gráfico de evolución
   const datosEvolucion = useMemo(() => {
     return lecturasOrdenadas.slice(-10).map(l => ({
       hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
@@ -725,24 +693,17 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
     }));
   }, [lecturasOrdenadas, meta]);
 
-  // Tooltip personalizado para el gráfico de banda
   const CustomBandaTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
-
     const puntoData = payload[0]?.payload;
-
     const obtenerFlujoDelMomento = () => {
       if (!puntoData || !lecturasOrdenadas.length) return 0;
-
       const lecturaActual = lecturasOrdenadas.find(l =>
         dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm") === puntoData.hora
       );
-
       return lecturaActual?.flujo_calculado || 0;
     };
-
     const flujoEnMomento = obtenerFlujoDelMomento();
-
     return (
       <div className="alm-tooltip">
         <p className="alm-tooltip-label">{label}</p>
@@ -792,9 +753,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
       </div>
 
       <div className="alm-predicciones-grid">
-        {/* Tarjetas de métricas */}
         <div className="alm-pred-metricas">
-          {/* Período de operación */}
           {primeraLectura && ultimaLectura && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
@@ -805,7 +764,6 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
             </div>
           )}
 
-          {/* FLUJO PROMEDIO GENERAL */}
           <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${producto.color_accent}20`, borderColor: producto.color_accent }}>
             <span className="alm-pred-label">📊 FLUJO PROMEDIO GENERAL</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPromedioGeneral, 2)} T/h</span>
@@ -814,85 +772,45 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
             </span>
           </div>
 
-          {/* PROGRESO */}
           <div className="alm-pred-metrica">
             <span className="alm-pred-label">🎯 PROGRESO ACTUAL</span>
             <span className="alm-pred-valor">{progreso.toFixed(1)}%</span>
-            <span className="alm-pred-sub">
-              {fmtTM(totalActual, 2)} T de {fmtTM(meta, 2)} T
-            </span>
+            <span className="alm-pred-sub">{fmtTM(totalActual, 2)} T de {fmtTM(meta, 2)} T</span>
           </div>
 
-          {/* FALTANTE */}
           <div className="alm-pred-metrica">
             <span className="alm-pred-label">{textoFaltante}</span>
             <span className="alm-pred-valor">{fmtTM(faltante, 2)} T</span>
           </div>
         </div>
 
-        {/* Gráfico de evolución */}
         {datosEvolucion.length > 1 && (
           <div className="alm-pred-grafico">
             <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={datosEvolucion} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="hora"
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                />
-                <YAxis
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  domain={[0, meta * 1.1]}
-                  tickFormatter={(v) => fmtTM(v, 0)}
-                />
+                <XAxis dataKey="hora" tick={{ fontSize: 9, fill: "#64748b" }} />
+                <YAxis tick={{ fontSize: 9, fill: "#64748b" }} domain={[0, meta * 1.1]} tickFormatter={(v) => fmtTM(v, 0)} />
                 <Tooltip content={<CustomBandaTooltip />} />
-
-                {/* Área de acumulado */}
-                <Area
-                  type="monotone"
-                  dataKey="acumulado"
-                  stroke={producto.color_accent}
-                  fill={`${producto.color_accent}30`}
-                  strokeWidth={2}
-                  name="Acumulado Banda"
-                />
-
-                {/* Línea de meta (Cantidad Manifestada) */}
-                <Line
-                  type="monotone"
-                  dataKey="meta"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={false}
-                  name="Cantidad Manifestada"
-                />
+                <Area type="monotone" dataKey="acumulado" stroke={producto.color_accent} fill={`${producto.color_accent}30`} strokeWidth={2} name="Acumulado Banda" />
+                <Line type="monotone" dataKey="meta" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Cantidad Manifestada" />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: producto.color_accent }} />
-                Acumulado Banda
-              </span>
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
-                Cantidad Manifestada ({fmtTM(meta, 0)} T)
-              </span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Acumulado Banda</span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Cantidad Manifestada ({fmtTM(meta, 0)} T)</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Resumen de flujo */}
       {tiempoRestante && (
         <div className="alm-recomendaciones">
           <h5 className="alm-recomendaciones-titulo">⏱️ Tiempo estimado de finalización</h5>
           <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Completado en aproximadamente</div>
             <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{tiempoRestante.tiempoFormateado}</div>
-            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-              {tiempoRestante.fecha}
-            </div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{tiempoRestante.fecha}</div>
           </div>
         </div>
       )}
@@ -901,22 +819,19 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes - ORIGINAL
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
-  // Determinar texto según tipo de operación
   const textoAccion = tipoOperacion === 'exportacion' ? 'CARGAR' : 'DESCARGAR';
   const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
   const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
-  // Filtrar solo viajes completos para cálculos de rendimiento
   const viajesCompletos = useMemo(() => {
     return viajes.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
   }, [viajes]);
 
-  // Ordenar viajes por fecha
   const viajesOrdenados = useMemo(() => {
     return [...viajesCompletos].sort((a, b) => {
       const fechaA = a.fecha_hora ? dayjs.utc(a.fecha_hora).unix() :
@@ -927,161 +842,109 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     });
   }, [viajesCompletos]);
 
-  // ===== RENDIMIENTO PROMEDIO DE VIAJES (usando peso destino) =====
   const rendimientoPromedio = useMemo(() => {
     if (viajesCompletos.length === 0) return 0;
     const totalToneladas = viajesCompletos.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
     return totalToneladas / viajesCompletos.length;
   }, [viajesCompletos]);
 
-  // ===== FRECUENCIA DE VIAJES (viajes por hora) =====
   const frecuenciaViajes = useMemo(() => {
     if (viajesOrdenados.length < 2) return 0;
-
     const primerViaje = viajesOrdenados[0];
     const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
-
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-
     if (!fechaPrimera || !fechaUltima) return 0;
-
     const horaInicial = dayjs.utc(fechaPrimera);
     const horaFinal = dayjs.utc(fechaUltima);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return 0;
-
     return viajesOrdenados.length / horasTranscurridas;
   }, [viajesOrdenados]);
 
-  // ===== FLUJO DE TONELADAS POR HORA (VIAJES) usando peso destino =====
   const flujoPorHoraViajes = useMemo(() => {
     if (viajesOrdenados.length < 2) return 0;
-
     const primerViaje = viajesOrdenados[0];
     const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
-
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-
     if (!fechaPrimera || !fechaUltima) return 0;
-
     const horaInicial = dayjs.utc(fechaPrimera);
     const horaFinal = dayjs.utc(fechaUltima);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return 0;
-
     const totalToneladas = viajesOrdenados.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
     return totalToneladas / horasTranscurridas;
   }, [viajesOrdenados]);
 
-  // ===== FLUJO RECIENTE (últimas 2 horas) =====
   const flujoRecientePorHora = useMemo(() => {
     const ahora = dayjs();
     const hace2Horas = ahora.subtract(2, 'hour');
-
     const viajesRecientes = viajesCompletos.filter(v => {
       const fecha = v.fecha_hora || v.created_at;
       return fecha && dayjs.utc(fecha).isAfter(hace2Horas);
     });
-
     if (viajesRecientes.length < 2) return flujoPorHoraViajes;
-
     const primerViaje = viajesRecientes[0];
     const ultimoViaje = viajesRecientes[viajesRecientes.length - 1];
-
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-
     if (!fechaPrimera || !fechaUltima) return flujoPorHoraViajes;
-
     const horaInicial = dayjs.utc(fechaPrimera);
     const horaFinal = dayjs.utc(fechaUltima);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return flujoPorHoraViajes;
-
     const totalToneladasRecientes = viajesRecientes.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
     return totalToneladasRecientes / horasTranscurridas;
   }, [viajesCompletos, flujoPorHoraViajes]);
 
-  // ===== VIAJES POR HORA (últimas 2 horas) =====
   const viajesRecientesPorHora = useMemo(() => {
     const ahora = dayjs();
     const hace2Horas = ahora.subtract(2, 'hour');
-
     const viajesRecientes = viajesCompletos.filter(v => {
       const fecha = v.fecha_hora || v.created_at;
       return fecha && dayjs.utc(fecha).isAfter(hace2Horas);
     });
-
     if (viajesRecientes.length < 2) return frecuenciaViajes;
-
     const primerViaje = viajesRecientes[0];
     const ultimoViaje = viajesRecientes[viajesRecientes.length - 1];
-
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-
     if (!fechaPrimera || !fechaUltima) return frecuenciaViajes;
-
     const horaInicial = dayjs.utc(fechaPrimera);
     const horaFinal = dayjs.utc(fechaUltima);
-
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-
     if (horasTranscurridas <= 0) return frecuenciaViajes;
-
     return viajesRecientes.length / horasTranscurridas;
   }, [viajesCompletos, frecuenciaViajes]);
 
-  // ===== RENDIMIENTO RECIENTE (últimos 5 viajes completos) usando peso destino =====
   const rendimientoReciente = useMemo(() => {
     const ultimosViajes = viajesCompletos.slice(-5);
     if (ultimosViajes.length === 0) return rendimientoPromedio;
-
     const totalToneladas = ultimosViajes.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
     return totalToneladas / ultimosViajes.length;
   }, [viajesCompletos, rendimientoPromedio]);
 
-  // Calcular total actual de viajes completos (usando peso destino)
   const totalViajes = viajesCompletos.length;
   const totalToneladasViajes = viajesCompletos.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
 
-  // ===== VIAJES FALTANTES ESTIMADOS =====
   const viajesFaltantes = useMemo(() => {
     if (!meta || meta === 0) return 0;
     const toneladasFaltantes = Math.max(0, meta - totalToneladasViajes);
     return rendimientoReciente > 0 ? Math.ceil(toneladasFaltantes / rendimientoReciente) : 0;
   }, [meta, totalToneladasViajes, rendimientoReciente]);
 
-  // ===== TIEMPO ESTIMADO PARA COMPLETAR VIAJES FALTANTES =====
   const tiempoRestanteViajes = useMemo(() => {
     if (viajesFaltantes <= 0 || viajesRecientesPorHora <= 0) return null;
-
     const horas = viajesFaltantes / viajesRecientesPorHora;
     const fechaEstimada = dayjs().add(horas, 'hour');
-
     const dias = Math.floor(horas / 24);
     const horasRestantes = horas % 24;
     const minutos = Math.round((horas - Math.floor(horas)) * 60);
-
     let tiempoFormateado = '';
-    if (dias > 0) {
-      tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
-    }
-    if (horasRestantes > 0 || dias === 0) {
-      tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
-    }
-    if (minutos > 0 && dias === 0 && horasRestantes < 1) {
-      tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
-    }
-
+    if (dias > 0) tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
+    if (horasRestantes > 0 || dias === 0) tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
+    if (minutos > 0 && dias === 0 && horasRestantes < 1) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
     return {
       horas,
       fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
@@ -1090,35 +953,25 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     };
   }, [viajesFaltantes, viajesRecientesPorHora]);
 
-  // Calcular horas totales transcurridas para mostrar
   const horasTranscurridas = useMemo(() => {
     if (viajesOrdenados.length < 2) return 0;
-
     const primerViaje = viajesOrdenados[0];
     const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
-
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-
     if (!fechaPrimera || !fechaUltima) return 0;
-
     const horaInicial = dayjs.utc(fechaPrimera);
     const horaFinal = dayjs.utc(fechaUltima);
-
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [viajesOrdenados]);
 
-  // Datos para gráfico de tendencia de viajes
   const datosViajes = useMemo(() => {
     const viajesParaGrafico = viajes.slice(-15);
-
     return viajesParaGrafico.map((v, i, arr) => {
       const viajesCompletosHastaAhora = viajes
         .slice(0, viajes.indexOf(v) + 1)
         .filter(v2 => v2.estado === 'completo');
-      
       const acumulado = viajesCompletosHastaAhora.reduce((sum, v2) => sum + (v2.peso_destino_tm || 0), 0);
-
       return {
         numero: `V${v.viaje_numero || (i + 1)}`,
         peso: v.peso_destino_tm || 0,
@@ -1130,7 +983,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     });
   }, [viajes]);
 
-  // Si no hay meta, mostrar mensaje
   if (!meta || meta === 0) {
     return (
       <div className="alm-predicciones-panel">
@@ -1164,84 +1016,50 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
       </div>
 
       <div className="alm-predicciones-grid">
-        {/* Tarjetas de métricas */}
         <div className="alm-pred-metricas">
-          {/* Resumen de viajes */}
           <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
             <span className="alm-pred-label">📊 TOTAL VIAJES COMPLETOS</span>
             <span className="alm-pred-valor-grande">{totalViajes}</span>
-            <span className="alm-pred-sub">
-              {fmtTM(totalToneladasViajes, 2)} {textoUnidad}
-            </span>
+            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 2)} {textoUnidad}</span>
           </div>
 
-          {/* FLUJO POR HORA */}
           <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${producto.color_accent}20`, borderColor: producto.color_accent }}>
             <span className="alm-pred-label">⏱️ FLUJO PROMEDIO POR HORA</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPorHoraViajes, 2)} T/h</span>
-            <span className="alm-pred-sub">
-              {fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas
-            </span>
+            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas</span>
           </div>
 
-          {/* Rendimiento promedio por viaje */}
           <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
             <span className="alm-pred-label">⚖️ RENDIMIENTO PROMEDIO</span>
             <span className="alm-pred-valor">{fmtTM(rendimientoPromedio, 2)} T/viaje</span>
-            <span className="alm-pred-sub">
-              {rendimientoReciente > rendimientoPromedio ? '↑ Superior' : '↓ Inferior'} al reciente
-            </span>
+            <span className="alm-pred-sub">{rendimientoReciente > rendimientoPromedio ? '↑ Superior' : '↓ Inferior'} al reciente</span>
           </div>
 
-          {/* Frecuencia de viajes */}
           {frecuenciaViajes > 0 && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">⏱️ FRECUENCIA DE VIAJES</span>
               <span className="alm-pred-valor">{Math.round(frecuenciaViajes)} viajes/h</span>
-              <span className="alm-pred-sub">
-                {viajesRecientesPorHora > frecuenciaViajes ? '🔼 Acelerando' : '🔽 Desacelerando'}
-              </span>
+              <span className="alm-pred-sub">{viajesRecientesPorHora > frecuenciaViajes ? '🔼 Acelerando' : '🔽 Desacelerando'}</span>
             </div>
           )}
 
-          {/* Viajes faltantes estimados */}
           {viajesFaltantes > 0 && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📦 {textoFaltante}</span>
               <span className="alm-pred-valor">{viajesFaltantes} viajes</span>
-              <span className="alm-pred-sub">
-                {fmtTM(meta - totalToneladasViajes, 2)} T por transportar
-              </span>
+              <span className="alm-pred-sub">{fmtTM(meta - totalToneladasViajes, 2)} T por transportar</span>
             </div>
           )}
         </div>
 
-        {/* Gráfico de tendencia de viajes */}
         {datosViajes.length > 0 ? (
           <div className="alm-pred-grafico">
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={datosViajes} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="numero"
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={50}
-                />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  tickFormatter={(v) => fmtTM(v, 0)}
-                  label={{ value: 'Peso (TM)', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#64748b' } }}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  tickFormatter={(v) => fmtTM(v, 0)}
-                  label={{ value: 'Acumulado (TM)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#64748b' } }}
-                />
+                <XAxis dataKey="numero" tick={{ fontSize: 9, fill: "#64748b" }} angle={-45} textAnchor="end" height={50} />
+                <YAxis yAxisId="left" tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'Peso (TM)', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#64748b' } }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'Acumulado (TM)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#64748b' } }} />
                 <Tooltip
                   formatter={(value, name) => {
                     if (name === "Peso Viaje") return [fmtTM(value, 2) + ' T', name];
@@ -1250,37 +1068,13 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
                   }}
                   labelFormatter={(label) => `Viaje ${label}`}
                 />
-
-                {/* Barras de peso por viaje (solo completos) */}
-                <Bar
-                  yAxisId="left"
-                  dataKey="peso"
-                  fill={producto.color_accent}
-                  name="Peso Viaje (Destino)"
-                  radius={[3, 3, 0, 0]}
-                />
-
-                {/* Línea de acumulado (solo completos) */}
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="acumulado"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "#ef4444" }}
-                  name="Acumulado (Destino)"
-                />
+                <Bar yAxisId="left" dataKey="peso" fill={producto.color_accent} name="Peso Viaje (Destino)" radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: "#ef4444" }} name="Acumulado (Destino)" />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: producto.color_accent }} />
-                Peso Destino por Viaje
-              </span>
-              <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
-                Acumulado Destino
-              </span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Peso Destino por Viaje</span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Acumulado Destino</span>
             </div>
           </div>
         ) : (
@@ -1290,7 +1084,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         )}
       </div>
 
-      {/* Resumen de flujo por hora en tabla */}
       {viajesOrdenados.length >= 2 && (
         <div className="alm-recomendaciones">
           <h5 className="alm-recomendaciones-titulo">📊 Resumen de Flujo por Hora</h5>
@@ -1298,16 +1091,12 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
               <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Promedio General</div>
               <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{fmtTM(flujoPorHoraViajes, 2)} T/h</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                {fmtTM(totalToneladasViajes, 0)} T / {horasTranscurridas.toFixed(1)} h
-              </div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{fmtTM(totalToneladasViajes, 0)} T / {horasTranscurridas.toFixed(1)} h</div>
             </div>
             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
               <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Reciente (2h)</div>
               <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>{fmtTM(flujoRecientePorHora, 2)} T/h</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                Basado en últimos viajes completos
-              </div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Basado en últimos viajes completos</div>
             </div>
           </div>
         </div>
@@ -1471,7 +1260,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
   let flujoTotal = 0;
 
   if (tipoOperacion === 'exportacion') {
-    // Para exportación, usar lecturas de exportación
     let flujoExportacion = 0;
     const exportacionesRecientes = lecturasExportacion
       .filter(e => e.fecha_hora && dayjs.utc(e.fecha_hora).isAfter(hace2Horas))
@@ -1486,7 +1274,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
     }
     flujoTotal = flujoExportacion;
   } else {
-    // Para importación, usar banda y viajes
     let flujoBanda = 0;
     const lecturasRecientes = lecturasBanda
       .filter(l => l.fecha_hora && dayjs.utc(l.fecha_hora).isAfter(hace2Horas))
@@ -1565,37 +1352,48 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
 }
 
 // ============================================================================
-// COMPONENTE: Vista General PREMIUM con Gráficos
+// COMPONENTE: Vista General PREMIUM con Gráficos - CORREGIDO
 // ============================================================================
 function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExportacion, onSelectProducto }) {
   const tipoOperacion = barco.tipo_operacion || 'importacion';
   const textoAccion = tipoOperacion === 'exportacion' ? 'Cargado' : 'Descargado';
   const textoFaltante = tipoOperacion === 'exportacion' ? 'Faltante por cargar' : 'Faltante por descargar';
-  const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
-  console.log("VistaGeneral - tipoOperacion:", tipoOperacion);
-  console.log("VistaGeneral - lecturasExportacion:", lecturasExportacion?.length);
+  console.log("🔍 VistaGeneral - Datos recibidos:");
+  console.log("Productos:", productos.map(p => p.codigo));
+  console.log("Viajes:", viajes.length);
+  console.log("Lecturas Banda:", lecturasBanda.length);
+  console.log("Exportaciones:", lecturasExportacion.length);
 
   const totales = useMemo(() => {
     return productos.map((producto) => {
-      const vp = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
-      const lp = lecturasBanda.filter((l) => l.producto_id === producto.id);
-      const exp = lecturasExportacion.filter((e) => e.producto_id === producto.id);
+      // Viajes completos para este producto
+      const viajesProducto = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
+      const totalCamiones = viajesProducto.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
       
-      const totalCamiones = vp.reduce((s, v) => s + v.peso_destino_tm, 0);
-      const totalBanda = lp.length > 0 ? lp[lp.length - 1]?.acumulado_tm || 0 : 0;
-      const totalExportacion = exp.length > 0 ? exp[0]?.acumulado_tm || 0 : 0; // La más reciente
+      // Lecturas de banda para este producto - tomar la más reciente
+      const lecturasProducto = lecturasBanda
+        .filter((l) => l.producto_id === producto.id)
+        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+      const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
+      
+      // Exportaciones para este producto - tomar la más reciente
+      const exportacionesProducto = lecturasExportacion
+        .filter((e) => e.producto_id === producto.id)
+        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+      const totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
       
       const meta = getMetaProducto(barco.metas_json, producto);
       
-      console.log(`Producto ${producto.codigo}:`, {
-        viajes: vp.length,
-        banda: lp.length,
-        exportacion: exp.length,
-        totalCamiones,
-        totalBanda,
-        totalExportacion,
-        meta
+      console.log(`📊 Producto ${producto.codigo}:`, {
+        viajes: viajesProducto.length,
+        totalCamiones: totalCamiones.toFixed(3),
+        lecturas: lecturasProducto.length,
+        totalBanda: totalBanda.toFixed(3),
+        exportaciones: exportacionesProducto.length,
+        totalExportacion: totalExportacion.toFixed(3),
+        total: (totalCamiones + totalBanda + totalExportacion).toFixed(3),
+        meta: meta.toFixed(3)
       });
       
       return { 
@@ -1614,7 +1412,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
   const faltanteGlobal = Math.max(0, metaGlobal - totalGlobal);
   const progresoGlobal = pct(totalGlobal, metaGlobal);
 
-  // Datos para gráfico de barras
   const barData = totales.map((t) => ({
     name: t.producto.codigo,
     Banda: parseFloat(t.totalBanda.toFixed(2)),
@@ -1623,12 +1420,10 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     fill: t.producto.color_accent,
   }));
 
-  // Datos para gráfico de pie
   const pieData = totales
     .filter((t) => t.total > 0)
     .map((t) => ({ name: t.producto.nombre, value: parseFloat(t.total.toFixed(2)), color: t.producto.color_accent }));
 
-  // Evolución de lecturas (según tipo de operación)
   const areaData = useMemo(() => {
     if (tipoOperacion === 'exportacion') {
       const sorted = [...lecturasExportacion]
@@ -1652,7 +1447,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
   return (
     <div className="alm-general-grid">
 
-      {/* ── KPIs ─────────────────────────────────────── */}
       <div className="alm-kpis-row">
         <KpiCard label={`Total ${textoAccion}`} value={`${fmtTM(totalGlobal, 2)} TM`}
           sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} icon="⚓" accent="#3b82f6" animate />
@@ -1668,7 +1462,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           sub="registros totales" icon="📊" accent="#8b5cf6" />
       </div>
 
-      {/* ── BARRA DE PROGRESO GLOBAL CON ESTIMACIONES ─────────────────── */}
       <div className="alm-progress-hero">
         <div className="alm-progress-hero-header">
           <div>
@@ -1688,7 +1481,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           <span>{fmtTM(metaGlobal)} TM</span>
         </div>
 
-        {/* Faltante */}
         {faltanteGlobal > 0 && (
           <div style={{ marginTop: '16px', fontSize: '13px', color: '#ef4444' }}>
             ⏳ {textoFaltante}: <strong>{fmtTM(faltanteGlobal, 2)} TM</strong>
@@ -1696,7 +1488,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         )}
       </div>
 
-      {/* ── CUADRITO DE FINALIZACIÓN GENERAL ─────────────────── */}
       {metaGlobal > 0 && faltanteGlobal > 0 && (
         <div style={{
           background: 'linear-gradient(135deg, #0f172a, #1e293b)',
@@ -1757,10 +1548,8 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         </div>
       )}
       
-      {/* ── GRÁFICOS ─────────────────────────────────── */}
       <div className="alm-charts-row">
 
-        {/* Barras apiladas por producto */}
         <div className="alm-chart-card">
           <h4 className="alm-chart-title">📦 Toneladas por Producto</h4>
           <ResponsiveContainer width="100%" height={240}>
@@ -1782,7 +1571,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           </ResponsiveContainer>
         </div>
 
-        {/* Distribución en pie */}
         <div className="alm-chart-card">
           <h4 className="alm-chart-title">🥧 Distribución por Producto</h4>
           {pieData.length > 0 ? (
@@ -1807,7 +1595,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           )}
         </div>
 
-        {/* Evolución */}
         <div className="alm-chart-card alm-chart-wide">
           <h4 className="alm-chart-title">
             {tipoOperacion === 'exportacion' ? '📈 Evolución de Carga' : '📈 Evolución Acumulado Banda'} (últimas lecturas)
@@ -1837,7 +1624,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
 
       </div>
 
-      {/* ===== PANEL DE COMPARATIVA POR PRODUCTO ===== */}
       <div className="alm-comparativa-section">
         <div className="alm-comparativa-header">
           <h3 className="alm-section-title">
@@ -1854,10 +1640,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           {totales.map(({ producto, meta, totalCamiones, totalBanda, totalExportacion, total }) => {
             const color = producto.color_accent;
 
-            // Para exportación, solo mostrar si hay datos de exportación
             if (tipoOperacion === 'exportacion' && totalExportacion === 0) return null;
-            
-            // Para importación, solo mostrar si no es exclusivamente de banda
             if (tipoOperacion !== 'exportacion' && producto.tipo_registro === 'banda') return null;
 
             return (
@@ -1878,7 +1661,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
 
                 <div className="alm-comparativa-bars">
                   {tipoOperacion === 'exportacion' ? (
-                    /* Barra de Exportación */
                     <div className="alm-comparativa-bar-container">
                       <div className="alm-comparativa-bar-label">
                         <div className="alm-comparativa-label-left">
@@ -1901,9 +1683,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                       </div>
                     </div>
                   ) : (
-                    /* Barras de Importación */
                     <>
-                      {/* Barra de Banda */}
                       <div className="alm-comparativa-bar-container">
                         <div className="alm-comparativa-bar-label">
                           <div className="alm-comparativa-label-left">
@@ -1924,7 +1704,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                         </div>
                       </div>
 
-                      {/* Barra de Viajes */}
                       <div className="alm-comparativa-bar-container">
                         <div className="alm-comparativa-bar-label">
                           <div className="alm-comparativa-label-left">
@@ -1983,7 +1762,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         </div>
       </div>
 
-      {/* ── TABLA RESUMEN ──────────────────────────────── */}
       <div className="alm-table-card">
         <div className="alm-table-header">
           <h3 className="alm-section-title">Resumen por Producto</h3>
@@ -2093,12 +1871,10 @@ function TablaViajes({ viajes, producto }) {
     );
   }
 
-  // Filtrar solo completos para los totales
   const viajesCompletos = viajes.filter(v => v.estado === 'completo');
 
   return (
     <div className="alm-space-y">
-      {/* Tabla de Viajes */}
       <div className="alm-table-card">
         <div className="alm-table-header">
           <h3 className="alm-section-title">
@@ -2189,28 +1965,19 @@ function TablaBanda({ lecturas, producto }) {
     );
   }
 
-  // Calcular flujo general para el producto
   const calcularFlujoGeneral = () => {
     if (lecturas.length < 2) return 0;
-
     const lecturasOrdenadas = [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
-
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-
     const horaPrimera = dayjs.utc(primeraLectura.fecha_hora);
     const horaUltima = dayjs.utc(ultimaLectura.fecha_hora);
-
     const horasTranscurridas = horaUltima.diff(horaPrimera, 'hour', true);
-
     if (horasTranscurridas <= 0) return 0;
-
     const acumuladoActual = ultimaLectura.acumulado_tm;
-    const flujo = acumuladoActual / horasTranscurridas;
-
-    return flujo;
+    return acumuladoActual / horasTranscurridas;
   };
 
   const areaData = [...lecturas]
@@ -2311,7 +2078,6 @@ function TablaExportacion({ lecturas, producto }) {
     );
   }
 
-  // Configuración de bodegas
   const BODEGAS = [
     { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01' },
     { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02' },
@@ -2323,24 +2089,17 @@ function TablaExportacion({ lecturas, producto }) {
     { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
   ];
 
-  // Calcular flujo general
   const calcularFlujoGeneral = () => {
     if (lecturas.length < 2) return 0;
-
     const lecturasOrdenadas = [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
-
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-
     const horaPrimera = dayjs.utc(primeraLectura.fecha_hora);
     const horaUltima = dayjs.utc(ultimaLectura.fecha_hora);
-
     const horasTranscurridas = horaUltima.diff(horaPrimera, 'hour', true);
-
     if (horasTranscurridas <= 0) return 0;
-
     const acumuladoActual = ultimaLectura.acumulado_tm;
     return acumuladoActual / horasTranscurridas;
   };
@@ -2449,7 +2208,7 @@ export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
   const { barco, productos, viajes, lecturasBanda, lecturasExportacion, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
 
-  console.log("Dashboard - datos cargados:", {
+  console.log("📊 Dashboard - datos cargados:", {
     barco: barco?.codigo_barco,
     tipo: barco?.tipo_operacion,
     productos: productos.length,
@@ -2477,11 +2236,15 @@ export default function DashboardCompartido({ codigoBarco }) {
     const mapa = new Map();
     productos.forEach((producto) => {
       const vp = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
-      const lp = lecturasBanda.filter((l) => l.producto_id === producto.id);
-      const exp = lecturasExportacion.filter((e) => e.producto_id === producto.id);
+      const lp = lecturasBanda
+        .filter((l) => l.producto_id === producto.id)
+        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+      const exp = lecturasExportacion
+        .filter((e) => e.producto_id === producto.id)
+        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
       
-      const totalCamiones = vp.reduce((s, v) => s + v.peso_destino_tm, 0);
-      const totalBanda = lp.length > 0 ? lp[lp.length - 1]?.acumulado_tm || 0 : 0;
+      const totalCamiones = vp.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
+      const totalBanda = lp.length > 0 ? lp[0]?.acumulado_tm || 0 : 0;
       const totalExportacion = exp.length > 0 ? exp[0]?.acumulado_tm || 0 : 0;
       
       mapa.set(producto.id, { totalCamiones, totalBanda, totalExportacion });
@@ -3883,7 +3646,6 @@ export default function DashboardCompartido({ codigoBarco }) {
 
       <div className="alm-root">
 
-        {/* ── TOPBAR ───────────────────────────────────────────── */}
         <header className="alm-topbar">
           <div className="alm-topbar-left">
             <img src="/logo.png" alt="ALMAPAC" className="alm-logo" />
@@ -3915,7 +3677,6 @@ export default function DashboardCompartido({ codigoBarco }) {
 
         <div className="alm-body">
 
-          {/* ── NAVEGACIÓN ───────────────────────────────────────── */}
           <nav className="alm-nav">
             <button
               onClick={() => setProductoSeleccionado("general")}
@@ -3945,7 +3706,6 @@ export default function DashboardCompartido({ codigoBarco }) {
             })}
           </nav>
 
-          {/* ── TARJETAS DE PRODUCTO ─────────────────────────────── */}
           {productos.length > 0 ? (
             <div className="alm-cards-row">
               {productos.map((producto) => {
@@ -3971,7 +3731,6 @@ export default function DashboardCompartido({ codigoBarco }) {
             </div>
           )}
 
-          {/* ── CONTENIDO PRINCIPAL ──────────────────────────────── */}
           {productoSeleccionado === "general" ? (
             <VistaGeneral
               barco={barco}
@@ -3997,10 +3756,8 @@ export default function DashboardCompartido({ codigoBarco }) {
                 </p>
               </div>
 
-              {/* Paneles según tipo de operación */}
               {tipoOperacion === 'exportacion' ? (
                 <>
-                  {/* Panel de Tendencias de Exportación */}
                   <PanelPrediccionesExportacion
                     producto={productoActivo}
                     lecturas={exportacionesFiltradas}
@@ -4008,12 +3765,10 @@ export default function DashboardCompartido({ codigoBarco }) {
                     tipoOperacion={tipoOperacion}
                   />
                   
-                  {/* Tabla de Exportaciones */}
                   <TablaExportacion lecturas={exportacionesFiltradas} producto={productoActivo} />
                 </>
               ) : (
                 <>
-                  {/* Panel de Tendencias de Banda - para importación */}
                   <PanelPrediccionesBanda
                     producto={productoActivo}
                     lecturas={lecturasFiltradas}
@@ -4022,7 +3777,6 @@ export default function DashboardCompartido({ codigoBarco }) {
                     tipoOperacion={tipoOperacion}
                   />
 
-                  {/* Panel de Tendencias de Viajes - SOLO si NO es solo banda */}
                   {productoActivo.tipo_registro !== 'banda' && (
                     <PanelPrediccionesViajes
                       producto={productoActivo}
@@ -4032,15 +3786,12 @@ export default function DashboardCompartido({ codigoBarco }) {
                     />
                   )}
 
-                  {/* Tabla de Viajes - SOLO si NO es solo banda */}
                   {productoActivo.tipo_registro !== 'banda' && (
                     <TablaViajes viajes={viajesFiltrados} producto={productoActivo} />
                   )}
 
-                  {/* Tabla de Lecturas de Banda */}
                   <TablaBanda lecturas={lecturasFiltradas} producto={productoActivo} />
 
-                  {/* Mensaje informativo si es solo banda */}
                   {productoActivo.tipo_registro === 'banda' && (
                     <div className="alm-info-box" style={{
                       background: '#1e293b',
