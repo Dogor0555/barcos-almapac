@@ -3,9 +3,9 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v23 · DISEÑO PREMIUM
- *  ⚡ CORREGIDO: Ocultar viajes en productos solo banda
- *  ⚡ MEJORADO: Texto dinámico según tipo de operación (carga/descarga)
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v24 · DISEÑO PREMIUM
+ *  ⚡ CORREGIDO: Mostrar exportaciones en vista general
+ *  ⚡ CORREGIDO: Texto dinámico según tipo de operación (carga/descarga)
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -51,12 +51,19 @@ const COLORES_FALLBACK = [
 ];
 
 // ============================================================================
-// HOOK PRINCIPAL
+// HOOK PRINCIPAL - CORREGIDO PARA CARGAR EXPORTACIONES
 // ============================================================================
 function useBarcoData(codigoBarco) {
   const [data, setData] = useState({
-    barco: null, productos: [], destinos: [], viajes: [],
-    lecturasBanda: [], loading: true, error: null, lastUpdate: null,
+    barco: null, 
+    productos: [], 
+    destinos: [], 
+    viajes: [],
+    lecturasBanda: [], 
+    lecturasExportacion: [], // ✅ NUEVO: lecturas de exportación
+    loading: true, 
+    error: null, 
+    lastUpdate: null,
   });
 
   const cargarTodo = useCallback(async () => {
@@ -84,6 +91,7 @@ function useBarcoData(codigoBarco) {
       }
 
       const barco = barcosEncontrados[0];
+      console.log("Barco encontrado:", barco);
 
       const { data: destinos, error: errorDestinos } = await supabase
         .from("destinos").select("*").eq("activo", true);
@@ -97,10 +105,28 @@ function useBarcoData(codigoBarco) {
         .order("viaje_numero", { ascending: true });
       if (errorViajes) throw new Error(`Error viajes: ${errorViajes.message}`);
 
+      // ✅ Cargar lecturas de banda (para importación)
       const { data: lecturas, error: errorBanda } = await supabase
         .from("lecturas_banda").select("*").eq("barco_id", barco.id)
         .order("fecha_hora", { ascending: false });
       if (errorBanda) throw new Error(`Error lecturas: ${errorBanda.message}`);
+
+      // ✅ Cargar exportaciones (para exportación)
+      const { data: exportaciones, error: errorExportacion } = await supabase
+        .from("exportacion_banda")
+        .select(`
+          *,
+          producto:producto_id(id, codigo, nombre, icono)
+        `)
+        .eq("barco_id", barco.id)
+        .order("fecha_hora", { ascending: false });
+      
+      if (errorExportacion) {
+        console.error("Error cargando exportaciones:", errorExportacion);
+        throw new Error(`Error exportaciones: ${errorExportacion.message}`);
+      }
+      
+      console.log("Exportaciones encontradas:", exportaciones?.length || 0);
 
       let productos = [];
       const codigosEnMetas = barco.metas_json?.productos || [];
@@ -114,6 +140,7 @@ function useBarcoData(codigoBarco) {
         const productoIdsSet = new Set();
         (viajes || []).forEach((v) => { if (v.producto_id) productoIdsSet.add(v.producto_id); });
         (lecturas || []).forEach((l) => { if (l.producto_id) productoIdsSet.add(l.producto_id); });
+        (exportaciones || []).forEach((e) => { if (e.producto_id) productoIdsSet.add(e.producto_id); });
 
         if (productoIdsSet.size > 0) {
           const { data: prods, error: errorProds } = await supabase
@@ -178,10 +205,57 @@ function useBarcoData(codigoBarco) {
         };
       });
 
+      // ✅ Enriquecer exportaciones
+      const exportacionesEnriquecidas = (exportaciones || []).map((e, index, array) => {
+        let flujo = 0;
+        const exportacionesOrdenadas = [...array].sort(
+          (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+        );
+        const indexOrdenado = exportacionesOrdenadas.findIndex(exp => exp.id === e.id);
+
+        if (indexOrdenado > 0) {
+          const expActual = exportacionesOrdenadas[indexOrdenado];
+          const expAnterior = exportacionesOrdenadas[indexOrdenado - 1];
+
+          const horaActual = dayjs.utc(expActual.fecha_hora);
+          const horaAnterior = dayjs.utc(expAnterior.fecha_hora);
+
+          const minutosTranscurridos = horaActual.diff(horaAnterior, 'minute', true);
+
+          if (minutosTranscurridos > 0) {
+            const acumuladoActual = expActual.acumulado_tm || 0;
+            const acumuladoAnterior = expAnterior.acumulado_tm || 0;
+            const diferencia = acumuladoActual - acumuladoAnterior;
+            flujo = (diferencia / minutosTranscurridos) * 60;
+          }
+        }
+
+        return {
+          ...e,
+          acumulado_tm: Number(e.acumulado_tm) || 0,
+          flujo_calculado: flujo > 0 ? flujo : 0,
+        };
+      });
+
+      console.log("Datos cargados:", {
+        barco: barco.codigo_barco,
+        tipo: barco.tipo_operacion,
+        productos: productos.length,
+        viajes: viajes?.length,
+        lecturas: lecturas?.length,
+        exportaciones: exportaciones?.length
+      });
+
       setData({
-        barco, productos, destinos: destinos || [],
-        viajes: viajesEnriquecidos, lecturasBanda: lecturasEnriquecidas,
-        loading: false, error: null, lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV),
+        barco, 
+        productos, 
+        destinos: destinos || [],
+        viajes: viajesEnriquecidos, 
+        lecturasBanda: lecturasEnriquecidas,
+        lecturasExportacion: exportacionesEnriquecidas, // ✅ Guardar exportaciones
+        loading: false, 
+        error: null, 
+        lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV),
       });
     } catch (error) {
       console.error("Error detallado cargando datos:", error);
@@ -221,7 +295,297 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Banda
+// COMPONENTE: Panel de Tendencias y Predicciones para Exportación
+// ============================================================================
+function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion }) {
+  const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
+
+  // Determinar texto según tipo de operación
+  const textoAccion = 'CARGAR';
+  const textoFaltante = 'FALTANTE POR CARGAR';
+
+  // Ordenar lecturas por fecha
+  const lecturasOrdenadas = useMemo(() => {
+    return [...lecturas].sort(
+      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+    );
+  }, [lecturas]);
+
+  // ===== FLUJO PROMEDIO GENERAL =====
+  const flujoPromedioGeneral = useMemo(() => {
+    if (lecturasOrdenadas.length < 2) return 0;
+
+    const primeraLectura = lecturasOrdenadas[0];
+    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+
+    const acumuladoInicial = primeraLectura.acumulado_tm || 0;
+    const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
+    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
+
+    if (diferenciaTotal <= 0) return 0;
+
+    const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
+    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
+
+    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+
+    if (horasTranscurridas <= 0) return 0;
+
+    return diferenciaTotal / horasTranscurridas;
+  }, [lecturasOrdenadas]);
+
+  // ===== FLUJO RECIENTE (últimas 2 horas) =====
+  const flujoReciente = useMemo(() => {
+    if (lecturasOrdenadas.length < 2) return flujoPromedioGeneral;
+
+    const ahora = dayjs();
+    const hace2Horas = ahora.subtract(2, 'hour');
+
+    const lecturasRecientes = lecturasOrdenadas.filter(l =>
+      dayjs.utc(l.fecha_hora).isAfter(hace2Horas)
+    );
+
+    if (lecturasRecientes.length < 2) return flujoPromedioGeneral;
+
+    const primeraReciente = lecturasRecientes[0];
+    const ultimaReciente = lecturasRecientes[lecturasRecientes.length - 1];
+
+    const acumuladoInicial = primeraReciente.acumulado_tm || 0;
+    const acumuladoFinal = ultimaReciente.acumulado_tm || 0;
+    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
+
+    if (diferenciaTotal <= 0) return flujoPromedioGeneral;
+
+    const horaInicial = dayjs.utc(primeraReciente.fecha_hora);
+    const horaFinal = dayjs.utc(ultimaReciente.fecha_hora);
+
+    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+
+    if (horasTranscurridas <= 0) return flujoPromedioGeneral;
+
+    return diferenciaTotal / horasTranscurridas;
+  }, [lecturasOrdenadas, flujoPromedioGeneral]);
+
+  // Calcular total actual
+  const totalActual = useMemo(() => {
+    const ultimaLectura = lecturasOrdenadas.length > 0
+      ? lecturasOrdenadas[lecturasOrdenadas.length - 1]
+      : null;
+    return ultimaLectura?.acumulado_tm || 0;
+  }, [lecturasOrdenadas]);
+
+  const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
+  const ultimaLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1] : null;
+
+  const faltante = Math.max(0, meta - totalActual);
+  const progreso = pct(totalActual, meta);
+
+  // ===== TIEMPO ESTIMADO DE FINALIZACIÓN =====
+  const tiempoRestante = useMemo(() => {
+    if (flujoReciente <= 0 || faltante <= 0) return null;
+
+    const horas = faltante / flujoReciente;
+    const fechaEstimada = dayjs().add(horas, 'hour');
+
+    const dias = Math.floor(horas / 24);
+    const horasRestantes = horas % 24;
+    const minutos = Math.round((horas - Math.floor(horas)) * 60);
+
+    let tiempoFormateado = '';
+    if (dias > 0) {
+      tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
+    }
+    if (horasRestantes > 0 || dias === 0) {
+      tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
+    }
+    if (minutos > 0 && dias === 0) {
+      tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
+    }
+
+    return {
+      horas,
+      fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
+      tiempoFormateado: tiempoFormateado.trim()
+    };
+  }, [faltante, flujoReciente]);
+
+  // ===== HORAS TOTALES TRANSCURRIDAS =====
+  const horasTranscurridas = useMemo(() => {
+    if (!primeraLectura || !ultimaLectura) return 0;
+
+    const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
+    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
+
+    return horaFinal.diff(horaInicial, 'hour', true);
+  }, [primeraLectura, ultimaLectura]);
+
+  // Datos para gráfico de evolución
+  const datosEvolucion = useMemo(() => {
+    return lecturasOrdenadas.slice(-10).map(l => ({
+      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
+      acumulado: l.acumulado_tm,
+      meta: meta
+    }));
+  }, [lecturasOrdenadas, meta]);
+
+  // Tooltip personalizado
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+
+    return (
+      <div className="alm-tooltip">
+        <p className="alm-tooltip-label">{label}</p>
+        {payload.map((p, i) => {
+          if (p.dataKey === 'acumulado') {
+            return (
+              <p key={i} style={{ color: p.color }} className="alm-tooltip-value">
+                Acumulado: <strong>{fmtTM(p.value, 2)} T</strong>
+              </p>
+            );
+          } else if (p.dataKey === 'meta') {
+            return (
+              <p key={i} style={{ color: p.color }} className="alm-tooltip-value">
+                Cantidad Manifestada: <strong>{fmtTM(p.value, 2)} T</strong>
+              </p>
+            );
+          }
+          return null;
+        })}
+      </div>
+    );
+  };
+
+  if (!meta || meta === 0) return null;
+
+  return (
+    <div className="alm-predicciones-panel">
+      <div className="alm-predicciones-header">
+        <h4 className="alm-chart-title">📈 Tendencias de Carga - {producto.nombre}</h4>
+        <div className="alm-predicciones-controls">
+          <select
+            value={periodoPrediccion}
+            onChange={(e) => setPeriodoPrediccion(Number(e.target.value))}
+            className="alm-predicciones-select"
+          >
+            <option value={3}>3 horas</option>
+            <option value={6}>6 horas</option>
+            <option value={12}>12 horas</option>
+            <option value={24}>24 horas</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="alm-predicciones-grid">
+        {/* Tarjetas de métricas */}
+        <div className="alm-pred-metricas">
+          {/* Período de operación */}
+          {primeraLectura && ultimaLectura && (
+            <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
+              <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
+              <span className="alm-pred-valor">{horasTranscurridas.toFixed(1)} horas</span>
+              <span className="alm-pred-sub">
+                {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")} → {dayjs.utc(ultimaLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
+              </span>
+            </div>
+          )}
+
+          {/* FLUJO PROMEDIO GENERAL */}
+          <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${producto.color_accent}20`, borderColor: producto.color_accent }}>
+            <span className="alm-pred-label">📊 FLUJO PROMEDIO GENERAL</span>
+            <span className="alm-pred-valor-grande">{fmtTM(flujoPromedioGeneral, 2)} T/h</span>
+            <span className="alm-pred-sub">
+              ({fmtTM(ultimaLectura?.acumulado_tm || 0, 0)} - {fmtTM(primeraLectura?.acumulado_tm || 0, 0)}) / {horasTranscurridas.toFixed(1)}h
+            </span>
+          </div>
+
+          {/* PROGRESO */}
+          <div className="alm-pred-metrica">
+            <span className="alm-pred-label">🎯 PROGRESO ACTUAL</span>
+            <span className="alm-pred-valor">{progreso.toFixed(1)}%</span>
+            <span className="alm-pred-sub">
+              {fmtTM(totalActual, 2)} T de {fmtTM(meta, 2)} T
+            </span>
+          </div>
+
+          {/* FALTANTE */}
+          <div className="alm-pred-metrica">
+            <span className="alm-pred-label">{textoFaltante}</span>
+            <span className="alm-pred-valor">{fmtTM(faltante, 2)} T</span>
+          </div>
+        </div>
+
+        {/* Gráfico de evolución */}
+        {datosEvolucion.length > 1 && (
+          <div className="alm-pred-grafico">
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={datosEvolucion} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="hora"
+                  tick={{ fontSize: 9, fill: "#64748b" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 9, fill: "#64748b" }}
+                  domain={[0, meta * 1.1]}
+                  tickFormatter={(v) => fmtTM(v, 0)}
+                />
+                <Tooltip content={<CustomTooltip />} />
+
+                {/* Área de acumulado */}
+                <Area
+                  type="monotone"
+                  dataKey="acumulado"
+                  stroke={producto.color_accent}
+                  fill={`${producto.color_accent}30`}
+                  strokeWidth={2}
+                  name="Acumulado"
+                />
+
+                {/* Línea de meta (Cantidad Manifestada) */}
+                <Line
+                  type="monotone"
+                  dataKey="meta"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  name="Cantidad Manifestada"
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div className="alm-pred-leyenda">
+              <span className="alm-leyenda-item">
+                <span className="alm-leyenda-color" style={{ background: producto.color_accent }} />
+                Acumulado
+              </span>
+              <span className="alm-leyenda-item">
+                <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
+                Cantidad Manifestada ({fmtTM(meta, 0)} T)
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Resumen de flujo */}
+      {tiempoRestante && (
+        <div className="alm-recomendaciones">
+          <h5 className="alm-recomendaciones-titulo">⏱️ Tiempo estimado de finalización</h5>
+          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Completado en aproximadamente</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{tiempoRestante.tiempoFormateado}</div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+              {tiempoRestante.fecha}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTE: Panel de Tendencias y Predicciones para Banda (Importación)
 // ============================================================================
 function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -319,9 +683,6 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 
     const horas = faltante / flujoReciente;
     const fechaEstimada = dayjs().add(horas, 'hour');
-    const ahora = dayjs();
-
-    const horaFinalizacion = ahora.add(horas, 'hour');
 
     const dias = Math.floor(horas / 24);
     const horasRestantes = horas % 24;
@@ -341,16 +702,6 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
     return {
       horas,
       fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
-      fechaRelativa: (() => {
-        try {
-          return fechaEstimada.fromNow();
-        } catch (e) {
-          if (horas < 0) return 'ya debería estar completo';
-          if (horas < 24) return `en ${Math.round(horas)} horas`;
-          return `en ${Math.round(horas / 24)} días`;
-        }
-      })(),
-      horaExacta: horaFinalizacion.format("HH:mm del DD/MM/YYYY"),
       tiempoFormateado: tiempoFormateado.trim()
     };
   }, [faltante, flujoReciente]);
@@ -531,6 +882,20 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
           </div>
         )}
       </div>
+
+      {/* Resumen de flujo */}
+      {tiempoRestante && (
+        <div className="alm-recomendaciones">
+          <h5 className="alm-recomendaciones-titulo">⏱️ Tiempo estimado de finalización</h5>
+          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Completado en aproximadamente</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{tiempoRestante.tiempoFormateado}</div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+              {tiempoRestante.fecha}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1015,8 +1380,8 @@ function GaugeRing({ pct: value, color, size = 96 }) {
 // ============================================================================
 // COMPONENTE: Tarjeta de Producto PREMIUM
 // ============================================================================
-function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, activo, onClick }) {
-  const total = totalCamiones + totalBanda;
+function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, totalExportacion, activo, onClick }) {
+  const total = totalCamiones + totalBanda + totalExportacion;
   const faltante = Math.max(0, meta - total);
   const progreso = pct(total, meta);
   const color = producto.color_accent;
@@ -1052,20 +1417,33 @@ function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, activo, on
       </div>
 
       <div className="alm-card-stats">
-        <div className="alm-stat">
-          <span className="alm-stat-dot alm-dot-banda" />
-          <div>
-            <p className="alm-stat-label">Banda</p>
-            <p className="alm-stat-val">{fmtTM(totalBanda, 2)}</p>
+        {totalBanda > 0 && (
+          <div className="alm-stat">
+            <span className="alm-stat-dot alm-dot-banda" />
+            <div>
+              <p className="alm-stat-label">Banda</p>
+              <p className="alm-stat-val">{fmtTM(totalBanda, 2)}</p>
+            </div>
           </div>
-        </div>
-        <div className="alm-stat">
-          <span className="alm-stat-dot alm-dot-cam" />
-          <div>
-            <p className="alm-stat-label">Camiones</p>
-            <p className="alm-stat-val">{fmtTM(totalCamiones, 2)}</p>
+        )}
+        {totalCamiones > 0 && (
+          <div className="alm-stat">
+            <span className="alm-stat-dot alm-dot-cam" />
+            <div>
+              <p className="alm-stat-label">Camiones</p>
+              <p className="alm-stat-val">{fmtTM(totalCamiones, 2)}</p>
+            </div>
           </div>
-        </div>
+        )}
+        {totalExportacion > 0 && (
+          <div className="alm-stat">
+            <span className="alm-stat-dot" style={{ background: '#f59e0b' }} />
+            <div>
+              <p className="alm-stat-label">Carga</p>
+              <p className="alm-stat-val">{fmtTM(totalExportacion, 2)}</p>
+            </div>
+          </div>
+        )}
         <div className="alm-stat alm-stat-total">
           <div>
             <p className="alm-stat-label">Total TM</p>
@@ -1080,7 +1458,7 @@ function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, activo, on
 // ============================================================================
 // COMPONENTE: Finalización General
 // ============================================================================
-function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, tipoOperacion }) {
+function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, lecturasExportacion, tipoOperacion }) {
   if (!metaGlobal || metaGlobal === 0) return null;
 
   const textoAccion = tipoOperacion === 'exportacion' ? 'CARGA' : 'DESCARGA';
@@ -1090,34 +1468,53 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, t
   const ahora = dayjs();
   const hace2Horas = ahora.subtract(2, 'hour');
 
-  // Flujo de banda (últimas 2 horas)
-  let flujoBanda = 0;
-  const lecturasRecientes = lecturasBanda
-    .filter(l => l.fecha_hora && dayjs.utc(l.fecha_hora).isAfter(hace2Horas))
-    .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
+  let flujoTotal = 0;
 
-  if (lecturasRecientes.length >= 2) {
-    const primera = lecturasRecientes[0];
-    const ultima = lecturasRecientes[lecturasRecientes.length - 1];
-    const difTon = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
-    const difHoras = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
-    if (difHoras > 0) flujoBanda = difTon / difHoras;
+  if (tipoOperacion === 'exportacion') {
+    // Para exportación, usar lecturas de exportación
+    let flujoExportacion = 0;
+    const exportacionesRecientes = lecturasExportacion
+      .filter(e => e.fecha_hora && dayjs.utc(e.fecha_hora).isAfter(hace2Horas))
+      .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
+
+    if (exportacionesRecientes.length >= 2) {
+      const primera = exportacionesRecientes[0];
+      const ultima = exportacionesRecientes[exportacionesRecientes.length - 1];
+      const difTon = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
+      const difHoras = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+      if (difHoras > 0) flujoExportacion = difTon / difHoras;
+    }
+    flujoTotal = flujoExportacion;
+  } else {
+    // Para importación, usar banda y viajes
+    let flujoBanda = 0;
+    const lecturasRecientes = lecturasBanda
+      .filter(l => l.fecha_hora && dayjs.utc(l.fecha_hora).isAfter(hace2Horas))
+      .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
+
+    if (lecturasRecientes.length >= 2) {
+      const primera = lecturasRecientes[0];
+      const ultima = lecturasRecientes[lecturasRecientes.length - 1];
+      const difTon = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
+      const difHoras = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+      if (difHoras > 0) flujoBanda = difTon / difHoras;
+    }
+
+    let flujoViajes = 0;
+    const viajesRecientes = viajes
+      .filter(v => v.estado === 'completo' && v.fecha_hora && dayjs.utc(v.fecha_hora).isAfter(hace2Horas));
+
+    if (viajesRecientes.length > 0) {
+      const totalToneladas = viajesRecientes.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
+      flujoViajes = totalToneladas / 2;
+    }
+
+    flujoTotal = flujoBanda + flujoViajes;
   }
 
-  // Flujo de viajes (últimas 2 horas) - solo completos y usando peso destino
-  let flujoViajes = 0;
-  const viajesRecientes = viajes
-    .filter(v => v.estado === 'completo' && v.fecha_hora && dayjs.utc(v.fecha_hora).isAfter(hace2Horas));
+  if (flujoTotal <= 0) return null;
 
-  if (viajesRecientes.length > 0) {
-    const totalToneladas = viajesRecientes.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
-    flujoViajes = totalToneladas / 2;
-  }
-
-  const flujoCombinado = flujoBanda + flujoViajes;
-  if (flujoCombinado <= 0) return null;
-
-  const horas = faltante / flujoCombinado;
+  const horas = faltante / flujoTotal;
   const fechaEstimada = dayjs().add(horas, 'hour');
 
   let tiempoTexto = '';
@@ -1170,22 +1567,47 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, t
 // ============================================================================
 // COMPONENTE: Vista General PREMIUM con Gráficos
 // ============================================================================
-function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProducto }) {
+function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExportacion, onSelectProducto }) {
   const tipoOperacion = barco.tipo_operacion || 'importacion';
   const textoAccion = tipoOperacion === 'exportacion' ? 'Cargado' : 'Descargado';
   const textoFaltante = tipoOperacion === 'exportacion' ? 'Faltante por cargar' : 'Faltante por descargar';
   const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
+  console.log("VistaGeneral - tipoOperacion:", tipoOperacion);
+  console.log("VistaGeneral - lecturasExportacion:", lecturasExportacion?.length);
+
   const totales = useMemo(() => {
     return productos.map((producto) => {
       const vp = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
       const lp = lecturasBanda.filter((l) => l.producto_id === producto.id);
+      const exp = lecturasExportacion.filter((e) => e.producto_id === producto.id);
+      
       const totalCamiones = vp.reduce((s, v) => s + v.peso_destino_tm, 0);
-      const totalBanda = lp.length > 0 ? lp[0].acumulado_tm : 0;
+      const totalBanda = lp.length > 0 ? lp[lp.length - 1]?.acumulado_tm || 0 : 0;
+      const totalExportacion = exp.length > 0 ? exp[0]?.acumulado_tm || 0 : 0; // La más reciente
+      
       const meta = getMetaProducto(barco.metas_json, producto);
-      return { producto, meta, totalCamiones, totalBanda, total: totalCamiones + totalBanda };
+      
+      console.log(`Producto ${producto.codigo}:`, {
+        viajes: vp.length,
+        banda: lp.length,
+        exportacion: exp.length,
+        totalCamiones,
+        totalBanda,
+        totalExportacion,
+        meta
+      });
+      
+      return { 
+        producto, 
+        meta, 
+        totalCamiones, 
+        totalBanda, 
+        totalExportacion,
+        total: totalCamiones + totalBanda + totalExportacion 
+      };
     });
-  }, [productos, viajes, lecturasBanda, barco.metas_json]);
+  }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json]);
 
   const totalGlobal = totales.reduce((s, t) => s + t.total, 0);
   const metaGlobal = totales.reduce((s, t) => s + t.meta, 0);
@@ -1197,6 +1619,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
     name: t.producto.codigo,
     Banda: parseFloat(t.totalBanda.toFixed(2)),
     Camiones: parseFloat(t.totalCamiones.toFixed(2)),
+    Exportacion: parseFloat(t.totalExportacion.toFixed(2)),
     fill: t.producto.color_accent,
   }));
 
@@ -1205,16 +1628,26 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
     .filter((t) => t.total > 0)
     .map((t) => ({ name: t.producto.nombre, value: parseFloat(t.total.toFixed(2)), color: t.producto.color_accent }));
 
-  // Evolución de lecturas de banda
+  // Evolución de lecturas (según tipo de operación)
   const areaData = useMemo(() => {
-    const sorted = [...lecturasBanda]
-      .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
-      .slice(-20);
-    return sorted.map((l, i) => ({
-      hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
-      acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
-    }));
-  }, [lecturasBanda]);
+    if (tipoOperacion === 'exportacion') {
+      const sorted = [...lecturasExportacion]
+        .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
+        .slice(-20);
+      return sorted.map((l, i) => ({
+        hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
+        acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
+      }));
+    } else {
+      const sorted = [...lecturasBanda]
+        .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
+        .slice(-20);
+      return sorted.map((l, i) => ({
+        hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
+        acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
+      }));
+    }
+  }, [lecturasBanda, lecturasExportacion, tipoOperacion]);
 
   return (
     <div className="alm-general-grid">
@@ -1227,9 +1660,11 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
           sub={`${productos.length} productos`} icon="🎯" accent="#10b981" />
         <KpiCard label={textoFaltante} value={`${fmtTM(faltanteGlobal, 2)} TM`}
           sub="por procesar" icon="⏳" accent="#ef4444" />
-        <KpiCard label="Viajes Completos" value={viajes.filter(v => v.estado === 'completo').length}
-          sub="camiones pesados" icon="🚛" accent="#f59e0b" />
-        <KpiCard label="Lecturas Banda" value={lecturasBanda.length}
+        {tipoOperacion !== 'exportacion' && (
+          <KpiCard label="Viajes Completos" value={viajes.filter(v => v.estado === 'completo').length}
+            sub="camiones pesados" icon="🚛" accent="#f59e0b" />
+        )}
+        <KpiCard label="Lecturas" value={tipoOperacion === 'exportacion' ? lecturasExportacion.length : lecturasBanda.length}
           sub="registros totales" icon="📊" accent="#8b5cf6" />
       </div>
 
@@ -1299,6 +1734,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
                   totalGlobal={totalGlobal}
                   viajes={viajes}
                   lecturasBanda={lecturasBanda}
+                  lecturasExportacion={lecturasExportacion}
                   tipoOperacion={tipoOperacion}
                 />
               </div>
@@ -1334,8 +1770,14 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
               <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Banda" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="Camiones" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+              {tipoOperacion === 'exportacion' ? (
+                <Bar dataKey="Exportacion" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              ) : (
+                <>
+                  <Bar dataKey="Banda" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Camiones" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </>
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1365,9 +1807,11 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
           )}
         </div>
 
-        {/* Evolución banda */}
+        {/* Evolución */}
         <div className="alm-chart-card alm-chart-wide">
-          <h4 className="alm-chart-title">📈 Evolución Acumulado Banda (últimas lecturas)</h4>
+          <h4 className="alm-chart-title">
+            {tipoOperacion === 'exportacion' ? '📈 Evolución de Carga' : '📈 Evolución Acumulado Banda'} (últimas lecturas)
+          </h4>
           {areaData.length > 1 ? (
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={areaData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -1393,21 +1837,28 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
 
       </div>
 
-      {/* ===== PANEL DE COMPARATIVA BANDA VS VIAJES POR PRODUCTO ===== */}
+      {/* ===== PANEL DE COMPARATIVA POR PRODUCTO ===== */}
       <div className="alm-comparativa-section">
         <div className="alm-comparativa-header">
-          <h3 className="alm-section-title">⚖️ Comparativa Banda vs Viajes por Producto</h3>
-          <p className="alm-section-sub">Distribución porcentual de toneladas por tipo de operación</p>
+          <h3 className="alm-section-title">
+            {tipoOperacion === 'exportacion' ? '📊 Resumen de Carga por Producto' : '⚖️ Comparativa Banda vs Viajes por Producto'}
+          </h3>
+          <p className="alm-section-sub">
+            {tipoOperacion === 'exportacion' 
+              ? 'Toneladas cargadas por producto' 
+              : 'Distribución porcentual de toneladas por tipo de operación'}
+          </p>
         </div>
 
         <div className="alm-comparativa-grid">
-          {totales.map(({ producto, meta, totalCamiones, totalBanda, total }) => {
-            const pctBanda = total > 0 ? (totalBanda / total) * 100 : 0;
-            const pctCamiones = total > 0 ? (totalCamiones / total) * 100 : 0;
+          {totales.map(({ producto, meta, totalCamiones, totalBanda, totalExportacion, total }) => {
             const color = producto.color_accent;
 
-            // Solo mostrar si el producto no es exclusivamente de banda
-            if (producto.tipo_registro === 'banda') return null;
+            // Para exportación, solo mostrar si hay datos de exportación
+            if (tipoOperacion === 'exportacion' && totalExportacion === 0) return null;
+            
+            // Para importación, solo mostrar si no es exclusivamente de banda
+            if (tipoOperacion !== 'exportacion' && producto.tipo_registro === 'banda') return null;
 
             return (
               <div key={producto.id} className="alm-comparativa-card" style={{ borderColor: color }}>
@@ -1426,47 +1877,75 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
                 </div>
 
                 <div className="alm-comparativa-bars">
-                  {/* Barra de Banda */}
-                  <div className="alm-comparativa-bar-container">
-                    <div className="alm-comparativa-bar-label">
-                      <div className="alm-comparativa-label-left">
-                        <span className="alm-comparativa-dot banda-dot" />
-                        <span>Banda</span>
+                  {tipoOperacion === 'exportacion' ? (
+                    /* Barra de Exportación */
+                    <div className="alm-comparativa-bar-container">
+                      <div className="alm-comparativa-bar-label">
+                        <div className="alm-comparativa-label-left">
+                          <span className="alm-comparativa-dot" style={{ background: color }} />
+                          <span>Carga a Barco</span>
+                        </div>
+                        <span className="alm-comparativa-valor">{fmtTM(totalExportacion, 2)} TM</span>
                       </div>
-                      <span className="alm-comparativa-valor">{fmtTM(totalBanda, 2)} TM</span>
+                      <div className="alm-comparativa-track">
+                        <div
+                          className="alm-comparativa-fill"
+                          style={{
+                            width: `${meta > 0 ? (totalExportacion / meta) * 100 : 0}%`,
+                            background: color
+                          }}
+                        />
+                        <span className="alm-comparativa-pct">
+                          {meta > 0 ? ((totalExportacion / meta) * 100).toFixed(1) : 0}%
+                        </span>
+                      </div>
                     </div>
-                    <div className="alm-comparativa-track">
-                      <div
-                        className="alm-comparativa-fill banda-fill"
-                        style={{
-                          width: `${pctBanda}%`,
-                          background: color
-                        }}
-                      />
-                      <span className="alm-comparativa-pct">{pctBanda.toFixed(1)}%</span>
-                    </div>
-                  </div>
+                  ) : (
+                    /* Barras de Importación */
+                    <>
+                      {/* Barra de Banda */}
+                      <div className="alm-comparativa-bar-container">
+                        <div className="alm-comparativa-bar-label">
+                          <div className="alm-comparativa-label-left">
+                            <span className="alm-comparativa-dot banda-dot" />
+                            <span>Banda</span>
+                          </div>
+                          <span className="alm-comparativa-valor">{fmtTM(totalBanda, 2)} TM</span>
+                        </div>
+                        <div className="alm-comparativa-track">
+                          <div
+                            className="alm-comparativa-fill banda-fill"
+                            style={{
+                              width: `${total > 0 ? (totalBanda / total) * 100 : 0}%`,
+                              background: color
+                            }}
+                          />
+                          <span className="alm-comparativa-pct">{total > 0 ? ((totalBanda / total) * 100).toFixed(1) : 0}%</span>
+                        </div>
+                      </div>
 
-                  {/* Barra de Viajes (solo completos) */}
-                  <div className="alm-comparativa-bar-container">
-                    <div className="alm-comparativa-bar-label">
-                      <div className="alm-comparativa-label-left">
-                        <span className="alm-comparativa-dot viajes-dot" />
-                        <span>Viajes</span>
+                      {/* Barra de Viajes */}
+                      <div className="alm-comparativa-bar-container">
+                        <div className="alm-comparativa-bar-label">
+                          <div className="alm-comparativa-label-left">
+                            <span className="alm-comparativa-dot viajes-dot" />
+                            <span>Viajes</span>
+                          </div>
+                          <span className="alm-comparativa-valor">{fmtTM(totalCamiones, 2)} TM</span>
+                        </div>
+                        <div className="alm-comparativa-track">
+                          <div
+                            className="alm-comparativa-fill viajes-fill"
+                            style={{
+                              width: `${total > 0 ? (totalCamiones / total) * 100 : 0}%`,
+                              background: '#10b981'
+                            }}
+                          />
+                          <span className="alm-comparativa-pct">{total > 0 ? ((totalCamiones / total) * 100).toFixed(1) : 0}%</span>
+                        </div>
                       </div>
-                      <span className="alm-comparativa-valor">{fmtTM(totalCamiones, 2)} TM</span>
-                    </div>
-                    <div className="alm-comparativa-track">
-                      <div
-                        className="alm-comparativa-fill viajes-fill"
-                        style={{
-                          width: `${pctCamiones}%`,
-                          background: '#10b981'
-                        }}
-                      />
-                      <span className="alm-comparativa-pct">{pctCamiones.toFixed(1)}%</span>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="alm-comparativa-footer">
@@ -1474,9 +1953,11 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
                     <span className="alm-comparativa-total-label">Total:</span>
                     <span className="alm-comparativa-total-valor">{fmtTM(total, 2)} TM</span>
                   </div>
-                  <div className="alm-comparativa-ratio" style={{ color }}>
-                    {pctBanda.toFixed(0)}% Banda / {pctCamiones.toFixed(0)}% Viajes
-                  </div>
+                  {tipoOperacion !== 'exportacion' && (
+                    <div className="alm-comparativa-ratio" style={{ color }}>
+                      {total > 0 ? ((totalBanda / total) * 100).toFixed(0) : 0}% Banda / {total > 0 ? ((totalCamiones / total) * 100).toFixed(0) : 0}% Viajes
+                    </div>
+                  )}
                 </div>
 
                 {meta > 0 && (
@@ -1513,8 +1994,14 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
               <tr>
                 <th>Producto</th>
                 <th className="alm-th-num">Cantidad Manifestada (TM)</th>
-                <th className="alm-th-num alm-col-banda">Banda (TM)</th>
-                <th className="alm-th-num alm-col-cam">Camiones (TM)</th>
+                {tipoOperacion === 'exportacion' ? (
+                  <th className="alm-th-num alm-col-banda">Carga (TM)</th>
+                ) : (
+                  <>
+                    <th className="alm-th-num alm-col-banda">Banda (TM)</th>
+                    <th className="alm-th-num alm-col-cam">Camiones (TM)</th>
+                  </>
+                )}
                 <th className="alm-th-num">Total (TM)</th>
                 <th className="alm-th-num">Faltante (TM)</th>
                 <th className="alm-th-num">Progreso</th>
@@ -1522,7 +2009,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
               </tr>
             </thead>
             <tbody>
-              {totales.map(({ producto, meta, totalCamiones, totalBanda, total }) => {
+              {totales.map(({ producto, meta, totalCamiones, totalBanda, totalExportacion, total }) => {
                 const faltante = Math.max(0, meta - total);
                 const progreso = pct(total, meta);
                 return (
@@ -1537,8 +2024,14 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
                       </div>
                     </td>
                     <td className="alm-td-num">{meta > 0 ? fmtTM(meta) : "—"}</td>
-                    <td className="alm-td-num alm-col-banda">{fmtTM(totalBanda)}</td>
-                    <td className="alm-td-num" style={{ color: producto.color_accent }}>{fmtTM(totalCamiones)}</td>
+                    {tipoOperacion === 'exportacion' ? (
+                      <td className="alm-td-num" style={{ color: producto.color_accent }}>{fmtTM(totalExportacion)}</td>
+                    ) : (
+                      <>
+                        <td className="alm-td-num alm-col-banda">{fmtTM(totalBanda)}</td>
+                        <td className="alm-td-num" style={{ color: producto.color_accent }}>{fmtTM(totalCamiones)}</td>
+                      </>
+                    )}
                     <td className="alm-td-num alm-bold">{fmtTM(total)}</td>
                     <td className="alm-td-num" style={{ color: faltante > 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>
                       {meta > 0 ? (faltante > 0 ? fmtTM(faltante) : '✓') : '—'}
@@ -1564,8 +2057,14 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, onSelectProduct
               <tr>
                 <td className="alm-bold">TOTAL BARCO</td>
                 <td className="alm-td-num alm-bold">{metaGlobal > 0 ? fmtTM(metaGlobal) : "—"}</td>
-                <td className="alm-td-num alm-col-banda alm-bold">{fmtTM(totales.reduce((s, t) => s + t.totalBanda, 0))}</td>
-                <td className="alm-td-num alm-bold">{fmtTM(totales.reduce((s, t) => s + t.totalCamiones, 0))}</td>
+                {tipoOperacion === 'exportacion' ? (
+                  <td className="alm-td-num alm-col-banda alm-bold">{fmtTM(totales.reduce((s, t) => s + t.totalExportacion, 0))}</td>
+                ) : (
+                  <>
+                    <td className="alm-td-num alm-col-banda alm-bold">{fmtTM(totales.reduce((s, t) => s + t.totalBanda, 0))}</td>
+                    <td className="alm-td-num alm-bold">{fmtTM(totales.reduce((s, t) => s + t.totalCamiones, 0))}</td>
+                  </>
+                )}
                 <td className="alm-td-num alm-bold">{fmtTM(totalGlobal)}</td>
                 <td className="alm-td-num alm-bold" style={{ color: faltanteGlobal > 0 ? '#ef4444' : '#10b981' }}>
                   {metaGlobal > 0 ? (faltanteGlobal > 0 ? fmtTM(faltanteGlobal) : '✓') : '—'}
@@ -1800,11 +2299,164 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
+// COMPONENTE: Tabla de Exportaciones
+// ============================================================================
+function TablaExportacion({ lecturas, producto }) {
+  if (!lecturas.length) {
+    return (
+      <div className="alm-empty">
+        <span className="alm-empty-icon">📦</span>
+        <p>No hay registros de carga para <strong>{producto.nombre}</strong></p>
+      </div>
+    );
+  }
+
+  // Configuración de bodegas
+  const BODEGAS = [
+    { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01' },
+    { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02' },
+    { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03' },
+    { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04' },
+    { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05' },
+    { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06' },
+    { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07' },
+    { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
+  ];
+
+  // Calcular flujo general
+  const calcularFlujoGeneral = () => {
+    if (lecturas.length < 2) return 0;
+
+    const lecturasOrdenadas = [...lecturas].sort(
+      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+    );
+
+    const primeraLectura = lecturasOrdenadas[0];
+    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+
+    const horaPrimera = dayjs.utc(primeraLectura.fecha_hora);
+    const horaUltima = dayjs.utc(ultimaLectura.fecha_hora);
+
+    const horasTranscurridas = horaUltima.diff(horaPrimera, 'hour', true);
+
+    if (horasTranscurridas <= 0) return 0;
+
+    const acumuladoActual = ultimaLectura.acumulado_tm;
+    return acumuladoActual / horasTranscurridas;
+  };
+
+  const areaData = [...lecturas]
+    .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
+    .slice(-20)
+    .map((l) => ({
+      hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
+      acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
+    }));
+
+  return (
+    <div className="alm-space-y">
+      {areaData.length > 1 && (
+        <div className="alm-table-card">
+          <div className="alm-table-header">
+            <h4 className="alm-chart-title">📈 Evolución de Carga</h4>
+          </div>
+          <div style={{ padding: "0 20px 16px" }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={areaData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="areaGrad2" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={producto.color_accent} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={producto.color_accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="acumulado" name="Acumulado"
+                  stroke={producto.color_accent} strokeWidth={2.5}
+                  fill="url(#areaGrad2)" dot={{ r: 3, fill: producto.color_accent }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      <div className="alm-table-card">
+        <div className="alm-table-header">
+          <h3 className="alm-section-title">
+            📦 Registros de Carga — {producto.nombre}
+            <span className="alm-badge">{lecturas.length} registros</span>
+          </h3>
+          {lecturas.length >= 2 && (
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
+              Flujo promedio: <strong style={{ color: producto.color_accent }}>{fmtTM(calcularFlujoGeneral(), 2)} TM/h</strong>
+            </div>
+          )}
+        </div>
+        <div className="alm-table-scroll alm-table-max">
+          <table className="alm-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Fecha / Hora</th>
+                <th className="alm-th-num">Acumulado (TM)</th>
+                <th className="alm-th-num">Flujo (TM/h)</th>
+                <th>Bodega</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lecturas.map((l, i) => {
+                const bodega = BODEGAS.find(b => b.id === l.bodega_id);
+                return (
+                  <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
+                    <td className="alm-muted">{i + 1}</td>
+                    <td>
+                      {dayjs.utc(l.fecha_hora).format("DD/MM/YY HH:mm")}
+                      {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
+                    </td>
+                    <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
+                      {fmtTM(l.acumulado_tm)}
+                    </td>
+                    <td className="alm-td-num" style={{ color: l.flujo_calculado > 0 ? '#10b981' : '#94a3b8' }}>
+                      {l.flujo_calculado > 0 ? fmtTM(l.flujo_calculado, 2) : '—'}
+                    </td>
+                    <td>
+                      {bodega ? (
+                        <div>
+                          <span className="font-medium text-white">{bodega.nombre}</span>
+                          <span className="text-xs text-green-400 ml-2">{bodega.codigo}</span>
+                        </div>
+                      ) : '—'}
+                    </td>
+                    <td className="text-slate-400">{l.observaciones || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
 export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
-  const { barco, productos, viajes, lecturasBanda, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
+  const { barco, productos, viajes, lecturasBanda, lecturasExportacion, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
+
+  console.log("Dashboard - datos cargados:", {
+    barco: barco?.codigo_barco,
+    tipo: barco?.tipo_operacion,
+    productos: productos.length,
+    viajes: viajes.length,
+    lecturasBanda: lecturasBanda.length,
+    lecturasExportacion: lecturasExportacion.length
+  });
 
   const viajesFiltrados = useMemo(() => {
     if (productoSeleccionado === "general") return [];
@@ -1816,17 +2468,26 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasBanda.filter((l) => l.producto_id === productoSeleccionado);
   }, [lecturasBanda, productoSeleccionado]);
 
+  const exportacionesFiltradas = useMemo(() => {
+    if (productoSeleccionado === "general") return [];
+    return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
+  }, [lecturasExportacion, productoSeleccionado]);
+
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();
     productos.forEach((producto) => {
       const vp = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
       const lp = lecturasBanda.filter((l) => l.producto_id === producto.id);
+      const exp = lecturasExportacion.filter((e) => e.producto_id === producto.id);
+      
       const totalCamiones = vp.reduce((s, v) => s + v.peso_destino_tm, 0);
-      const totalBanda = lp.length > 0 ? lp[0].acumulado_tm : 0;
-      mapa.set(producto.id, { totalCamiones, totalBanda });
+      const totalBanda = lp.length > 0 ? lp[lp.length - 1]?.acumulado_tm || 0 : 0;
+      const totalExportacion = exp.length > 0 ? exp[0]?.acumulado_tm || 0 : 0;
+      
+      mapa.set(producto.id, { totalCamiones, totalBanda, totalExportacion });
     });
     return mapa;
-  }, [productos, viajes, lecturasBanda]);
+  }, [productos, viajes, lecturasBanda, lecturasExportacion]);
 
   if (loading && !barco) {
     return (
@@ -3264,9 +3925,9 @@ export default function DashboardCompartido({ codigoBarco }) {
             </button>
 
             {productos.map((producto) => {
-              const totales = totalesPorProducto.get(producto.id) || { totalCamiones: 0, totalBanda: 0 };
+              const totales = totalesPorProducto.get(producto.id) || { totalCamiones: 0, totalBanda: 0, totalExportacion: 0 };
               const meta = getMetaProducto(barco.metas_json, producto);
-              const progreso = pct(totales.totalCamiones + totales.totalBanda, meta);
+              const progreso = pct(totales.totalCamiones + totales.totalBanda + totales.totalExportacion, meta);
               const activo = productoSeleccionado === producto.id;
 
               return (
@@ -3288,7 +3949,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           {productos.length > 0 ? (
             <div className="alm-cards-row">
               {productos.map((producto) => {
-                const totales = totalesPorProducto.get(producto.id) || { totalCamiones: 0, totalBanda: 0 };
+                const totales = totalesPorProducto.get(producto.id) || { totalCamiones: 0, totalBanda: 0, totalExportacion: 0 };
                 const meta = getMetaProducto(barco.metas_json, producto);
                 return (
                   <TarjetaProducto
@@ -3297,6 +3958,7 @@ export default function DashboardCompartido({ codigoBarco }) {
                     meta={meta}
                     totalCamiones={totales.totalCamiones}
                     totalBanda={totales.totalBanda}
+                    totalExportacion={totales.totalExportacion}
                     activo={productoSeleccionado === producto.id}
                     onClick={() => setProductoSeleccionado(producto.id)}
                   />
@@ -3316,6 +3978,7 @@ export default function DashboardCompartido({ codigoBarco }) {
               productos={productos}
               viajes={viajes}
               lecturasBanda={lecturasBanda}
+              lecturasExportacion={lecturasExportacion}
               onSelectProducto={(id) => setProductoSeleccionado(id)}
             />
           ) : productoActivo ? (
@@ -3334,56 +3997,74 @@ export default function DashboardCompartido({ codigoBarco }) {
                 </p>
               </div>
 
-              {/* Panel de Tendencias de Banda - SIEMPRE visible si hay lecturas */}
-              <PanelPrediccionesBanda
-                producto={productoActivo}
-                lecturas={lecturasFiltradas}
-                viajes={viajesFiltrados}
-                meta={getMetaProducto(barco.metas_json, productoActivo)}
-                tipoOperacion={tipoOperacion}
-              />
+              {/* Paneles según tipo de operación */}
+              {tipoOperacion === 'exportacion' ? (
+                <>
+                  {/* Panel de Tendencias de Exportación */}
+                  <PanelPrediccionesExportacion
+                    producto={productoActivo}
+                    lecturas={exportacionesFiltradas}
+                    meta={getMetaProducto(barco.metas_json, productoActivo)}
+                    tipoOperacion={tipoOperacion}
+                  />
+                  
+                  {/* Tabla de Exportaciones */}
+                  <TablaExportacion lecturas={exportacionesFiltradas} producto={productoActivo} />
+                </>
+              ) : (
+                <>
+                  {/* Panel de Tendencias de Banda - para importación */}
+                  <PanelPrediccionesBanda
+                    producto={productoActivo}
+                    lecturas={lecturasFiltradas}
+                    viajes={viajesFiltrados}
+                    meta={getMetaProducto(barco.metas_json, productoActivo)}
+                    tipoOperacion={tipoOperacion}
+                  />
 
-              {/* Panel de Tendencias de Viajes - SOLO si NO es solo banda */}
-              {productoActivo.tipo_registro !== 'banda' && (
-                <PanelPrediccionesViajes
-                  producto={productoActivo}
-                  viajes={viajesFiltrados}
-                  meta={getMetaProducto(barco.metas_json, productoActivo)}
-                  tipoOperacion={tipoOperacion}
-                />
-              )}
+                  {/* Panel de Tendencias de Viajes - SOLO si NO es solo banda */}
+                  {productoActivo.tipo_registro !== 'banda' && (
+                    <PanelPrediccionesViajes
+                      producto={productoActivo}
+                      viajes={viajesFiltrados}
+                      meta={getMetaProducto(barco.metas_json, productoActivo)}
+                      tipoOperacion={tipoOperacion}
+                    />
+                  )}
 
-              {/* Tabla de Viajes - SOLO si NO es solo banda */}
-              {productoActivo.tipo_registro !== 'banda' && (
-                <TablaViajes viajes={viajesFiltrados} producto={productoActivo} />
-              )}
+                  {/* Tabla de Viajes - SOLO si NO es solo banda */}
+                  {productoActivo.tipo_registro !== 'banda' && (
+                    <TablaViajes viajes={viajesFiltrados} producto={productoActivo} />
+                  )}
 
-              {/* Tabla de Lecturas de Banda - SIEMPRE visible si hay lecturas */}
-              <TablaBanda lecturas={lecturasFiltradas} producto={productoActivo} />
+                  {/* Tabla de Lecturas de Banda */}
+                  <TablaBanda lecturas={lecturasFiltradas} producto={productoActivo} />
 
-              {/* Mensaje informativo si es solo banda */}
-              {productoActivo.tipo_registro === 'banda' && (
-                <div className="alm-info-box" style={{
-                  background: '#1e293b',
-                  border: '1px solid #3b82f6',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  marginTop: '12px',
-                  color: '#94a3b8'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '24px' }}>⚡</span>
-                    <div>
-                      <p style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
-                        Producto exclusivo de banda transportadora
-                      </p>
-                      <p style={{ fontSize: '13px' }}>
-                        Este producto se registra únicamente a través de lecturas de banda. 
-                        No se utilizan viajes de camiones para su control.
-                      </p>
+                  {/* Mensaje informativo si es solo banda */}
+                  {productoActivo.tipo_registro === 'banda' && (
+                    <div className="alm-info-box" style={{
+                      background: '#1e293b',
+                      border: '1px solid #3b82f6',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginTop: '12px',
+                      color: '#94a3b8'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '24px' }}>⚡</span>
+                        <div>
+                          <p style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
+                            Producto exclusivo de banda transportadora
+                          </p>
+                          <p style={{ fontSize: '13px' }}>
+                            Este producto se registra únicamente a través de lecturas de banda. 
+                            No se utilizan viajes de camiones para su control.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
           ) : null}
