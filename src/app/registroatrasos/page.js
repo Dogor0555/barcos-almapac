@@ -1,4 +1,4 @@
-// app/registroatrasos/page.js - Módulo de atrasos con modo oscuro/claro
+// app/registroatrasos/page.js - Módulo de atrasos con filtros por bodega en lista
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -73,7 +73,122 @@ const TIPOS_PARO_CONFIG = {
 }
 
 // =====================================================
-// MODAL FILTROS AVANZADOS
+// MODAL FILTROS DE LISTA
+// =====================================================
+const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
+  const [bodegasSeleccionadas, setBodegasSeleccionadas] = useState(filtros.bodegas || [])
+  const [mostrarSoloGenerales, setMostrarSoloGenerales] = useState(filtros.soloGenerales || false)
+
+  const toggleBodega = (bodegaId) => {
+    setBodegasSeleccionadas(prev =>
+      prev.includes(bodegaId)
+        ? prev.filter(id => id !== bodegaId)
+        : [...prev, bodegaId]
+    )
+  }
+
+  const handleAplicar = () => {
+    onAplicar({
+      bodegas: bodegasSeleccionadas,
+      soloGenerales: mostrarSoloGenerales
+    })
+    onClose()
+  }
+
+  const handleLimpiar = () => {
+    setBodegasSeleccionadas([])
+    setMostrarSoloGenerales(false)
+    onAplicar({ 
+      bodegas: [], 
+      soloGenerales: false
+    })
+    onClose()
+  }
+
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-xl">
+                <Filter className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-white">Filtrar por Bodega</h2>
+                <p className="text-purple-200 text-xs">Selecciona las bodegas a mostrar</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Opción general */}
+          <label className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500/30`}>
+            <input
+              type="checkbox"
+              checked={mostrarSoloGenerales}
+              onChange={(e) => {
+                setMostrarSoloGenerales(e.target.checked)
+                if (e.target.checked) setBodegasSeleccionadas([])
+              }}
+              className="w-4 h-4 rounded accent-purple-500"
+            />
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span className={`text-sm ${textColor}`}>Solo paros generales (todas las bodegas)</span>
+            </div>
+          </label>
+
+          {!mostrarSoloGenerales && bodegas.length > 0 && (
+            <>
+              <div className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide font-bold px-1`}>
+                Bodegas disponibles ({bodegas.length})
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {bodegas.map(bodega => (
+                  <label key={bodega.id} className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-blue-500/30`}>
+                    <input
+                      type="checkbox"
+                      checked={bodegasSeleccionadas.includes(bodega.id)}
+                      onChange={() => toggleBodega(bodega.id)}
+                      className="w-4 h-4 rounded accent-blue-500"
+                    />
+                    <div className="flex items-center gap-2 flex-1">
+                      <Box className="w-4 h-4 text-blue-400" />
+                      <span className={`text-sm ${textColor}`}>{bodega.nombre}</span>
+                      <span className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ml-auto`}>{bodega.codigo}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className={`p-5 border-t ${borderColor} flex gap-3`}>
+          <button onClick={handleLimpiar} className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
+            Limpiar
+          </button>
+          <button onClick={handleAplicar} className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-xl text-sm">
+            Aplicar filtros
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// MODAL FILTROS AVANZADOS DASHBOARD
 // =====================================================
 const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
   const [bodegasSeleccionadas, setBodegasSeleccionadas] = useState(filtros.bodegas || [])
@@ -114,10 +229,10 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) 
   }
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
-  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -1444,6 +1559,8 @@ export default function RegistroAtrasosPage() {
   const [descargaSeleccionada, setDescargaSeleccionada] = useState(null)
   const [atrasoEditando, setAtrasoEditando] = useState(null)
   const [filtroFecha, setFiltroFecha] = useState(dayjs().format('YYYY-MM-DD'))
+  const [filtrosLista, setFiltrosLista] = useState({ bodegas: [], soloGenerales: false })
+  const [showFiltrosListaModal, setShowFiltrosListaModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [vista, setVista] = useState('lista')
   const [showShipSelector, setShowShipSelector] = useState(true)
@@ -1576,6 +1693,7 @@ export default function RegistroAtrasosPage() {
     await cargarRegistros(barco.id)
     await cargarDescargas(barco.id)
     await cargarOperacionInfo(barco.id)
+    setFiltrosLista({ bodegas: [], soloGenerales: false }) // Reset filtros al cambiar barco
     setShowShipSelector(false)
   }
 
@@ -1626,8 +1744,21 @@ export default function RegistroAtrasosPage() {
     }
   }
 
+  // Aplicar filtros de bodega a los registros de la lista
+  const registrosConFiltroBodega = registros.filter(r => {
+    if (filtrosLista.soloGenerales) {
+      return r.es_general === true
+    }
+    if (filtrosLista.bodegas.length > 0) {
+      if (r.es_general) return true
+      return filtrosLista.bodegas.includes(r.bodega_id)
+    }
+    return true
+  })
+
+  const registrosFiltrados = registrosConFiltroBodega.filter(r => r.fecha === filtroFecha)
+
   const barcosFiltrados = barcos.filter(b => b.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
-  const registrosFiltrados = registros.filter(r => r.fecha === filtroFecha)
   const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
   const puedeRegistrar = barcoSeleccionado?.estado === 'activo'
@@ -1643,6 +1774,8 @@ export default function RegistroAtrasosPage() {
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
+  const tieneFiltrosBodegaActivos = filtrosLista.bodegas.length > 0 || filtrosLista.soloGenerales
 
   if (loading) {
     return (
@@ -1961,7 +2094,7 @@ export default function RegistroAtrasosPage() {
             {/* ── LISTA DE REGISTROS / DASHBOARD ── */}
             {vista === 'lista' ? (
               <div className="space-y-3">
-                {/* Toolbar */}
+                {/* Toolbar con filtros de bodega */}
                 <div className={`${cardBg} ${borderColor} rounded-2xl p-3`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
@@ -1979,13 +2112,66 @@ export default function RegistroAtrasosPage() {
                         title="Actualizar">
                         <RefreshCw className="w-4 h-4" />
                       </button>
+                      
+                      {/* Botón filtro de bodega */}
+                      <button
+                        onClick={() => setShowFiltrosListaModal(true)}
+                        className={`px-3 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                          tieneFiltrosBodegaActivos
+                            ? 'bg-purple-500 text-white'
+                            : theme === 'dark' ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        }`}
+                        title="Filtrar por bodega">
+                        <Filter className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Bodegas</span>
+                        {tieneFiltrosBodegaActivos && (
+                          <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[9px]">
+                            {filtrosLista.bodegas.length + (filtrosLista.soloGenerales ? 1 : 0)}
+                          </span>
+                        )}
+                      </button>
                     </div>
+                    
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0`} />
                       <input type="date" value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)}
                         className={`${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} ${borderColor} rounded-xl px-3 py-2 ${textColor} text-sm`} />
                     </div>
                   </div>
+
+                  {/* Mostrar filtros de bodega activos */}
+                  {tieneFiltrosBodegaActivos && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {filtrosLista.soloGenerales && (
+                        <span className={`text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                          Solo generales
+                          <button onClick={() => setFiltrosLista({ ...filtrosLista, soloGenerales: false })}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+                      {filtrosLista.bodegas.map(bodegaId => {
+                        const bodega = bodegasBarco.find(b => b.id === bodegaId)
+                        return bodega ? (
+                          <span key={bodegaId} className={`text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                            {bodega.nombre}
+                            <button onClick={() => setFiltrosLista({
+                              ...filtrosLista,
+                              bodegas: filtrosLista.bodegas.filter(id => id !== bodegaId)
+                            })}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ) : null
+                      })}
+                      <button
+                        onClick={() => setFiltrosLista({ bodegas: [], soloGenerales: false })}
+                        className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full hover:bg-red-500/30">
+                        Limpiar todo
+                      </button>
+                    </div>
+                  )}
+
                   {estadoOperacion === 'pendiente' && (
                     <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1.5">
                       <Info className="w-3.5 h-3.5" /> Inicia la operación para registrar atrasos
@@ -2004,6 +2190,11 @@ export default function RegistroAtrasosPage() {
                     <h3 className={`font-bold ${textColor} flex items-center gap-2 text-sm`}>
                       <Clock className="w-4 h-4 text-orange-400" />
                       {dayjs(filtroFecha).format('DD [de] MMMM, YYYY')}
+                      {tieneFiltrosBodegaActivos && (
+                        <span className="text-xs font-normal text-purple-400 ml-2">
+                          (filtrado por bodega)
+                        </span>
+                      )}
                     </h3>
                     <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-bold">
                       {registrosFiltrados.length} registros
@@ -2022,7 +2213,11 @@ export default function RegistroAtrasosPage() {
                     ) : (
                       <div className="py-14 text-center">
                         <Clock className={`w-12 h-12 mx-auto mb-3 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'}`} />
-                        <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1`}>Sin registros para esta fecha</p>
+                        <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1`}>
+                          {tieneFiltrosBodegaActivos 
+                            ? 'No hay registros para esta fecha con los filtros seleccionados'
+                            : 'Sin registros para esta fecha'}
+                        </p>
                         {puedeRegistrar && (
                           <button onClick={handleNuevoAtraso}
                             className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm inline-flex items-center gap-2">
@@ -2092,6 +2287,15 @@ export default function RegistroAtrasosPage() {
       {showEditarTiemposModal && barcoSeleccionado && (
         <EditarTiemposModal barco={barcoSeleccionado} onClose={() => setShowEditarTiemposModal(false)}
           onSave={() => cargarOperacionInfo(barcoSeleccionado.id)} theme={theme} />
+      )}
+      {showFiltrosListaModal && barcoSeleccionado && (
+        <FiltrosListaModal
+          bodegas={bodegasBarco}
+          filtros={filtrosLista}
+          onClose={() => setShowFiltrosListaModal(false)}
+          onAplicar={setFiltrosLista}
+          theme={theme}
+        />
       )}
     </div>
   )
