@@ -1,4 +1,4 @@
-// app/registroatrasos/page.js - Módulo de atrasos responsive mejorado
+// app/registroatrasos/page.js - Módulo de atrasos con filtros completos
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -13,7 +13,8 @@ import {
   ArrowLeft, Play, StopCircle, CheckCircle,
   ChevronDown, ChevronRight, Info,
   Flag, Anchor, Target, Inbox, Edit,
-  Package, History, MapPin, Box
+  Package, History, MapPin, Box, Filter,
+  CalendarRange
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -47,6 +48,152 @@ const TIPOS_PARO_CONFIG = {
   'Falla en sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
   'Falla en el sistema ALMAPAC': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
   'Esperando señal de Almapac': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
+}
+
+// =====================================================
+// MODAL FILTROS AVANZADOS
+// =====================================================
+const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
+  const [bodegasSeleccionadas, setBodegasSeleccionadas] = useState(filtros.bodegas || [])
+  const [mostrarSoloGenerales, setMostrarSoloGenerales] = useState(filtros.soloGenerales || false)
+  const [fechaDesde, setFechaDesde] = useState(filtros.fechaDesde || '')
+  const [fechaHasta, setFechaHasta] = useState(filtros.fechaHasta || '')
+
+  const toggleBodega = (bodegaId) => {
+    setBodegasSeleccionadas(prev =>
+      prev.includes(bodegaId)
+        ? prev.filter(id => id !== bodegaId)
+        : [...prev, bodegaId]
+    )
+  }
+
+  const handleAplicar = () => {
+    onAplicar({
+      bodegas: bodegasSeleccionadas,
+      soloGenerales: mostrarSoloGenerales,
+      fechaDesde: fechaDesde || null,
+      fechaHasta: fechaHasta || null
+    })
+    onClose()
+  }
+
+  const handleLimpiar = () => {
+    setBodegasSeleccionadas([])
+    setMostrarSoloGenerales(false)
+    setFechaDesde('')
+    setFechaHasta('')
+    onAplicar({ 
+      bodegas: [], 
+      soloGenerales: false,
+      fechaDesde: null,
+      fechaHasta: null 
+    })
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-xl">
+                <Filter className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-white">Filtros Avanzados</h2>
+                <p className="text-purple-200 text-xs">Selecciona los criterios</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Filtro por fecha */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Rango de fechas</p>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Separador */}
+          <div className="border-t border-white/10 my-2"></div>
+
+          {/* Opción general */}
+          <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-white/10 cursor-pointer hover:border-purple-500/30">
+            <input
+              type="checkbox"
+              checked={mostrarSoloGenerales}
+              onChange={(e) => {
+                setMostrarSoloGenerales(e.target.checked)
+                if (e.target.checked) setBodegasSeleccionadas([])
+              }}
+              className="w-4 h-4 rounded accent-purple-500"
+            />
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span className="text-sm text-white">Solo paros generales (todas las bodegas)</span>
+            </div>
+          </label>
+
+          {!mostrarSoloGenerales && bodegas.length > 0 && (
+            <>
+              <div className="text-xs text-slate-400 uppercase tracking-wide font-bold px-1">
+                Bodegas disponibles ({bodegas.length})
+              </div>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {bodegas.map(bodega => (
+                  <label key={bodega.id} className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-white/10 cursor-pointer hover:border-blue-500/30">
+                    <input
+                      type="checkbox"
+                      checked={bodegasSeleccionadas.includes(bodega.id)}
+                      onChange={() => toggleBodega(bodega.id)}
+                      className="w-4 h-4 rounded accent-blue-500"
+                    />
+                    <div className="flex items-center gap-2 flex-1">
+                      <Box className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm text-white">{bodega.nombre}</span>
+                      <span className="text-xs text-slate-500 ml-auto">{bodega.codigo}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="p-5 border-t border-white/10 flex gap-3">
+          <button onClick={handleLimpiar} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-sm">
+            Limpiar
+          </button>
+          <button onClick={handleAplicar} className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-xl text-sm">
+            Aplicar filtros
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // =====================================================
@@ -781,17 +928,58 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
 }
 
 // =====================================================
-// DASHBOARD DE ATRASOS
+// DASHBOARD DE ATRASOS - CON FILTROS COMPLETOS
 // =====================================================
 const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
   const [periodo, setPeriodo] = useState('todo')
+  const [filtros, setFiltros] = useState({ 
+    bodegas: [], 
+    soloGenerales: false,
+    fechaDesde: null,
+    fechaHasta: null 
+  })
+  const [showFiltrosModal, setShowFiltrosModal] = useState(false)
 
+  // Obtener fecha de inicio de operación
+  const fechaInicioOperacion = barco.operacion_iniciada_at 
+    ? dayjs(barco.operacion_iniciada_at) 
+    : barco.fecha_llegada 
+      ? dayjs(barco.fecha_llegada)
+      : dayjs()
+
+  // Aplicar filtros
   const registrosFiltrados = registros.filter(r => {
-    if (periodo === 'todo') return true
-    const fechaReg = dayjs(r.fecha), hoy = dayjs()
-    if (periodo === 'dia') return fechaReg.isSame(hoy, 'day')
-    if (periodo === 'semana') return fechaReg.isAfter(hoy.subtract(7, 'day'))
-    if (periodo === 'mes') return fechaReg.isAfter(hoy.subtract(30, 'day'))
+    // Filtro por período
+    if (periodo !== 'todo') {
+      const fechaReg = dayjs(r.fecha)
+      const hoy = dayjs()
+      if (periodo === 'dia' && !fechaReg.isSame(hoy, 'day')) return false
+      if (periodo === 'semana' && !fechaReg.isAfter(hoy.subtract(7, 'day'))) return false
+      if (periodo === 'mes' && !fechaReg.isAfter(hoy.subtract(30, 'day'))) return false
+    }
+
+    // Filtro por rango de fechas personalizado
+    if (filtros.fechaDesde) {
+      const fechaReg = dayjs(r.fecha)
+      if (fechaReg.isBefore(dayjs(filtros.fechaDesde))) return false
+    }
+    if (filtros.fechaHasta) {
+      const fechaReg = dayjs(r.fecha)
+      if (fechaReg.isAfter(dayjs(filtros.fechaHasta))) return false
+    }
+
+    // Filtro por bodega
+    if (filtros.soloGenerales) {
+      return r.es_general === true
+    }
+    
+    if (filtros.bodegas.length > 0) {
+      // Si es general, aplica a todas las bodegas
+      if (r.es_general) return true
+      // Si tiene bodega específica, verificar si está en seleccionadas
+      return filtros.bodegas.includes(r.bodega_id)
+    }
+
     return true
   })
 
@@ -799,8 +987,11 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
     const registrosTipo = registrosFiltrados.filter(r => r.tipo_paro_id === tipo.id)
     const totalMinutos = registrosTipo.reduce((sum, r) => sum + (r.duracion_minutos || 0), 0)
     return {
-      ...tipo, registros: registrosTipo.length, totalMinutos,
-      horas: Math.floor(totalMinutos / 60), minutos: totalMinutos % 60,
+      ...tipo,
+      registros: registrosTipo.length,
+      totalMinutos,
+      horas: Math.floor(totalMinutos / 60),
+      minutos: totalMinutos % 60,
       config: TIPOS_PARO_CONFIG[tipo.nombre] || {}
     }
   })
@@ -810,9 +1001,15 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
   const totalNoImputable = noImputables.reduce((sum, t) => sum + t.totalMinutos, 0)
   const totalImputable = imputables.reduce((sum, t) => sum + t.totalMinutos, 0)
   const totalGeneral = totalNoImputable + totalImputable
-  const fechaLlegada = barco.fecha_llegada ? dayjs(barco.fecha_llegada) : dayjs()
-  const totalMinutosOperacion = dayjs().diff(fechaLlegada, 'minute')
-  const tiempoNeto = totalMinutosOperacion - totalGeneral
+
+  // Calcular tiempo de operación
+  const ahora = dayjs()
+  const tiempoOperacionMinutos = ahora.diff(fechaInicioOperacion, 'minute')
+  const tiempoNeto = tiempoOperacionMinutos - totalGeneral
+
+  const bodegasDisponibles = barco.bodegas_json || []
+
+  const tieneFiltrosActivos = filtros.bodegas.length > 0 || filtros.soloGenerales || filtros.fechaDesde || filtros.fechaHasta
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
@@ -830,32 +1027,107 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
               <X className="w-5 h-5 text-white" />
             </button>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-            {[{ value: 'dia', label: 'Hoy' }, { value: 'semana', label: '7 días' }, { value: 'mes', label: '30 días' }, { value: 'todo', label: 'Todo' }].map(p => (
-              <button key={p.value} onClick={() => setPeriodo(p.value)}
+          
+          {/* Filtros rápidos */}
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-2">
+            {[
+              { value: 'dia', label: 'Hoy' },
+              { value: 'semana', label: '7 días' },
+              { value: 'mes', label: '30 días' },
+              { value: 'todo', label: 'Todo' }
+            ].map(p => (
+              <button
+                key={p.value}
+                onClick={() => setPeriodo(p.value)}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all ${
                   periodo === p.value ? 'bg-white text-blue-600' : 'bg-white/10 text-white'
                 }`}>
                 {p.label}
               </button>
             ))}
+            
+            {/* Botón filtros avanzados */}
+            <button
+              onClick={() => setShowFiltrosModal(true)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all flex items-center gap-1 ${
+                tieneFiltrosActivos
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-white/10 text-white'
+              }`}>
+              <Filter className="w-3 h-3" />
+              Filtros
+              {tieneFiltrosActivos && (
+                <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded-full text-[9px]">
+                  {filtros.bodegas.length + (filtros.soloGenerales ? 1 : 0) + (filtros.fechaDesde ? 1 : 0) + (filtros.fechaHasta ? 1 : 0)}
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Mostrar filtros activos */}
+          {tieneFiltrosActivos && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {filtros.soloGenerales && (
+                <span className="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full">
+                  Solo generales
+                </span>
+              )}
+              {filtros.fechaDesde && (
+                <span className="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
+                  Desde: {dayjs(filtros.fechaDesde).format('DD/MM/YY')}
+                </span>
+              )}
+              {filtros.fechaHasta && (
+                <span className="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
+                  Hasta: {dayjs(filtros.fechaHasta).format('DD/MM/YY')}
+                </span>
+              )}
+              {filtros.bodegas.length > 0 && (
+                <span className="text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full">
+                  {filtros.bodegas.length} bodega(s)
+                </span>
+              )}
+              <button
+                onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
+                className="text-[10px] bg-red-500/30 text-red-300 px-2 py-0.5 rounded-full hover:bg-red-500/50">
+                Limpiar
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           {/* KPIs */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Tiempo total', value: totalMinutosOperacion, sub: 'Desde llegada', from: 'from-blue-600', to: 'to-blue-800' },
-              { label: 'Tiempo neto', value: tiempoNeto, sub: 'Sin paros', from: 'from-green-600', to: 'to-green-800' },
-              { label: 'Total paros', value: totalGeneral, sub: `${registrosFiltrados.length} reg.`, from: 'from-orange-600', to: 'to-red-600' },
+              { 
+                label: 'Tiempo operación', 
+                value: tiempoOperacionMinutos, 
+                sub: `Desde ${fechaInicioOperacion.format('DD/MM HH:mm')}`, 
+                from: 'from-blue-600', 
+                to: 'to-blue-800' 
+              },
+              { 
+                label: 'Tiempo neto', 
+                value: tiempoNeto, 
+                sub: 'Sin paros', 
+                from: 'from-green-600', 
+                to: 'to-green-800' 
+              },
+              { 
+                label: 'Total paros', 
+                value: totalGeneral, 
+                sub: `${registrosFiltrados.length} reg.`, 
+                from: 'from-orange-600', 
+                to: 'to-red-600' 
+              },
             ].map(({ label, value, sub, from, to }) => (
               <div key={label} className={`bg-gradient-to-br ${from} ${to} rounded-xl p-3`}>
                 <p className="text-white/60 text-[10px] uppercase tracking-wide">{label}</p>
                 <p className="text-xl font-black text-white mt-1">
-                  {Math.floor(value / 60)}<span className="text-sm font-bold">h {value % 60}m</span>
+                  {Math.floor(value / 60)}<span className="text-sm font-bold">h {Math.abs(value % 60)}m</span>
                 </p>
-                <p className="text-white/50 text-[10px] mt-0.5">{sub}</p>
+                <p className="text-white/50 text-[10px] mt-0.5 truncate">{sub}</p>
               </div>
             ))}
           </div>
@@ -886,8 +1158,26 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
 
           {/* Detalle por tipo */}
           {[
-            { list: noImputables, title: 'No imputables a ALMAPAC', borderColor: 'border-red-500/20', headerBg: 'bg-red-500/10', icon: <AlertTriangle className="w-4 h-4 text-red-400" />, barColor: 'bg-red-500/60', total: totalNoImputable, totalText: 'text-red-400' },
-            { list: imputables, title: 'Imputables a ALMAPAC', borderColor: 'border-yellow-500/20', headerBg: 'bg-yellow-500/10', icon: <Zap className="w-4 h-4 text-yellow-400" />, barColor: 'bg-yellow-500/60', total: totalImputable, totalText: 'text-yellow-400' },
+            { 
+              list: noImputables, 
+              title: 'No imputables a ALMAPAC', 
+              borderColor: 'border-red-500/20', 
+              headerBg: 'bg-red-500/10', 
+              icon: <AlertTriangle className="w-4 h-4 text-red-400" />, 
+              barColor: 'bg-red-500/60', 
+              total: totalNoImputable, 
+              totalText: 'text-red-400' 
+            },
+            { 
+              list: imputables, 
+              title: 'Imputables a ALMAPAC', 
+              borderColor: 'border-yellow-500/20', 
+              headerBg: 'bg-yellow-500/10', 
+              icon: <Zap className="w-4 h-4 text-yellow-400" />, 
+              barColor: 'bg-yellow-500/60', 
+              total: totalImputable, 
+              totalText: 'text-yellow-400' 
+            },
           ].map(({ list, title, borderColor, headerBg, icon, barColor, total, totalText }) => list.length > 0 && (
             <div key={title} className={`bg-slate-900 rounded-xl overflow-hidden border ${borderColor}`}>
               <div className={`${headerBg} px-4 py-3 border-b ${borderColor} flex items-center gap-2`}>
@@ -925,17 +1215,34 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
           {registrosFiltrados.length === 0 && (
             <div className="bg-slate-900 rounded-xl p-10 text-center">
               <Clock className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">No hay atrasos en este período</p>
+              <p className="text-slate-400 text-sm">No hay atrasos con los filtros seleccionados</p>
+              {tieneFiltrosActivos && (
+                <button
+                  onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
+                  className="mt-3 text-xs text-purple-400 hover:text-purple-300">
+                  Limpiar todos los filtros
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Modal filtros avanzados */}
+      {showFiltrosModal && (
+        <FiltrosAvanzadosModal
+          bodegas={bodegasDisponibles}
+          filtros={filtros}
+          onClose={() => setShowFiltrosModal(false)}
+          onAplicar={setFiltros}
+        />
+      )}
     </div>
   )
 }
 
 // =====================================================
-// TARJETA DE REGISTRO — RESPONSIVE MEJORADA
+// TARJETA DE REGISTRO
 // =====================================================
 const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) => {
   const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
@@ -1124,7 +1431,7 @@ export default function RegistroAtrasosPage() {
   const cargarOperacionInfo = async (barcoId) => {
     try {
       const { data } = await supabase.from('barcos')
-        .select('tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
+        .select('tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado, fecha_llegada')
         .eq('id', barcoId).single()
       if (data) setOperacionInfo(data)
     } catch (error) {
