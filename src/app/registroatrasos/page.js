@@ -47,7 +47,6 @@ const useTheme = () => {
 // HELPER: colores de iconos adaptados al tema
 // =====================================================
 const getIconColor = (colorKey, theme) => {
-  // En modo claro usamos colores más saturados/oscuros para que sean visibles
   const darkMap = {
     red: 'text-red-400', orange: 'text-orange-400', yellow: 'text-yellow-400',
     blue: 'text-blue-400', purple: 'text-purple-400', green: 'text-green-400',
@@ -1455,7 +1454,7 @@ export default function RegistroAtrasosPage() {
   const cargarOperacionInfo = async (barcoId) => {
     try {
       const { data } = await supabase.from('barcos')
-        .select('tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado, fecha_llegada')
+        .select('tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado, fecha_llegada, estado')
         .eq('id', barcoId).single()
       if (data) setOperacionInfo(data)
     } catch (error) { console.error('Error cargando info de operación:', error) }
@@ -1508,18 +1507,30 @@ export default function RegistroAtrasosPage() {
   }
 
   const handleNuevoAtraso = () => {
-    if (barcoSeleccionado?.estado === 'finalizado') { toast.error('La operación está finalizada'); return }
-    if (!operacionInfo?.operacion_iniciada_at) { toast.error('Inicia la operación primero'); return }
-    setAtrasoEditando(null); setShowAtrasoModal(true)
+    // CORRECCIÓN: Permitir registrar incluso si la operación no ha iniciado
+    // Solo bloqueamos si el barco está finalizado
+    if (barcoSeleccionado?.estado === 'finalizado') { 
+      toast.error('La operación está finalizada'); 
+      return 
+    }
+    setAtrasoEditando(null); 
+    setShowAtrasoModal(true)
   }
 
   const handleEditarAtraso = (atraso) => {
-    if (barcoSeleccionado?.estado === 'finalizado') { toast.error('La operación está finalizada'); return }
-    setAtrasoEditando(atraso); setShowAtrasoModal(true)
+    if (barcoSeleccionado?.estado === 'finalizado') { 
+      toast.error('La operación está finalizada'); 
+      return 
+    }
+    setAtrasoEditando(atraso); 
+    setShowAtrasoModal(true)
   }
 
   const handleEliminarAtraso = async (id) => {
-    if (barcoSeleccionado?.estado === 'finalizado') { toast.error('La operación está finalizada'); return }
+    if (barcoSeleccionado?.estado === 'finalizado') { 
+      toast.error('La operación está finalizada'); 
+      return 
+    }
     if (!confirm('¿Eliminar este registro?')) return
     try {
       const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
@@ -1552,9 +1563,9 @@ export default function RegistroAtrasosPage() {
   const barcosFiltrados = barcos.filter(b => b.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
   const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
-  const puedeRegistrar = barcoSeleccionado?.estado === 'activo'
-    && !!operacionInfo?.operacion_iniciada_at
-    && !operacionInfo?.operacion_finalizada_at
+  // CORRECCIÓN: Modificar la lógica de puedeRegistrar
+  // Ahora se puede registrar incluso si la operación no ha iniciado
+  const puedeRegistrar = barcoSeleccionado?.estado !== 'finalizado'
 
   const estadoOperacion = !barcoSeleccionado ? null
     : barcoSeleccionado.estado === 'finalizado' ? 'finalizado'
@@ -1951,14 +1962,10 @@ export default function RegistroAtrasosPage() {
                     </div>
                   )}
 
-                  {estadoOperacion === 'pendiente' && (
-                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'}`}>
-                      <Info className="w-3.5 h-3.5" /> Inicia la operación para registrar demoras
-                    </p>
-                  )}
+                  {/* CORRECCIÓN: Mensajes más claros sobre el estado */}
                   {estadoOperacion === 'finalizado' && (
                     <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
-                      <Info className="w-3.5 h-3.5" /> Operación finalizada — solo lectura
+                      <Info className="w-3.5 h-3.5" /> Operación finalizada — modo solo lectura
                     </p>
                   )}
                 </div>

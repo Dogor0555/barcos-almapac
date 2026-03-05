@@ -155,7 +155,7 @@ export default function ExportacionPage() {
     }
   }
 
-  // Calcular estadísticas por producto
+  // Calcular estadísticas por producto - CORREGIDO: suma los acumulados por bodega
   const estadisticasProducto = useMemo(() => {
     if (!productoActivo) return null
 
@@ -171,20 +171,41 @@ export default function ExportacionPage() {
       }
     }
 
+    // Ordenar por fecha
     const ordenadas = [...exportacionesProd].sort(
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
 
+    // CORRECCIÓN: Calcular total sumando los últimos acumulados de CADA BODEGA
+    const bodegasMap = new Map()
+    
+    // Primero, ordenar todas las exportaciones por fecha (ascendente)
+    const todasOrdenadas = [...exportacionesProd].sort(
+      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+    )
+    
+    // Para cada bodega, encontrar su último registro
+    todasOrdenadas.forEach(exp => {
+      if (exp.bodega_id) {
+        bodegasMap.set(exp.bodega_id, exp)
+      }
+    })
+    
+    // Sumar los acumulados de todas las bodegas
+    let totalGeneral = 0
+    bodegasMap.forEach(exp => {
+      totalGeneral += Number(exp.acumulado_tm) || 0
+    })
+
     const primera = ordenadas[0]
     const ultima = ordenadas[ordenadas.length - 1]
-    const totalTM = ultima.acumulado_tm
 
-    // Calcular flujo promedio (TM/h)
+    // Calcular flujo promedio (TM/h) basado en el total general
     const horasTranscurridas = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
-    const flujoPromedio = horasTranscurridas > 0 ? totalTM / horasTranscurridas : 0
+    const flujoPromedio = horasTranscurridas > 0 ? totalGeneral / horasTranscurridas : 0
 
     return {
-      totalTM,
+      totalTM: totalGeneral, // Ahora es la suma de todas las bodegas
       lecturas: exportacionesProd.length,
       primeraLectura: primera,
       ultimaLectura: ultima,
@@ -192,7 +213,7 @@ export default function ExportacionPage() {
     }
   }, [exportaciones, productoActivo])
 
-  // ✅ NUEVO: Calcular flujo por hora de banda (TM/h)
+  // ✅ NUEVO: Calcular flujo por hora de banda (TM/h) - CORREGIDO
   const calcularFlujoBandaPorHora = useMemo(() => {
     if (!productoActivo) return 0
 
@@ -212,15 +233,41 @@ export default function ExportacionPage() {
 
     if (diferenciaHoras <= 0) return 0
 
-    const deltaAcumulado =
-      (Number(ultima.acumulado_tm) || 0) - (Number(primera.acumulado_tm) || 0)
+    // CORRECCIÓN: Calcular el total sumando los últimos acumulados de cada bodega
+    const bodegasMap = new Map()
+    
+    ordenadas.forEach(exp => {
+      if (exp.bodega_id) {
+        bodegasMap.set(exp.bodega_id, exp)
+      }
+    })
+    
+    let totalGeneral = 0
+    bodegasMap.forEach(exp => {
+      totalGeneral += Number(exp.acumulado_tm) || 0
+    })
+
+    // Calcular delta total
+    const bodegasInicio = new Map()
+    ordenadas.forEach(exp => {
+      if (exp.bodega_id && !bodegasInicio.has(exp.bodega_id)) {
+        bodegasInicio.set(exp.bodega_id, exp)
+      }
+    })
+    
+    let totalInicio = 0
+    bodegasInicio.forEach(exp => {
+      totalInicio += Number(exp.acumulado_tm) || 0
+    })
+
+    const deltaAcumulado = totalGeneral - totalInicio
 
     if (deltaAcumulado <= 0) return 0
 
     return deltaAcumulado / diferenciaHoras
   }, [exportaciones, productoActivo])
 
-  // ✅ NUEVO: Datos para gráfica de flujo acumulado por hora
+  // ✅ NUEVO: Datos para gráfica de flujo acumulado por hora - CORREGIDO
   const datosGraficoFlujo = useMemo(() => {
     if (!productoActivo) return []
 
@@ -228,18 +275,35 @@ export default function ExportacionPage() {
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    return exportacionesProd.map(e => {
-      const bodega = BODEGAS_BARCO.find(b => b.id === e.bodega_id)
-      return {
-        hora: dayjs(e.fecha_hora).format('DD/MM HH:mm'),
-        acumulado: e.acumulado_tm,
-        bodega: bodega?.nombre || '—',
-        timestamp: new Date(e.fecha_hora).getTime()
+    // CORRECCIÓN: Calcular acumulado total por punto en el tiempo
+    const puntos = []
+    const acumuladoPorBodega = new Map()
+    
+    exportacionesProd.forEach(exp => {
+      if (exp.bodega_id) {
+        // Actualizar el acumulado de esta bodega
+        acumuladoPorBodega.set(exp.bodega_id, Number(exp.acumulado_tm) || 0)
+        
+        // Calcular total sumando todas las bodegas
+        let total = 0
+        acumuladoPorBodega.forEach(valor => {
+          total += valor
+        })
+        
+        const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+        puntos.push({
+          hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
+          acumulado: total,
+          bodega: bodega?.nombre || '—',
+          timestamp: new Date(exp.fecha_hora).getTime()
+        })
       }
     })
+
+    return puntos
   }, [exportaciones, productoActivo])
 
-  // Datos para gráfica de tendencia (original)
+  // Datos para gráfica de tendencia (original) - CORREGIDO
   const datosGrafico = useMemo(() => {
     if (!productoActivo) return []
 
@@ -247,17 +311,32 @@ export default function ExportacionPage() {
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    return exportacionesProd.map(e => {
-      const bodega = BODEGAS_BARCO.find(b => b.id === e.bodega_id)
-      return {
-        hora: dayjs(e.fecha_hora).format('DD/MM HH:mm'),
-        acumulado: e.acumulado_tm,
-        bodega: bodega?.nombre || '—'
+    // CORRECCIÓN: Calcular acumulado total por punto
+    const puntos = []
+    const acumuladoPorBodega = new Map()
+    
+    exportacionesProd.forEach(exp => {
+      if (exp.bodega_id) {
+        acumuladoPorBodega.set(exp.bodega_id, Number(exp.acumulado_tm) || 0)
+        
+        let total = 0
+        acumuladoPorBodega.forEach(valor => {
+          total += valor
+        })
+        
+        const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+        puntos.push({
+          hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
+          acumulado: total,
+          bodega: bodega?.nombre || '—'
+        })
       }
     })
+
+    return puntos
   }, [exportaciones, productoActivo])
 
-  // Resumen por bodega
+  // Resumen por bodega - CORREGIDO
   const resumenPorBodega = useMemo(() => {
     if (!productoActivo) return []
 
@@ -265,7 +344,12 @@ export default function ExportacionPage() {
     
     const mapa = {}
     
-    exportacionesProd.forEach(e => {
+    // Ordenar por fecha para tomar el último de cada bodega
+    const ordenadas = [...exportacionesProd].sort(
+      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+    )
+    
+    ordenadas.forEach(e => {
       const key = e.bodega_id
       if (!key) return
       
@@ -279,7 +363,8 @@ export default function ExportacionPage() {
           ultimaLectura: null
         }
       }
-      mapa[key].totalTM = e.acumulado_tm // Tomar el acumulado más reciente
+      // Actualizar siempre con el valor más reciente (sobrescribe)
+      mapa[key].totalTM = Number(e.acumulado_tm) || 0
       mapa[key].lecturas++
       
       if (!mapa[key].ultimaLectura || new Date(e.fecha_hora) > new Date(mapa[key].ultimaLectura.fecha_hora)) {
@@ -288,6 +373,30 @@ export default function ExportacionPage() {
     })
 
     return Object.values(mapa).sort((a, b) => b.totalTM - a.totalTM)
+  }, [exportaciones, productoActivo])
+
+  // Calcular total general - CORREGIDO
+  const totalGeneral = useMemo(() => {
+    if (!productoActivo) return 0
+    
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+    const ultimosPorBodega = new Map()
+    
+    exportacionesProd.forEach(exp => {
+      if (exp.bodega_id) {
+        const existente = ultimosPorBodega.get(exp.bodega_id)
+        if (!existente || new Date(exp.fecha_hora) > new Date(existente.fecha_hora)) {
+          ultimosPorBodega.set(exp.bodega_id, exp)
+        }
+      }
+    })
+    
+    let total = 0
+    ultimosPorBodega.forEach(exp => {
+      total += Number(exp.acumulado_tm) || 0
+    })
+    
+    return total
   }, [exportaciones, productoActivo])
 
   // Cambiar producto activo
@@ -890,7 +999,7 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tarjeta de resumen del producto activo con flujo por hora */}
+        {/* Tarjeta de resumen del producto activo con flujo por hora - CORREGIDO */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -909,6 +1018,7 @@ export default function ExportacionPage() {
                 </p>
                 <div className="flex gap-3 text-sm text-slate-400">
                   <span>📊 {estadisticasProducto.lecturas} lecturas</span>
+                  <span>🏭 {resumenPorBodega.length} bodegas</span>
                 </div>
               </div>
             </div>
@@ -958,9 +1068,8 @@ export default function ExportacionPage() {
                           )
                           const primera = ordenadas[0]
                           const ultima = ordenadas[ordenadas.length - 1]
-                          const delta = (Number(ultima.acumulado_tm) - Number(primera.acumulado_tm)).toFixed(3)
                           const horas = ((new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)).toFixed(1)
-                          return `Δ ${delta} TM en ${horas} h`
+                          return `En ${horas} horas`
                         })()}
                       </p>
                     )}
@@ -971,7 +1080,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Gráfica de tendencia con FLUJO ACUMULADO */}
+        {/* Gráfica de tendencia con FLUJO ACUMULADO - CORREGIDO */}
         {productoActivo && datosGraficoFlujo.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -996,7 +1105,7 @@ export default function ExportacionPage() {
                     type="monotone" 
                     dataKey="acumulado" 
                     stroke="#3b82f6" 
-                    name="Acumulado (TM)" 
+                    name="Acumulado Total (TM)" 
                     dot={{ r: 4, fill: '#3b82f6' }}
                     strokeWidth={2}
                   />
@@ -1004,7 +1113,7 @@ export default function ExportacionPage() {
               </ResponsiveContainer>
             </div>
 
-            {/* Resumen de flujo en la gráfica */}
+            {/* Resumen de flujo en la gráfica - CORREGIDO */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900 rounded-lg p-3">
                 <p className="text-xs text-slate-500">Primera lectura</p>
@@ -1028,7 +1137,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Resumen por bodega */}
+        {/* Resumen por bodega - CORREGIDO */}
         {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1071,12 +1180,15 @@ export default function ExportacionPage() {
               ))}
             </div>
 
-            {/* Total general */}
+            {/* Total general - CORREGIDO */}
             <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
               <div className="bg-slate-900 rounded-lg px-6 py-3">
-                <p className="text-sm text-slate-400">TOTAL CARGADO</p>
+                <p className="text-sm text-slate-400">TOTAL GENERAL</p>
                 <p className="text-2xl font-black text-green-400">
-                  {resumenPorBodega.reduce((sum, b) => sum + b.totalTM, 0).toFixed(3)} TM
+                  {totalGeneral.toFixed(3)} TM
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Suma de todas las bodegas
                 </p>
               </div>
             </div>
@@ -1185,7 +1297,7 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tabla de exportaciones con flujo por hora */}
+        {/* Tabla de exportaciones con flujo por hora - CORREGIDO */}
         {exportacionesFiltradas.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
@@ -1279,9 +1391,9 @@ export default function ExportacionPage() {
                 </tbody>
                 <tfoot className="bg-slate-900">
                   <tr>
-                    <td className="px-4 py-3 font-bold text-white">TOTAL / PROMEDIO</td>
+                    <td className="px-4 py-3 font-bold text-white">TOTAL GENERAL</td>
                     <td className="px-4 py-3 font-bold text-blue-400">
-                      {exportacionesFiltradas[exportacionesFiltradas.length - 1]?.acumulado_tm?.toFixed(3) || '0.000'}
+                      {totalGeneral.toFixed(3)} TM
                     </td>
                     <td className="px-4 py-3 font-bold text-green-400">
                       {calcularFlujoBandaPorHora.toFixed(3)} TM/h
@@ -1402,4 +1514,4 @@ export default function ExportacionPage() {
       </div>
     </div>
   )
-}
+} 
