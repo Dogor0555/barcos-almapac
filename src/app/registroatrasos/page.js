@@ -1,4 +1,4 @@
-// app/registroatrasos/page.js - Módulo de atrasos con filtros completos
+// app/registroatrasos/page.js - Módulo de atrasos con modo oscuro/claro
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -14,7 +14,7 @@ import {
   ChevronDown, ChevronRight, Info,
   Flag, Anchor, Target, Inbox, Edit,
   Package, History, MapPin, Box, Filter,
-  CalendarRange
+  Sun, Moon
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -22,38 +22,60 @@ import 'dayjs/locale/es'
 dayjs.locale('es')
 
 // =====================================================
+// CONTEXTO DE TEMA (MODO OSCURO/CLARO)
+// =====================================================
+const useTheme = () => {
+  const [theme, setTheme] = useState('dark')
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'dark'
+    setTheme(savedTheme)
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+  }, [])
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(newTheme)
+    localStorage.setItem('theme', newTheme)
+    document.documentElement.classList.toggle('dark', newTheme === 'dark')
+  }
+
+  return { theme, toggleTheme }
+}
+
+// =====================================================
 // CONFIGURACIÓN DE TIPOS DE PARO
 // =====================================================
 const TIPOS_PARO_CONFIG = {
-  'Desperfecto de grua del buque': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
-  'Colocando almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
-  'Falta de camiones (Unidades insuficientes por transportistas)': { icono: <Truck className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20' },
-  'Traslado de UCA a Almapac': { icono: <Truck className="w-4 h-4" />, bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
-  'Falla sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
-  'Tiempo de comida': { icono: <Coffee className="w-4 h-4" />, bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20' },
-  'Cierre de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' },
-  'Amenaza de lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20' },
-  'Lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20' },
-  'Esperando apertura de bodegas': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
-  'Apertura de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-  'Traslado de UCA a Alcasa': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20' },
-  'Mantenimiento almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' },
-  'Sacando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-pink-500/10', text: 'text-pink-400', border: 'border-pink-500/20' },
-  'Movimiento de UCA': { icono: <Truck className="w-4 h-4" />, bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20' },
-  'Movilizando tolvas': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-lime-500/10', text: 'text-lime-400', border: 'border-lime-500/20' },
-  'Falta de Tolveros': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-stone-500/10', text: 'text-stone-400', border: 'border-stone-500/20' },
-  'Quitando Almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20' },
-  'Colocando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-fuchsia-500/10', text: 'text-fuchsia-400', border: 'border-fuchsia-500/20' },
-  'Acumulado producto': { icono: <BarChart3 className="w-4 h-4" />, bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20' },
-  'Falla en sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
-  'Falla en el sistema ALMAPAC': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-  'Esperando señal de Almapac': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
+  'Desperfecto de grua del buque': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-red-500/10 dark:bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
+  'Colocando almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-orange-500/10 dark:bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
+  'Falta de camiones (Unidades insuficientes por transportistas)': { icono: <Truck className="w-4 h-4" />, bg: 'bg-yellow-500/10 dark:bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20' },
+  'Traslado de UCA a Almapac': { icono: <Truck className="w-4 h-4" />, bg: 'bg-blue-500/10 dark:bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+  'Falla sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10 dark:bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  'Tiempo de comida': { icono: <Coffee className="w-4 h-4" />, bg: 'bg-green-500/10 dark:bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20' },
+  'Cierre de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-gray-500/10 dark:bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' },
+  'Amenaza de lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-sky-500/10 dark:bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20' },
+  'Lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-indigo-500/10 dark:bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20' },
+  'Esperando apertura de bodegas': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/10 dark:bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
+  'Apertura de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-emerald-500/10 dark:bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+  'Traslado de UCA a Alcasa': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10 dark:bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20' },
+  'Mantenimiento almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-rose-500/10 dark:bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' },
+  'Sacando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-pink-500/10 dark:bg-pink-500/10', text: 'text-pink-400', border: 'border-pink-500/20' },
+  'Movimiento de UCA': { icono: <Truck className="w-4 h-4" />, bg: 'bg-teal-500/10 dark:bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20' },
+  'Movilizando tolvas': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-lime-500/10 dark:bg-lime-500/10', text: 'text-lime-400', border: 'border-lime-500/20' },
+  'Falta de Tolveros': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-stone-500/10 dark:bg-stone-500/10', text: 'text-stone-400', border: 'border-stone-500/20' },
+  'Quitando Almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-violet-500/10 dark:bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20' },
+  'Colocando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-fuchsia-500/10 dark:bg-fuchsia-500/10', text: 'text-fuchsia-400', border: 'border-fuchsia-500/20' },
+  'Acumulado producto': { icono: <BarChart3 className="w-4 h-4" />, bg: 'bg-slate-500/10 dark:bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20' },
+  'Falla en sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10 dark:bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  'Falla en el sistema ALMAPAC': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/20 dark:bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+  'Esperando señal de Almapac': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/20 dark:bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
 }
 
 // =====================================================
 // MODAL FILTROS AVANZADOS
 // =====================================================
-const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
+const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
   const [bodegasSeleccionadas, setBodegasSeleccionadas] = useState(filtros.bodegas || [])
   const [mostrarSoloGenerales, setMostrarSoloGenerales] = useState(filtros.soloGenerales || false)
   const [fechaDesde, setFechaDesde] = useState(filtros.fechaDesde || '')
@@ -91,9 +113,15 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
     onClose()
   }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -114,34 +142,36 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Filtro por fecha */}
           <div className="space-y-3">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Rango de fechas</p>
+            <p className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide`}>
+              Rango de fechas
+            </p>
             <div className="space-y-2">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mb-1`}>Desde</label>
                 <input
                   type="date"
                   value={fechaDesde}
                   onChange={(e) => setFechaDesde(e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mb-1`}>Hasta</label>
                 <input
                   type="date"
                   value={fechaHasta}
                   onChange={(e) => setFechaHasta(e.target.value)}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}
                 />
               </div>
             </div>
           </div>
 
           {/* Separador */}
-          <div className="border-t border-white/10 my-2"></div>
+          <div className={`border-t ${borderColor} my-2`}></div>
 
           {/* Opción general */}
-          <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-white/10 cursor-pointer hover:border-purple-500/30">
+          <label className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500/30`}>
             <input
               type="checkbox"
               checked={mostrarSoloGenerales}
@@ -153,18 +183,18 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
             />
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-purple-400" />
-              <span className="text-sm text-white">Solo paros generales (todas las bodegas)</span>
+              <span className={`text-sm ${textColor}`}>Solo paros generales (todas las bodegas)</span>
             </div>
           </label>
 
           {!mostrarSoloGenerales && bodegas.length > 0 && (
             <>
-              <div className="text-xs text-slate-400 uppercase tracking-wide font-bold px-1">
+              <div className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide font-bold px-1`}>
                 Bodegas disponibles ({bodegas.length})
               </div>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {bodegas.map(bodega => (
-                  <label key={bodega.id} className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-white/10 cursor-pointer hover:border-blue-500/30">
+                  <label key={bodega.id} className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-blue-500/30`}>
                     <input
                       type="checkbox"
                       checked={bodegasSeleccionadas.includes(bodega.id)}
@@ -173,8 +203,8 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
                     />
                     <div className="flex items-center gap-2 flex-1">
                       <Box className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-white">{bodega.nombre}</span>
-                      <span className="text-xs text-slate-500 ml-auto">{bodega.codigo}</span>
+                      <span className={`text-sm ${textColor}`}>{bodega.nombre}</span>
+                      <span className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ml-auto`}>{bodega.codigo}</span>
                     </div>
                   </label>
                 ))}
@@ -183,8 +213,8 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
           )}
         </div>
 
-        <div className="p-5 border-t border-white/10 flex gap-3">
-          <button onClick={handleLimpiar} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-sm">
+        <div className={`p-5 border-t ${borderColor} flex gap-3`}>
+          <button onClick={handleLimpiar} className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
             Limpiar
           </button>
           <button onClick={handleAplicar} className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-xl text-sm">
@@ -199,7 +229,7 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar }) => {
 // =====================================================
 // MODAL REGISTRAR TIPO DE DESCARGA
 // =====================================================
-const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descargaActual }) => {
+const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descargaActual, theme }) => {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     tipo_descarga_id: descargaActual?.tipo_descarga_id || '',
@@ -249,9 +279,14 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
     }
   }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -270,11 +305,11 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className="block text-xs text-slate-400 mb-1.5 font-medium">
+            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>
               Tipo de Descarga <span className="text-red-400">*</span>
             </label>
             <select name="tipo_descarga_id" value={formData.tipo_descarga_id} onChange={handleChange}
-              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" required>
+              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required>
               <option value="">Seleccionar tipo</option>
               {tiposDescarga.map(tipo => (
                 <option key={tipo.id} value={tipo.id}>{tipo.icono} {tipo.nombre}</option>
@@ -282,26 +317,26 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Fecha y Hora de Inicio</label>
+            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Fecha y Hora de Inicio</label>
             <div className="relative">
               <input type="datetime-local" name="fecha_hora_inicio" value={formData.fecha_hora_inicio} onChange={handleChange}
-                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" />
+                className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} />
               <button type="button"
                 onClick={() => setFormData(prev => ({ ...prev, fecha_hora_inicio: dayjs().format('YYYY-MM-DDTHH:mm') }))}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400">
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme === 'dark' ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}>
                 <Clock className="w-4 h-4" />
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Observaciones</label>
+            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Observaciones</label>
             <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} rows="2"
-              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
+              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
               placeholder="Detalles adicionales..." />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-sm">
+              className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
               Cancelar
             </button>
             <button type="submit" disabled={loading}
@@ -319,7 +354,7 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
 // =====================================================
 // MODAL HISTORIAL DE DESCARGAS
 // =====================================================
-const HistorialDescargaModal = ({ barco, onClose }) => {
+const HistorialDescargaModal = ({ barco, onClose, theme }) => {
   const [historial, setHistorial] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -342,9 +377,14 @@ const HistorialDescargaModal = ({ barco, onClose }) => {
     }
   }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><History className="w-5 h-5 text-white" /></div>
@@ -365,29 +405,29 @@ const HistorialDescargaModal = ({ barco, onClose }) => {
           ) : historial.length === 0 ? (
             <div className="text-center py-12">
               <History className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400">No hay registros de descarga</p>
+              <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}>No hay registros de descarga</p>
             </div>
           ) : (
             <div className="space-y-3">
               {historial.map(reg => (
-                <div key={reg.id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                <div key={reg.id} className={`${cardBg} rounded-xl p-4 border ${borderColor}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{reg.tipo_descarga?.icono || '📦'}</span>
                       <div>
-                        <p className="font-bold text-white text-sm">{reg.tipo_descarga?.nombre}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className={`font-bold ${textColor} text-sm`}>{reg.tipo_descarga?.nombre}</p>
+                        <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mt-0.5`}>
                           {dayjs(reg.fecha_hora_inicio).format('DD/MM/YY HH:mm')}
                           {reg.fecha_hora_fin && ` → ${dayjs(reg.fecha_hora_fin).format('HH:mm')}`}
                         </p>
-                        {reg.observaciones && <p className="text-xs text-slate-400 mt-1">{reg.observaciones}</p>}
+                        {reg.observaciones && <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mt-1`}>{reg.observaciones}</p>}
                       </div>
                     </div>
                     {!reg.fecha_hora_fin && (
                       <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-bold flex-shrink-0">ACTIVO</span>
                     )}
                   </div>
-                  <div className="mt-2 pt-2 border-t border-white/10 flex justify-between text-xs text-slate-500">
+                  <div className={`mt-2 pt-2 border-t ${borderColor} flex justify-between text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
                     <span>{reg.usuario?.nombre || 'Sistema'}</span>
                     {reg.fecha_hora_fin && (
                       <span>
@@ -401,9 +441,9 @@ const HistorialDescargaModal = ({ barco, onClose }) => {
             </div>
           )}
         </div>
-        <div className="border-t border-white/10 p-4 flex-shrink-0">
+        <div className={`border-t ${borderColor} p-4 flex-shrink-0`}>
           <button onClick={onClose}
-            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm">
+            className={`w-full py-2.5 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} rounded-xl font-bold text-sm`}>
             Cerrar
           </button>
         </div>
@@ -415,13 +455,17 @@ const HistorialDescargaModal = ({ barco, onClose }) => {
 // =====================================================
 // MODAL FINALIZAR DESCARGA
 // =====================================================
-const FinalizarDescargaModal = ({ descarga, onClose, onConfirm }) => {
+const FinalizarDescargaModal = ({ descarga, onClose, onConfirm, theme }) => {
   const [loading, setLoading] = useState(false)
   const handleConfirm = async () => { setLoading(true); await onConfirm(); setLoading(false) }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-yellow-600 to-amber-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><StopCircle className="w-5 h-5 text-white" /></div>
@@ -432,13 +476,13 @@ const FinalizarDescargaModal = ({ descarga, onClose, onConfirm }) => {
           </div>
         </div>
         <div className="p-5">
-          <p className="text-white text-sm mb-2">¿Finalizar este tipo de descarga?</p>
-          <p className="text-xs text-slate-400 mb-6">
+          <p className={`${textColor} text-sm mb-2`}>¿Finalizar este tipo de descarga?</p>
+          <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-6`}>
             Iniciado: {dayjs(descarga.fecha_hora_inicio).format('DD/MM/YYYY HH:mm')}
           </p>
           <div className="flex gap-3">
             <button onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-xl text-sm">
+              className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
               Cancelar
             </button>
             <button onClick={handleConfirm} disabled={loading}
@@ -456,7 +500,7 @@ const FinalizarDescargaModal = ({ descarga, onClose, onConfirm }) => {
 // =====================================================
 // MODAL EDITAR TIEMPOS DE OPERACIÓN
 // =====================================================
-const EditarTiemposModal = ({ barco, onClose, onSave }) => {
+const EditarTiemposModal = ({ barco, onClose, onSave, theme }) => {
   const [loading, setLoading] = useState(false)
   const [tiempos, setTiempos] = useState({
     tiempo_arribo: barco.tiempo_arribo ? dayjs(barco.tiempo_arribo).format('YYYY-MM-DDTHH:mm') : '',
@@ -508,9 +552,15 @@ const EditarTiemposModal = ({ barco, onClose, onSave }) => {
     }
   }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const inputBg = theme === 'dark' ? 'bg-slate-800' : 'bg-white'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><Clock className="w-5 h-5 text-white" /></div>
@@ -525,16 +575,16 @@ const EditarTiemposModal = ({ barco, onClose, onSave }) => {
         </div>
         <div className="p-5 space-y-3 overflow-y-auto flex-1">
           {campos.map(({ key, label, icon, color, accent }) => (
-            <div key={key} className={`bg-slate-900 rounded-xl p-3.5 border ${color}`}>
+            <div key={key} className={`${cardBg} rounded-xl p-3.5 border ${color}`}>
               <div className="flex items-center gap-2 mb-2">
                 {icon}
-                <span className="text-xs font-bold text-slate-300">{label}</span>
+                <span className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-gray-700'}`}>{label}</span>
               </div>
               <div className="relative">
                 <input type="datetime-local" name={key} value={tiempos[key]} onChange={handleChange}
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm pr-10" />
+                  className={`w-full ${inputBg} border ${borderColor} rounded-lg px-3 py-2.5 ${textColor} text-sm pr-10`} />
                 <button type="button" onClick={() => setHoraActual(key)}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 ${accent} transition-colors`}>
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ${accent} transition-colors`}>
                   <Clock className="w-4 h-4" />
                 </button>
               </div>
@@ -544,9 +594,9 @@ const EditarTiemposModal = ({ barco, onClose, onSave }) => {
             <p className="text-xs text-red-400">⚠️ No se puede tener fin sin inicio</p>
           )}
         </div>
-        <div className="p-5 border-t border-white/10 flex gap-3 flex-shrink-0">
+        <div className={`p-5 border-t ${borderColor} flex gap-3 flex-shrink-0`}>
           <button type="button" onClick={onClose}
-            className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-xl text-sm">
+            className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
             Cancelar
           </button>
           <button onClick={handleSubmit}
@@ -564,13 +614,17 @@ const EditarTiemposModal = ({ barco, onClose, onSave }) => {
 // =====================================================
 // MODAL INICIAR OPERACIÓN
 // =====================================================
-const IniciarOperacionModal = ({ barco, onClose, onConfirm }) => {
+const IniciarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
   const [loading, setLoading] = useState(false)
   const handleConfirm = async () => { setLoading(true); await onConfirm(); setLoading(false) }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><Play className="w-5 h-5 text-white" /></div>
@@ -581,13 +635,13 @@ const IniciarOperacionModal = ({ barco, onClose, onConfirm }) => {
           </div>
         </div>
         <div className="p-5">
-          <p className="text-white text-sm mb-2">¿Iniciar la operación ahora?</p>
-          <p className="text-xs text-slate-400 mb-6">
+          <p className={`${textColor} text-sm mb-2`}>¿Iniciar la operación ahora?</p>
+          <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-6`}>
             Se registrará la hora actual y se habilitará el registro de atrasos.
           </p>
           <div className="flex gap-3">
             <button onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-xl text-sm">
+              className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
               Cancelar
             </button>
             <button onClick={handleConfirm} disabled={loading}
@@ -605,14 +659,19 @@ const IniciarOperacionModal = ({ barco, onClose, onConfirm }) => {
 // =====================================================
 // MODAL FINALIZAR OPERACIÓN
 // =====================================================
-const FinalizarOperacionModal = ({ barco, onClose, onConfirm }) => {
+const FinalizarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
   const [loading, setLoading] = useState(false)
   const [motivo, setMotivo] = useState('')
   const handleConfirm = async () => { setLoading(true); await onConfirm(motivo); setLoading(false) }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-red-600 to-rose-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><StopCircle className="w-5 h-5 text-white" /></div>
@@ -623,17 +682,17 @@ const FinalizarOperacionModal = ({ barco, onClose, onConfirm }) => {
           </div>
         </div>
         <div className="p-5">
-          <p className="text-white text-sm mb-2">¿Finalizar la operación?</p>
-          <p className="text-xs text-slate-400 mb-4">No se podrán registrar más atrasos.</p>
+          <p className={`${textColor} text-sm mb-2`}>¿Finalizar la operación?</p>
+          <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-4`}>No se podrán registrar más atrasos.</p>
           <div className="mb-5">
-            <label className="block text-xs text-slate-400 mb-1.5">Motivo (opcional)</label>
+            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5`}>Motivo (opcional)</label>
             <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows="2"
-              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
+              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
               placeholder="Ej: Operación completada..." />
           </div>
           <div className="flex gap-3">
             <button onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-xl text-sm">
+              className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
               Cancelar
             </button>
             <button onClick={handleConfirm} disabled={loading}
@@ -651,7 +710,7 @@ const FinalizarOperacionModal = ({ barco, onClose, onConfirm }) => {
 // =====================================================
 // MODAL REGISTRAR / EDITAR ATRASO
 // =====================================================
-const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }) => {
+const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, theme }) => {
   const [loading, setLoading] = useState(false)
   const [paso, setPaso] = useState(1)
   const [tipoSeleccionado, setTipoSeleccionado] = useState(null)
@@ -741,9 +800,15 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
     }
   }
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className="bg-gradient-to-r from-orange-600 to-red-600 p-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -771,7 +836,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
         <div className="overflow-y-auto flex-1 p-4">
           {paso === 1 ? (
             <div className="space-y-2">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">
+              <p className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide mb-3`}>
                 Selecciona el tipo de paro
               </p>
               <div className="grid grid-cols-1 gap-2">
@@ -782,11 +847,11 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
                       className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] flex items-center gap-3 ${
                         tipo.es_imputable_almapac
                           ? 'border-yellow-500/30 bg-yellow-500/5 hover:border-yellow-500/60'
-                          : 'border-white/10 bg-slate-900 hover:border-orange-500/40'
+                          : `${borderColor} ${cardBg} hover:border-orange-500/40`
                       }`}>
                       <div className={`p-2 rounded-lg flex-shrink-0 ${config.bg}`}>{config.icono}</div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white text-sm leading-tight">{tipo.nombre}</p>
+                        <p className={`font-semibold ${textColor} text-sm leading-tight`}>{tipo.nombre}</p>
                         <div className="flex gap-1.5 mt-1 flex-wrap">
                           {tipo.es_general && (
                             <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full">GENERAL</span>
@@ -796,7 +861,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
                           )}
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                      <ChevronRight className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'} flex-shrink-0`} />
                     </button>
                   )
                 })}
@@ -810,11 +875,11 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
               </button>
 
               {/* Tipo seleccionado */}
-              <div className="bg-slate-900 rounded-xl p-3 border border-orange-500/20">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Tipo seleccionado</p>
+              <div className={`${cardBg} rounded-xl p-3 border border-orange-500/20`}>
+                <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide mb-1`}>Tipo seleccionado</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {tipoSeleccionado && TIPOS_PARO_CONFIG[tipoSeleccionado.nombre]?.icono}
-                  <span className="font-bold text-white text-sm">{tipoSeleccionado?.nombre}</span>
+                  <span className={`font-bold ${textColor} text-sm`}>{tipoSeleccionado?.nombre}</span>
                   {tipoSeleccionado?.es_general && (
                     <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">GENERAL</span>
                   )}
@@ -823,20 +888,20 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
 
               {/* Fecha */}
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Fecha</label>
+                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Fecha</label>
                 <input type="date" value={formData.fecha}
                   onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" required />
+                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required />
               </div>
 
               {/* Horario */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
+                  <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Hora Inicio</label>
                   <div className="flex gap-2">
                     <input type="time" value={formData.hora_inicio}
                       onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
-                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm min-w-0" required />
+                      className={`flex-1 ${inputBg} ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} required />
                     <button type="button"
                       onClick={() => { setFormData(prev => ({ ...prev, hora_inicio: dayjs().format('HH:mm') })); setEnCurso(true) }}
                       className="px-2.5 py-2.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-xl flex-shrink-0"
@@ -846,11 +911,11 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Fin</label>
+                  <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Hora Fin</label>
                   <div className="flex gap-2">
                     <input type="time" value={formData.hora_fin}
                       onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
-                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm min-w-0" />
+                      className={`flex-1 ${inputBg} ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} />
                     <button type="button"
                       onClick={() => { setFormData(prev => ({ ...prev, hora_fin: dayjs().format('HH:mm') })); setEnCurso(false) }}
                       className="px-2.5 py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl flex-shrink-0"
@@ -873,18 +938,18 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
               {/* Bodega */}
               {!tipoSeleccionado?.es_general && (
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer p-3 bg-slate-900 rounded-xl border border-white/10 hover:border-white/20">
+                  <label className={`flex items-center gap-3 cursor-pointer p-3 ${cardBg} rounded-xl border ${borderColor} hover:border-white/20`}>
                     <input type="checkbox" checked={formData.es_general}
                       onChange={(e) => setFormData({ ...formData, es_general: e.target.checked, bodega_id: '' })}
                       className="w-4 h-4 rounded accent-orange-500" />
-                    <span className="text-sm text-slate-300">Aplica a todo el barco</span>
+                    <span className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-gray-700'}`}>Aplica a todo el barco</span>
                   </label>
                   {!formData.es_general && (
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1.5 font-medium">Bodega</label>
+                      <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Bodega</label>
                       <select value={formData.bodega_id}
                         onChange={(e) => setFormData({ ...formData, bodega_id: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm">
+                        className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}>
                         <option value="">Seleccionar bodega</option>
                         {bodegasBarco.map(b => (
                           <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>
@@ -897,17 +962,17 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
 
               {/* Observaciones */}
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Observaciones</label>
+                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Observaciones</label>
                 <textarea value={formData.observaciones}
                   onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
                   rows="2"
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
+                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
                   placeholder="Detalles adicionales (opcional)" />
               </div>
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={onClose}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-sm">
+                  className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3.5 rounded-xl text-sm`}>
                   Cancelar
                 </button>
                 <button type="submit" disabled={loading}
@@ -930,7 +995,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave }
 // =====================================================
 // DASHBOARD DE ATRASOS - CON FILTROS COMPLETOS
 // =====================================================
-const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
+const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
   const [periodo, setPeriodo] = useState('todo')
   const [filtros, setFiltros] = useState({ 
     bodegas: [], 
@@ -1011,9 +1076,14 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
 
   const tieneFiltrosActivos = filtros.bodegas.length > 0 || filtros.soloGenerales || filtros.fechaDesde || filtros.fechaHasta
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -1133,8 +1203,8 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
           </div>
 
           {/* Distribución */}
-          <div className="bg-slate-900 rounded-xl p-4 border border-white/10">
-            <h3 className="font-bold text-white mb-3 flex items-center gap-2 text-xs uppercase tracking-wide">
+          <div className={`${cardBg} rounded-xl p-4 border ${borderColor}`}>
+            <h3 className={`font-bold ${textColor} mb-3 flex items-center gap-2 text-xs uppercase tracking-wide`}>
               <Info className="w-3.5 h-3.5 text-blue-400" /> Distribución
             </h3>
             <div className="space-y-3">
@@ -1144,10 +1214,10 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
               ].map(({ label, value, color, text }) => (
                 <div key={label}>
                   <div className="flex justify-between text-xs mb-1.5">
-                    <span className="text-slate-400">{label}</span>
+                    <span className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>{label}</span>
                     <span className={`font-bold ${text}`}>{Math.floor(value / 60)}h {value % 60}m</span>
                   </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div className={`h-2 ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-200'} rounded-full overflow-hidden`}>
                     <div className={`h-full ${color} rounded-full transition-all`}
                       style={{ width: totalGeneral > 0 ? `${(value / totalGeneral) * 100}%` : '0%' }} />
                   </div>
@@ -1178,11 +1248,11 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
               total: totalImputable, 
               totalText: 'text-yellow-400' 
             },
-          ].map(({ list, title, borderColor, headerBg, icon, barColor, total, totalText }) => list.length > 0 && (
-            <div key={title} className={`bg-slate-900 rounded-xl overflow-hidden border ${borderColor}`}>
-              <div className={`${headerBg} px-4 py-3 border-b ${borderColor} flex items-center gap-2`}>
+          ].map(({ list, title, borderColor: tipoBorderColor, headerBg, icon, barColor, total, totalText }) => list.length > 0 && (
+            <div key={title} className={`${cardBg} rounded-xl overflow-hidden border ${tipoBorderColor}`}>
+              <div className={`${headerBg} px-4 py-3 border-b ${tipoBorderColor} flex items-center gap-2`}>
                 {icon}
-                <h3 className="font-bold text-white text-xs">{title}</h3>
+                <h3 className={`font-bold ${textColor} text-xs`}>{title}</h3>
               </div>
               <div className="p-4 space-y-3">
                 {list.map(tipo => (
@@ -1192,20 +1262,20 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
                         <div className={`p-1 rounded flex-shrink-0 ${tipo.config.bg || 'bg-gray-500/10'}`}>
                           {tipo.config.icono || <AlertTriangle className="w-3 h-3" />}
                         </div>
-                        <span className="text-white text-xs leading-tight truncate">{tipo.nombre}</span>
+                        <span className={`${textColor} text-xs leading-tight truncate`}>{tipo.nombre}</span>
                       </div>
                       <span className={`font-bold text-xs whitespace-nowrap flex-shrink-0 ${tipo.config.text || totalText}`}>
                         {tipo.horas}h {tipo.minutos}m
                       </span>
                     </div>
-                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className={`h-1.5 ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-200'} rounded-full overflow-hidden`}>
                       <div className={`h-full ${barColor} rounded-full`}
                         style={{ width: total > 0 ? `${(tipo.totalMinutos / total) * 100}%` : '0%' }} />
                     </div>
                   </div>
                 ))}
-                <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-sm">
-                  <span className="text-white">TOTAL</span>
+                <div className={`pt-2 border-t ${borderColor} flex justify-between font-bold text-sm`}>
+                  <span className={textColor}>TOTAL</span>
                   <span className={totalText}>{Math.floor(total / 60)}h {total % 60}m</span>
                 </div>
               </div>
@@ -1213,9 +1283,9 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
           ))}
 
           {registrosFiltrados.length === 0 && (
-            <div className="bg-slate-900 rounded-xl p-10 text-center">
-              <Clock className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">No hay atrasos con los filtros seleccionados</p>
+            <div className={`${cardBg} rounded-xl p-10 text-center`}>
+              <Clock className={`w-10 h-10 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-3`} />
+              <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}>No hay atrasos con los filtros seleccionados</p>
               {tieneFiltrosActivos && (
                 <button
                   onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
@@ -1235,6 +1305,7 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
           filtros={filtros}
           onClose={() => setShowFiltrosModal(false)}
           onAplicar={setFiltros}
+          theme={theme}
         />
       )}
     </div>
@@ -1244,7 +1315,7 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose }) => {
 // =====================================================
 // TARJETA DE REGISTRO
 // =====================================================
-const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) => {
+const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar, theme }) => {
   const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
   const config = TIPOS_PARO_CONFIG[tipo?.nombre || ''] || {
     bg: 'bg-slate-800', icono: <AlertTriangle className="w-4 h-4 text-slate-400" />,
@@ -1256,11 +1327,16 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
         : bodegasBarco.find(b => b.id === reg.bodega_id))
     : null
 
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subTextColor = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+
   return (
-    <div className={`bg-slate-900 rounded-xl border-2 transition-all overflow-hidden ${
+    <div className={`${cardBg} rounded-xl border-2 transition-all overflow-hidden ${
       reg.es_general ? 'border-purple-500/30 hover:border-purple-500/50'
       : bodegaInfo ? 'border-blue-500/30 hover:border-blue-500/50'
-      : 'border-slate-800 hover:border-orange-500/40'
+      : theme === 'dark' ? 'border-slate-800 hover:border-orange-500/40' : 'border-gray-200 hover:border-orange-500/40'
     }`}>
       <div className="p-4">
         {/* Cabecera: tipo + acciones */}
@@ -1269,12 +1345,12 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
             {config.icono}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white text-sm leading-snug">{tipo?.nombre || 'Desconocido'}</h3>
+            <h3 className={`font-bold ${textColor} text-sm leading-snug`}>{tipo?.nombre || 'Desconocido'}</h3>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {tipo?.es_imputable_almapac && (
                 <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full font-bold">ALMAPAC</span>
               )}
-              <span className="text-[10px] text-slate-600">{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
+              <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'}`}>{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
             </div>
           </div>
           {/* Botones de acción */}
@@ -1291,13 +1367,13 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
         </div>
 
         {/* Horario y duración en una sola fila */}
-        <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg px-3 py-2 mb-3">
-          <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-          <span className="font-mono text-sm text-white">{reg.hora_inicio?.slice(0, 5)}</span>
+        <div className={`flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-800/60' : 'bg-gray-100'} rounded-lg px-3 py-2 mb-3`}>
+          <Clock className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0`} />
+          <span className={`font-mono text-sm ${textColor}`}>{reg.hora_inicio?.slice(0, 5)}</span>
           {reg.hora_fin ? (
             <>
-              <span className="text-slate-600 text-xs">→</span>
-              <span className="font-mono text-sm text-white">{reg.hora_fin?.slice(0, 5)}</span>
+              <span className={theme === 'dark' ? 'text-slate-600' : 'text-gray-400'}>→</span>
+              <span className={`font-mono text-sm ${textColor}`}>{reg.hora_fin?.slice(0, 5)}</span>
               <span className="ml-auto font-bold text-xs text-orange-400">
                 {Math.floor((reg.duracion_minutos || 0) / 60)}h {(reg.duracion_minutos || 0) % 60}m
               </span>
@@ -1311,10 +1387,10 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
           reg.es_general ? 'bg-purple-500/10 border border-purple-500/20'
           : bodegaInfo ? 'bg-blue-500/10 border border-blue-500/20'
-          : 'bg-slate-800/40 border border-slate-700/50'
+          : theme === 'dark' ? 'bg-slate-800/40 border border-slate-700/50' : 'bg-gray-100 border border-gray-200'
         }`}>
           <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${
-            reg.es_general ? 'text-purple-400' : bodegaInfo ? 'text-blue-400' : 'text-slate-600'
+            reg.es_general ? 'text-purple-400' : bodegaInfo ? 'text-blue-400' : theme === 'dark' ? 'text-slate-600' : 'text-gray-400'
           }`} />
           {reg.es_general ? (
             <div className="flex items-center gap-2">
@@ -1324,19 +1400,19 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
           ) : bodegaInfo ? (
             <div className="flex items-center gap-2 min-w-0">
               <Box className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-              <span className="text-xs font-semibold text-white truncate">{bodegaInfo.nombre}</span>
+              <span className={`text-xs font-semibold ${textColor} truncate`}>{bodegaInfo.nombre}</span>
               {bodegaInfo.codigo && (
                 <span className="text-xs text-blue-400 font-mono flex-shrink-0">{bodegaInfo.codigo}</span>
               )}
             </div>
           ) : (
-            <span className="text-xs text-slate-500">Sin bodega específica</span>
+            <span className={`text-xs ${subTextColor}`}>Sin bodega específica</span>
           )}
         </div>
 
         {/* Observaciones */}
         {reg.observaciones && (
-          <p className="mt-2.5 text-xs text-slate-400 italic bg-slate-800/40 rounded-lg px-3 py-2 border-l-2 border-slate-600">
+          <p className={`mt-2.5 text-xs ${subTextColor} italic ${theme === 'dark' ? 'bg-slate-800/40' : 'bg-gray-100'} rounded-lg px-3 py-2 border-l-2 ${theme === 'dark' ? 'border-slate-600' : 'border-gray-300'}`}>
             {reg.observaciones}
           </p>
         )}
@@ -1350,6 +1426,7 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar }) =>
 // =====================================================
 export default function RegistroAtrasosPage() {
   const router = useRouter()
+  const { theme, toggleTheme } = useTheme()
   const [user, setUser] = useState(null)
   const [barcos, setBarcos] = useState([])
   const [barcoSeleccionado, setBarcoSeleccionado] = useState(null)
@@ -1562,19 +1639,24 @@ export default function RegistroAtrasosPage() {
     : operacionInfo?.operacion_iniciada_at ? 'en_curso'
     : 'pendiente'
 
+  const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-gray-50'
+  const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
+  const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
+  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
+      <div className={`min-h-screen flex items-center justify-center ${bgColor}`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">Cargando...</p>
+          <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>Cargando...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
+    <div className={`min-h-screen ${bgColor} transition-colors duration-200`}>
       <div className="max-w-6xl mx-auto p-3 sm:p-4 lg:p-6 space-y-3">
 
         {/* ── HEADER ── */}
@@ -1597,38 +1679,49 @@ export default function RegistroAtrasosPage() {
                 </p>
               </div>
             </div>
-            {/* Tabs de vista */}
-            <div className="flex gap-1 bg-black/20 rounded-xl p-1 flex-shrink-0">
-              <button onClick={() => setVista('lista')}
-                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                  vista === 'lista' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
-                }`}>
-                📋 <span className="hidden sm:inline">Lista</span>
+            <div className="flex items-center gap-2">
+              {/* Botón modo oscuro/claro */}
+              <button
+                onClick={toggleTheme}
+                className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+                title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+              >
+                {theme === 'dark' ? <Sun className="w-5 h-5 text-white" /> : <Moon className="w-5 h-5 text-white" />}
               </button>
-              <button onClick={() => barcoSeleccionado ? setVista('dashboard') : toast.error('Selecciona un barco')}
-                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                  vista === 'dashboard' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
-                }`}>
-                📊 <span className="hidden sm:inline">Dashboard</span>
-              </button>
+              
+              {/* Tabs de vista */}
+              <div className="flex gap-1 bg-black/20 rounded-xl p-1 flex-shrink-0">
+                <button onClick={() => setVista('lista')}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                    vista === 'lista' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
+                  }`}>
+                  📋 <span className="hidden sm:inline">Lista</span>
+                </button>
+                <button onClick={() => barcoSeleccionado ? setVista('dashboard') : toast.error('Selecciona un barco')}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                    vista === 'dashboard' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
+                  }`}>
+                  📊 <span className="hidden sm:inline">Dashboard</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* ── SELECTOR DE BARCO ── */}
-        <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+        <div className={`${cardBg} ${borderColor} rounded-2xl overflow-hidden`}>
           <button onClick={() => setShowShipSelector(!showShipSelector)}
-            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors">
+            className={`w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors ${textColor}`}>
             <div className="flex items-center gap-3 min-w-0">
               <div className="bg-orange-500/20 p-2 rounded-lg flex-shrink-0">
                 <Ship className="w-4 h-4 text-orange-400" />
               </div>
               <div className="min-w-0 text-left">
-                <p className="text-sm font-bold text-white truncate">
+                <p className="text-sm font-bold truncate">
                   {barcoSeleccionado ? barcoSeleccionado.nombre : 'Seleccionar barco'}
                 </p>
                 {barcoSeleccionado && (
-                  <p className="text-[11px] text-slate-500">
+                  <p className={`text-[11px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
                     {barcoSeleccionado.tipo_operacion === 'exportacion' ? '🚢 Exportación' : '⚓ Importación'}
                     {' · '}
                     <span className={barcoSeleccionado.estado === 'activo' ? 'text-green-400' : 'text-red-400'}>
@@ -1638,16 +1731,16 @@ export default function RegistroAtrasosPage() {
                 )}
               </div>
             </div>
-            <ChevronDown className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform ${showShipSelector ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0 transition-transform ${showShipSelector ? 'rotate-180' : ''}`} />
           </button>
 
           {showShipSelector && (
-            <div className="px-4 pb-4 border-t border-white/5 pt-3 space-y-3">
+            <div className={`px-4 pb-4 border-t ${borderColor} pt-3 space-y-3`}>
               <div className="relative">
                 <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar barco..."
-                  className="w-full bg-slate-800 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm" />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  className={`w-full ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} ${borderColor} rounded-xl pl-9 pr-4 py-2.5 ${textColor} text-sm`} />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'}`} />
               </div>
               <div className="space-y-1.5 max-h-44 overflow-y-auto">
                 {barcosFiltrados.length > 0 ? barcosFiltrados.map(b => (
@@ -1655,12 +1748,12 @@ export default function RegistroAtrasosPage() {
                     className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${
                       barcoSeleccionado?.id === b.id
                         ? 'border-orange-500/60 bg-orange-500/10'
-                        : 'border-white/10 bg-slate-800 hover:border-white/20'
+                        : `${borderColor} ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} hover:border-white/20`
                     }`}>
                     <div>
-                      <p className="font-semibold text-white text-sm">{b.nombre}</p>
+                      <p className={`font-semibold ${textColor} text-sm`}>{b.nombre}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-slate-500">
+                        <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
                           {b.tipo_operacion === 'exportacion' ? '🚢 Exportación' : '⚓ Importación'}
                         </span>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
@@ -1675,7 +1768,7 @@ export default function RegistroAtrasosPage() {
                     )}
                   </button>
                 )) : (
-                  <p className="text-center py-6 text-slate-500 text-sm">No se encontraron barcos</p>
+                  <p className={`text-center py-6 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} text-sm`}>No se encontraron barcos</p>
                 )}
               </div>
             </div>
@@ -1706,20 +1799,20 @@ export default function RegistroAtrasosPage() {
                       }`} />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold">Estado</p>
+                      <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide font-bold`}>Estado</p>
                       {estadoOperacion === 'pendiente' && (
                         <p className="text-yellow-400 text-sm font-semibold">⏳ Pendiente de inicio</p>
                       )}
                       {estadoOperacion === 'en_curso' && (
                         <div>
                           <p className="text-green-400 text-sm font-semibold">🟢 En curso</p>
-                          <p className="text-xs text-slate-500">Inicio: {formatFechaHora(operacionInfo?.operacion_iniciada_at)}</p>
+                          <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>Inicio: {formatFechaHora(operacionInfo?.operacion_iniciada_at)}</p>
                         </div>
                       )}
                       {estadoOperacion === 'finalizado' && (
                         <div>
                           <p className="text-red-400 text-sm font-semibold">🔴 Finalizada</p>
-                          <p className="text-xs text-slate-500">
+                          <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
                             {formatFechaHora(operacionInfo?.operacion_iniciada_at)} → {formatFechaHora(operacionInfo?.operacion_finalizada_at)}
                           </p>
                         </div>
@@ -1745,7 +1838,7 @@ export default function RegistroAtrasosPage() {
               {/* Tiempos */}
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wide font-bold flex items-center gap-1.5">
+                  <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} uppercase tracking-wide font-bold flex items-center gap-1.5`}>
                     <Clock className="w-3.5 h-3.5 text-blue-400" /> Tiempos de operación
                   </p>
                   <button onClick={() => setShowEditarTiemposModal(true)}
@@ -1759,15 +1852,15 @@ export default function RegistroAtrasosPage() {
                     { key: 'tiempo_ataque', label: 'Ataque', icon: <Target className="w-3.5 h-3.5 text-yellow-400" />, editado: operacionInfo?.tiempo_ataque_editado },
                     { key: 'tiempo_recibido', label: 'Recibido', icon: <Inbox className="w-3.5 h-3.5 text-green-400" />, editado: operacionInfo?.tiempo_recibido_editado },
                   ].map(({ key, label, icon, editado }) => (
-                    <div key={key} className="bg-slate-800/60 rounded-xl p-3">
+                    <div key={key} className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-gray-100'} rounded-xl p-3`}>
                       <div className="flex items-center gap-1.5 mb-1.5">
                         {icon}
-                        <span className="text-[10px] text-slate-500 font-bold uppercase">{label}</span>
+                        <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} font-bold uppercase`}>{label}</span>
                         {editado && (
                           <span className="ml-auto text-[8px] bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded">Ed.</span>
                         )}
                       </div>
-                      <p className="text-xs font-bold text-white leading-tight">
+                      <p className={`text-xs font-bold ${textColor} leading-tight`}>
                         {operacionInfo?.[key] ? dayjs(operacionInfo[key]).format('DD/MM HH:mm') : '—'}
                       </p>
                     </div>
@@ -1777,13 +1870,13 @@ export default function RegistroAtrasosPage() {
             </div>
 
             {/* ── TIPO DE DESCARGA ── */}
-            <div className="bg-slate-900 rounded-2xl border border-blue-500/20 overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-white/5">
+            <div className={`${cardBg} rounded-2xl border border-blue-500/20 overflow-hidden`}>
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
                 <div className="flex items-center gap-2">
                   <div className="bg-blue-500/20 p-1.5 rounded-lg">
                     <Package className="w-4 h-4 text-blue-400" />
                   </div>
-                  <span className="font-bold text-white text-sm">Tipo de Descarga</span>
+                  <span className={`font-bold ${textColor} text-sm`}>Tipo de Descarga</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setShowHistorialDescargaModal(true)}
@@ -1794,7 +1887,7 @@ export default function RegistroAtrasosPage() {
                     className={`text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all font-bold ${
                       puedeRegistrar
                         ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400'
-                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                        : theme === 'dark' ? 'bg-slate-800 text-slate-600' : 'bg-gray-200 text-gray-400'
                     }`}>
                     <Plus className="w-3 h-3" /> Nuevo
                   </button>
@@ -1810,8 +1903,8 @@ export default function RegistroAtrasosPage() {
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-2xl flex-shrink-0">{descarga.tipo_descarga?.icono || '📦'}</span>
                           <div className="min-w-0">
-                            <p className="font-bold text-white text-sm truncate">{descarga.tipo_descarga?.nombre}</p>
-                            <p className="text-xs text-slate-500">
+                            <p className={`font-bold ${textColor} text-sm truncate`}>{descarga.tipo_descarga?.nombre}</p>
+                            <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
                               Desde {dayjs(descarga.fecha_hora_inicio).format('HH:mm')} · {dayjs(descarga.fecha_hora_inicio).format('DD/MM')}
                             </p>
                           </div>
@@ -1826,8 +1919,8 @@ export default function RegistroAtrasosPage() {
                   </div>
                 ) : (
                   <div className="text-center py-6 border-2 border-dashed border-blue-500/20 rounded-xl">
-                    <Package className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm mb-3">Sin descarga activa</p>
+                    <Package className={`w-8 h-8 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-2`} />
+                    <p className={`${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} text-sm mb-3`}>Sin descarga activa</p>
                     {puedeRegistrar && (
                       <button onClick={() => setShowDescargaModal(true)}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs inline-flex items-center gap-1.5">
@@ -1838,17 +1931,17 @@ export default function RegistroAtrasosPage() {
                 )}
 
                 {historialDescargas.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 font-bold">Últimas finalizadas</p>
+                  <div className={`mt-3 pt-3 border-t ${borderColor}`}>
+                    <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide mb-2 font-bold`}>Últimas finalizadas</p>
                     <div className="space-y-1.5">
                       {historialDescargas.slice(0, 2).map(desc => (
                         <div key={desc.id}
-                          className="flex items-center justify-between text-xs bg-slate-800/40 px-3 py-2 rounded-lg">
+                          className={`flex items-center justify-between text-xs ${theme === 'dark' ? 'bg-slate-800/40' : 'bg-gray-100'} px-3 py-2 rounded-lg`}>
                           <div className="flex items-center gap-2">
                             <span>{desc.tipo_descarga?.icono}</span>
-                            <span className="text-slate-400 truncate max-w-[120px]">{desc.tipo_descarga?.nombre}</span>
+                            <span className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>{desc.tipo_descarga?.nombre}</span>
                           </div>
-                          <span className="text-slate-600 text-[10px]">
+                          <span className={`${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'} text-[10px]`}>
                             {dayjs(desc.fecha_hora_inicio).format('HH:mm')} → {dayjs(desc.fecha_hora_fin).format('HH:mm')}
                           </span>
                         </div>
@@ -1869,28 +1962,28 @@ export default function RegistroAtrasosPage() {
             {vista === 'lista' ? (
               <div className="space-y-3">
                 {/* Toolbar */}
-                <div className="bg-slate-900 border border-white/10 rounded-2xl p-3">
+                <div className={`${cardBg} ${borderColor} rounded-2xl p-3`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       <button onClick={handleNuevoAtraso} disabled={!puedeRegistrar}
                         className={`px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 text-sm transition-all ${
                           puedeRegistrar
                             ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            : theme === 'dark' ? 'bg-slate-800 text-slate-500' : 'bg-gray-200 text-gray-400'
                         }`}>
                         <Plus className="w-4 h-4" />
                         Nuevo Atraso
                       </button>
                       <button onClick={() => cargarRegistros(barcoSeleccionado.id)}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-400 p-2.5 rounded-xl transition-all"
+                        className={`${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'} p-2.5 rounded-xl transition-all`}
                         title="Actualizar">
                         <RefreshCw className="w-4 h-4" />
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <Calendar className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0`} />
                       <input type="date" value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)}
-                        className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm" />
+                        className={`${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} ${borderColor} rounded-xl px-3 py-2 ${textColor} text-sm`} />
                     </div>
                   </div>
                   {estadoOperacion === 'pendiente' && (
@@ -1906,9 +1999,9 @@ export default function RegistroAtrasosPage() {
                 </div>
 
                 {/* Grid de registros */}
-                <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                    <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+                <div className={`${cardBg} ${borderColor} rounded-2xl overflow-hidden`}>
+                  <div className={`px-4 py-3 border-b ${borderColor} flex items-center justify-between`}>
+                    <h3 className={`font-bold ${textColor} flex items-center gap-2 text-sm`}>
                       <Clock className="w-4 h-4 text-orange-400" />
                       {dayjs(filtroFecha).format('DD [de] MMMM, YYYY')}
                     </h3>
@@ -1922,13 +2015,14 @@ export default function RegistroAtrasosPage() {
                         {registrosFiltrados.map(reg => (
                           <RegistroCard key={reg.id} reg={reg} tiposParo={tiposParo}
                             bodegasBarco={bodegasBarco}
-                            onEditar={handleEditarAtraso} onEliminar={handleEliminarAtraso} />
+                            onEditar={handleEditarAtraso} onEliminar={handleEliminarAtraso}
+                            theme={theme} />
                         ))}
                       </div>
                     ) : (
                       <div className="py-14 text-center">
-                        <Clock className="w-12 h-12 mx-auto mb-3 text-slate-700" />
-                        <p className="text-slate-400 mb-1">Sin registros para esta fecha</p>
+                        <Clock className={`w-12 h-12 mx-auto mb-3 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'}`} />
+                        <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1`}>Sin registros para esta fecha</p>
                         {puedeRegistrar && (
                           <button onClick={handleNuevoAtraso}
                             className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm inline-flex items-center gap-2">
@@ -1942,17 +2036,17 @@ export default function RegistroAtrasosPage() {
               </div>
             ) : (
               <DashboardAtrasos barco={barcoSeleccionado} registros={registros}
-                tiposParo={tiposParo} onClose={() => setVista('lista')} />
+                tiposParo={tiposParo} onClose={() => setVista('lista')} theme={theme} />
             )}
           </>
         )}
 
         {/* Sin barco */}
         {!barcoSeleccionado && !loading && (
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
-            <Ship className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-white mb-1">Sin barco seleccionado</h3>
-            <p className="text-slate-400 text-sm">Selecciona un barco para comenzar</p>
+          <div className={`${cardBg} ${borderColor} rounded-2xl p-12 text-center`}>
+            <Ship className={`w-12 h-12 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-3`} />
+            <h3 className={`text-base font-bold ${textColor} mb-1`}>Sin barco seleccionado</h3>
+            <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>Selecciona un barco para comenzar</p>
           </div>
         )}
       </div>
@@ -1968,33 +2062,36 @@ export default function RegistroAtrasosPage() {
       {/* MODALES */}
       {showAtrasoModal && barcoSeleccionado && (
         <AtrasoModal barco={barcoSeleccionado} atraso={atrasoEditando} tiposParo={tiposParo}
-          bodegasBarco={bodegasBarco} onClose={() => setShowAtrasoModal(false)} onSave={handleGuardarAtraso} />
+          bodegasBarco={bodegasBarco} onClose={() => setShowAtrasoModal(false)} onSave={handleGuardarAtraso}
+          theme={theme} />
       )}
       {showDescargaModal && barcoSeleccionado && (
         <RegistroDescargaModal barco={barcoSeleccionado} tiposDescarga={tiposDescarga}
           descargaActual={descargasActivas[0]}
           onClose={() => setShowDescargaModal(false)}
-          onSave={() => cargarDescargas(barcoSeleccionado.id)} />
+          onSave={() => cargarDescargas(barcoSeleccionado.id)}
+          theme={theme} />
       )}
       {showFinalizarDescargaModal && descargaSeleccionada && (
         <FinalizarDescargaModal descarga={descargaSeleccionada}
           onClose={() => { setShowFinalizarDescargaModal(false); setDescargaSeleccionada(null) }}
-          onConfirm={handleConfirmarFinalizarDescarga} />
+          onConfirm={handleConfirmarFinalizarDescarga}
+          theme={theme} />
       )}
       {showHistorialDescargaModal && barcoSeleccionado && (
-        <HistorialDescargaModal barco={barcoSeleccionado} onClose={() => setShowHistorialDescargaModal(false)} />
+        <HistorialDescargaModal barco={barcoSeleccionado} onClose={() => setShowHistorialDescargaModal(false)} theme={theme} />
       )}
       {showIniciarModal && barcoSeleccionado && (
         <IniciarOperacionModal barco={barcoSeleccionado} onClose={() => setShowIniciarModal(false)}
-          onConfirm={handleIniciarOperacion} />
+          onConfirm={handleIniciarOperacion} theme={theme} />
       )}
       {showFinalizarModal && barcoSeleccionado && (
         <FinalizarOperacionModal barco={barcoSeleccionado} onClose={() => setShowFinalizarModal(false)}
-          onConfirm={handleFinalizarOperacion} />
+          onConfirm={handleFinalizarOperacion} theme={theme} />
       )}
       {showEditarTiemposModal && barcoSeleccionado && (
         <EditarTiemposModal barco={barcoSeleccionado} onClose={() => setShowEditarTiemposModal(false)}
-          onSave={() => cargarOperacionInfo(barcoSeleccionado.id)} />
+          onSave={() => cargarOperacionInfo(barcoSeleccionado.id)} theme={theme} />
       )}
     </div>
   )
