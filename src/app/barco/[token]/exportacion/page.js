@@ -1,4 +1,4 @@
-// barco/[token]/exportacion/page.js - Página para registro de exportación (carga a bodega del barco)
+// app/barco/[token]/exportacion/page.js - Página para registro de exportación (carga a bodega del barco)
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
@@ -1514,4 +1514,4 @@ export default function ExportacionPage() {
       </div>
     </div>
   )
-} 
+}
