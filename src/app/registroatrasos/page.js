@@ -930,7 +930,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
             <div className="flex items-center gap-3">
               <div className="bg-white/20 p-2 rounded-lg"><Clock className="w-5 h-5 text-white" /></div>
               <div>
-                <h2 className="text-base font-black text-white">{atraso ? 'Editar Atraso' : 'Nuevo Atraso'}</h2>
+                <h2 className="text-base font-black text-white">{atraso ? 'Editar Demora' : 'Nueva Demora'}</h2>
                 <p className="text-orange-200 text-xs">{barco.nombre}</p>
               </div>
             </div>
@@ -2105,7 +2105,7 @@ export default function RegistroAtrasosPage() {
                             : theme === 'dark' ? 'bg-slate-800 text-slate-500' : 'bg-gray-200 text-gray-400'
                         }`}>
                         <Plus className="w-4 h-4" />
-                        Nuevo Atraso
+                        Nueva Demora
                       </button>
                       <button onClick={() => cargarRegistros(barcoSeleccionado.id)}
                         className={`${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'} p-2.5 rounded-xl transition-all`}
