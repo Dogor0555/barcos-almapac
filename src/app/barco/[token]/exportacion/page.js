@@ -192,7 +192,54 @@ export default function ExportacionPage() {
     }
   }, [exportaciones, productoActivo])
 
-  // Datos para gráfica de tendencia
+  // ✅ NUEVO: Calcular flujo por hora de banda (TM/h)
+  const calcularFlujoBandaPorHora = useMemo(() => {
+    if (!productoActivo) return 0
+
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+
+    if (exportacionesProd.length < 2) return 0
+
+    const ordenadas = [...exportacionesProd].sort(
+      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+    )
+
+    const primera = ordenadas[0]
+    const ultima = ordenadas[ordenadas.length - 1]
+
+    const diferenciaHoras =
+      (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+
+    if (diferenciaHoras <= 0) return 0
+
+    const deltaAcumulado =
+      (Number(ultima.acumulado_tm) || 0) - (Number(primera.acumulado_tm) || 0)
+
+    if (deltaAcumulado <= 0) return 0
+
+    return deltaAcumulado / diferenciaHoras
+  }, [exportaciones, productoActivo])
+
+  // ✅ NUEVO: Datos para gráfica de flujo acumulado por hora
+  const datosGraficoFlujo = useMemo(() => {
+    if (!productoActivo) return []
+
+    const exportacionesProd = exportaciones
+      .filter(e => e.producto_id === productoActivo.id)
+      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+
+    return exportacionesProd.map(e => {
+      const bodega = BODEGAS_BARCO.find(b => b.id === e.bodega_id)
+      return {
+        hora: dayjs(e.fecha_hora).format('DD/MM HH:mm'),
+        acumulado: e.acumulado_tm,
+        bodega: bodega?.nombre || '—',
+        timestamp: new Date(e.fecha_hora).getTime()
+      }
+    })
+  }, [exportaciones, productoActivo])
+
+  // Datos para gráfica de tendencia (original)
   const datosGrafico = useMemo(() => {
     if (!productoActivo) return []
 
@@ -598,7 +645,7 @@ export default function ExportacionPage() {
             </div>
           </div>
 
-          {/* ✅ NUEVO: Indicadores de inicio/fin de carga (SOLO VISUALIZACIÓN) */}
+          {/* Indicadores de inicio/fin de carga (SOLO VISUALIZACIÓN) */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Estado de Inicio de Carga */}
             <div className={`rounded-xl p-4 ${
@@ -720,7 +767,7 @@ export default function ExportacionPage() {
             </div>
           </div>
 
-          {/* ✅ Si hay tiempos de Arribo/Ataque/Recibido, mostrarlos también */}
+          {/* Si hay tiempos de Arribo/Ataque/Recibido, mostrarlos también */}
           {(barco.tiempo_arribo || barco.tiempo_ataque || barco.tiempo_recibido) && (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               {barco.tiempo_arribo && (
@@ -766,7 +813,7 @@ export default function ExportacionPage() {
               {barco.tiempo_recibido && (
                 <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
                   <div className="flex items-center gap-2 mb-1">
-                    <Inbox className="w-4 h-4 text-green-400" />
+                    <Package className="w-4 h-4 text-green-400" />
                     <span className="text-xs font-bold text-green-400">RECIBIDO</span>
                     {barco.tiempo_recibido_editado && (
                       <span className="text-[8px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
@@ -785,7 +832,7 @@ export default function ExportacionPage() {
             </div>
           )}
 
-          {/* ✅ Si hay motivo de finalización y está finalizado, mostrarlo destacado */}
+          {/* Si hay motivo de finalización y está finalizado, mostrarlo destacado */}
           {barco.estado === 'finalizado' && barco.operacion_motivo_finalizacion && (
             <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
               <div className="flex items-center gap-2">
@@ -843,7 +890,7 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tarjeta de resumen del producto activo */}
+        {/* Tarjeta de resumen del producto activo con flujo por hora */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -862,58 +909,82 @@ export default function ExportacionPage() {
                 </p>
                 <div className="flex gap-3 text-sm text-slate-400">
                   <span>📊 {estadisticasProducto.lecturas} lecturas</span>
-                  {estadisticasProducto.flujoPromedio > 0 && (
-                    <span className="text-blue-400">
-                      ⚡ {estadisticasProducto.flujoPromedio.toFixed(2)} TM/h
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
 
-            {/* Meta si existe */}
-            {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">Cantidad a Cargar</p>
-                  <p className="text-xl font-bold text-white">
-                    {barco.metas_json.limites[productoActivo.codigo].toFixed(3)} TM
-                  </p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">Cargado</p>
-                  <p className="text-xl font-bold text-blue-400">
-                    {estadisticasProducto.totalTM.toFixed(3)} TM
-                  </p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">Progreso</p>
-                  <p className="text-xl font-bold text-green-400">
-                    {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
-                  </p>
-                </div>
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4">
-                  <p className="text-xs text-blue-200">Flujo Promedio</p>
-                  <p className="text-2xl font-black text-white">
-                    {estadisticasProducto.flujoPromedio.toFixed(2)} TM/h
-                  </p>
+            {/* Tarjeta de FLUJO POR HORA - NUEVA */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+              {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+                <>
+                  <div className="bg-slate-900 rounded-xl p-4">
+                    <p className="text-xs text-slate-500">Cantidad a Cargar</p>
+                    <p className="text-xl font-bold text-white">
+                      {barco.metas_json.limites[productoActivo.codigo].toFixed(3)} TM
+                    </p>
+                  </div>
+                  <div className="bg-slate-900 rounded-xl p-4">
+                    <p className="text-xs text-slate-500">Cargado</p>
+                    <p className="text-xl font-bold text-blue-400">
+                      {estadisticasProducto.totalTM.toFixed(3)} TM
+                    </p>
+                  </div>
+                  <div className="bg-slate-900 rounded-xl p-4">
+                    <p className="text-xs text-slate-500">Progreso</p>
+                    <p className="text-xl font-bold text-green-400">
+                      {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                </>
+              )}
+              
+              {/* TARJETA DE FLUJO PROMEDIO POR HORA - NUEVA */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4 col-span-2">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="w-6 h-6 text-blue-200" />
+                  <div>
+                    <p className="text-xs text-blue-200 uppercase font-bold">FLUJO PROMEDIO POR HORA</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-white">
+                        {calcularFlujoBandaPorHora.toFixed(3)}
+                      </span>
+                      <span className="text-sm text-blue-200">TM/h</span>
+                    </div>
+                    {exportacionesFiltradas.length >= 2 && (
+                      <p className="text-[10px] text-blue-300 mt-1">
+                        {(() => {
+                          const ordenadas = [...exportacionesFiltradas].sort(
+                            (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+                          )
+                          const primera = ordenadas[0]
+                          const ultima = ordenadas[ordenadas.length - 1]
+                          const delta = (Number(ultima.acumulado_tm) - Number(primera.acumulado_tm)).toFixed(3)
+                          const horas = ((new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)).toFixed(1)
+                          return `Δ ${delta} TM en ${horas} h`
+                        })()}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {/* Gráfica de tendencia */}
-        {productoActivo && datosGrafico.length > 1 && (
+        {/* Gráfica de tendencia con FLUJO ACUMULADO */}
+        {productoActivo && datosGraficoFlujo.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <LineChart className="w-5 h-5 text-blue-400" />
               Tendencia de Carga - {productoActivo.nombre}
+              <span className="text-sm font-normal text-slate-500 ml-2">
+                Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
+              </span>
             </h3>
             
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ReLineChart data={datosGrafico} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <ReLineChart data={datosGraficoFlujo} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="hora" stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
                   <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
@@ -931,6 +1002,28 @@ export default function ExportacionPage() {
                   />
                 </ReLineChart>
               </ResponsiveContainer>
+            </div>
+
+            {/* Resumen de flujo en la gráfica */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-900 rounded-lg p-3">
+                <p className="text-xs text-slate-500">Primera lectura</p>
+                <p className="text-sm font-bold text-white">
+                  {datosGraficoFlujo[0]?.hora}
+                </p>
+              </div>
+              <div className="bg-slate-900 rounded-lg p-3">
+                <p className="text-xs text-slate-500">Última lectura</p>
+                <p className="text-sm font-bold text-white">
+                  {datosGraficoFlujo[datosGraficoFlujo.length - 1]?.hora}
+                </p>
+              </div>
+              <div className="bg-slate-900 rounded-lg p-3">
+                <p className="text-xs text-slate-500">Total acumulado</p>
+                <p className="text-lg font-bold text-blue-400">
+                  {datosGraficoFlujo[datosGraficoFlujo.length - 1]?.acumulado.toFixed(3)} TM
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -976,6 +1069,16 @@ export default function ExportacionPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Total general */}
+            <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
+              <div className="bg-slate-900 rounded-lg px-6 py-3">
+                <p className="text-sm text-slate-400">TOTAL CARGADO</p>
+                <p className="text-2xl font-black text-green-400">
+                  {resumenPorBodega.reduce((sum, b) => sum + b.totalTM, 0).toFixed(3)} TM
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -1082,12 +1185,15 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tabla de exportaciones */}
+        {/* Tabla de exportaciones con flujo por hora */}
         {exportacionesFiltradas.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
               <h3 className="font-bold text-white">
                 Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length})
+                <span className="text-sm font-normal text-slate-500 ml-2">
+                  Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
+                </span>
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -1096,19 +1202,50 @@ export default function ExportacionPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Flujo (TM/h)</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {exportacionesFiltradas.map(exp => {
+                  {exportacionesFiltradas.map((exp, index, array) => {
                     const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+                    
+                    // Calcular flujo entre esta lectura y la anterior (misma bodega)
+                    const lecturasMismaBodega = exportacionesFiltradas
+                      .filter(e => e.bodega_id === exp.bodega_id)
+                      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+                    
+                    const indiceEnBodega = lecturasMismaBodega.findIndex(e => e.id === exp.id)
+                    const lecturaAnteriorMismaBodega = indiceEnBodega > 0 ? lecturasMismaBodega[indiceEnBodega - 1] : null
+                    
+                    let flujo = 0
+                    let delta = 0
+                    
+                    if (lecturaAnteriorMismaBodega) {
+                      const tiempoMs = new Date(exp.fecha_hora) - new Date(lecturaAnteriorMismaBodega.fecha_hora)
+                      const tiempoHoras = tiempoMs / (1000 * 60 * 60)
+                      delta = Number(exp.acumulado_tm) - Number(lecturaAnteriorMismaBodega.acumulado_tm)
+                      if (tiempoHoras > 0 && delta > 0) {
+                        flujo = delta / tiempoHoras
+                      }
+                    }
                     
                     return (
                       <tr key={exp.id} className="hover:bg-white/5">
                         <td className="px-4 py-3">{formatFechaHora(exp.fecha_hora)}</td>
                         <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
+                        <td className="px-4 py-3">
+                          {flujo > 0 ? (
+                            <span className="font-bold text-green-400">{flujo.toFixed(3)}</span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                          {delta > 0 && (
+                            <span className="text-[10px] text-slate-500 ml-1">(+{delta.toFixed(3)})</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           {bodega ? (
                             <div>
@@ -1142,9 +1279,12 @@ export default function ExportacionPage() {
                 </tbody>
                 <tfoot className="bg-slate-900">
                   <tr>
-                    <td className="px-4 py-3 font-bold text-white">TOTAL</td>
+                    <td className="px-4 py-3 font-bold text-white">TOTAL / PROMEDIO</td>
                     <td className="px-4 py-3 font-bold text-blue-400">
                       {exportacionesFiltradas[exportacionesFiltradas.length - 1]?.acumulado_tm?.toFixed(3) || '0.000'}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-green-400">
+                      {calcularFlujoBandaPorHora.toFixed(3)} TM/h
                     </td>
                     <td colSpan="3"></td>
                   </tr>

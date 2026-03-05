@@ -1650,6 +1650,7 @@ export default function AdminPage() {
                 <Clock className="w-4 h-4" />
                 Registro de Atrasos
               </Link>
+              
               <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -2076,7 +2077,7 @@ export default function AdminPage() {
                               <Eye className="w-4 h-4 text-slate-400 group-hover:text-white" />
                             </button>
 
-                            {/* Botón Editar (NUEVO) */}
+                            {/* Botón Editar */}
                             <button
                               onClick={() => handleEditarBarco(barco)}
                               className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors group"
@@ -2093,6 +2094,15 @@ export default function AdminPage() {
                             >
                               <ExternalLink className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300" />
                             </button>
+                            
+                            {/* Botón Reporte de Atrasos - NUEVO */}
+                            <Link
+                              href={`/admin/reporte-atrasos/${barco.id}`}
+                              className="p-2 hover:bg-orange-500/20 rounded-lg transition-colors group"
+                              title="Ver Reporte de Atrasos"
+                            >
+                              <FileText className="w-4 h-4 text-orange-400 group-hover:text-orange-300" />
+                            </Link>
                             
                             {/* Botón Registrar según tipo */}
                             {barco.tipo_operacion === 'exportacion' ? (

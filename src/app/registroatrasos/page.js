@@ -44,33 +44,59 @@ const useTheme = () => {
 }
 
 // =====================================================
+// HELPER: colores de iconos adaptados al tema
+// =====================================================
+const getIconColor = (colorKey, theme) => {
+  // En modo claro usamos colores más saturados/oscuros para que sean visibles
+  const darkMap = {
+    red: 'text-red-400', orange: 'text-orange-400', yellow: 'text-yellow-400',
+    blue: 'text-blue-400', purple: 'text-purple-400', green: 'text-green-400',
+    gray: 'text-gray-400', sky: 'text-sky-400', indigo: 'text-indigo-400',
+    amber: 'text-amber-400', emerald: 'text-emerald-400', cyan: 'text-cyan-400',
+    rose: 'text-rose-400', pink: 'text-pink-400', teal: 'text-teal-400',
+    lime: 'text-lime-400', stone: 'text-stone-400', violet: 'text-violet-400',
+    fuchsia: 'text-fuchsia-400', slate: 'text-slate-400',
+  }
+  const lightMap = {
+    red: 'text-red-600', orange: 'text-orange-600', yellow: 'text-yellow-600',
+    blue: 'text-blue-600', purple: 'text-purple-600', green: 'text-green-600',
+    gray: 'text-gray-600', sky: 'text-sky-600', indigo: 'text-indigo-600',
+    amber: 'text-amber-600', emerald: 'text-emerald-600', cyan: 'text-cyan-600',
+    rose: 'text-rose-600', pink: 'text-pink-600', teal: 'text-teal-600',
+    lime: 'text-lime-600', stone: 'text-stone-600', violet: 'text-violet-600',
+    fuchsia: 'text-fuchsia-600', slate: 'text-slate-600',
+  }
+  return theme === 'dark' ? darkMap[colorKey] : lightMap[colorKey]
+}
+
+// =====================================================
 // CONFIGURACIÓN DE TIPOS DE PARO
 // =====================================================
-const TIPOS_PARO_CONFIG = {
-  'Desperfecto de grua del buque': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-red-500/10 dark:bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
-  'Colocando almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-orange-500/10 dark:bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
-  'Falta de camiones (Unidades insuficientes por transportistas)': { icono: <Truck className="w-4 h-4" />, bg: 'bg-yellow-500/10 dark:bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20' },
-  'Traslado de UCA a Almapac': { icono: <Truck className="w-4 h-4" />, bg: 'bg-blue-500/10 dark:bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
-  'Falla sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10 dark:bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
-  'Tiempo de comida': { icono: <Coffee className="w-4 h-4" />, bg: 'bg-green-500/10 dark:bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20' },
-  'Cierre de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-gray-500/10 dark:bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' },
-  'Amenaza de lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-sky-500/10 dark:bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20' },
-  'Lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: 'bg-indigo-500/10 dark:bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20' },
-  'Esperando apertura de bodegas': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/10 dark:bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
-  'Apertura de bodegas': { icono: <Layers className="w-4 h-4" />, bg: 'bg-emerald-500/10 dark:bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-  'Traslado de UCA a Alcasa': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10 dark:bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20' },
-  'Mantenimiento almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-rose-500/10 dark:bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' },
-  'Sacando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-pink-500/10 dark:bg-pink-500/10', text: 'text-pink-400', border: 'border-pink-500/20' },
-  'Movimiento de UCA': { icono: <Truck className="w-4 h-4" />, bg: 'bg-teal-500/10 dark:bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20' },
-  'Movilizando tolvas': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-lime-500/10 dark:bg-lime-500/10', text: 'text-lime-400', border: 'border-lime-500/20' },
-  'Falta de Tolveros': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-stone-500/10 dark:bg-stone-500/10', text: 'text-stone-400', border: 'border-stone-500/20' },
-  'Quitando Almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-violet-500/10 dark:bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20' },
-  'Colocando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-fuchsia-500/10 dark:bg-fuchsia-500/10', text: 'text-fuchsia-400', border: 'border-fuchsia-500/20' },
-  'Acumulado producto': { icono: <BarChart3 className="w-4 h-4" />, bg: 'bg-slate-500/10 dark:bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20' },
-  'Falla en sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10 dark:bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
-  'Falla en el sistema ALMAPAC': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/20 dark:bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-  'Esperando señal de Almapac': { icono: <Clock className="w-4 h-4" />, bg: 'bg-amber-500/20 dark:bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
-}
+const getTiposParoConfig = (theme) => ({
+  'Desperfecto de grua del buque': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-red-500/10' : 'bg-red-100', text: theme === 'dark' ? 'text-red-400' : 'text-red-700', border: theme === 'dark' ? 'border-red-500/20' : 'border-red-300' },
+  'Colocando almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-orange-500/10' : 'bg-orange-100', text: theme === 'dark' ? 'text-orange-400' : 'text-orange-700', border: theme === 'dark' ? 'border-orange-500/20' : 'border-orange-300' },
+  'Falta de camiones (Unidades insuficientes por transportistas)': { icono: <Truck className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-yellow-500/10' : 'bg-yellow-100', text: theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700', border: theme === 'dark' ? 'border-yellow-500/20' : 'border-yellow-300' },
+  'Traslado de UCA a Almapac': { icono: <Truck className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-blue-500/10' : 'bg-blue-100', text: theme === 'dark' ? 'text-blue-400' : 'text-blue-700', border: theme === 'dark' ? 'border-blue-500/20' : 'border-blue-300' },
+  'Falla sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-purple-500/10' : 'bg-purple-100', text: theme === 'dark' ? 'text-purple-400' : 'text-purple-700', border: theme === 'dark' ? 'border-purple-500/20' : 'border-purple-300' },
+  'Tiempo de comida': { icono: <Coffee className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-green-500/10' : 'bg-green-100', text: theme === 'dark' ? 'text-green-400' : 'text-green-700', border: theme === 'dark' ? 'border-green-500/20' : 'border-green-300' },
+  'Cierre de bodegas': { icono: <Layers className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-gray-500/10' : 'bg-gray-200', text: theme === 'dark' ? 'text-gray-400' : 'text-gray-700', border: theme === 'dark' ? 'border-gray-500/20' : 'border-gray-400' },
+  'Amenaza de lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-sky-500/10' : 'bg-sky-100', text: theme === 'dark' ? 'text-sky-400' : 'text-sky-700', border: theme === 'dark' ? 'border-sky-500/20' : 'border-sky-300' },
+  'Lluvia': { icono: <CloudRain className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-indigo-500/10' : 'bg-indigo-100', text: theme === 'dark' ? 'text-indigo-400' : 'text-indigo-700', border: theme === 'dark' ? 'border-indigo-500/20' : 'border-indigo-300' },
+  'Esperando apertura de bodegas': { icono: <Clock className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-amber-500/10' : 'bg-amber-100', text: theme === 'dark' ? 'text-amber-400' : 'text-amber-700', border: theme === 'dark' ? 'border-amber-500/20' : 'border-amber-300' },
+  'Apertura de bodegas': { icono: <Layers className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-emerald-500/10' : 'bg-emerald-100', text: theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700', border: theme === 'dark' ? 'border-emerald-500/20' : 'border-emerald-300' },
+  'Traslado de UCA a Alcasa': { icono: <Truck className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-cyan-500/10' : 'bg-cyan-100', text: theme === 'dark' ? 'text-cyan-400' : 'text-cyan-700', border: theme === 'dark' ? 'border-cyan-500/20' : 'border-cyan-300' },
+  'Mantenimiento almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-rose-500/10' : 'bg-rose-100', text: theme === 'dark' ? 'text-rose-400' : 'text-rose-700', border: theme === 'dark' ? 'border-rose-500/20' : 'border-rose-300' },
+  'Sacando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-pink-500/10' : 'bg-pink-100', text: theme === 'dark' ? 'text-pink-400' : 'text-pink-700', border: theme === 'dark' ? 'border-pink-500/20' : 'border-pink-300' },
+  'Movimiento de UCA': { icono: <Truck className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-teal-500/10' : 'bg-teal-100', text: theme === 'dark' ? 'text-teal-400' : 'text-teal-700', border: theme === 'dark' ? 'border-teal-500/20' : 'border-teal-300' },
+  'Movilizando tolvas': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-lime-500/10' : 'bg-lime-100', text: theme === 'dark' ? 'text-lime-400' : 'text-lime-700', border: theme === 'dark' ? 'border-lime-500/20' : 'border-lime-300' },
+  'Falta de Tolveros': { icono: <AlertTriangle className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-stone-500/10' : 'bg-stone-200', text: theme === 'dark' ? 'text-stone-400' : 'text-stone-700', border: theme === 'dark' ? 'border-stone-500/20' : 'border-stone-400' },
+  'Quitando Almeja UPDP': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-violet-500/10' : 'bg-violet-100', text: theme === 'dark' ? 'text-violet-400' : 'text-violet-700', border: theme === 'dark' ? 'border-violet-500/20' : 'border-violet-300' },
+  'Colocando equipo abordo': { icono: <Wrench className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-fuchsia-500/10' : 'bg-fuchsia-100', text: theme === 'dark' ? 'text-fuchsia-400' : 'text-fuchsia-700', border: theme === 'dark' ? 'border-fuchsia-500/20' : 'border-fuchsia-300' },
+  'Acumulado producto': { icono: <BarChart3 className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-slate-500/10' : 'bg-slate-200', text: theme === 'dark' ? 'text-slate-400' : 'text-slate-700', border: theme === 'dark' ? 'border-slate-500/20' : 'border-slate-400' },
+  'Falla en sistema UPDP': { icono: <Zap className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-purple-500/10' : 'bg-purple-100', text: theme === 'dark' ? 'text-purple-400' : 'text-purple-700', border: theme === 'dark' ? 'border-purple-500/20' : 'border-purple-300' },
+  'Falla en el sistema ALMAPAC': { icono: <Zap className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-yellow-500/20' : 'bg-yellow-100', text: theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700', border: theme === 'dark' ? 'border-yellow-500/30' : 'border-yellow-300' },
+  'Esperando señal de Almapac': { icono: <Clock className="w-4 h-4" />, bg: theme === 'dark' ? 'bg-amber-500/20' : 'bg-amber-100', text: theme === 'dark' ? 'text-amber-400' : 'text-amber-700', border: theme === 'dark' ? 'border-amber-500/30' : 'border-amber-300' },
+})
 
 // =====================================================
 // MODAL FILTROS DE LISTA
@@ -88,20 +114,14 @@ const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
   }
 
   const handleAplicar = () => {
-    onAplicar({
-      bodegas: bodegasSeleccionadas,
-      soloGenerales: mostrarSoloGenerales
-    })
+    onAplicar({ bodegas: bodegasSeleccionadas, soloGenerales: mostrarSoloGenerales })
     onClose()
   }
 
   const handleLimpiar = () => {
     setBodegasSeleccionadas([])
     setMostrarSoloGenerales(false)
-    onAplicar({ 
-      bodegas: [], 
-      soloGenerales: false
-    })
+    onAplicar({ bodegas: [], soloGenerales: false })
     onClose()
   }
 
@@ -109,10 +129,11 @@ const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subText = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -131,7 +152,6 @@ const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
         </div>
 
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-          {/* Opción general */}
           <label className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500/30`}>
             <input
               type="checkbox"
@@ -143,14 +163,14 @@ const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
               className="w-4 h-4 rounded accent-purple-500"
             />
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-400" />
+              <Layers className={`w-4 h-4 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`} />
               <span className={`text-sm ${textColor}`}>Solo paros generales (todas las bodegas)</span>
             </div>
           </label>
 
           {!mostrarSoloGenerales && bodegas.length > 0 && (
             <>
-              <div className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide font-bold px-1`}>
+              <div className={`text-xs ${subText} uppercase tracking-wide font-bold px-1`}>
                 Bodegas disponibles ({bodegas.length})
               </div>
               <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -163,9 +183,9 @@ const FiltrosListaModal = ({ bodegas, filtros, onClose, onAplicar, theme }) => {
                       className="w-4 h-4 rounded accent-blue-500"
                     />
                     <div className="flex items-center gap-2 flex-1">
-                      <Box className="w-4 h-4 text-blue-400" />
+                      <Box className={`w-4 h-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
                       <span className={`text-sm ${textColor}`}>{bodega.nombre}</span>
-                      <span className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ml-auto`}>{bodega.codigo}</span>
+                      <span className={`text-xs ${subText} ml-auto`}>{bodega.codigo}</span>
                     </div>
                   </label>
                 ))}
@@ -198,33 +218,18 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) 
 
   const toggleBodega = (bodegaId) => {
     setBodegasSeleccionadas(prev =>
-      prev.includes(bodegaId)
-        ? prev.filter(id => id !== bodegaId)
-        : [...prev, bodegaId]
+      prev.includes(bodegaId) ? prev.filter(id => id !== bodegaId) : [...prev, bodegaId]
     )
   }
 
   const handleAplicar = () => {
-    onAplicar({
-      bodegas: bodegasSeleccionadas,
-      soloGenerales: mostrarSoloGenerales,
-      fechaDesde: fechaDesde || null,
-      fechaHasta: fechaHasta || null
-    })
+    onAplicar({ bodegas: bodegasSeleccionadas, soloGenerales: mostrarSoloGenerales, fechaDesde: fechaDesde || null, fechaHasta: fechaHasta || null })
     onClose()
   }
 
   const handleLimpiar = () => {
-    setBodegasSeleccionadas([])
-    setMostrarSoloGenerales(false)
-    setFechaDesde('')
-    setFechaHasta('')
-    onAplicar({ 
-      bodegas: [], 
-      soloGenerales: false,
-      fechaDesde: null,
-      fechaHasta: null 
-    })
+    setBodegasSeleccionadas([]); setMostrarSoloGenerales(false); setFechaDesde(''); setFechaHasta('')
+    onAplicar({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })
     onClose()
   }
 
@@ -233,10 +238,11 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) 
   const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subText = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -255,71 +261,45 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) 
         </div>
 
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-          {/* Filtro por fecha */}
           <div className="space-y-3">
-            <p className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide`}>
-              Rango de fechas
-            </p>
+            <p className={`text-xs font-bold ${subText} uppercase tracking-wide`}>Rango de fechas</p>
             <div className="space-y-2">
               <div>
-                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mb-1`}>Desde</label>
-                <input
-                  type="date"
-                  value={fechaDesde}
-                  onChange={(e) => setFechaDesde(e.target.value)}
-                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}
-                />
+                <label className={`block text-xs ${subText} mb-1`}>Desde</label>
+                <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)}
+                  className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} />
               </div>
               <div>
-                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mb-1`}>Hasta</label>
-                <input
-                  type="date"
-                  value={fechaHasta}
-                  onChange={(e) => setFechaHasta(e.target.value)}
-                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}
-                />
+                <label className={`block text-xs ${subText} mb-1`}>Hasta</label>
+                <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)}
+                  className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} />
               </div>
             </div>
           </div>
-
-          {/* Separador */}
           <div className={`border-t ${borderColor} my-2`}></div>
-
-          {/* Opción general */}
           <label className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500/30`}>
-            <input
-              type="checkbox"
-              checked={mostrarSoloGenerales}
-              onChange={(e) => {
-                setMostrarSoloGenerales(e.target.checked)
-                if (e.target.checked) setBodegasSeleccionadas([])
-              }}
-              className="w-4 h-4 rounded accent-purple-500"
-            />
+            <input type="checkbox" checked={mostrarSoloGenerales}
+              onChange={(e) => { setMostrarSoloGenerales(e.target.checked); if (e.target.checked) setBodegasSeleccionadas([]) }}
+              className="w-4 h-4 rounded accent-purple-500" />
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-400" />
+              <Layers className={`w-4 h-4 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`} />
               <span className={`text-sm ${textColor}`}>Solo paros generales (todas las bodegas)</span>
             </div>
           </label>
-
           {!mostrarSoloGenerales && bodegas.length > 0 && (
             <>
-              <div className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide font-bold px-1`}>
+              <div className={`text-xs ${subText} uppercase tracking-wide font-bold px-1`}>
                 Bodegas disponibles ({bodegas.length})
               </div>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {bodegas.map(bodega => (
                   <label key={bodega.id} className={`flex items-center gap-3 p-3 ${cardBg} rounded-xl border ${borderColor} cursor-pointer hover:border-blue-500/30`}>
-                    <input
-                      type="checkbox"
-                      checked={bodegasSeleccionadas.includes(bodega.id)}
-                      onChange={() => toggleBodega(bodega.id)}
-                      className="w-4 h-4 rounded accent-blue-500"
-                    />
+                    <input type="checkbox" checked={bodegasSeleccionadas.includes(bodega.id)}
+                      onChange={() => toggleBodega(bodega.id)} className="w-4 h-4 rounded accent-blue-500" />
                     <div className="flex items-center gap-2 flex-1">
-                      <Box className="w-4 h-4 text-blue-400" />
+                      <Box className={`w-4 h-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
                       <span className={`text-sm ${textColor}`}>{bodega.nombre}</span>
-                      <span className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ml-auto`}>{bodega.codigo}</span>
+                      <span className={`text-xs ${subText} ml-auto`}>{bodega.codigo}</span>
                     </div>
                   </label>
                 ))}
@@ -327,7 +307,6 @@ const FiltrosAvanzadosModal = ({ bodegas, filtros, onClose, onAplicar, theme }) 
             </>
           )}
         </div>
-
         <div className={`p-5 border-t ${borderColor} flex gap-3`}>
           <button onClick={handleLimpiar} className={`flex-1 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${textColor} font-bold py-3 rounded-xl text-sm`}>
             Limpiar
@@ -360,54 +339,40 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault(); setLoading(true)
     try {
       const user = getCurrentUser()
       if (!user) throw new Error('No autenticado')
       if (!formData.tipo_descarga_id) { toast.error('Selecciona un tipo de descarga'); return }
-
       if (descargaActual && !descargaActual.fecha_hora_fin) {
-        const { error: finalizarError } = await supabase
-          .from('registro_descarga')
-          .update({ fecha_hora_fin: new Date().toISOString() })
-          .eq('id', descargaActual.id)
+        const { error: finalizarError } = await supabase.from('registro_descarga')
+          .update({ fecha_hora_fin: new Date().toISOString() }).eq('id', descargaActual.id)
         if (finalizarError) throw finalizarError
       }
-
       const { error } = await supabase.from('registro_descarga').insert([{
-        barco_id: barco.id,
-        tipo_descarga_id: parseInt(formData.tipo_descarga_id),
+        barco_id: barco.id, tipo_descarga_id: parseInt(formData.tipo_descarga_id),
         fecha_hora_inicio: new Date(formData.fecha_hora_inicio).toISOString(),
-        observaciones: formData.observaciones || null,
-        created_by: user.id
+        observaciones: formData.observaciones || null, created_by: user.id
       }])
       if (error) throw error
-
-      toast.success('Tipo de descarga registrado')
-      onSave()
-      onClose()
-    } catch (error) {
-      toast.error(error.message)
-    } finally {
-      setLoading(false)
-    }
+      toast.success('Tipo de descarga registrado'); onSave(); onClose()
+    } catch (error) { toast.error(error.message) } finally { setLoading(false) }
   }
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const labelColor = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+  const clockColor = theme === 'dark' ? 'text-slate-400 hover:text-blue-400' : 'text-gray-500 hover:text-blue-600'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2.5 rounded-xl">
-                <Package className="w-5 h-5 text-white" />
-              </div>
+              <div className="bg-white/20 p-2.5 rounded-xl"><Package className="w-5 h-5 text-white" /></div>
               <div>
                 <h2 className="text-lg font-black text-white">Registrar Tipo de Descarga</h2>
                 <p className="text-blue-200 text-xs">{barco.nombre}</p>
@@ -420,11 +385,11 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>
+            <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>
               Tipo de Descarga <span className="text-red-400">*</span>
             </label>
             <select name="tipo_descarga_id" value={formData.tipo_descarga_id} onChange={handleChange}
-              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required>
+              className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required>
               <option value="">Seleccionar tipo</option>
               {tiposDescarga.map(tipo => (
                 <option key={tipo.id} value={tipo.id}>{tipo.icono} {tipo.nombre}</option>
@@ -432,21 +397,21 @@ const RegistroDescargaModal = ({ barco, onClose, onSave, tiposDescarga, descarga
             </select>
           </div>
           <div>
-            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Fecha y Hora de Inicio</label>
+            <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Fecha y Hora de Inicio</label>
             <div className="relative">
               <input type="datetime-local" name="fecha_hora_inicio" value={formData.fecha_hora_inicio} onChange={handleChange}
-                className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} />
+                className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} />
               <button type="button"
                 onClick={() => setFormData(prev => ({ ...prev, fecha_hora_inicio: dayjs().format('YYYY-MM-DDTHH:mm') }))}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 ${theme === 'dark' ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}>
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${clockColor}`}>
                 <Clock className="w-4 h-4" />
               </button>
             </div>
           </div>
           <div>
-            <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Observaciones</label>
+            <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Observaciones</label>
             <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} rows="2"
-              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
+              className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
               placeholder="Detalles adicionales..." />
           </div>
           <div className="flex gap-3 pt-2">
@@ -478,28 +443,23 @@ const HistorialDescargaModal = ({ barco, onClose, theme }) => {
   const cargarHistorial = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('registro_descarga')
+      const { data, error } = await supabase.from('registro_descarga')
         .select(`*, tipo_descarga:tipos_descarga(id, nombre, icono, color), usuario:created_by(id, nombre, username)`)
-        .eq('barco_id', barco.id)
-        .order('fecha_hora_inicio', { ascending: false })
+        .eq('barco_id', barco.id).order('fecha_hora_inicio', { ascending: false })
       if (error) throw error
       setHistorial(data || [])
-    } catch (error) {
-      toast.error('Error al cargar historial')
-    } finally {
-      setLoading(false)
-    }
+    } catch (error) { toast.error('Error al cargar historial') } finally { setLoading(false) }
   }
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subText = theme === 'dark' ? 'text-slate-500' : 'text-gray-500'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><History className="w-5 h-5 text-white" /></div>
@@ -519,8 +479,8 @@ const HistorialDescargaModal = ({ barco, onClose, theme }) => {
             </div>
           ) : historial.length === 0 ? (
             <div className="text-center py-12">
-              <History className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-              <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}>No hay registros de descarga</p>
+              <History className={`w-12 h-12 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-3`} />
+              <p className={subText}>No hay registros de descarga</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -531,7 +491,7 @@ const HistorialDescargaModal = ({ barco, onClose, theme }) => {
                       <span className="text-2xl">{reg.tipo_descarga?.icono || '📦'}</span>
                       <div>
                         <p className={`font-bold ${textColor} text-sm`}>{reg.tipo_descarga?.nombre}</p>
-                        <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} mt-0.5`}>
+                        <p className={`text-xs ${subText} mt-0.5`}>
                           {dayjs(reg.fecha_hora_inicio).format('DD/MM/YY HH:mm')}
                           {reg.fecha_hora_fin && ` → ${dayjs(reg.fecha_hora_fin).format('HH:mm')}`}
                         </p>
@@ -539,10 +499,10 @@ const HistorialDescargaModal = ({ barco, onClose, theme }) => {
                       </div>
                     </div>
                     {!reg.fecha_hora_fin && (
-                      <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs font-bold flex-shrink-0">ACTIVO</span>
+                      <span className="bg-green-500/20 text-green-600 px-2 py-1 rounded-full text-xs font-bold flex-shrink-0">ACTIVO</span>
                     )}
                   </div>
-                  <div className={`mt-2 pt-2 border-t ${borderColor} flex justify-between text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
+                  <div className={`mt-2 pt-2 border-t ${borderColor} flex justify-between text-xs ${subText}`}>
                     <span>{reg.usuario?.nombre || 'Sistema'}</span>
                     {reg.fecha_hora_fin && (
                       <span>
@@ -580,7 +540,7 @@ const FinalizarDescargaModal = ({ descarga, onClose, onConfirm, theme }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-yellow-600 to-amber-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><StopCircle className="w-5 h-5 text-white" /></div>
@@ -629,22 +589,19 @@ const EditarTiemposModal = ({ barco, onClose, onSave, theme }) => {
     const { name, value } = e.target
     setTiempos(prev => ({ ...prev, [name]: value }))
   }
-
   const setHoraActual = (campo) => setTiempos(prev => ({ ...prev, [campo]: dayjs().format('YYYY-MM-DDTHH:mm') }))
 
   const campos = [
-    { key: 'tiempo_arribo', label: 'Arribo', icon: <Anchor className="w-4 h-4 text-blue-400" />, color: 'border-blue-500/20', accent: 'hover:text-blue-400' },
-    { key: 'tiempo_ataque', label: 'Ataque', icon: <Target className="w-4 h-4 text-yellow-400" />, color: 'border-yellow-500/20', accent: 'hover:text-yellow-400' },
-    { key: 'tiempo_recibido', label: 'Recibido', icon: <Inbox className="w-4 h-4 text-green-400" />, color: 'border-green-500/20', accent: 'hover:text-green-400' },
-    { key: 'operacion_iniciada_at', label: 'Inicio Operación', icon: <Play className="w-4 h-4 text-emerald-400" />, color: 'border-emerald-500/20', accent: 'hover:text-emerald-400' },
-    { key: 'operacion_finalizada_at', label: 'Fin Operación', icon: <StopCircle className="w-4 h-4 text-red-400" />, color: 'border-red-500/20', accent: 'hover:text-red-400' },
+    { key: 'tiempo_arribo', label: 'Arribo', iconEl: <Anchor className={`w-4 h-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />, color: theme === 'dark' ? 'border-blue-500/20' : 'border-blue-300', accent: `hover:${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}` },
+    { key: 'tiempo_ataque', label: 'Ataque', iconEl: <Target className={`w-4 h-4 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`} />, color: theme === 'dark' ? 'border-yellow-500/20' : 'border-yellow-300', accent: `hover:${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}` },
+    { key: 'tiempo_recibido', label: 'Recibido', iconEl: <Inbox className={`w-4 h-4 ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`} />, color: theme === 'dark' ? 'border-green-500/20' : 'border-green-300', accent: `hover:${theme === 'dark' ? 'text-green-400' : 'text-green-600'}` },
+    { key: 'operacion_iniciada_at', label: 'Inicio Operación', iconEl: <Play className={`w-4 h-4 ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}`} />, color: theme === 'dark' ? 'border-emerald-500/20' : 'border-emerald-300', accent: `hover:${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-600'}` },
+    { key: 'operacion_finalizada_at', label: 'Fin Operación', iconEl: <StopCircle className={`w-4 h-4 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`} />, color: theme === 'dark' ? 'border-red-500/20' : 'border-red-300', accent: `hover:${theme === 'dark' ? 'text-red-400' : 'text-red-600'}` },
   ]
 
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault()
-    if (tiempos.operacion_finalizada_at && !tiempos.operacion_iniciada_at) {
-      toast.error('No se puede tener fin sin inicio'); return
-    }
+    if (tiempos.operacion_finalizada_at && !tiempos.operacion_iniciada_at) { toast.error('No se puede tener fin sin inicio'); return }
     setLoading(true)
     try {
       const updates = {}
@@ -655,16 +612,10 @@ const EditarTiemposModal = ({ barco, onClose, onSave, theme }) => {
       if (tiempos.operacion_finalizada_at) { updates.operacion_finalizada_at = new Date(tiempos.operacion_finalizada_at).toISOString(); updates.operacion_finalizada_editado = true }
       if (tiempos.operacion_finalizada_at) updates.estado = 'finalizado'
       else if (tiempos.operacion_iniciada_at) updates.estado = 'activo'
-
       const { error } = await supabase.from('barcos').update(updates).eq('id', barco.id)
       if (error) throw error
-      toast.success('Tiempos actualizados')
-      onSave(); onClose()
-    } catch (error) {
-      toast.error('Error al actualizar tiempos')
-    } finally {
-      setLoading(false)
-    }
+      toast.success('Tiempos actualizados'); onSave(); onClose()
+    } catch (error) { toast.error('Error al actualizar tiempos') } finally { setLoading(false) }
   }
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
@@ -672,10 +623,12 @@ const EditarTiemposModal = ({ barco, onClose, onSave, theme }) => {
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const inputBg = theme === 'dark' ? 'bg-slate-800' : 'bg-white'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const labelColor = theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
+  const clockBase = theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><Clock className="w-5 h-5 text-white" /></div>
@@ -689,24 +642,24 @@ const EditarTiemposModal = ({ barco, onClose, onSave, theme }) => {
           </button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto flex-1">
-          {campos.map(({ key, label, icon, color, accent }) => (
+          {campos.map(({ key, label, iconEl, color, accent }) => (
             <div key={key} className={`${cardBg} rounded-xl p-3.5 border ${color}`}>
               <div className="flex items-center gap-2 mb-2">
-                {icon}
-                <span className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-300' : 'text-gray-700'}`}>{label}</span>
+                {iconEl}
+                <span className={`text-xs font-bold ${labelColor}`}>{label}</span>
               </div>
               <div className="relative">
                 <input type="datetime-local" name={key} value={tiempos[key]} onChange={handleChange}
                   className={`w-full ${inputBg} border ${borderColor} rounded-lg px-3 py-2.5 ${textColor} text-sm pr-10`} />
                 <button type="button" onClick={() => setHoraActual(key)}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} ${accent} transition-colors`}>
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 ${clockBase} transition-colors ${accent}`}>
                   <Clock className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ))}
           {tiempos.operacion_finalizada_at && !tiempos.operacion_iniciada_at && (
-            <p className="text-xs text-red-400">⚠️ No se puede tener fin sin inicio</p>
+            <p className="text-xs text-red-500">⚠️ No se puede tener fin sin inicio</p>
           )}
         </div>
         <div className={`p-5 border-t ${borderColor} flex gap-3 flex-shrink-0`}>
@@ -739,7 +692,7 @@ const IniciarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><Play className="w-5 h-5 text-white" /></div>
@@ -752,7 +705,7 @@ const IniciarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
         <div className="p-5">
           <p className={`${textColor} text-sm mb-2`}>¿Iniciar la operación ahora?</p>
           <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-6`}>
-            Se registrará la hora actual y se habilitará el registro de atrasos.
+            Se registrará la hora actual y se habilitará el registro de demoras.
           </p>
           <div className="flex gap-3">
             <button onClick={onClose}
@@ -786,7 +739,7 @@ const FinalizarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md overflow-hidden`}>
         <div className="bg-gradient-to-r from-red-600 to-rose-600 p-5">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2.5 rounded-xl"><StopCircle className="w-5 h-5 text-white" /></div>
@@ -798,11 +751,11 @@ const FinalizarOperacionModal = ({ barco, onClose, onConfirm, theme }) => {
         </div>
         <div className="p-5">
           <p className={`${textColor} text-sm mb-2`}>¿Finalizar la operación?</p>
-          <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-4`}>No se podrán registrar más atrasos.</p>
+          <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} mb-4`}>No se podrán registrar más demoras.</p>
           <div className="mb-5">
             <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5`}>Motivo (opcional)</label>
             <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows="2"
-              className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
+              className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
               placeholder="Ej: Operación completada..." />
           </div>
           <div className="flex gap-3">
@@ -841,11 +794,12 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
     observaciones: atraso?.observaciones || ''
   })
 
+  const TIPOS_PARO_CONFIG = getTiposParoConfig(theme)
+
   useEffect(() => {
     if (atraso) {
       const tipo = tiposParo.find(t => t.id === atraso.tipo_paro_id)
-      setTipoSeleccionado(tipo)
-      setPaso(2)
+      setTipoSeleccionado(tipo); setPaso(2)
     }
   }, [atraso, tiposParo])
 
@@ -858,8 +812,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
   const seleccionarTipo = (tipo) => {
     setTipoSeleccionado(tipo)
     setFormData(prev => ({
-      ...prev,
-      tipo_paro_id: tipo.id,
+      ...prev, tipo_paro_id: tipo.id,
       es_general: tipo.es_general ? true : prev.es_general,
       bodega_id: tipo.es_general ? '' : prev.bodega_id
     }))
@@ -876,8 +829,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault(); setLoading(true)
     try {
       const user = getCurrentUser()
       if (!user) throw new Error('No autenticado')
@@ -888,31 +840,21 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
       const bodegaSeleccionada = bodegasBarco.find(b => b.id === parseInt(formData.bodega_id))
       const duracion = formData.hora_fin ? calcularDuracion(formData.hora_inicio, formData.hora_fin) : null
       const datos = {
-        barco_id: barco.id,
-        tipo_paro_id: parseInt(formData.tipo_paro_id),
-        fecha: formData.fecha,
-        hora_inicio: formData.hora_inicio,
-        hora_fin: formData.hora_fin || null,
-        duracion_minutos: duracion,
+        barco_id: barco.id, tipo_paro_id: parseInt(formData.tipo_paro_id),
+        fecha: formData.fecha, hora_inicio: formData.hora_inicio,
+        hora_fin: formData.hora_fin || null, duracion_minutos: duracion,
         bodega_id: formData.es_general ? null : (formData.bodega_id ? parseInt(formData.bodega_id) : null),
         bodega_nombre: formData.es_general ? null : (bodegaSeleccionada?.nombre || null),
         bodega_codigo: formData.es_general ? null : (bodegaSeleccionada?.codigo || null),
-        es_general: formData.es_general,
-        observaciones: formData.observaciones || null,
-        created_by: user.id,
-        updated_by: user.id
+        es_general: formData.es_general, observaciones: formData.observaciones || null,
+        created_by: user.id, updated_by: user.id
       }
       const result = atraso
         ? await supabase.from('registro_atrasos').update(datos).eq('id', atraso.id)
         : await supabase.from('registro_atrasos').insert([datos])
       if (result.error) throw result.error
-      toast.success(atraso ? 'Atraso actualizado' : 'Atraso registrado')
-      onSave()
-    } catch (error) {
-      toast.error(error.message)
-    } finally {
-      setLoading(false)
-    }
+      toast.success(atraso ? 'Atraso actualizado' : 'Atraso registrado'); onSave()
+    } catch (error) { toast.error(error.message) } finally { setLoading(false) }
   }
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
@@ -920,11 +862,13 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const inputBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const labelColor = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+  const chevronColor = theme === 'dark' ? 'text-slate-600' : 'text-gray-400'
+  const subTextColor = theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] flex flex-col overflow-hidden`}>
-        {/* Header */}
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-orange-600 to-red-600 p-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -951,32 +895,35 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
         <div className="overflow-y-auto flex-1 p-4">
           {paso === 1 ? (
             <div className="space-y-2">
-              <p className={`text-xs font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'} uppercase tracking-wide mb-3`}>
-                Selecciona el tipo de paro
-              </p>
+              <p className={`text-xs font-bold ${labelColor} uppercase tracking-wide mb-3`}>Selecciona el tipo de paro</p>
               <div className="grid grid-cols-1 gap-2">
                 {tiposParo.map(tipo => {
-                  const config = TIPOS_PARO_CONFIG[tipo.nombre] || { bg: 'bg-gray-500/10', icono: <AlertTriangle className="w-4 h-4 text-gray-400" /> }
+                  const config = TIPOS_PARO_CONFIG[tipo.nombre] || {
+                    bg: theme === 'dark' ? 'bg-gray-500/10' : 'bg-gray-200',
+                    icono: <AlertTriangle className={`w-4 h-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
+                  }
                   return (
                     <button key={tipo.id} onClick={() => seleccionarTipo(tipo)}
                       className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] flex items-center gap-3 ${
                         tipo.es_imputable_almapac
-                          ? 'border-yellow-500/30 bg-yellow-500/5 hover:border-yellow-500/60'
+                          ? `${theme === 'dark' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-yellow-400 bg-yellow-50'} hover:border-yellow-500/60`
                           : `${borderColor} ${cardBg} hover:border-orange-500/40`
                       }`}>
-                      <div className={`p-2 rounded-lg flex-shrink-0 ${config.bg}`}>{config.icono}</div>
+                      <div className={`p-2 rounded-lg flex-shrink-0 ${config.bg}`}>
+                        <span className={config.text}>{config.icono}</span>
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className={`font-semibold ${textColor} text-sm leading-tight`}>{tipo.nombre}</p>
                         <div className="flex gap-1.5 mt-1 flex-wrap">
                           {tipo.es_general && (
-                            <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full">GENERAL</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${theme === 'dark' ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>GENERAL</span>
                           )}
                           {tipo.es_imputable_almapac && (
-                            <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full">ALMAPAC</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${theme === 'dark' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-700'}`}>ALMAPAC</span>
                           )}
                         </div>
                       </div>
-                      <ChevronRight className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'} flex-shrink-0`} />
+                      <ChevronRight className={`w-4 h-4 ${chevronColor} flex-shrink-0`} />
                     </button>
                   )
                 })}
@@ -985,55 +932,56 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <button type="button" onClick={() => { setPaso(1); setTipoSeleccionado(null) }}
-                className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1">
+                className="text-xs text-orange-500 hover:text-orange-400 flex items-center gap-1 font-medium">
                 ← Volver a tipos
               </button>
 
-              {/* Tipo seleccionado */}
-              <div className={`${cardBg} rounded-xl p-3 border border-orange-500/20`}>
-                <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide mb-1`}>Tipo seleccionado</p>
+              <div className={`${cardBg} rounded-xl p-3 border ${theme === 'dark' ? 'border-orange-500/20' : 'border-orange-300'}`}>
+                <p className={`text-[10px] ${labelColor} uppercase tracking-wide mb-1`}>Tipo seleccionado</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {tipoSeleccionado && TIPOS_PARO_CONFIG[tipoSeleccionado.nombre]?.icono}
+                  {tipoSeleccionado && TIPOS_PARO_CONFIG[tipoSeleccionado.nombre] && (
+                    <span className={TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].text}>
+                      {TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].icono}
+                    </span>
+                  )}
                   <span className={`font-bold ${textColor} text-sm`}>{tipoSeleccionado?.nombre}</span>
                   {tipoSeleccionado?.es_general && (
-                    <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">GENERAL</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${theme === 'dark' ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>GENERAL</span>
                   )}
                 </div>
               </div>
 
-              {/* Fecha */}
               <div>
-                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Fecha</label>
+                <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Fecha</label>
                 <input type="date" value={formData.fecha}
                   onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required />
+                  className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`} required />
               </div>
 
-              {/* Horario */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Hora Inicio</label>
+                  <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Hora Inicio</label>
                   <div className="flex gap-2">
                     <input type="time" value={formData.hora_inicio}
                       onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
-                      className={`flex-1 ${inputBg} ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} required />
+                      className={`flex-1 ${inputBg} border ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} required />
                     <button type="button"
                       onClick={() => { setFormData(prev => ({ ...prev, hora_inicio: dayjs().format('HH:mm') })); setEnCurso(true) }}
-                      className="px-2.5 py-2.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-xl flex-shrink-0"
+                      className={`px-2.5 py-2.5 rounded-xl flex-shrink-0 ${theme === 'dark' ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400' : 'bg-green-100 hover:bg-green-200 text-green-700'}`}
                       title="Ahora">
                       <Play className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Hora Fin</label>
+                  <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Hora Fin</label>
                   <div className="flex gap-2">
                     <input type="time" value={formData.hora_fin}
                       onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
-                      className={`flex-1 ${inputBg} ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} />
+                      className={`flex-1 ${inputBg} border ${borderColor} rounded-xl px-3 py-3 ${textColor} text-sm min-w-0`} />
                     <button type="button"
                       onClick={() => { setFormData(prev => ({ ...prev, hora_fin: dayjs().format('HH:mm') })); setEnCurso(false) }}
-                      className="px-2.5 py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl flex-shrink-0"
+                      className={`px-2.5 py-2.5 rounded-xl flex-shrink-0 ${theme === 'dark' ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-red-100 hover:bg-red-200 text-red-700'}`}
                       title="Ahora">
                       <StopCircle className="w-4 h-4" />
                     </button>
@@ -1042,29 +990,26 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
               </div>
 
               {enCurso && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center gap-2">
-                  <div className="animate-pulse w-2 h-2 bg-blue-400 rounded-full flex-shrink-0" />
-                  <p className="text-blue-400 text-xs">
-                    En curso · {Math.floor(tiempoTranscurrido / 60)}h {tiempoTranscurrido % 60}m
-                  </p>
+                <div className={`${theme === 'dark' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-blue-50 border-blue-300 text-blue-700'} border rounded-xl p-3 flex items-center gap-2`}>
+                  <div className="animate-pulse w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                  <p className="text-xs">En curso · {Math.floor(tiempoTranscurrido / 60)}h {tiempoTranscurrido % 60}m</p>
                 </div>
               )}
 
-              {/* Bodega */}
               {!tipoSeleccionado?.es_general && (
                 <div className="space-y-2">
                   <label className={`flex items-center gap-3 cursor-pointer p-3 ${cardBg} rounded-xl border ${borderColor} hover:border-white/20`}>
                     <input type="checkbox" checked={formData.es_general}
                       onChange={(e) => setFormData({ ...formData, es_general: e.target.checked, bodega_id: '' })}
                       className="w-4 h-4 rounded accent-orange-500" />
-                    <span className={`text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-gray-700'}`}>Aplica a todo el barco</span>
+                    <span className={`text-sm ${subTextColor}`}>Aplica a todo el barco</span>
                   </label>
                   {!formData.es_general && (
                     <div>
-                      <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Bodega</label>
+                      <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Bodega</label>
                       <select value={formData.bodega_id}
                         onChange={(e) => setFormData({ ...formData, bodega_id: e.target.value })}
-                        className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}>
+                        className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} text-sm`}>
                         <option value="">Seleccionar bodega</option>
                         {bodegasBarco.map(b => (
                           <option key={b.id} value={b.id}>{b.nombre} ({b.codigo})</option>
@@ -1075,13 +1020,12 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
                 </div>
               )}
 
-              {/* Observaciones */}
               <div>
-                <label className={`block text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1.5 font-medium`}>Observaciones</label>
+                <label className={`block text-xs ${labelColor} mb-1.5 font-medium`}>Observaciones</label>
                 <textarea value={formData.observaciones}
                   onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
                   rows="2"
-                  className={`w-full ${inputBg} ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
+                  className={`w-full ${inputBg} border ${borderColor} rounded-xl px-4 py-3 ${textColor} resize-none text-sm`}
                   placeholder="Detalles adicionales (opcional)" />
               </div>
 
@@ -1108,72 +1052,37 @@ const AtrasoModal = ({ barco, atraso, tiposParo, bodegasBarco, onClose, onSave, 
 }
 
 // =====================================================
-// DASHBOARD DE ATRASOS - CON FILTROS COMPLETOS
+// DASHBOARD DE ATRASOS
 // =====================================================
 const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
   const [periodo, setPeriodo] = useState('todo')
-  const [filtros, setFiltros] = useState({ 
-    bodegas: [], 
-    soloGenerales: false,
-    fechaDesde: null,
-    fechaHasta: null 
-  })
+  const [filtros, setFiltros] = useState({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })
   const [showFiltrosModal, setShowFiltrosModal] = useState(false)
 
-  // Obtener fecha de inicio de operación
-  const fechaInicioOperacion = barco.operacion_iniciada_at 
-    ? dayjs(barco.operacion_iniciada_at) 
-    : barco.fecha_llegada 
-      ? dayjs(barco.fecha_llegada)
-      : dayjs()
+  const TIPOS_PARO_CONFIG = getTiposParoConfig(theme)
 
-  // Aplicar filtros
+  const fechaInicioOperacion = barco.operacion_iniciada_at
+    ? dayjs(barco.operacion_iniciada_at)
+    : barco.fecha_llegada ? dayjs(barco.fecha_llegada) : dayjs()
+
   const registrosFiltrados = registros.filter(r => {
-    // Filtro por período
     if (periodo !== 'todo') {
-      const fechaReg = dayjs(r.fecha)
-      const hoy = dayjs()
+      const fechaReg = dayjs(r.fecha); const hoy = dayjs()
       if (periodo === 'dia' && !fechaReg.isSame(hoy, 'day')) return false
       if (periodo === 'semana' && !fechaReg.isAfter(hoy.subtract(7, 'day'))) return false
       if (periodo === 'mes' && !fechaReg.isAfter(hoy.subtract(30, 'day'))) return false
     }
-
-    // Filtro por rango de fechas personalizado
-    if (filtros.fechaDesde) {
-      const fechaReg = dayjs(r.fecha)
-      if (fechaReg.isBefore(dayjs(filtros.fechaDesde))) return false
-    }
-    if (filtros.fechaHasta) {
-      const fechaReg = dayjs(r.fecha)
-      if (fechaReg.isAfter(dayjs(filtros.fechaHasta))) return false
-    }
-
-    // Filtro por bodega
-    if (filtros.soloGenerales) {
-      return r.es_general === true
-    }
-    
-    if (filtros.bodegas.length > 0) {
-      // Si es general, aplica a todas las bodegas
-      if (r.es_general) return true
-      // Si tiene bodega específica, verificar si está en seleccionadas
-      return filtros.bodegas.includes(r.bodega_id)
-    }
-
+    if (filtros.fechaDesde && dayjs(r.fecha).isBefore(dayjs(filtros.fechaDesde))) return false
+    if (filtros.fechaHasta && dayjs(r.fecha).isAfter(dayjs(filtros.fechaHasta))) return false
+    if (filtros.soloGenerales) return r.es_general === true
+    if (filtros.bodegas.length > 0) { if (r.es_general) return true; return filtros.bodegas.includes(r.bodega_id) }
     return true
   })
 
   const totales = tiposParo.map(tipo => {
     const registrosTipo = registrosFiltrados.filter(r => r.tipo_paro_id === tipo.id)
     const totalMinutos = registrosTipo.reduce((sum, r) => sum + (r.duracion_minutos || 0), 0)
-    return {
-      ...tipo,
-      registros: registrosTipo.length,
-      totalMinutos,
-      horas: Math.floor(totalMinutos / 60),
-      minutos: totalMinutos % 60,
-      config: TIPOS_PARO_CONFIG[tipo.nombre] || {}
-    }
+    return { ...tipo, registros: registrosTipo.length, totalMinutos, horas: Math.floor(totalMinutos / 60), minutos: totalMinutos % 60, config: TIPOS_PARO_CONFIG[tipo.nombre] || {} }
   })
 
   const noImputables = totales.filter(t => !t.es_imputable_almapac && t.totalMinutos > 0)
@@ -1182,23 +1091,22 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
   const totalImputable = imputables.reduce((sum, t) => sum + t.totalMinutos, 0)
   const totalGeneral = totalNoImputable + totalImputable
 
-  // Calcular tiempo de operación
   const ahora = dayjs()
   const tiempoOperacionMinutos = ahora.diff(fechaInicioOperacion, 'minute')
   const tiempoNeto = tiempoOperacionMinutos - totalGeneral
 
   const bodegasDisponibles = barco.bodegas_json || []
-
   const tieneFiltrosActivos = filtros.bodegas.length > 0 || filtros.soloGenerales || filtros.fechaDesde || filtros.fechaHasta
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subText = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-      <div className={`${bgColor} ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden`}>
+      <div className={`${bgColor} border ${borderColor} rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden`}>
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -1212,33 +1120,15 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
               <X className="w-5 h-5 text-white" />
             </button>
           </div>
-          
-          {/* Filtros rápidos */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-2">
-            {[
-              { value: 'dia', label: 'Hoy' },
-              { value: 'semana', label: '7 días' },
-              { value: 'mes', label: '30 días' },
-              { value: 'todo', label: 'Todo' }
-            ].map(p => (
-              <button
-                key={p.value}
-                onClick={() => setPeriodo(p.value)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all ${
-                  periodo === p.value ? 'bg-white text-blue-600' : 'bg-white/10 text-white'
-                }`}>
+            {[{ value: 'dia', label: 'Hoy' }, { value: 'semana', label: '7 días' }, { value: 'mes', label: '30 días' }, { value: 'todo', label: 'Todo' }].map(p => (
+              <button key={p.value} onClick={() => setPeriodo(p.value)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all ${periodo === p.value ? 'bg-white text-blue-600' : 'bg-white/10 text-white'}`}>
                 {p.label}
               </button>
             ))}
-            
-            {/* Botón filtros avanzados */}
-            <button
-              onClick={() => setShowFiltrosModal(true)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all flex items-center gap-1 ${
-                tieneFiltrosActivos
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-white/10 text-white'
-              }`}>
+            <button onClick={() => setShowFiltrosModal(true)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all flex items-center gap-1 ${tieneFiltrosActivos ? 'bg-purple-500 text-white' : 'bg-white/10 text-white'}`}>
               <Filter className="w-3 h-3" />
               Filtros
               {tieneFiltrosActivos && (
@@ -1248,33 +1138,14 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
               )}
             </button>
           </div>
-
-          {/* Mostrar filtros activos */}
           {tieneFiltrosActivos && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {filtros.soloGenerales && (
-                <span className="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full">
-                  Solo generales
-                </span>
-              )}
-              {filtros.fechaDesde && (
-                <span className="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
-                  Desde: {dayjs(filtros.fechaDesde).format('DD/MM/YY')}
-                </span>
-              )}
-              {filtros.fechaHasta && (
-                <span className="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
-                  Hasta: {dayjs(filtros.fechaHasta).format('DD/MM/YY')}
-                </span>
-              )}
-              {filtros.bodegas.length > 0 && (
-                <span className="text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full">
-                  {filtros.bodegas.length} bodega(s)
-                </span>
-              )}
-              <button
-                onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
-                className="text-[10px] bg-red-500/30 text-red-300 px-2 py-0.5 rounded-full hover:bg-red-500/50">
+              {filtros.soloGenerales && <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded-full">Solo generales</span>}
+              {filtros.fechaDesde && <span className="text-[10px] bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full">Desde: {dayjs(filtros.fechaDesde).format('DD/MM/YY')}</span>}
+              {filtros.fechaHasta && <span className="text-[10px] bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full">Hasta: {dayjs(filtros.fechaHasta).format('DD/MM/YY')}</span>}
+              {filtros.bodegas.length > 0 && <span className="text-[10px] bg-green-500/30 text-green-200 px-2 py-0.5 rounded-full">{filtros.bodegas.length} bodega(s)</span>}
+              <button onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
+                className="text-[10px] bg-red-500/30 text-red-200 px-2 py-0.5 rounded-full hover:bg-red-500/50">
                 Limpiar
               </button>
             </div>
@@ -1282,54 +1153,34 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
-          {/* KPIs */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { 
-                label: 'Tiempo operación', 
-                value: tiempoOperacionMinutos, 
-                sub: `Desde ${fechaInicioOperacion.format('DD/MM HH:mm')}`, 
-                from: 'from-blue-600', 
-                to: 'to-blue-800' 
-              },
-              { 
-                label: 'Tiempo neto', 
-                value: tiempoNeto, 
-                sub: 'Sin paros', 
-                from: 'from-green-600', 
-                to: 'to-green-800' 
-              },
-              { 
-                label: 'Total paros', 
-                value: totalGeneral, 
-                sub: `${registrosFiltrados.length} reg.`, 
-                from: 'from-orange-600', 
-                to: 'to-red-600' 
-              },
+              { label: 'Tiempo operación', value: tiempoOperacionMinutos, sub: `Desde ${fechaInicioOperacion.format('DD/MM HH:mm')}`, from: 'from-blue-600', to: 'to-blue-800' },
+              { label: 'Tiempo neto', value: tiempoNeto, sub: 'Sin paros', from: 'from-green-600', to: 'to-green-800' },
+              { label: 'Total paros', value: totalGeneral, sub: `${registrosFiltrados.length} reg.`, from: 'from-orange-600', to: 'to-red-600' },
             ].map(({ label, value, sub, from, to }) => (
               <div key={label} className={`bg-gradient-to-br ${from} ${to} rounded-xl p-3`}>
-                <p className="text-white/60 text-[10px] uppercase tracking-wide">{label}</p>
+                <p className="text-white/70 text-[10px] uppercase tracking-wide">{label}</p>
                 <p className="text-xl font-black text-white mt-1">
                   {Math.floor(value / 60)}<span className="text-sm font-bold">h {Math.abs(value % 60)}m</span>
                 </p>
-                <p className="text-white/50 text-[10px] mt-0.5 truncate">{sub}</p>
+                <p className="text-white/60 text-[10px] mt-0.5 truncate">{sub}</p>
               </div>
             ))}
           </div>
 
-          {/* Distribución */}
           <div className={`${cardBg} rounded-xl p-4 border ${borderColor}`}>
             <h3 className={`font-bold ${textColor} mb-3 flex items-center gap-2 text-xs uppercase tracking-wide`}>
-              <Info className="w-3.5 h-3.5 text-blue-400" /> Distribución
+              <Info className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} /> Distribución
             </h3>
             <div className="space-y-3">
               {[
-                { label: 'No imputables', value: totalNoImputable, color: 'bg-red-500', text: 'text-red-400' },
-                { label: 'Imputables ALMAPAC', value: totalImputable, color: 'bg-yellow-500', text: 'text-yellow-400' },
+                { label: 'No imputables', value: totalNoImputable, color: 'bg-red-500', text: theme === 'dark' ? 'text-red-400' : 'text-red-600' },
+                { label: 'Imputables ALMAPAC', value: totalImputable, color: 'bg-yellow-500', text: theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600' },
               ].map(({ label, value, color, text }) => (
                 <div key={label}>
                   <div className="flex justify-between text-xs mb-1.5">
-                    <span className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>{label}</span>
+                    <span className={subText}>{label}</span>
                     <span className={`font-bold ${text}`}>{Math.floor(value / 60)}h {value % 60}m</span>
                   </div>
                   <div className={`h-2 ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-200'} rounded-full overflow-hidden`}>
@@ -1341,31 +1192,12 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
             </div>
           </div>
 
-          {/* Detalle por tipo */}
           {[
-            { 
-              list: noImputables, 
-              title: 'No imputables a ALMAPAC', 
-              borderColor: 'border-red-500/20', 
-              headerBg: 'bg-red-500/10', 
-              icon: <AlertTriangle className="w-4 h-4 text-red-400" />, 
-              barColor: 'bg-red-500/60', 
-              total: totalNoImputable, 
-              totalText: 'text-red-400' 
-            },
-            { 
-              list: imputables, 
-              title: 'Imputables a ALMAPAC', 
-              borderColor: 'border-yellow-500/20', 
-              headerBg: 'bg-yellow-500/10', 
-              icon: <Zap className="w-4 h-4 text-yellow-400" />, 
-              barColor: 'bg-yellow-500/60', 
-              total: totalImputable, 
-              totalText: 'text-yellow-400' 
-            },
-          ].map(({ list, title, borderColor: tipoBorderColor, headerBg, icon, barColor, total, totalText }) => list.length > 0 && (
-            <div key={title} className={`${cardBg} rounded-xl overflow-hidden border ${tipoBorderColor}`}>
-              <div className={`${headerBg} px-4 py-3 border-b ${tipoBorderColor} flex items-center gap-2`}>
+            { list: noImputables, title: 'No imputables a ALMAPAC', borderC: theme === 'dark' ? 'border-red-500/20' : 'border-red-300', headerBg: theme === 'dark' ? 'bg-red-500/10' : 'bg-red-50', icon: <AlertTriangle className={`w-4 h-4 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`} />, barColor: 'bg-red-500/60', total: totalNoImputable, totalText: theme === 'dark' ? 'text-red-400' : 'text-red-600' },
+            { list: imputables, title: 'Imputables a ALMAPAC', borderC: theme === 'dark' ? 'border-yellow-500/20' : 'border-yellow-400', headerBg: theme === 'dark' ? 'bg-yellow-500/10' : 'bg-yellow-50', icon: <Zap className={`w-4 h-4 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`} />, barColor: 'bg-yellow-500/60', total: totalImputable, totalText: theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600' },
+          ].map(({ list, title, borderC, headerBg, icon, barColor, total, totalText }) => list.length > 0 && (
+            <div key={title} className={`${cardBg} rounded-xl overflow-hidden border ${borderC}`}>
+              <div className={`${headerBg} px-4 py-3 border-b ${borderC} flex items-center gap-2`}>
                 {icon}
                 <h3 className={`font-bold ${textColor} text-xs`}>{title}</h3>
               </div>
@@ -1374,8 +1206,10 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
                   <div key={tipo.id}>
                     <div className="flex justify-between items-center gap-2 mb-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className={`p-1 rounded flex-shrink-0 ${tipo.config.bg || 'bg-gray-500/10'}`}>
-                          {tipo.config.icono || <AlertTriangle className="w-3 h-3" />}
+                        <div className={`p-1 rounded flex-shrink-0 ${tipo.config.bg || (theme === 'dark' ? 'bg-gray-500/10' : 'bg-gray-200')}`}>
+                          <span className={tipo.config.text || (theme === 'dark' ? 'text-gray-400' : 'text-gray-600')}>
+                            {tipo.config.icono || <AlertTriangle className="w-3 h-3" />}
+                          </span>
                         </div>
                         <span className={`${textColor} text-xs leading-tight truncate`}>{tipo.nombre}</span>
                       </div>
@@ -1400,11 +1234,10 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
           {registrosFiltrados.length === 0 && (
             <div className={`${cardBg} rounded-xl p-10 text-center`}>
               <Clock className={`w-10 h-10 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-3`} />
-              <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}>No hay atrasos con los filtros seleccionados</p>
+              <p className={subText}>No hay demoras con los filtros seleccionados</p>
               {tieneFiltrosActivos && (
-                <button
-                  onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
-                  className="mt-3 text-xs text-purple-400 hover:text-purple-300">
+                <button onClick={() => setFiltros({ bodegas: [], soloGenerales: false, fechaDesde: null, fechaHasta: null })}
+                  className={`mt-3 text-xs ${theme === 'dark' ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-500'}`}>
                   Limpiar todos los filtros
                 </button>
               )}
@@ -1412,16 +1245,9 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
           )}
         </div>
       </div>
-
-      {/* Modal filtros avanzados */}
       {showFiltrosModal && (
-        <FiltrosAvanzadosModal
-          bodegas={bodegasDisponibles}
-          filtros={filtros}
-          onClose={() => setShowFiltrosModal(false)}
-          onAplicar={setFiltros}
-          theme={theme}
-        />
+        <FiltrosAvanzadosModal bodegas={bodegasDisponibles} filtros={filtros}
+          onClose={() => setShowFiltrosModal(false)} onAplicar={setFiltros} theme={theme} />
       )}
     </div>
   )
@@ -1431,93 +1257,106 @@ const DashboardAtrasos = ({ barco, registros, tiposParo, onClose, theme }) => {
 // TARJETA DE REGISTRO
 // =====================================================
 const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar, theme }) => {
+  const TIPOS_PARO_CONFIG = getTiposParoConfig(theme)
+
   const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
   const config = TIPOS_PARO_CONFIG[tipo?.nombre || ''] || {
-    bg: 'bg-slate-800', icono: <AlertTriangle className="w-4 h-4 text-slate-400" />,
-    border: 'border-slate-700', text: 'text-slate-400'
+    bg: theme === 'dark' ? 'bg-slate-800' : 'bg-gray-200',
+    icono: <AlertTriangle className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}`} />,
+    border: theme === 'dark' ? 'border-slate-700' : 'border-gray-300',
+    text: theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
   }
   const bodegaInfo = !reg.es_general && reg.bodega_id
-    ? (reg.bodega_nombre
-        ? { nombre: reg.bodega_nombre, codigo: reg.bodega_codigo }
-        : bodegasBarco.find(b => b.id === reg.bodega_id))
+    ? (reg.bodega_nombre ? { nombre: reg.bodega_nombre, codigo: reg.bodega_codigo } : bodegasBarco.find(b => b.id === reg.bodega_id))
     : null
 
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
-  const subTextColor = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+  const subTextColor = theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+  const timeBg = theme === 'dark' ? 'bg-slate-800/60' : 'bg-gray-100'
+  const clockIcon = theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
+  const arrowColor = theme === 'dark' ? 'text-slate-600' : 'text-gray-400'
+  const obsBg = theme === 'dark' ? 'bg-slate-800/40' : 'bg-gray-100'
+  const obsBorder = theme === 'dark' ? 'border-slate-600' : 'border-gray-300'
 
   return (
     <div className={`${cardBg} rounded-xl border-2 transition-all overflow-hidden ${
-      reg.es_general ? 'border-purple-500/30 hover:border-purple-500/50'
-      : bodegaInfo ? 'border-blue-500/30 hover:border-blue-500/50'
-      : theme === 'dark' ? 'border-slate-800 hover:border-orange-500/40' : 'border-gray-200 hover:border-orange-500/40'
+      reg.es_general
+        ? 'border-purple-500/30 hover:border-purple-500/50'
+        : bodegaInfo
+          ? 'border-blue-500/30 hover:border-blue-500/50'
+          : theme === 'dark' ? 'border-slate-800 hover:border-orange-500/40' : 'border-gray-200 hover:border-orange-400'
     }`}>
       <div className="p-4">
-        {/* Cabecera: tipo + acciones */}
         <div className="flex items-start gap-3 mb-3">
           <div className={`p-2.5 rounded-xl ${config.bg} flex-shrink-0`}>
-            {config.icono}
+            <span className={config.text}>{config.icono}</span>
           </div>
           <div className="flex-1 min-w-0">
             <h3 className={`font-bold ${textColor} text-sm leading-snug`}>{tipo?.nombre || 'Desconocido'}</h3>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {tipo?.es_imputable_almapac && (
-                <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full font-bold">ALMAPAC</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${theme === 'dark' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-700'}`}>ALMAPAC</span>
               )}
-              <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'}`}>{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
+              <span className={`text-[10px] ${subTextColor}`}>{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
             </div>
           </div>
-          {/* Botones de acción */}
           <div className="flex gap-1 flex-shrink-0">
             <button onClick={() => onEditar(reg)}
-              className="p-2 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg transition-all" title="Editar">
-              <Edit2 className="w-3.5 h-3.5 text-blue-400" />
+              className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400' : 'bg-blue-100 hover:bg-blue-200 text-blue-600'}`}
+              title="Editar">
+              <Edit2 className="w-3.5 h-3.5" />
             </button>
             <button onClick={() => onEliminar(reg.id)}
-              className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-all" title="Eliminar">
-              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400' : 'bg-red-100 hover:bg-red-200 text-red-600'}`}
+              title="Eliminar">
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Horario y duración en una sola fila */}
-        <div className={`flex items-center gap-2 ${theme === 'dark' ? 'bg-slate-800/60' : 'bg-gray-100'} rounded-lg px-3 py-2 mb-3`}>
-          <Clock className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0`} />
+        <div className={`flex items-center gap-2 ${timeBg} rounded-lg px-3 py-2 mb-3`}>
+          <Clock className={`w-3.5 h-3.5 ${clockIcon} flex-shrink-0`} />
           <span className={`font-mono text-sm ${textColor}`}>{reg.hora_inicio?.slice(0, 5)}</span>
           {reg.hora_fin ? (
             <>
-              <span className={theme === 'dark' ? 'text-slate-600' : 'text-gray-400'}>→</span>
+              <span className={arrowColor}>→</span>
               <span className={`font-mono text-sm ${textColor}`}>{reg.hora_fin?.slice(0, 5)}</span>
-              <span className="ml-auto font-bold text-xs text-orange-400">
+              <span className={`ml-auto font-bold text-xs ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`}>
                 {Math.floor((reg.duracion_minutos || 0) / 60)}h {(reg.duracion_minutos || 0) % 60}m
               </span>
             </>
           ) : (
-            <span className="ml-auto text-xs text-blue-400 animate-pulse font-medium">En curso</span>
+            <span className={`ml-auto text-xs font-medium animate-pulse ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>En curso</span>
           )}
         </div>
 
-        {/* Ubicación */}
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-          reg.es_general ? 'bg-purple-500/10 border border-purple-500/20'
-          : bodegaInfo ? 'bg-blue-500/10 border border-blue-500/20'
-          : theme === 'dark' ? 'bg-slate-800/40 border border-slate-700/50' : 'bg-gray-100 border border-gray-200'
+          reg.es_general
+            ? theme === 'dark' ? 'bg-purple-500/10 border border-purple-500/20' : 'bg-purple-50 border border-purple-300'
+            : bodegaInfo
+              ? theme === 'dark' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-300'
+              : theme === 'dark' ? 'bg-slate-800/40 border border-slate-700/50' : 'bg-gray-100 border border-gray-200'
         }`}>
           <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${
-            reg.es_general ? 'text-purple-400' : bodegaInfo ? 'text-blue-400' : theme === 'dark' ? 'text-slate-600' : 'text-gray-400'
+            reg.es_general
+              ? theme === 'dark' ? 'text-purple-400' : 'text-purple-600'
+              : bodegaInfo
+                ? theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
+                : theme === 'dark' ? 'text-slate-600' : 'text-gray-400'
           }`} />
           {reg.es_general ? (
             <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-purple-400" />
-              <span className="text-xs font-bold text-purple-300">TODAS LAS BODEGAS</span>
+              <Layers className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`} />
+              <span className={`text-xs font-bold ${theme === 'dark' ? 'text-purple-300' : 'text-purple-700'}`}>TODAS LAS BODEGAS</span>
             </div>
           ) : bodegaInfo ? (
             <div className="flex items-center gap-2 min-w-0">
-              <Box className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <Box className={`w-3.5 h-3.5 flex-shrink-0 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
               <span className={`text-xs font-semibold ${textColor} truncate`}>{bodegaInfo.nombre}</span>
               {bodegaInfo.codigo && (
-                <span className="text-xs text-blue-400 font-mono flex-shrink-0">{bodegaInfo.codigo}</span>
+                <span className={`text-xs font-mono flex-shrink-0 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{bodegaInfo.codigo}</span>
               )}
             </div>
           ) : (
@@ -1525,9 +1364,8 @@ const RegistroCard = ({ reg, tiposParo, bodegasBarco, onEditar, onEliminar, them
           )}
         </div>
 
-        {/* Observaciones */}
         {reg.observaciones && (
-          <p className={`mt-2.5 text-xs ${subTextColor} italic ${theme === 'dark' ? 'bg-slate-800/40' : 'bg-gray-100'} rounded-lg px-3 py-2 border-l-2 ${theme === 'dark' ? 'border-slate-600' : 'border-gray-300'}`}>
+          <p className={`mt-2.5 text-xs ${subTextColor} italic ${obsBg} rounded-lg px-3 py-2 border-l-2 ${obsBorder}`}>
             {reg.observaciones}
           </p>
         )}
@@ -1595,14 +1433,8 @@ export default function RegistroAtrasosPage() {
         await cargarDescargas(barcosData[0].id)
         await cargarOperacionInfo(barcosData[0].id)
         setShowShipSelector(false)
-      } else if (barcosData?.length === 0) {
-        toast.error('No hay barcos disponibles')
-      }
-    } catch (error) {
-      toast.error('Error al cargar datos')
-    } finally {
-      setLoading(false)
-    }
+      } else if (barcosData?.length === 0) { toast.error('No hay barcos disponibles') }
+    } catch (error) { toast.error('Error al cargar datos') } finally { setLoading(false) }
   }
 
   const cargarDescargas = async (barcoId) => {
@@ -1617,9 +1449,7 @@ export default function RegistroAtrasosPage() {
         .eq('barco_id', barcoId).not('fecha_hora_fin', 'is', null)
         .order('fecha_hora_inicio', { ascending: false }).limit(10)
       setHistorialDescargas(historial || [])
-    } catch (error) {
-      toast.error('Error al cargar tipos de descarga')
-    }
+    } catch (error) { toast.error('Error al cargar tipos de descarga') }
   }
 
   const cargarOperacionInfo = async (barcoId) => {
@@ -1628,48 +1458,33 @@ export default function RegistroAtrasosPage() {
         .select('tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado, fecha_llegada')
         .eq('id', barcoId).single()
       if (data) setOperacionInfo(data)
-    } catch (error) {
-      console.error('Error cargando info de operación:', error)
-    }
+    } catch (error) { console.error('Error cargando info de operación:', error) }
   }
 
   const handleIniciarOperacion = async () => {
     if (!barcoSeleccionado || !user) return
     try {
       const { error } = await supabase.from('barcos').update({
-        operacion_iniciada_at: new Date().toISOString(),
-        operacion_iniciada_por: user.id,
-        operacion_iniciada_editado: false,
-        estado: 'activo'
+        operacion_iniciada_at: new Date().toISOString(), operacion_iniciada_por: user.id,
+        operacion_iniciada_editado: false, estado: 'activo'
       }).eq('id', barcoSeleccionado.id)
       if (error) throw error
-      toast.success('Operación iniciada')
-      setShowIniciarModal(false)
-      await cargarOperacionInfo(barcoSeleccionado.id)
-      await cargarDatos()
-    } catch (error) {
-      toast.error('Error al iniciar la operación')
-    }
+      toast.success('Operación iniciada'); setShowIniciarModal(false)
+      await cargarOperacionInfo(barcoSeleccionado.id); await cargarDatos()
+    } catch (error) { toast.error('Error al iniciar la operación') }
   }
 
   const handleFinalizarOperacion = async (motivo) => {
     if (!barcoSeleccionado || !user) return
     try {
       const { error } = await supabase.from('barcos').update({
-        operacion_finalizada_at: new Date().toISOString(),
-        operacion_finalizada_por: user.id,
-        operacion_motivo_finalizacion: motivo || null,
-        operacion_finalizada_editado: false,
-        estado: 'finalizado'
+        operacion_finalizada_at: new Date().toISOString(), operacion_finalizada_por: user.id,
+        operacion_motivo_finalizacion: motivo || null, operacion_finalizada_editado: false, estado: 'finalizado'
       }).eq('id', barcoSeleccionado.id)
       if (error) throw error
-      toast.success('Operación finalizada')
-      setShowFinalizarModal(false)
-      await cargarOperacionInfo(barcoSeleccionado.id)
-      await cargarDatos()
-    } catch (error) {
-      toast.error('Error al finalizar la operación')
-    }
+      toast.success('Operación finalizada'); setShowFinalizarModal(false)
+      await cargarOperacionInfo(barcoSeleccionado.id); await cargarDatos()
+    } catch (error) { toast.error('Error al finalizar la operación') }
   }
 
   const cargarBodegas = (barco) => setBodegasBarco(barco.bodegas_json || [])
@@ -1682,32 +1497,25 @@ export default function RegistroAtrasosPage() {
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false })
       setRegistros(data || [])
-    } catch (error) {
-      toast.error('Error al cargar registros')
-    }
+    } catch (error) { toast.error('Error al cargar registros') }
   }
 
   const handleSeleccionarBarco = async (barco) => {
-    setBarcoSeleccionado(barco)
-    cargarBodegas(barco)
-    await cargarRegistros(barco.id)
-    await cargarDescargas(barco.id)
+    setBarcoSeleccionado(barco); cargarBodegas(barco)
+    await cargarRegistros(barco.id); await cargarDescargas(barco.id)
     await cargarOperacionInfo(barco.id)
-    setFiltrosLista({ bodegas: [], soloGenerales: false }) // Reset filtros al cambiar barco
-    setShowShipSelector(false)
+    setFiltrosLista({ bodegas: [], soloGenerales: false }); setShowShipSelector(false)
   }
 
   const handleNuevoAtraso = () => {
     if (barcoSeleccionado?.estado === 'finalizado') { toast.error('La operación está finalizada'); return }
     if (!operacionInfo?.operacion_iniciada_at) { toast.error('Inicia la operación primero'); return }
-    setAtrasoEditando(null)
-    setShowAtrasoModal(true)
+    setAtrasoEditando(null); setShowAtrasoModal(true)
   }
 
   const handleEditarAtraso = (atraso) => {
     if (barcoSeleccionado?.estado === 'finalizado') { toast.error('La operación está finalizada'); return }
-    setAtrasoEditando(atraso)
-    setShowAtrasoModal(true)
+    setAtrasoEditando(atraso); setShowAtrasoModal(true)
   }
 
   const handleEliminarAtraso = async (id) => {
@@ -1716,48 +1524,31 @@ export default function RegistroAtrasosPage() {
     try {
       const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
       if (error) throw error
-      toast.success('Registro eliminado')
-      await cargarRegistros(barcoSeleccionado.id)
-    } catch (error) {
-      toast.error('Error al eliminar')
-    }
+      toast.success('Registro eliminado'); await cargarRegistros(barcoSeleccionado.id)
+    } catch (error) { toast.error('Error al eliminar') }
   }
 
   const handleGuardarAtraso = async () => {
-    setShowAtrasoModal(false)
-    await cargarRegistros(barcoSeleccionado.id)
+    setShowAtrasoModal(false); await cargarRegistros(barcoSeleccionado.id)
   }
 
   const handleConfirmarFinalizarDescarga = async () => {
     if (!descargaSeleccionada) return
     try {
       const { error } = await supabase.from('registro_descarga')
-        .update({ fecha_hora_fin: new Date().toISOString() })
-        .eq('id', descargaSeleccionada.id)
+        .update({ fecha_hora_fin: new Date().toISOString() }).eq('id', descargaSeleccionada.id)
       if (error) throw error
-      toast.success('Descarga finalizada')
-      setShowFinalizarDescargaModal(false)
-      setDescargaSeleccionada(null)
+      toast.success('Descarga finalizada'); setShowFinalizarDescargaModal(false); setDescargaSeleccionada(null)
       await cargarDescargas(barcoSeleccionado.id)
-    } catch (error) {
-      toast.error('Error al finalizar descarga')
-    }
+    } catch (error) { toast.error('Error al finalizar descarga') }
   }
 
-  // Aplicar filtros de bodega a los registros de la lista
   const registrosConFiltroBodega = registros.filter(r => {
-    if (filtrosLista.soloGenerales) {
-      return r.es_general === true
-    }
-    if (filtrosLista.bodegas.length > 0) {
-      if (r.es_general) return true
-      return filtrosLista.bodegas.includes(r.bodega_id)
-    }
+    if (filtrosLista.soloGenerales) return r.es_general === true
+    if (filtrosLista.bodegas.length > 0) { if (r.es_general) return true; return filtrosLista.bodegas.includes(r.bodega_id) }
     return true
   })
-
   const registrosFiltrados = registrosConFiltroBodega.filter(r => r.fecha === filtroFecha)
-
   const barcosFiltrados = barcos.filter(b => b.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
   const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
@@ -1767,13 +1558,15 @@ export default function RegistroAtrasosPage() {
 
   const estadoOperacion = !barcoSeleccionado ? null
     : barcoSeleccionado.estado === 'finalizado' ? 'finalizado'
-    : operacionInfo?.operacion_iniciada_at ? 'en_curso'
-    : 'pendiente'
+    : operacionInfo?.operacion_iniciada_at ? 'en_curso' : 'pendiente'
 
   const bgColor = theme === 'dark' ? 'bg-[#0f172a]' : 'bg-gray-50'
   const cardBg = theme === 'dark' ? 'bg-slate-900' : 'bg-white'
   const borderColor = theme === 'dark' ? 'border-white/10' : 'border-gray-200'
   const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900'
+  const subText = theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+  const inputBg = theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'
+  const searchIcon = theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
 
   const tieneFiltrosBodegaActivos = filtrosLista.bodegas.length > 0 || filtrosLista.soloGenerales
 
@@ -1782,7 +1575,7 @@ export default function RegistroAtrasosPage() {
       <div className={`min-h-screen flex items-center justify-center ${bgColor}`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mx-auto mb-3" />
-          <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>Cargando...</p>
+          <p className={subText}>Cargando...</p>
         </div>
       </div>
     )
@@ -1805,7 +1598,7 @@ export default function RegistroAtrasosPage() {
               <div className="min-w-0">
                 <h1 className="text-lg sm:text-2xl font-black flex items-center gap-2">
                   <Clock className="w-5 h-5 sm:w-7 sm:h-7 flex-shrink-0" />
-                  Control de Atrasos
+                  Control de Demoras
                 </h1>
                 <p className="text-orange-200 text-xs mt-0.5 truncate">
                   {user?.nombre} · {user?.rol === 'admin' ? 'Admin' : 'Chequero'}
@@ -1813,27 +1606,18 @@ export default function RegistroAtrasosPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Botón modo oscuro/claro */}
-              <button
-                onClick={toggleTheme}
+              <button onClick={toggleTheme}
                 className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
-                title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-              >
+                title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
                 {theme === 'dark' ? <Sun className="w-5 h-5 text-white" /> : <Moon className="w-5 h-5 text-white" />}
               </button>
-              
-              {/* Tabs de vista */}
               <div className="flex gap-1 bg-black/20 rounded-xl p-1 flex-shrink-0">
                 <button onClick={() => setVista('lista')}
-                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                    vista === 'lista' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
-                  }`}>
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${vista === 'lista' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'}`}>
                   📋 <span className="hidden sm:inline">Lista</span>
                 </button>
                 <button onClick={() => barcoSeleccionado ? setVista('dashboard') : toast.error('Selecciona un barco')}
-                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                    vista === 'dashboard' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'
-                  }`}>
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${vista === 'dashboard' ? 'bg-white text-orange-600' : 'text-white hover:bg-white/10'}`}>
                   📊 <span className="hidden sm:inline">Dashboard</span>
                 </button>
               </div>
@@ -1842,29 +1626,29 @@ export default function RegistroAtrasosPage() {
         </div>
 
         {/* ── SELECTOR DE BARCO ── */}
-        <div className={`${cardBg} ${borderColor} rounded-2xl overflow-hidden`}>
+        <div className={`${cardBg} border ${borderColor} rounded-2xl overflow-hidden`}>
           <button onClick={() => setShowShipSelector(!showShipSelector)}
-            className={`w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors ${textColor}`}>
+            className={`w-full flex items-center justify-between p-4 hover:bg-black/5 transition-colors ${textColor}`}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="bg-orange-500/20 p-2 rounded-lg flex-shrink-0">
-                <Ship className="w-4 h-4 text-orange-400" />
+              <div className={`p-2 rounded-lg flex-shrink-0 ${theme === 'dark' ? 'bg-orange-500/20' : 'bg-orange-100'}`}>
+                <Ship className={`w-4 h-4 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`} />
               </div>
               <div className="min-w-0 text-left">
                 <p className="text-sm font-bold truncate">
                   {barcoSeleccionado ? barcoSeleccionado.nombre : 'Seleccionar barco'}
                 </p>
                 {barcoSeleccionado && (
-                  <p className={`text-[11px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
+                  <p className={`text-[11px] ${subText}`}>
                     {barcoSeleccionado.tipo_operacion === 'exportacion' ? '🚢 Exportación' : '⚓ Importación'}
                     {' · '}
-                    <span className={barcoSeleccionado.estado === 'activo' ? 'text-green-400' : 'text-red-400'}>
+                    <span className={barcoSeleccionado.estado === 'activo' ? 'text-green-500' : 'text-red-500'}>
                       {barcoSeleccionado.estado}
                     </span>
                   </p>
                 )}
               </div>
             </div>
-            <ChevronDown className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0 transition-transform ${showShipSelector ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 ${searchIcon} flex-shrink-0 transition-transform ${showShipSelector ? 'rotate-180' : ''}`} />
           </button>
 
           {showShipSelector && (
@@ -1872,8 +1656,8 @@ export default function RegistroAtrasosPage() {
               <div className="relative">
                 <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar barco..."
-                  className={`w-full ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} ${borderColor} rounded-xl pl-9 pr-4 py-2.5 ${textColor} text-sm`} />
-                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'}`} />
+                  className={`w-full ${inputBg} border ${borderColor} rounded-xl pl-9 pr-4 py-2.5 ${textColor} text-sm`} />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${searchIcon}`} />
               </div>
               <div className="space-y-1.5 max-h-44 overflow-y-auto">
                 {barcosFiltrados.length > 0 ? barcosFiltrados.map(b => (
@@ -1881,27 +1665,27 @@ export default function RegistroAtrasosPage() {
                     className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${
                       barcoSeleccionado?.id === b.id
                         ? 'border-orange-500/60 bg-orange-500/10'
-                        : `${borderColor} ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} hover:border-white/20`
+                        : `${borderColor} ${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} hover:border-orange-400`
                     }`}>
                     <div>
                       <p className={`font-semibold ${textColor} text-sm`}>{b.nombre}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
+                        <span className={`text-[10px] ${subText}`}>
                           {b.tipo_operacion === 'exportacion' ? '🚢 Exportación' : '⚓ Importación'}
                         </span>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                          b.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                          b.estado === 'activo' ? 'bg-green-500/20 text-green-600' : 'bg-red-500/20 text-red-600'
                         }`}>
                           {b.estado}
                         </span>
                       </div>
                     </div>
                     {barcoSeleccionado?.id === b.id && (
-                      <CheckCircle className="w-4 h-4 text-orange-400 flex-shrink-0" />
+                      <CheckCircle className={`w-4 h-4 flex-shrink-0 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`} />
                     )}
                   </button>
                 )) : (
-                  <p className={`text-center py-6 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} text-sm`}>No se encontraron barcos</p>
+                  <p className={`text-center py-6 ${subText} text-sm`}>No se encontraron barcos</p>
                 )}
               </div>
             </div>
@@ -1912,47 +1696,47 @@ export default function RegistroAtrasosPage() {
           <>
             {/* ── PANEL ESTADO + TIEMPOS ── */}
             <div className={`rounded-2xl border overflow-hidden ${
-              estadoOperacion === 'finalizado' ? 'border-red-500/20 bg-red-500/5'
-              : estadoOperacion === 'en_curso' ? 'border-green-500/20 bg-green-500/5'
-              : 'border-yellow-500/20 bg-yellow-500/5'
+              estadoOperacion === 'finalizado'
+                ? theme === 'dark' ? 'border-red-500/20 bg-red-500/5' : 'border-red-300 bg-red-50'
+                : estadoOperacion === 'en_curso'
+                  ? theme === 'dark' ? 'border-green-500/20 bg-green-500/5' : 'border-green-300 bg-green-50'
+                  : theme === 'dark' ? 'border-yellow-500/20 bg-yellow-500/5' : 'border-yellow-300 bg-yellow-50'
             }`}>
-              {/* Fila de estado */}
-              <div className="p-4 border-b border-white/5">
+              <div className={`p-4 border-b ${theme === 'dark' ? 'border-white/5' : 'border-black/5'}`}>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${
-                      estadoOperacion === 'finalizado' ? 'bg-red-500/20'
-                      : estadoOperacion === 'en_curso' ? 'bg-green-500/20'
-                      : 'bg-yellow-500/20'
+                      estadoOperacion === 'finalizado' ? theme === 'dark' ? 'bg-red-500/20' : 'bg-red-100'
+                      : estadoOperacion === 'en_curso' ? theme === 'dark' ? 'bg-green-500/20' : 'bg-green-100'
+                      : theme === 'dark' ? 'bg-yellow-500/20' : 'bg-yellow-100'
                     }`}>
                       <Flag className={`w-4 h-4 ${
-                        estadoOperacion === 'finalizado' ? 'text-red-400'
-                        : estadoOperacion === 'en_curso' ? 'text-green-400'
-                        : 'text-yellow-400'
+                        estadoOperacion === 'finalizado' ? theme === 'dark' ? 'text-red-400' : 'text-red-600'
+                        : estadoOperacion === 'en_curso' ? theme === 'dark' ? 'text-green-400' : 'text-green-600'
+                        : theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'
                       }`} />
                     </div>
                     <div>
-                      <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide font-bold`}>Estado</p>
+                      <p className={`text-[10px] ${subText} uppercase tracking-wide font-bold`}>Estado</p>
                       {estadoOperacion === 'pendiente' && (
-                        <p className="text-yellow-400 text-sm font-semibold">⏳ Pendiente de inicio</p>
+                        <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'}`}>⏳ Pendiente de inicio</p>
                       )}
                       {estadoOperacion === 'en_curso' && (
                         <div>
-                          <p className="text-green-400 text-sm font-semibold">🟢 En curso</p>
-                          <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>Inicio: {formatFechaHora(operacionInfo?.operacion_iniciada_at)}</p>
+                          <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-700'}`}>🟢 En curso</p>
+                          <p className={`text-xs ${subText}`}>Inicio: {formatFechaHora(operacionInfo?.operacion_iniciada_at)}</p>
                         </div>
                       )}
                       {estadoOperacion === 'finalizado' && (
                         <div>
-                          <p className="text-red-400 text-sm font-semibold">🔴 Finalizada</p>
-                          <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
+                          <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>🔴 Finalizada</p>
+                          <p className={`text-xs ${subText}`}>
                             {formatFechaHora(operacionInfo?.operacion_iniciada_at)} → {formatFechaHora(operacionInfo?.operacion_finalizada_at)}
                           </p>
                         </div>
                       )}
                     </div>
                   </div>
-
                   {estadoOperacion === 'pendiente' && (
                     <button onClick={() => setShowIniciarModal(true)}
                       className="bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 text-sm transition-all">
@@ -1968,29 +1752,30 @@ export default function RegistroAtrasosPage() {
                 </div>
               </div>
 
-              {/* Tiempos */}
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} uppercase tracking-wide font-bold flex items-center gap-1.5`}>
-                    <Clock className="w-3.5 h-3.5 text-blue-400" /> Tiempos de operación
+                  <p className={`text-[10px] ${subText} uppercase tracking-wide font-bold flex items-center gap-1.5`}>
+                    <Clock className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} /> Tiempos de operación
                   </p>
                   <button onClick={() => setShowEditarTiemposModal(true)}
-                    className="text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all">
+                    className={`text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all ${
+                      theme === 'dark' ? 'text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20' : 'text-blue-700 hover:text-blue-800 bg-blue-100 hover:bg-blue-200'
+                    }`}>
                     <Edit className="w-3 h-3" /> Editar
                   </button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { key: 'tiempo_arribo', label: 'Arribo', icon: <Anchor className="w-3.5 h-3.5 text-blue-400" />, editado: operacionInfo?.tiempo_arribo_editado },
-                    { key: 'tiempo_ataque', label: 'Ataque', icon: <Target className="w-3.5 h-3.5 text-yellow-400" />, editado: operacionInfo?.tiempo_ataque_editado },
-                    { key: 'tiempo_recibido', label: 'Recibido', icon: <Inbox className="w-3.5 h-3.5 text-green-400" />, editado: operacionInfo?.tiempo_recibido_editado },
-                  ].map(({ key, label, icon, editado }) => (
-                    <div key={key} className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-gray-100'} rounded-xl p-3`}>
+                    { key: 'tiempo_arribo', label: 'Arribo', iconEl: <Anchor className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />, editado: operacionInfo?.tiempo_arribo_editado },
+                    { key: 'tiempo_ataque', label: 'Ataque', iconEl: <Target className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`} />, editado: operacionInfo?.tiempo_ataque_editado },
+                    { key: 'tiempo_recibido', label: 'Recibido', iconEl: <Inbox className={`w-3.5 h-3.5 ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`} />, editado: operacionInfo?.tiempo_recibido_editado },
+                  ].map(({ key, label, iconEl, editado }) => (
+                    <div key={key} className={`${theme === 'dark' ? 'bg-slate-800/60' : 'bg-white/70'} rounded-xl p-3 border ${borderColor}`}>
                       <div className="flex items-center gap-1.5 mb-1.5">
-                        {icon}
-                        <span className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} font-bold uppercase`}>{label}</span>
+                        {iconEl}
+                        <span className={`text-[10px] ${subText} font-bold uppercase`}>{label}</span>
                         {editado && (
-                          <span className="ml-auto text-[8px] bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded">Ed.</span>
+                          <span className={`ml-auto text-[8px] px-1 py-0.5 rounded ${theme === 'dark' ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>Ed.</span>
                         )}
                       </div>
                       <p className={`text-xs font-bold ${textColor} leading-tight`}>
@@ -2003,57 +1788,62 @@ export default function RegistroAtrasosPage() {
             </div>
 
             {/* ── TIPO DE DESCARGA ── */}
-            <div className={`${cardBg} rounded-2xl border border-blue-500/20 overflow-hidden`}>
+            <div className={`${cardBg} rounded-2xl border ${theme === 'dark' ? 'border-blue-500/20' : 'border-blue-300'} overflow-hidden`}>
               <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
                 <div className="flex items-center gap-2">
-                  <div className="bg-blue-500/20 p-1.5 rounded-lg">
-                    <Package className="w-4 h-4 text-blue-400" />
+                  <div className={`p-1.5 rounded-lg ${theme === 'dark' ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
+                    <Package className={`w-4 h-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
                   </div>
                   <span className={`font-bold ${textColor} text-sm`}>Tipo de Descarga</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setShowHistorialDescargaModal(true)}
-                    className="text-xs text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all">
+                    className={`text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all ${
+                      theme === 'dark' ? 'text-purple-400 bg-purple-500/10 hover:bg-purple-500/20' : 'text-purple-700 bg-purple-100 hover:bg-purple-200'
+                    }`}>
                     <History className="w-3 h-3" /> Historial
                   </button>
                   <button onClick={() => setShowDescargaModal(true)} disabled={!puedeRegistrar}
                     className={`text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all font-bold ${
                       puedeRegistrar
-                        ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400'
+                        ? theme === 'dark' ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'
                         : theme === 'dark' ? 'bg-slate-800 text-slate-600' : 'bg-gray-200 text-gray-400'
                     }`}>
                     <Plus className="w-3 h-3" /> Nuevo
                   </button>
                 </div>
               </div>
-
               <div className="p-4">
                 {descargasActivas.length > 0 ? (
                   <div className="space-y-2">
                     {descargasActivas.map(descarga => (
                       <div key={descarga.id}
-                        className="flex items-center justify-between gap-3 bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+                        className={`flex items-center justify-between gap-3 rounded-xl p-3 ${
+                          theme === 'dark' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'
+                        }`}>
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-2xl flex-shrink-0">{descarga.tipo_descarga?.icono || '📦'}</span>
                           <div className="min-w-0">
                             <p className={`font-bold ${textColor} text-sm truncate`}>{descarga.tipo_descarga?.nombre}</p>
-                            <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}`}>
+                            <p className={`text-xs ${subText}`}>
                               Desde {dayjs(descarga.fecha_hora_inicio).format('HH:mm')} · {dayjs(descarga.fecha_hora_inicio).format('DD/MM')}
                             </p>
                           </div>
                         </div>
                         <button
                           onClick={() => { setDescargaSeleccionada(descarga); setShowFinalizarDescargaModal(true) }}
-                          className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-3 py-2 rounded-lg font-bold flex items-center gap-1.5 text-xs flex-shrink-0 transition-all">
+                          className={`px-3 py-2 rounded-lg font-bold flex items-center gap-1.5 text-xs flex-shrink-0 transition-all ${
+                            theme === 'dark' ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
+                          }`}>
                           <StopCircle className="w-3.5 h-3.5" /> Finalizar
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6 border-2 border-dashed border-blue-500/20 rounded-xl">
-                    <Package className={`w-8 h-8 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-2`} />
-                    <p className={`${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} text-sm mb-3`}>Sin descarga activa</p>
+                  <div className={`text-center py-6 border-2 border-dashed rounded-xl ${theme === 'dark' ? 'border-blue-500/20' : 'border-blue-300'}`}>
+                    <Package className={`w-8 h-8 mx-auto mb-2 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'}`} />
+                    <p className={`${subText} text-sm mb-3`}>Sin descarga activa</p>
                     {puedeRegistrar && (
                       <button onClick={() => setShowDescargaModal(true)}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs inline-flex items-center gap-1.5">
@@ -2065,16 +1855,16 @@ export default function RegistroAtrasosPage() {
 
                 {historialDescargas.length > 0 && (
                   <div className={`mt-3 pt-3 border-t ${borderColor}`}>
-                    <p className={`text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-gray-500'} uppercase tracking-wide mb-2 font-bold`}>Últimas finalizadas</p>
+                    <p className={`text-[10px] ${subText} uppercase tracking-wide mb-2 font-bold`}>Últimas finalizadas</p>
                     <div className="space-y-1.5">
                       {historialDescargas.slice(0, 2).map(desc => (
                         <div key={desc.id}
                           className={`flex items-center justify-between text-xs ${theme === 'dark' ? 'bg-slate-800/40' : 'bg-gray-100'} px-3 py-2 rounded-lg`}>
                           <div className="flex items-center gap-2">
                             <span>{desc.tipo_descarga?.icono}</span>
-                            <span className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>{desc.tipo_descarga?.nombre}</span>
+                            <span className={subText}>{desc.tipo_descarga?.nombre}</span>
                           </div>
-                          <span className={`${theme === 'dark' ? 'text-slate-600' : 'text-gray-400'} text-[10px]`}>
+                          <span className={`${subText} text-[10px]`}>
                             {dayjs(desc.fecha_hora_inicio).format('HH:mm')} → {dayjs(desc.fecha_hora_fin).format('HH:mm')}
                           </span>
                         </div>
@@ -2082,7 +1872,7 @@ export default function RegistroAtrasosPage() {
                     </div>
                     {historialDescargas.length > 2 && (
                       <button onClick={() => setShowHistorialDescargaModal(true)}
-                        className="mt-2 text-xs text-blue-400 hover:text-blue-300">
+                        className={`mt-2 text-xs ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}>
                         Ver todos ({historialDescargas.length}) →
                       </button>
                     )}
@@ -2091,11 +1881,10 @@ export default function RegistroAtrasosPage() {
               </div>
             </div>
 
-            {/* ── LISTA DE REGISTROS / DASHBOARD ── */}
+            {/* ── LISTA / DASHBOARD ── */}
             {vista === 'lista' ? (
               <div className="space-y-3">
-                {/* Toolbar con filtros de bodega */}
-                <div className={`${cardBg} ${borderColor} rounded-2xl p-3`}>
+                <div className={`${cardBg} border ${borderColor} rounded-2xl p-3`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       <button onClick={handleNuevoAtraso} disabled={!puedeRegistrar}
@@ -2104,18 +1893,14 @@ export default function RegistroAtrasosPage() {
                             ? 'bg-orange-500 hover:bg-orange-600 text-white'
                             : theme === 'dark' ? 'bg-slate-800 text-slate-500' : 'bg-gray-200 text-gray-400'
                         }`}>
-                        <Plus className="w-4 h-4" />
-                        Nueva Demora
+                        <Plus className="w-4 h-4" /> Nueva Demora
                       </button>
                       <button onClick={() => cargarRegistros(barcoSeleccionado.id)}
-                        className={`${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'} p-2.5 rounded-xl transition-all`}
+                        className={`p-2.5 rounded-xl transition-all ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
                         title="Actualizar">
                         <RefreshCw className="w-4 h-4" />
                       </button>
-                      
-                      {/* Botón filtro de bodega */}
-                      <button
-                        onClick={() => setShowFiltrosListaModal(true)}
+                      <button onClick={() => setShowFiltrosListaModal(true)}
                         className={`px-3 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
                           tieneFiltrosBodegaActivos
                             ? 'bg-purple-500 text-white'
@@ -2131,19 +1916,17 @@ export default function RegistroAtrasosPage() {
                         )}
                       </button>
                     </div>
-                    
                     <div className="flex items-center gap-2">
-                      <Calendar className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-500' : 'text-gray-400'} flex-shrink-0`} />
+                      <Calendar className={`w-4 h-4 ${searchIcon} flex-shrink-0`} />
                       <input type="date" value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)}
-                        className={`${theme === 'dark' ? 'bg-slate-800' : 'bg-gray-100'} ${borderColor} rounded-xl px-3 py-2 ${textColor} text-sm`} />
+                        className={`${inputBg} border ${borderColor} rounded-xl px-3 py-2 ${textColor} text-sm`} />
                     </div>
                   </div>
 
-                  {/* Mostrar filtros de bodega activos */}
                   {tieneFiltrosBodegaActivos && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {filtrosLista.soloGenerales && (
-                        <span className={`text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${theme === 'dark' ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
                           Solo generales
                           <button onClick={() => setFiltrosLista({ ...filtrosLista, soloGenerales: false })}>
                             <X className="w-3 h-3" />
@@ -2153,50 +1936,45 @@ export default function RegistroAtrasosPage() {
                       {filtrosLista.bodegas.map(bodegaId => {
                         const bodega = bodegasBarco.find(b => b.id === bodegaId)
                         return bodega ? (
-                          <span key={bodegaId} className={`text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                          <span key={bodegaId} className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${theme === 'dark' ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
                             {bodega.nombre}
-                            <button onClick={() => setFiltrosLista({
-                              ...filtrosLista,
-                              bodegas: filtrosLista.bodegas.filter(id => id !== bodegaId)
-                            })}>
+                            <button onClick={() => setFiltrosLista({ ...filtrosLista, bodegas: filtrosLista.bodegas.filter(id => id !== bodegaId) })}>
                               <X className="w-3 h-3" />
                             </button>
                           </span>
                         ) : null
                       })}
-                      <button
-                        onClick={() => setFiltrosLista({ bodegas: [], soloGenerales: false })}
-                        className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full hover:bg-red-500/30">
+                      <button onClick={() => setFiltrosLista({ bodegas: [], soloGenerales: false })}
+                        className={`text-[10px] px-2 py-0.5 rounded-full ${theme === 'dark' ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
                         Limpiar todo
                       </button>
                     </div>
                   )}
 
                   {estadoOperacion === 'pendiente' && (
-                    <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5" /> Inicia la operación para registrar atrasos
+                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                      <Info className="w-3.5 h-3.5" /> Inicia la operación para registrar demoras
                     </p>
                   )}
                   {estadoOperacion === 'finalizado' && (
-                    <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5">
+                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
                       <Info className="w-3.5 h-3.5" /> Operación finalizada — solo lectura
                     </p>
                   )}
                 </div>
 
-                {/* Grid de registros */}
-                <div className={`${cardBg} ${borderColor} rounded-2xl overflow-hidden`}>
+                <div className={`${cardBg} border ${borderColor} rounded-2xl overflow-hidden`}>
                   <div className={`px-4 py-3 border-b ${borderColor} flex items-center justify-between`}>
                     <h3 className={`font-bold ${textColor} flex items-center gap-2 text-sm`}>
-                      <Clock className="w-4 h-4 text-orange-400" />
+                      <Clock className={`w-4 h-4 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`} />
                       {dayjs(filtroFecha).format('DD [de] MMMM, YYYY')}
                       {tieneFiltrosBodegaActivos && (
-                        <span className="text-xs font-normal text-purple-400 ml-2">
+                        <span className={`text-xs font-normal ml-2 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`}>
                           (filtrado por bodega)
                         </span>
                       )}
                     </h3>
-                    <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-bold">
+                    <span className={`text-xs px-2 py-1 rounded-full font-bold ${theme === 'dark' ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-700'}`}>
                       {registrosFiltrados.length} registros
                     </span>
                   </div>
@@ -2213,15 +1991,15 @@ export default function RegistroAtrasosPage() {
                     ) : (
                       <div className="py-14 text-center">
                         <Clock className={`w-12 h-12 mx-auto mb-3 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'}`} />
-                        <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} mb-1`}>
-                          {tieneFiltrosBodegaActivos 
+                        <p className={`${subText} mb-1`}>
+                          {tieneFiltrosBodegaActivos
                             ? 'No hay registros para esta fecha con los filtros seleccionados'
                             : 'Sin registros para esta fecha'}
                         </p>
                         {puedeRegistrar && (
                           <button onClick={handleNuevoAtraso}
                             className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm inline-flex items-center gap-2">
-                            <Plus className="w-4 h-4" /> Registrar primer atraso
+                            <Plus className="w-4 h-4" /> Registrar primer demora
                           </button>
                         )}
                       </div>
@@ -2236,17 +2014,15 @@ export default function RegistroAtrasosPage() {
           </>
         )}
 
-        {/* Sin barco */}
         {!barcoSeleccionado && !loading && (
-          <div className={`${cardBg} ${borderColor} rounded-2xl p-12 text-center`}>
-            <Ship className={`w-12 h-12 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'} mx-auto mb-3`} />
+          <div className={`${cardBg} border ${borderColor} rounded-2xl p-12 text-center`}>
+            <Ship className={`w-12 h-12 mx-auto mb-3 ${theme === 'dark' ? 'text-slate-700' : 'text-gray-300'}`} />
             <h3 className={`text-base font-bold ${textColor} mb-1`}>Sin barco seleccionado</h3>
-            <p className={theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}>Selecciona un barco para comenzar</p>
+            <p className={subText}>Selecciona un barco para comenzar</p>
           </div>
         )}
       </div>
 
-      {/* FAB mobile */}
       {puedeRegistrar && vista === 'lista' && (
         <button onClick={handleNuevoAtraso}
           className="sm:hidden fixed bottom-6 right-4 z-40 bg-gradient-to-r from-orange-500 to-red-600 text-white w-14 h-14 rounded-2xl shadow-2xl shadow-orange-900/50 flex items-center justify-center active:scale-95 transition-transform">
@@ -2254,7 +2030,6 @@ export default function RegistroAtrasosPage() {
         </button>
       )}
 
-      {/* MODALES */}
       {showAtrasoModal && barcoSeleccionado && (
         <AtrasoModal barco={barcoSeleccionado} atraso={atrasoEditando} tiposParo={tiposParo}
           bodegasBarco={bodegasBarco} onClose={() => setShowAtrasoModal(false)} onSave={handleGuardarAtraso}
@@ -2270,8 +2045,7 @@ export default function RegistroAtrasosPage() {
       {showFinalizarDescargaModal && descargaSeleccionada && (
         <FinalizarDescargaModal descarga={descargaSeleccionada}
           onClose={() => { setShowFinalizarDescargaModal(false); setDescargaSeleccionada(null) }}
-          onConfirm={handleConfirmarFinalizarDescarga}
-          theme={theme} />
+          onConfirm={handleConfirmarFinalizarDescarga} theme={theme} />
       )}
       {showHistorialDescargaModal && barcoSeleccionado && (
         <HistorialDescargaModal barco={barcoSeleccionado} onClose={() => setShowHistorialDescargaModal(false)} theme={theme} />
@@ -2289,13 +2063,8 @@ export default function RegistroAtrasosPage() {
           onSave={() => cargarOperacionInfo(barcoSeleccionado.id)} theme={theme} />
       )}
       {showFiltrosListaModal && barcoSeleccionado && (
-        <FiltrosListaModal
-          bodegas={bodegasBarco}
-          filtros={filtrosLista}
-          onClose={() => setShowFiltrosListaModal(false)}
-          onAplicar={setFiltrosLista}
-          theme={theme}
-        />
+        <FiltrosListaModal bodegas={bodegasBarco} filtros={filtrosLista}
+          onClose={() => setShowFiltrosListaModal(false)} onAplicar={setFiltrosLista} theme={theme} />
       )}
     </div>
   )
