@@ -2009,16 +2009,7 @@ function TablaBanda({ lecturas, producto }) {
                     <td>
                       {fechaHoraSV.format("DD/MM/YY HH:mm")}
                       {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
-                      <span className="alm-timezone-badge" style={{
-                        marginLeft: '6px',
-                        fontSize: '8px',
-                        background: '#334155',
-                        color: '#94a3b8',
-                        padding: '2px 4px',
-                        borderRadius: '4px'
-                      }}>
-                        SV
-                      </span>
+                     
                     </td>
                     <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
                       {fmtTM(l.acumulado_tm)}
