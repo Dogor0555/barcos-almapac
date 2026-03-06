@@ -293,7 +293,7 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Exportación
+// COMPONENTE: Panel de Tendencias y Predicciones para Exportación - CORREGIDO
 // ============================================================================
 function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -301,108 +301,74 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
   const textoAccion = 'CARGAR';
   const textoFaltante = 'FALTANTE POR CARGAR';
 
+  // CORREGIDO: Ordenar lecturas por fecha (ascendente para cálculos)
   const lecturasOrdenadas = useMemo(() => {
     return [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
   }, [lecturas]);
 
+  // CORREGIDO: El acumulado total ES SIMPLEMENTE EL VALOR DE LA ÚLTIMA LECTURA
+  // porque ya es un acumulado que crece con cada registro
   const totalGeneral = useMemo(() => {
     if (lecturasOrdenadas.length === 0) return 0;
-    const ultimosPorBodega = {};
-    lecturasOrdenadas.forEach(lectura => {
-      if (lectura.bodega_id) {
-        ultimosPorBodega[lectura.bodega_id] = lectura.acumulado_tm;
-      }
-    });
-    return Object.values(ultimosPorBodega).reduce((sum, val) => sum + (val || 0), 0);
+    // La última lectura (más reciente) ya tiene el acumulado total
+    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+    return ultimaLectura.acumulado_tm || 0;
   }, [lecturasOrdenadas]);
 
+  // CORREGIDO: Flujo promedio general basado en primera y última lectura
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-    const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
-    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
     
-    const acumuladosInicio = {};
-    const acumuladosFinal = {};
-    
-    lecturasOrdenadas.forEach(l => {
-      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(primeraLectura.fecha_hora).unix()) {
-        if (l.bodega_id) {
-          acumuladosInicio[l.bodega_id] = l.acumulado_tm;
-        }
-      }
-      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(ultimaLectura.fecha_hora).unix()) {
-        if (l.bodega_id) {
-          acumuladosFinal[l.bodega_id] = l.acumulado_tm;
-        }
-      }
-    });
-    
-    const totalInicial = Object.values(acumuladosInicio).reduce((sum, val) => sum + (val || 0), 0);
-    const totalFinal = Object.values(acumuladosFinal).reduce((sum, val) => sum + (val || 0), 0);
-    const diferenciaTotal = totalFinal - totalInicial;
+    const acumuladoInicial = primeraLectura.acumulado_tm || 0;
+    const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
+    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
 
     if (diferenciaTotal <= 0) return 0;
+    
+    const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
+    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+    
     if (horasTranscurridas <= 0) return 0;
     return diferenciaTotal / horasTranscurridas;
   }, [lecturasOrdenadas]);
 
+  // CORREGIDO: Flujo de la última hora (CORREGIDO)
   const flujoUltimaHora = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
+    
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
-    const lecturaReciente = lecturasOrdenadas[lecturasOrdenadas.length - 1];
     
-    if (dayjs.utc(lecturaReciente.fecha_hora).isBefore(hace1Hora)) return 0;
-    
+    // Encontrar la lectura más antigua dentro de la última hora
     const lecturasUltimaHora = lecturasOrdenadas.filter(l =>
       dayjs.utc(l.fecha_hora).isAfter(hace1Hora)
     );
-    if (lecturasUltimaHora.length === 0) return 0;
     
-    const lecturasAntes = lecturasOrdenadas.filter(l =>
-      dayjs.utc(l.fecha_hora).isBefore(hace1Hora)
-    );
-    
-    let fechaBase;
-    if (lecturasAntes.length > 0) {
-      fechaBase = lecturasAntes[lecturasAntes.length - 1].fecha_hora;
-    } else {
-      fechaBase = hace1Hora.toISOString();
+    if (lecturasUltimaHora.length < 2) {
+      // Si no hay suficientes lecturas en la última hora, tomar las dos últimas lecturas disponibles
+      const ultimasDos = lecturasOrdenadas.slice(-2);
+      if (ultimasDos.length < 2) return 0;
+      
+      const [anterior, actual] = ultimasDos;
+      const diferenciaTon = (actual.acumulado_tm || 0) - (anterior.acumulado_tm || 0);
+      const diferenciaHoras = dayjs.utc(actual.fecha_hora).diff(dayjs.utc(anterior.fecha_hora), 'hour', true);
+      
+      return diferenciaHoras > 0 ? diferenciaTon / diferenciaHoras : 0;
     }
-
-    const acumuladosBase = {};
-    const acumuladosActual = {};
     
-    lecturasOrdenadas.forEach(l => {
-      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(fechaBase).unix()) {
-        if (l.bodega_id) {
-          acumuladosBase[l.bodega_id] = l.acumulado_tm;
-        }
-      }
-    });
+    // Usar la primera y última lectura de la última hora
+    const primeraUltimaHora = lecturasUltimaHora[0];
+    const ultimaUltimaHora = lecturasUltimaHora[lecturasUltimaHora.length - 1];
     
-    lecturasOrdenadas.forEach(l => {
-      if (dayjs.utc(l.fecha_hora).unix() <= dayjs.utc(lecturaReciente.fecha_hora).unix()) {
-        if (l.bodega_id) {
-          acumuladosActual[l.bodega_id] = l.acumulado_tm;
-        }
-      }
-    });
-
-    const totalBase = Object.values(acumuladosBase).reduce((sum, val) => sum + (val || 0), 0);
-    const totalActual = Object.values(acumuladosActual).reduce((sum, val) => sum + (val || 0), 0);
-    const diferenciaTotal = totalActual - totalBase;
-    if (diferenciaTotal <= 0) return 0;
-
-    const horasTranscurridas = dayjs.utc(lecturaReciente.fecha_hora).diff(dayjs.utc(fechaBase), 'hour', true);
-    if (horasTranscurridas <= 0) return 0;
-
-    return diferenciaTotal / horasTranscurridas;
+    const diferenciaTon = (ultimaUltimaHora.acumulado_tm || 0) - (primeraUltimaHora.acumulado_tm || 0);
+    const diferenciaHoras = dayjs.utc(ultimaUltimaHora.fecha_hora).diff(dayjs.utc(primeraUltimaHora.fecha_hora), 'hour', true);
+    
+    return diferenciaHoras > 0 ? diferenciaTon / diferenciaHoras : 0;
   }, [lecturasOrdenadas]);
 
   const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
@@ -422,7 +388,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     let tiempoFormateado = '';
     if (dias > 0) tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
     if (horasRestantes > 0 || dias === 0) tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
-    if (minutos > 0 && dias === 0) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
+    if (minutos > 0 && dias === 0 && horasRestantes < 1) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
 
     return {
       horas,
@@ -438,21 +404,13 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     return horaFinal.diff(horaInicial, 'hour', true);
   }, [primeraLectura, ultimaLectura]);
 
+  // CORREGIDO: Datos para el gráfico - usar directamente los valores acumulados
   const datosEvolucion = useMemo(() => {
-    const puntos = [];
-    const acumuladosPorBodega = {};
-    lecturasOrdenadas.forEach(l => {
-      if (l.bodega_id) {
-        acumuladosPorBodega[l.bodega_id] = l.acumulado_tm;
-      }
-      const totalEnPunto = Object.values(acumuladosPorBodega).reduce((sum, val) => sum + (val || 0), 0);
-      puntos.push({
-        hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
-        acumulado: totalEnPunto,
-        meta: meta
-      });
-    });
-    return puntos.slice(-10);
+    return lecturasOrdenadas.slice(-10).map(l => ({
+      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
+      acumulado: l.acumulado_tm,
+      meta: meta
+    }));
   }, [lecturasOrdenadas, meta]);
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -1953,7 +1911,7 @@ function TablaViajes({ viajes, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Lecturas de Banda PREMIUM
+// COMPONENTE: Tabla de Lecturas de Banda PREMIUM - CORREGIDO
 // ============================================================================
 function TablaBanda({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -1984,7 +1942,8 @@ function TablaBanda({ lecturas, producto }) {
     .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
     .slice(-20)
     .map((l) => ({
-      hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
+      // CORREGIDO: Convertir UTC a hora de El Salvador
+      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
       acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
     }));
 
@@ -2034,29 +1993,43 @@ function TablaBanda({ lecturas, producto }) {
             <thead>
               <tr>
                 <th>#</th>
-                <th>Fecha / Hora</th>
+                <th>Fecha / Hora (El Salvador)</th>
                 <th className="alm-th-num">Acumulado (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Destino</th>
               </tr>
             </thead>
             <tbody>
-              {lecturas.map((l, i) => (
-                <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
-                  <td className="alm-muted">{i + 1}</td>
-                  <td>
-                    {dayjs.utc(l.fecha_hora).format("DD/MM/YY HH:mm")}
-                    {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
-                  </td>
-                  <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
-                    {fmtTM(l.acumulado_tm)}
-                  </td>
-                  <td className="alm-td-num" style={{ color: l.flujo_calculado > 0 ? '#10b981' : '#94a3b8' }}>
-                    {l.flujo_calculado > 0 ? fmtTM(l.flujo_calculado, 2) : '—'}
-                  </td>
-                  <td>{l.destino_nombre}</td>
-                </tr>
-              ))}
+              {lecturas.map((l, i) => {
+                // CORREGIDO: Convertir UTC a hora de El Salvador
+                const fechaHoraSV = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV);
+                return (
+                  <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
+                    <td className="alm-muted">{i + 1}</td>
+                    <td>
+                      {fechaHoraSV.format("DD/MM/YY HH:mm")}
+                      {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
+                      <span className="alm-timezone-badge" style={{
+                        marginLeft: '6px',
+                        fontSize: '8px',
+                        background: '#334155',
+                        color: '#94a3b8',
+                        padding: '2px 4px',
+                        borderRadius: '4px'
+                      }}>
+                        SV
+                      </span>
+                    </td>
+                    <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
+                      {fmtTM(l.acumulado_tm)}
+                    </td>
+                    <td className="alm-td-num" style={{ color: l.flujo_calculado > 0 ? '#10b981' : '#94a3b8' }}>
+                      {l.flujo_calculado > 0 ? fmtTM(l.flujo_calculado, 2) : '—'}
+                    </td>
+                    <td>{l.destino_nombre}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2066,7 +2039,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Exportaciones
+// COMPONENTE: Tabla de Exportaciones - SOLO LÍNEA DE TENDENCIA
 // ============================================================================
 function TablaExportacion({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2096,47 +2069,78 @@ function TablaExportacion({ lecturas, producto }) {
     );
     const primeraLectura = lecturasOrdenadas[0];
     const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-    const horaPrimera = dayjs.utc(primeraLectura.fecha_hora);
-    const horaUltima = dayjs.utc(ultimaLectura.fecha_hora);
-    const horasTranscurridas = horaUltima.diff(horaPrimera, 'hour', true);
-    if (horasTranscurridas <= 0) return 0;
-    const acumuladoActual = ultimaLectura.acumulado_tm;
-    return acumuladoActual / horasTranscurridas;
+    const diferenciaTotal = ultimaLectura.acumulado_tm - primeraLectura.acumulado_tm;
+    const horasTranscurridas = dayjs.utc(ultimaLectura.fecha_hora).diff(dayjs.utc(primeraLectura.fecha_hora), 'hour', true);
+    return horasTranscurridas > 0 ? diferenciaTotal / horasTranscurridas : 0;
   };
 
-  const areaData = [...lecturas]
-    .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
-    .slice(-20)
-    .map((l) => ({
-      hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
-      acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
+  // Datos para el gráfico de FLUJO (usando flujo_calculado)
+  const lineData = useMemo(() => {
+    const lecturasOrdenadas = [...lecturas]
+      .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
+      .slice(-20); // Últimas 20 lecturas
+    
+    return lecturasOrdenadas.map((l) => ({
+      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
+      flujo: l.flujo_calculado || 0
     }));
+  }, [lecturas]);
+
+  // Tooltip personalizado
+  const CustomFlujoTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="alm-tooltip">
+        <p className="alm-tooltip-label">{label}</p>
+        {payload.map((p, i) => (
+          <p key={i} style={{ color: p.color }} className="alm-tooltip-value">
+            Flujo: <strong>{fmtTM(p.value, 2)} TM/h</strong>
+          </p>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="alm-space-y">
-      {areaData.length > 1 && (
+      {lineData.length > 1 && (
         <div className="alm-table-card">
           <div className="alm-table-header">
-            <h4 className="alm-chart-title">📈 Evolución de Carga</h4>
+            <h4 className="alm-chart-title">📈 Tendencia de Flujo de Carga (TM/h)</h4>
           </div>
           <div style={{ padding: "0 20px 16px" }}>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={areaData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="areaGrad2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={producto.color_accent} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={producto.color_accent} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={lineData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#94a3b8" }} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="acumulado" name="Acumulado"
-                  stroke={producto.color_accent} strokeWidth={2.5}
-                  fill="url(#areaGrad2)" dot={{ r: 3, fill: producto.color_accent }} />
-              </AreaChart>
+                <YAxis 
+                  tick={{ fontSize: 10, fill: "#94a3b8" }} 
+                  label={{ value: 'TM/h', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#94a3b8' } }}
+                />
+                <Tooltip content={<CustomFlujoTooltip />} />
+                {/* SOLO LA LÍNEA ROJA DE TENDENCIA */}
+                <Line 
+                  type="monotone" 
+                  dataKey="flujo" 
+                  stroke="#ef4444" 
+                  strokeWidth={3} 
+                  dot={{ r: 4, fill: "#ef4444", strokeWidth: 0 }}
+                  name="Flujo (TM/h)"
+                />
+              </ComposedChart>
             </ResponsiveContainer>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              marginTop: '8px',
+              fontSize: '10px',
+              color: '#64748b'
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '20px', height: '3px', background: '#ef4444', borderRadius: '3px' }}></span>
+                Tendencia de Flujo
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -2158,7 +2162,7 @@ function TablaExportacion({ lecturas, producto }) {
             <thead>
               <tr>
                 <th>#</th>
-                <th>Fecha / Hora</th>
+                <th>Fecha / Hora (El Salvador)</th>
                 <th className="alm-th-num">Acumulado (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Bodega</th>
@@ -2168,18 +2172,24 @@ function TablaExportacion({ lecturas, producto }) {
             <tbody>
               {lecturas.map((l, i) => {
                 const bodega = BODEGAS.find(b => b.id === l.bodega_id);
+                const fechaHoraSV = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV);
+                
                 return (
                   <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
                     <td className="alm-muted">{i + 1}</td>
                     <td>
-                      {dayjs.utc(l.fecha_hora).format("DD/MM/YY HH:mm")}
+                      {fechaHoraSV.format("DD/MM/YY HH:mm")}
                       {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
                     </td>
                     <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
                       {fmtTM(l.acumulado_tm)}
                     </td>
                     <td className="alm-td-num" style={{ color: l.flujo_calculado > 0 ? '#10b981' : '#94a3b8' }}>
-                      {l.flujo_calculado > 0 ? fmtTM(l.flujo_calculado, 2) : '—'}
+                      {l.flujo_calculado > 0 ? (
+                        <span style={{ fontWeight: 600 }}>
+                          {fmtTM(l.flujo_calculado, 2)} TM/h
+                        </span>
+                      ) : '—'}
                     </td>
                     <td>
                       {bodega ? (
@@ -2200,7 +2210,6 @@ function TablaExportacion({ lecturas, producto }) {
     </div>
   );
 }
-
 // ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================

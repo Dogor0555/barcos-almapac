@@ -16,6 +16,34 @@ import {
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+
+// Extender dayjs con plugins de zona horaria
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
+// =====================================================
+// CONFIGURACIÓN DE HORARIO EL SALVADOR (GMT-6) - VERSIÓN FINAL CORREGIDA
+// =====================================================
+const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
+
+// Para MOSTRAR: Convertir UTC de BD a hora de El Salvador
+const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm') => {
+  if (!utcDate) return '—'
+  return dayjs.utc(utcDate).tz(TIMEZONE_EL_SALVADOR).format(format)
+}
+
+// Para GUARDAR: Convertir hora de El Salvador del input a UTC
+const svToUTC = (svDateTime) => {
+  if (!svDateTime) return null
+  return dayjs.tz(svDateTime, TIMEZONE_EL_SALVADOR).utc().toISOString()
+}
+
+// Obtener hora actual en El Salvador para inputs
+const getCurrentSVTimeForInput = () => {
+  return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm')
+}
 
 // =====================================================
 // CONFIGURACIÓN DE BODEGAS DEL BARCO (SIN CAPACIDAD)
@@ -83,7 +111,7 @@ const AtrasoModal = ({ barco, atraso, tiposParo, onClose, onSave }) => {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState(null)
   const [formData, setFormData] = useState({
     tipo_paro_id: atraso?.tipo_paro_id || '',
-    fecha: atraso?.fecha || dayjs().format('YYYY-MM-DD'),
+    fecha: atraso?.fecha || dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
     hora_inicio: atraso?.hora_inicio?.slice(0, 5) || '',
     hora_fin: atraso?.hora_fin?.slice(0, 5) || '',
     observaciones: atraso?.observaciones || ''
@@ -339,7 +367,13 @@ const AtrasoModal = ({ barco, atraso, tiposParo, onClose, onSave }) => {
                       onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
                       className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
                     <button type="button"
-                      onClick={() => { setFormData(prev => ({ ...prev, hora_inicio: dayjs().format('HH:mm') })); setEnCurso(true) }}
+                      onClick={() => { 
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          hora_inicio: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') 
+                        })); 
+                        setEnCurso(true) 
+                      }}
                       className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-green-500/20 hover:bg-green-500/30 text-green-400"
                       title="Ahora">
                       <Play className="w-4 h-4" />
@@ -353,7 +387,13 @@ const AtrasoModal = ({ barco, atraso, tiposParo, onClose, onSave }) => {
                       onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
                       className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" />
                     <button type="button"
-                      onClick={() => { setFormData(prev => ({ ...prev, hora_fin: dayjs().format('HH:mm') })); setEnCurso(false) }}
+                      onClick={() => { 
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          hora_fin: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') 
+                        })); 
+                        setEnCurso(false) 
+                      }}
                       className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-red-500/20 hover:bg-red-500/30 text-red-400"
                       title="Ahora">
                       <StopCircle className="w-4 h-4" />
@@ -426,7 +466,7 @@ const DemoraCard = ({ reg, tiposParo, onEditar, onEliminar }) => {
             <h3 className="font-bold text-white text-sm leading-snug">{tipo?.nombre || 'Desconocido'}</h3>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${grupoColor}`}>{grupo}</span>
-              <span className="text-[10px] text-slate-400">{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
+              <span className="text-[10px] text-slate-400">{reg.fecha}</span>
             </div>
           </div>
           <div className="flex gap-1 flex-shrink-0">
@@ -585,7 +625,7 @@ const DashboardDemoras = ({ barco, registros, tiposParo, onClose }) => {
                           </span>
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {dayjs(reg.fecha).format('DD/MM')} {reg.hora_inicio} {reg.hora_fin && `→ ${reg.hora_fin}`}
+                          {reg.fecha} {reg.hora_inicio} {reg.hora_fin && `→ ${reg.hora_fin}`}
                         </div>
                       </div>
                     )
@@ -641,16 +681,6 @@ export default function ExportacionPage() {
   const [editandoExportacion, setEditandoExportacion] = useState(null)
   const [editandoBitacora, setEditandoBitacora] = useState(null)
 
-  const getHoraActual = () => {
-    const ahora = new Date()
-    const year = ahora.getFullYear()
-    const month = String(ahora.getMonth() + 1).padStart(2, '0')
-    const day = String(ahora.getDate()).padStart(2, '0')
-    const hours = String(ahora.getHours()).padStart(2, '0')
-    const minutes = String(ahora.getMinutes()).padStart(2, '0')
-    return `${year}-${month}-${day}T${hours}:${minutes}`
-  }
-
   useEffect(() => {
     const currentUser = getCurrentUser()
     setUser(currentUser)
@@ -662,7 +692,7 @@ export default function ExportacionPage() {
       setProductoActivo(productos[0])
       setNuevaExportacion(prev => ({
         ...prev,
-        fecha_hora: getHoraActual()
+        fecha_hora: getCurrentSVTimeForInput()
       }))
     }
   }, [productos])
@@ -861,7 +891,7 @@ export default function ExportacionPage() {
     exportacionesProd.forEach(exp => {
       const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
       puntos.push({
-        hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
+        hora: formatUTCToSV(exp.fecha_hora, 'DD/MM HH:mm'),
         acumulado: Number(exp.acumulado_tm) || 0,
         bodega: bodega?.nombre || '—',
         timestamp: new Date(exp.fecha_hora).getTime()
@@ -926,13 +956,13 @@ export default function ExportacionPage() {
   const cambiarProducto = (producto) => {
     setProductoActivo(producto)
     setNuevaExportacion({
-      fecha_hora: getHoraActual(),
+      fecha_hora: getCurrentSVTimeForInput(),
       acumulado_tm: '',
       bodega_id: '',
       observaciones: ''
     })
     setBitacoraActual({
-      fecha_hora: getHoraActual(),
+      fecha_hora: getCurrentSVTimeForInput(),
       comentarios: ''
     })
     setEditandoExportacion(null)
@@ -976,9 +1006,13 @@ export default function ExportacionPage() {
         return
       }
 
+      // Convertir hora de El Salvador a UTC antes de guardar
+      // Ejemplo: 2026-03-06T11:00 (11:00 AM El Salvador) → 2026-03-06T17:00:00.000Z (17:00 UTC)
+      const fechaUTC = svToUTC(nuevaExportacion.fecha_hora)
+
       const datos = {
         barco_id: barco.id,
-        fecha_hora: nuevaExportacion.fecha_hora,
+        fecha_hora: fechaUTC,
         producto_id: productoActivo.id,
         acumulado_tm: parseFloat(nuevaExportacion.acumulado_tm),
         bodega_id: parseInt(nuevaExportacion.bodega_id),
@@ -1015,7 +1049,7 @@ export default function ExportacionPage() {
       }
 
       setNuevaExportacion({
-        fecha_hora: getHoraActual(),
+        fecha_hora: getCurrentSVTimeForInput(),
         acumulado_tm: '',
         bodega_id: '',
         observaciones: ''
@@ -1046,9 +1080,12 @@ export default function ExportacionPage() {
         return
       }
 
+      // Convertir hora de El Salvador a UTC antes de guardar
+      const fechaUTC = svToUTC(bitacoraActual.fecha_hora)
+
       const datos = {
         barco_id: barco.id,
-        fecha_hora: bitacoraActual.fecha_hora,
+        fecha_hora: fechaUTC,
         producto_id: productoActivo.id,
         comentarios: bitacoraActual.comentarios || null,
         created_by: user?.id || null
@@ -1083,7 +1120,7 @@ export default function ExportacionPage() {
       }
 
       setBitacoraActual({
-        fecha_hora: getHoraActual(),
+        fecha_hora: getCurrentSVTimeForInput(),
         comentarios: ''
       })
 
@@ -1097,8 +1134,9 @@ export default function ExportacionPage() {
 
   const handleEditarExportacion = (exp) => {
     setEditandoExportacion(exp)
+    // Para editar, convertimos UTC de vuelta a El Salvador
     setNuevaExportacion({
-      fecha_hora: exp.fecha_hora.slice(0, 16),
+      fecha_hora: formatUTCToSV(exp.fecha_hora, 'YYYY-MM-DDTHH:mm'),
       acumulado_tm: exp.acumulado_tm,
       bodega_id: exp.bodega_id || '',
       observaciones: exp.observaciones || ''
@@ -1108,7 +1146,7 @@ export default function ExportacionPage() {
   const handleEditarBitacora = (reg) => {
     setEditandoBitacora(reg)
     setBitacoraActual({
-      fecha_hora: reg.fecha_hora.slice(0, 16),
+      fecha_hora: formatUTCToSV(reg.fecha_hora, 'YYYY-MM-DDTHH:mm'),
       comentarios: reg.comentarios || ''
     })
   }
@@ -1130,7 +1168,7 @@ export default function ExportacionPage() {
       if (editandoExportacion?.id === id) {
         setEditandoExportacion(null)
         setNuevaExportacion({
-          fecha_hora: getHoraActual(),
+          fecha_hora: getCurrentSVTimeForInput(),
           acumulado_tm: '',
           bodega_id: '',
           observaciones: ''
@@ -1159,7 +1197,7 @@ export default function ExportacionPage() {
       if (editandoBitacora?.id === id) {
         setEditandoBitacora(null)
         setBitacoraActual({
-          fecha_hora: getHoraActual(),
+          fecha_hora: getCurrentSVTimeForInput(),
           comentarios: ''
         })
       }
@@ -1173,18 +1211,16 @@ export default function ExportacionPage() {
     setEditandoExportacion(null)
     setEditandoBitacora(null)
     setNuevaExportacion({
-      fecha_hora: getHoraActual(),
+      fecha_hora: getCurrentSVTimeForInput(),
       acumulado_tm: '',
       bodega_id: '',
       observaciones: ''
     })
     setBitacoraActual({
-      fecha_hora: getHoraActual(),
+      fecha_hora: getCurrentSVTimeForInput(),
       comentarios: ''
     })
   }
-
-  const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
   const puedeRegistrar = barco?.estado !== 'finalizado'
 
@@ -1255,7 +1291,7 @@ export default function ExportacionPage() {
                 </span>
               </div>
               <p className="text-blue-200 text-sm mt-1">
-                Registro de Carga a Bodega del Barco por Banda · {new Date().toLocaleDateString()}
+                Registro de Carga a Bodega del Barco por Banda · {formatUTCToSV(new Date(), 'DD/MM/YYYY')}
               </p>
             </div>
             <div className="flex gap-2">
@@ -1295,12 +1331,7 @@ export default function ExportacionPage() {
                   {barco.operacion_iniciada_at ? (
                     <div>
                       <p className="text-lg font-black text-green-400">
-                        {new Date(barco.operacion_iniciada_at).toLocaleString('es-ES', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {formatUTCToSV(barco.operacion_iniciada_at, 'DD/MM/YY HH:mm')}
                       </p>
                       {barco.operacion_iniciada_por && (
                         <p className="text-xs text-green-300">
@@ -1353,12 +1384,7 @@ export default function ExportacionPage() {
                   {barco.operacion_finalizada_at ? (
                     <div>
                       <p className="text-lg font-black text-red-400">
-                        {new Date(barco.operacion_finalizada_at).toLocaleString('es-ES', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {formatUTCToSV(barco.operacion_finalizada_at, 'DD/MM/YY HH:mm')}
                       </p>
                       {barco.operacion_motivo_finalizacion && (
                         <p className="text-xs text-red-300 mt-1">
@@ -1637,7 +1663,7 @@ export default function ExportacionPage() {
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">Última lectura:</span>
                         <span className="font-bold text-white">
-                          {dayjs(bodega.ultimaLectura.fecha_hora).format('DD/MM HH:mm')}
+                          {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
                         </span>
                       </div>
                     )}
@@ -1678,7 +1704,7 @@ export default function ExportacionPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Fecha y Hora</label>
+              <label className="block text-xs text-slate-400 mb-1">Fecha y Hora (El Salvador)</label>
               <div className="relative">
                 <input
                   type="datetime-local"
@@ -1690,7 +1716,7 @@ export default function ExportacionPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => setNuevaExportacion(prev => ({ ...prev, fecha_hora: getHoraActual() }))}
+                  onClick={() => setNuevaExportacion(prev => ({ ...prev, fecha_hora: getCurrentSVTimeForInput() }))}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
                 >
                   <Clock className="w-4 h-4" />
@@ -1787,15 +1813,12 @@ export default function ExportacionPage() {
                   {exportacionesFiltradas.map((exp, index, array) => {
                     const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
                     
-                    // CORRECCIÓN: Ordenar todas las lecturas por fecha para encontrar la anterior (cualquier bodega)
+                    // Ordenar todas las lecturas por fecha para encontrar la anterior
                     const todasOrdenadas = [...exportacionesFiltradas].sort(
                       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
                     )
                     
-                    // Encontrar el índice de esta lectura en el array ordenado global
                     const indiceGlobal = todasOrdenadas.findIndex(e => e.id === exp.id)
-                    
-                    // Obtener la lectura anterior (si existe) - PUEDE SER DE OTRA BODEGA
                     const lecturaAnterior = indiceGlobal > 0 ? todasOrdenadas[indiceGlobal - 1] : null
                     
                     let flujo = 0
@@ -1807,18 +1830,19 @@ export default function ExportacionPage() {
                       tiempoHoras = tiempoMs / (1000 * 60 * 60)
                       delta = Number(exp.acumulado_tm) - Number(lecturaAnterior.acumulado_tm)
                       
-                      // El flujo se calcula con el delta de acumulado (aunque cambie de bodega)
                       if (tiempoHoras > 0 && delta > 0) {
                         flujo = delta / tiempoHoras
                       }
                     }
                     
-                    // Determinar si hubo cambio de bodega
                     const cambioBodega = lecturaAnterior && lecturaAnterior.bodega_id !== exp.bodega_id
+                    
+                    // Mostrar la fecha convertida a El Salvador
+                    const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY HH:mm')
                     
                     return (
                       <tr key={exp.id} className="hover:bg-white/5">
-                        <td className="px-4 py-3">{formatFechaHora(exp.fecha_hora)}</td>
+                        <td className="px-4 py-3">{fechaSV}</td>
                         <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
                         <td className="px-4 py-3">
                           {flujo > 0 ? (
@@ -1908,6 +1932,7 @@ export default function ExportacionPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="relative">
+              <label className="block text-xs text-slate-400 mb-1">Fecha y Hora (El Salvador)</label>
               <input
                 type="datetime-local"
                 name="fecha_hora"
@@ -1918,13 +1943,14 @@ export default function ExportacionPage() {
               />
               <button
                 type="button"
-                onClick={() => setBitacoraActual(prev => ({ ...prev, fecha_hora: getHoraActual() }))}
+                onClick={() => setBitacoraActual(prev => ({ ...prev, fecha_hora: getCurrentSVTimeForInput() }))}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-400"
               >
                 <Clock className="w-4 h-4" />
               </button>
             </div>
             <div>
+              <label className="block text-xs text-slate-400 mb-1">Comentarios</label>
               <input
                 type="text"
                 name="comentarios"
@@ -1969,7 +1995,7 @@ export default function ExportacionPage() {
                 <tbody className="divide-y divide-white/5">
                   {bitacoraFiltrada.map(reg => (
                     <tr key={reg.id} className="hover:bg-white/5">
-                      <td className="px-4 py-2">{formatFechaHora(reg.fecha_hora)}</td>
+                      <td className="px-4 py-2">{formatUTCToSV(reg.fecha_hora)}</td>
                       <td className="px-4 py-2 text-slate-400">{reg.comentarios || '—'}</td>
                       <td className="px-4 py-2">
                         <div className="flex gap-2">
