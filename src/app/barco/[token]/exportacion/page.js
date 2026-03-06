@@ -1,4 +1,4 @@
-// barco/[token]/exportacion/page.js - Página para registro de exportación (carga a bodega del barco)
+// app/barco/[token]/exportacion/page.js - Página para registro de exportación (carga a bodega del barco)
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
@@ -6,13 +6,12 @@ import { useParams } from 'next/navigation'
 import { supabase } from './../../../lib/supabase'
 import { getCurrentUser } from './../../../lib/auth'
 import { 
-  formatTM, formatHora, formatFechaHora, formatFecha
-} from './../../../lib/utils'
-import { 
   Save, RefreshCw, Scale, Ship, Target, CheckCircle, 
   Package, Clock, AlertCircle, Edit2, Trash2, MapPin,
   TrendingUp, LineChart, BookOpen, X, Download, Layers,
-  Anchor, Play, StopCircle, Lock, Unlock
+  Anchor, Play, StopCircle, Lock, Unlock, Coffee, CloudRain,
+  Wrench, Truck, Zap, AlertTriangle, BarChart3, Flag,
+  History, Filter, ChevronDown, ChevronRight, Info, Box
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -32,6 +31,585 @@ const BODEGAS_BARCO = [
   { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
 ]
 
+// =====================================================
+// CONFIGURACIÓN DE TIPOS DE PARO (VERSIÓN COMPLETA)
+// =====================================================
+const getTiposParoConfig = () => ({
+  // PAROS ALMAPAC
+  'BANDA 7': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20', grupo: 'ALMAPAC' },
+  'MOVIMIENTO DEL CARRO DE BANDA 7': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20', grupo: 'ALMAPAC' },
+  'ELEVADOR 23': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', grupo: 'ALMAPAC' },
+  'ELEVADOR 13': { icono: <Zap className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', grupo: 'ALMAPAC' },
+  'BÁSCULA DE EXPORTACIÓN': { icono: <Scale className="w-4 h-4" />, bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', grupo: 'ALMAPAC' },
+  'COMPUERTA DE LLENADO': { icono: <Layers className="w-4 h-4" />, bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20', grupo: 'ALMAPAC' },
+  'COMPUERTA DE DESCARGA': { icono: <Layers className="w-4 h-4" />, bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20', grupo: 'ALMAPAC' },
+  'HEL ALTO': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', grupo: 'ALMAPAC' },
+  'DRAFT MASTER': { icono: <BarChart3 className="w-4 h-4" />, bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20', grupo: 'ALMAPAC' },
+  'COMPRESOR A': { icono: <Zap className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', grupo: 'ALMAPAC' },
+  'COMPRESOR B': { icono: <Zap className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', grupo: 'ALMAPAC' },
+  'BANDA 15': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'ALMAPAC' },
+  'BANDA 19': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'ALMAPAC' },
+  'BANDA 72': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'ALMAPAC' },
+  'BANDA 73': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'ALMAPAC' },
+  'FALLA DE PAYD LOADER': { icono: <Truck className="w-4 h-4" />, bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', grupo: 'ALMAPAC' },
+  'PLC': { icono: <Zap className="w-4 h-4" />, bg: 'bg-fuchsia-500/10', text: 'text-fuchsia-400', border: 'border-fuchsia-500/20', grupo: 'ALMAPAC' },
+  'FALTA DE AZÚCAR': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-stone-500/10', text: 'text-stone-400', border: 'border-stone-500/20', grupo: 'ALMAPAC' },
+  'BANDA 21': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-pink-500/10', text: 'text-pink-400', border: 'border-pink-500/20', grupo: 'ALMAPAC' },
+  'BANDA 2': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', grupo: 'ALMAPAC' },
+  'BANDA 1': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', grupo: 'ALMAPAC' },
+  'DESATORANDO ELEVADOR 23.': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', grupo: 'ALMAPAC' },
+  'OTROS': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20', grupo: 'ALMAPAC' },
+  
+  // PAROS UPDP
+  'TRANSPORTADOR No:': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', grupo: 'UPDP' },
+  'REBALSE EN EL BUM': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', grupo: 'UPDP' },
+  'FALLAS EN UNIDAD DE CARGA': { icono: <Truck className="w-4 h-4" />, bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20', grupo: 'UPDP' },
+  'FALLAS EN EL APILADOR': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20', grupo: 'UPDP' },
+  'MANTENIMIENTO DEL APILADOR': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', grupo: 'UPDP' },
+  'LIMPIEZA DEL APILADOR': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20', grupo: 'UPDP' },
+  'MOVIMIENTO DEL APILADOR': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', grupo: 'UPDP' },
+  'CAMBIO DE BODEGA EN EL BARCO': { icono: <Layers className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'UPDP' },
+})
+
+// =====================================================
+// MODAL REGISTRAR / EDITAR ATRASO (DEMORA)
+// =====================================================
+const AtrasoModal = ({ barco, atraso, tiposParo, onClose, onSave }) => {
+  const [loading, setLoading] = useState(false)
+  const [paso, setPaso] = useState(1)
+  const [tipoSeleccionado, setTipoSeleccionado] = useState(null)
+  const [enCurso, setEnCurso] = useState(false)
+  const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0)
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState(null)
+  const [formData, setFormData] = useState({
+    tipo_paro_id: atraso?.tipo_paro_id || '',
+    fecha: atraso?.fecha || dayjs().format('YYYY-MM-DD'),
+    hora_inicio: atraso?.hora_inicio?.slice(0, 5) || '',
+    hora_fin: atraso?.hora_fin?.slice(0, 5) || '',
+    observaciones: atraso?.observaciones || ''
+  })
+
+  const TIPOS_PARO_CONFIG = getTiposParoConfig()
+
+  useEffect(() => {
+    if (atraso) {
+      const tipo = tiposParo.find(t => t.id === atraso.tipo_paro_id)
+      setTipoSeleccionado(tipo)
+      
+      if (tipo) {
+        const grupo = TIPOS_PARO_CONFIG[tipo.nombre]?.grupo || 'ALMAPAC'
+        setGrupoSeleccionado(grupo)
+      }
+      setPaso(2)
+    }
+  }, [atraso, tiposParo, TIPOS_PARO_CONFIG])
+
+  useEffect(() => {
+    let interval
+    if (enCurso) interval = setInterval(() => setTiempoTranscurrido(prev => prev + 1), 60000)
+    return () => clearInterval(interval)
+  }, [enCurso])
+
+  const seleccionarGrupo = (grupo) => {
+    setGrupoSeleccionado(grupo)
+  }
+
+  const seleccionarTipo = (tipo) => {
+    setTipoSeleccionado(tipo)
+    setFormData(prev => ({ ...prev, tipo_paro_id: tipo.id }))
+    setPaso(2)
+  }
+
+  const volverAGrupos = () => {
+    setGrupoSeleccionado(null)
+  }
+
+  const calcularDuracion = (inicio, fin) => {
+    if (!inicio || !fin) return null
+    const [hI, mI] = inicio.split(':').map(Number)
+    const [hF, mF] = fin.split(':').map(Number)
+    let minI = hI * 60 + mI, minF = hF * 60 + mF
+    if (minF < minI) minF += 24 * 60
+    return minF - minI
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault(); setLoading(true)
+    try {
+      const user = getCurrentUser()
+      if (!user) throw new Error('No autenticado')
+      if (!formData.hora_inicio) { toast.error('Ingresa hora de inicio'); return }
+      if (!formData.tipo_paro_id) { toast.error('Selecciona un tipo de paro'); return }
+
+      const duracion = formData.hora_fin ? calcularDuracion(formData.hora_inicio, formData.hora_fin) : null
+      const datos = {
+        barco_id: barco.id, 
+        tipo_paro_id: parseInt(formData.tipo_paro_id),
+        fecha: formData.fecha, 
+        hora_inicio: formData.hora_inicio,
+        hora_fin: formData.hora_fin || null, 
+        duracion_minutos: duracion,
+        observaciones: formData.observaciones || null,
+        created_by: user.id, 
+        updated_by: user.id
+      }
+
+      const result = atraso
+        ? await supabase.from('registro_atrasos').update(datos).eq('id', atraso.id)
+        : await supabase.from('registro_atrasos').insert([datos])
+      
+      if (result.error) throw result.error
+      toast.success(atraso ? 'Demora actualizada' : 'Demora registrada'); onSave()
+    } catch (error) { 
+      console.error('❌ Error:', error)
+      toast.error(error.message) 
+    } finally { setLoading(false) }
+  }
+
+  const tiposPorGrupo = {
+    ALMAPAC: [],
+    UPDP: []
+  }
+
+  tiposParo.forEach(tipo => {
+    const grupo = TIPOS_PARO_CONFIG[tipo.nombre]?.grupo || 'ALMAPAC'
+    if (grupo === 'UPDP') {
+      tiposPorGrupo.UPDP.push(tipo)
+    } else {
+      tiposPorGrupo.ALMAPAC.push(tipo)
+    }
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] flex flex-col overflow-hidden">
+        <div className="bg-gradient-to-r from-orange-600 to-red-600 p-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg"><Clock className="w-5 h-5 text-white" /></div>
+              <div>
+                <h2 className="text-base font-black text-white">{atraso ? 'Editar Demora' : 'Nueva Demora'}</h2>
+                <p className="text-orange-200 text-xs">{barco.nombre}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+          <div className="flex gap-1.5">
+            <div className={`flex-1 h-1 rounded-full ${paso >= 1 ? 'bg-white' : 'bg-white/30'}`} />
+            <div className={`flex-1 h-1 rounded-full ${paso >= 2 ? 'bg-white' : 'bg-white/30'}`} />
+          </div>
+          <div className="flex justify-between text-[10px] text-white/60 mt-1">
+            <span>1. Tipo de paro</span>
+            <span>2. Detalles</span>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-4">
+          {paso === 1 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">SELECCIONA EL TIPO DE PARO</p>
+              
+              {!grupoSeleccionado ? (
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => seleccionarGrupo('ALMAPAC')}
+                    className="w-full p-4 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <span className="text-blue-400 text-lg">📦</span>
+                      </div>
+                      <span className="font-bold text-white">PAROS ALMAPAC</span>
+                      {tiposPorGrupo.ALMAPAC.length > 0 && (
+                        <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                          {tiposPorGrupo.ALMAPAC.length}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-orange-400 transition-colors" />
+                  </button>
+
+                  <button 
+                    onClick={() => seleccionarGrupo('UPDP')}
+                    className="w-full p-4 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <span className="text-green-400 text-lg">⚡</span>
+                      </div>
+                      <span className="font-bold text-white">PAROS UPDP</span>
+                      {tiposPorGrupo.UPDP.length > 0 && (
+                        <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                          {tiposPorGrupo.UPDP.length}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-orange-400 transition-colors" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <button 
+                    onClick={volverAGrupos}
+                    className="text-xs text-orange-500 hover:text-orange-400 flex items-center gap-1 font-medium mb-4"
+                  >
+                    ← Volver a grupos
+                  </button>
+
+                  <h3 className="text-sm font-bold mb-3 px-1" style={{
+                    color: grupoSeleccionado === 'ALMAPAC' ? '#60a5fa' : '#4ade80'
+                  }}>
+                    {grupoSeleccionado === 'ALMAPAC' ? '📦 PAROS ALMAPAC' : '⚡ PAROS UPDP'}
+                  </h3>
+
+                  {tiposPorGrupo[grupoSeleccionado].length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto pr-1">
+                      {tiposPorGrupo[grupoSeleccionado].map(tipo => {
+                        const config = TIPOS_PARO_CONFIG[tipo.nombre] || {
+                          bg: 'bg-gray-500/10', 
+                          icono: <AlertTriangle className="w-4 h-4 text-gray-400" />,
+                          text: 'text-gray-400'
+                        }
+                        return (
+                          <button key={tipo.id} onClick={() => seleccionarTipo(tipo)}
+                            className="p-3 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center gap-3 transition-all"
+                          >
+                            <div className={`p-2 rounded-lg flex-shrink-0 ${config.bg}`}>
+                              <span className={config.text}>{config.icono}</span>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-white text-sm">{tipo.nombre}</p>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-800/50 rounded-xl p-8 text-center">
+                      <AlertCircle className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                      <p className="text-slate-400 text-sm">No hay tipos de paro en este grupo</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <button type="button" onClick={() => { setPaso(1); setTipoSeleccionado(null); setGrupoSeleccionado(null); }}
+                className="text-xs text-orange-500 hover:text-orange-400 flex items-center gap-1 font-medium">
+                ← Volver a tipos
+              </button>
+
+              <div className="bg-slate-900 rounded-xl p-3 border border-orange-500/20">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Tipo seleccionado</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {tipoSeleccionado && (
+                    <>
+                      {TIPOS_PARO_CONFIG[tipoSeleccionado.nombre] && (
+                        <span className={TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].text}>
+                          {TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].icono}
+                        </span>
+                      )}
+                      <span className="font-bold text-white text-sm">{tipoSeleccionado.nombre}</span>
+                    </>
+                  )}
+                  {grupoSeleccionado && (
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-slate-300 ml-auto">
+                      {grupoSeleccionado}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Fecha</label>
+                <input type="date" value={formData.fecha}
+                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" required />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
+                  <div className="flex gap-2">
+                    <input type="time" value={formData.hora_inicio}
+                      onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
+                    <button type="button"
+                      onClick={() => { setFormData(prev => ({ ...prev, hora_inicio: dayjs().format('HH:mm') })); setEnCurso(true) }}
+                      className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-green-500/20 hover:bg-green-500/30 text-green-400"
+                      title="Ahora">
+                      <Play className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Fin</label>
+                  <div className="flex gap-2">
+                    <input type="time" value={formData.hora_fin}
+                      onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" />
+                    <button type="button"
+                      onClick={() => { setFormData(prev => ({ ...prev, hora_fin: dayjs().format('HH:mm') })); setEnCurso(false) }}
+                      className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-red-500/20 hover:bg-red-500/30 text-red-400"
+                      title="Ahora">
+                      <StopCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {enCurso && (
+                <div className="bg-blue-500/10 border-blue-500/20 text-blue-400 border rounded-xl p-3 flex items-center gap-2">
+                  <div className="animate-pulse w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                  <p className="text-xs">En curso · {Math.floor(tiempoTranscurrido / 60)}h {tiempoTranscurrido % 60}m</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Observaciones</label>
+                <textarea value={formData.observaciones}
+                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                  rows="2"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
+                  placeholder="Detalles adicionales (opcional)" />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={onClose}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-sm">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={loading}
+                  className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+                  {loading
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <CheckCircle className="w-4 h-4" />
+                  }
+                  {atraso ? 'Actualizar' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// TARJETA DE DEMORA
+// =====================================================
+const DemoraCard = ({ reg, tiposParo, onEditar, onEliminar }) => {
+  const TIPOS_PARO_CONFIG = getTiposParoConfig()
+
+  const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
+  const config = TIPOS_PARO_CONFIG[tipo?.nombre || ''] || {
+    bg: 'bg-slate-800', icono: <AlertTriangle className="w-4 h-4 text-slate-400" />, border: 'border-slate-700', text: 'text-slate-400'
+  }
+  const grupo = config.grupo || 'ALMAPAC'
+
+  let grupoColor = 'bg-blue-500/20 text-blue-400'
+  if (grupo === 'UPDP') grupoColor = 'bg-green-500/20 text-green-400'
+
+  return (
+    <div className="bg-slate-900 rounded-xl border-2 border-white/10 hover:border-orange-500/40 transition-all overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className={`p-2.5 rounded-xl ${config.bg} flex-shrink-0`}>
+            <span className={config.text}>{config.icono}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-white text-sm leading-snug">{tipo?.nombre || 'Desconocido'}</h3>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${grupoColor}`}>{grupo}</span>
+              <span className="text-[10px] text-slate-400">{dayjs(reg.fecha).format('DD/MM/YYYY')}</span>
+            </div>
+          </div>
+          <div className="flex gap-1 flex-shrink-0">
+            <button onClick={() => onEditar(reg)}
+              className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400"
+              title="Editar">
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => onEliminar(reg.id)}
+              className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400"
+              title="Eliminar">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg px-3 py-2 mb-3">
+          <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+          <span className="font-mono text-sm text-white">{reg.hora_inicio?.slice(0, 5)}</span>
+          {reg.hora_fin ? (
+            <>
+              <span className="text-slate-600">→</span>
+              <span className="font-mono text-sm text-white">{reg.hora_fin?.slice(0, 5)}</span>
+              <span className="ml-auto font-bold text-xs text-orange-400">
+                {Math.floor((reg.duracion_minutos || 0) / 60)}h {(reg.duracion_minutos || 0) % 60}m
+              </span>
+            </>
+          ) : (
+            <span className="ml-auto text-xs font-medium animate-pulse text-blue-400">En curso</span>
+          )}
+        </div>
+
+        {reg.observaciones && (
+          <p className="text-xs text-slate-400 italic bg-slate-800/40 rounded-lg px-3 py-2 border-l-2 border-slate-600">
+            {reg.observaciones}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// DASHBOARD DE DEMORAS
+// =====================================================
+const DashboardDemoras = ({ barco, registros, tiposParo, onClose }) => {
+  const TIPOS_PARO_CONFIG = getTiposParoConfig()
+
+  const grupos = {
+    ALMAPAC: registros.filter(r => {
+      const tipo = tiposParo.find(t => t.id === r.tipo_paro_id)
+      const grupo = TIPOS_PARO_CONFIG[tipo?.nombre || '']?.grupo
+      return grupo === 'ALMAPAC' || !grupo
+    }),
+    UPDP: registros.filter(r => {
+      const tipo = tiposParo.find(t => t.id === r.tipo_paro_id)
+      return TIPOS_PARO_CONFIG[tipo?.nombre || '']?.grupo === 'UPDP'
+    })
+  }
+
+  const totalesGrupo = {}
+  Object.keys(grupos).forEach(grupo => {
+    totalesGrupo[grupo] = grupos[grupo].reduce((sum, r) => sum + (r.duracion_minutos || 0), 0)
+  })
+
+  const totalGeneral = Object.values(totalesGrupo).reduce((a, b) => a + b, 0)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+      <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden">
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg"><Clock className="w-5 h-5 text-white" /></div>
+              <div>
+                <h2 className="text-base font-black text-white">Dashboard de Demoras</h2>
+                <p className="text-purple-200 text-xs">{barco.nombre}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl">
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-3">
+              <p className="text-white/70 text-[10px] uppercase tracking-wide">Total Demoras</p>
+              <p className="text-xl font-black text-white mt-1">{registros.length}</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-3">
+              <p className="text-white/70 text-[10px] uppercase tracking-wide">Tiempo Total</p>
+              <p className="text-xl font-black text-white mt-1">
+                {Math.floor(totalGeneral / 60)}h {totalGeneral % 60}m
+              </p>
+            </div>
+            <div className="bg-gradient-to-br from-orange-600 to-red-600 rounded-xl p-3">
+              <p className="text-white/70 text-[10px] uppercase tracking-wide">En curso</p>
+              <p className="text-xl font-black text-white mt-1">
+                {registros.filter(r => !r.hora_fin).length}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-xl p-4 border border-white/10">
+            <h3 className="font-bold text-white mb-3 text-xs uppercase tracking-wide">Distribución por Grupo</h3>
+            <div className="space-y-3">
+              {Object.keys(grupos).map(grupo => {
+                let color = 'bg-blue-500', textColor = 'text-blue-400'
+                if (grupo === 'UPDP') { color = 'bg-green-500'; textColor = 'text-green-400' }
+
+                return (
+                  <div key={grupo}>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="text-slate-400">{grupo}</span>
+                      <span className={`font-bold ${textColor}`}>
+                        {Math.floor(totalesGrupo[grupo] / 60)}h {totalesGrupo[grupo] % 60}m
+                      </span>
+                    </div>
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full ${color} rounded-full transition-all`}
+                        style={{ width: totalGeneral > 0 ? `${(totalesGrupo[grupo] / totalGeneral) * 100}%` : '0%' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {Object.keys(grupos).map(grupo => {
+            if (grupos[grupo].length === 0) return null
+
+            let headerColor = 'bg-blue-500/10 text-blue-400'
+            if (grupo === 'UPDP') headerColor = 'bg-green-500/10 text-green-400'
+
+            return (
+              <div key={grupo} className="bg-slate-900 rounded-xl overflow-hidden border border-white/10">
+                <div className={`${headerColor} px-4 py-3 border-b border-white/10 flex items-center gap-2`}>
+                  <h3 className="font-bold text-xs">{grupo}</h3>
+                  <span className="text-xs ml-auto">{grupos[grupo].length} demoras</span>
+                </div>
+                <div className="p-4 space-y-3">
+                  {grupos[grupo].map(reg => {
+                    const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
+                    const config = TIPOS_PARO_CONFIG[tipo?.nombre || ''] || {}
+                    return (
+                      <div key={reg.id} className="border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <span className={config.text || 'text-slate-400'}>{config.icono}</span>
+                            <span className="text-xs text-white">{tipo?.nombre}</span>
+                          </div>
+                          <span className="text-xs text-orange-400 font-bold">
+                            {reg.duracion_minutos ? `${Math.floor(reg.duracion_minutos / 60)}h ${reg.duracion_minutos % 60}m` : 'En curso'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {dayjs(reg.fecha).format('DD/MM')} {reg.hora_inicio} {reg.hora_fin && `→ ${reg.hora_fin}`}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {registros.length === 0 && (
+            <div className="bg-slate-900 rounded-xl p-10 text-center">
+              <Clock className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-400">No hay demoras registradas</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// COMPONENTE PRINCIPAL
+// =====================================================
 export default function ExportacionPage() {
   const { token } = useParams()
   const [loading, setLoading] = useState(true)
@@ -39,28 +617,30 @@ export default function ExportacionPage() {
   const [productos, setProductos] = useState([])
   const [exportaciones, setExportaciones] = useState([])
   const [bitacora, setBitacora] = useState([])
+  const [tiposParo, setTiposParo] = useState([])
+  const [registrosDemoras, setRegistrosDemoras] = useState([])
   const [productoActivo, setProductoActivo] = useState(null)
   const [user, setUser] = useState(null)
   
-  // Estado para nueva exportación
+  const [showDemoraModal, setShowDemoraModal] = useState(false)
+  const [showDemorasDashboard, setShowDemorasDashboard] = useState(false)
+  const [demoraEditando, setDemoraEditando] = useState(null)
+  
   const [nuevaExportacion, setNuevaExportacion] = useState({
     fecha_hora: '',
     acumulado_tm: '',
-    bodega_id: '', // ID de la bodega del barco
+    bodega_id: '',
     observaciones: ''
   })
 
-  // Estado para bitácora
   const [bitacoraActual, setBitacoraActual] = useState({
     fecha_hora: '',
     comentarios: ''
   })
 
-  // Estado para edición
   const [editandoExportacion, setEditandoExportacion] = useState(null)
   const [editandoBitacora, setEditandoBitacora] = useState(null)
 
-  // Función para obtener hora actual
   const getHoraActual = () => {
     const ahora = new Date()
     const year = ahora.getFullYear()
@@ -71,14 +651,12 @@ export default function ExportacionPage() {
     return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
-  // Cargar datos
   useEffect(() => {
     const currentUser = getCurrentUser()
     setUser(currentUser)
     cargarDatos()
   }, [token])
 
-  // Inicializar producto activo cuando se carguen productos
   useEffect(() => {
     if (productos.length > 0 && !productoActivo) {
       setProductoActivo(productos[0])
@@ -93,7 +671,6 @@ export default function ExportacionPage() {
     try {
       setLoading(true)
       
-      // Buscar barco por token
       const { data: barcoData, error: barcoError } = await supabase
         .from('barcos')
         .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
@@ -107,7 +684,21 @@ export default function ExportacionPage() {
 
       setBarco(barcoData)
 
-      // Productos del barco
+      const { data: tiposParoData } = await supabase
+        .from('tipos_paro')
+        .select('*')
+        .eq('activo', true)
+        .order('orden')
+      setTiposParo(tiposParoData || [])
+
+      const { data: demorasData } = await supabase
+        .from('registro_atrasos')
+        .select(`*, tipo_paro:tipos_paro(*)`)
+        .eq('barco_id', barcoData.id)
+        .order('fecha', { ascending: false })
+        .order('hora_inicio', { ascending: false })
+      setRegistrosDemoras(demorasData || [])
+
       const productosBarco = barcoData.metas_json?.productos || []
       
       if (productosBarco.length === 0) {
@@ -123,7 +714,6 @@ export default function ExportacionPage() {
         setProductos(productosData || [])
       }
 
-      // Cargar exportaciones
       const { data: exportData } = await supabase
         .from('exportacion_banda')
         .select(`
@@ -135,7 +725,6 @@ export default function ExportacionPage() {
 
       setExportaciones(exportData || [])
 
-      // Cargar bitácora de exportación
       const { data: bitacoraData } = await supabase
         .from('bitacora_exportacion')
         .select(`
@@ -155,7 +744,45 @@ export default function ExportacionPage() {
     }
   }
 
-  // Calcular estadísticas por producto - CORREGIDO: suma los acumulados por bodega
+  const handleNuevaDemora = () => {
+    if (barco.estado === 'finalizado') {
+      toast.error('Operación finalizada')
+      return
+    }
+    setDemoraEditando(null)
+    setShowDemoraModal(true)
+  }
+
+  const handleEditarDemora = (demora) => {
+    if (barco.estado === 'finalizado') {
+      toast.error('Operación finalizada')
+      return
+    }
+    setDemoraEditando(demora)
+    setShowDemoraModal(true)
+  }
+
+  const handleEliminarDemora = async (id) => {
+    if (barco.estado === 'finalizado') {
+      toast.error('Operación finalizada')
+      return
+    }
+    if (!confirm('¿Eliminar esta demora?')) return
+    try {
+      const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
+      if (error) throw error
+      toast.success('Demora eliminada')
+      await cargarDatos()
+    } catch (error) {
+      toast.error('Error al eliminar')
+    }
+  }
+
+  const handleGuardarDemora = async () => {
+    setShowDemoraModal(false)
+    await cargarDatos()
+  }
+
   const estadisticasProducto = useMemo(() => {
     if (!productoActivo) return null
 
@@ -171,41 +798,21 @@ export default function ExportacionPage() {
       }
     }
 
-    // Ordenar por fecha
     const ordenadas = [...exportacionesProd].sort(
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
 
-    // CORRECCIÓN: Calcular total sumando los últimos acumulados de CADA BODEGA
-    const bodegasMap = new Map()
-    
-    // Primero, ordenar todas las exportaciones por fecha (ascendente)
-    const todasOrdenadas = [...exportacionesProd].sort(
-      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-    )
-    
-    // Para cada bodega, encontrar su último registro
-    todasOrdenadas.forEach(exp => {
-      if (exp.bodega_id) {
-        bodegasMap.set(exp.bodega_id, exp)
-      }
-    })
-    
-    // Sumar los acumulados de todas las bodegas
-    let totalGeneral = 0
-    bodegasMap.forEach(exp => {
-      totalGeneral += Number(exp.acumulado_tm) || 0
-    })
+    const ultimoRegistro = ordenadas[ordenadas.length - 1]
+    const totalGeneral = Number(ultimoRegistro.acumulado_tm) || 0
 
     const primera = ordenadas[0]
     const ultima = ordenadas[ordenadas.length - 1]
 
-    // Calcular flujo promedio (TM/h) basado en el total general
     const horasTranscurridas = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
     const flujoPromedio = horasTranscurridas > 0 ? totalGeneral / horasTranscurridas : 0
 
     return {
-      totalTM: totalGeneral, // Ahora es la suma de todas las bodegas
+      totalTM: totalGeneral,
       lecturas: exportacionesProd.length,
       primeraLectura: primera,
       ultimaLectura: ultima,
@@ -213,7 +820,6 @@ export default function ExportacionPage() {
     }
   }, [exportaciones, productoActivo])
 
-  // ✅ NUEVO: Calcular flujo por hora de banda (TM/h) - CORREGIDO
   const calcularFlujoBandaPorHora = useMemo(() => {
     if (!productoActivo) return 0
 
@@ -233,41 +839,16 @@ export default function ExportacionPage() {
 
     if (diferenciaHoras <= 0) return 0
 
-    // CORRECCIÓN: Calcular el total sumando los últimos acumulados de cada bodega
-    const bodegasMap = new Map()
-    
-    ordenadas.forEach(exp => {
-      if (exp.bodega_id) {
-        bodegasMap.set(exp.bodega_id, exp)
-      }
-    })
-    
-    let totalGeneral = 0
-    bodegasMap.forEach(exp => {
-      totalGeneral += Number(exp.acumulado_tm) || 0
-    })
+    const acumuladoInicial = Number(primera.acumulado_tm) || 0
+    const acumuladoFinal = Number(ultima.acumulado_tm) || 0
 
-    // Calcular delta total
-    const bodegasInicio = new Map()
-    ordenadas.forEach(exp => {
-      if (exp.bodega_id && !bodegasInicio.has(exp.bodega_id)) {
-        bodegasInicio.set(exp.bodega_id, exp)
-      }
-    })
-    
-    let totalInicio = 0
-    bodegasInicio.forEach(exp => {
-      totalInicio += Number(exp.acumulado_tm) || 0
-    })
-
-    const deltaAcumulado = totalGeneral - totalInicio
+    const deltaAcumulado = acumuladoFinal - acumuladoInicial
 
     if (deltaAcumulado <= 0) return 0
 
     return deltaAcumulado / diferenciaHoras
   }, [exportaciones, productoActivo])
 
-  // ✅ NUEVO: Datos para gráfica de flujo acumulado por hora - CORREGIDO
   const datosGraficoFlujo = useMemo(() => {
     if (!productoActivo) return []
 
@@ -275,68 +856,21 @@ export default function ExportacionPage() {
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    // CORRECCIÓN: Calcular acumulado total por punto en el tiempo
     const puntos = []
-    const acumuladoPorBodega = new Map()
     
     exportacionesProd.forEach(exp => {
-      if (exp.bodega_id) {
-        // Actualizar el acumulado de esta bodega
-        acumuladoPorBodega.set(exp.bodega_id, Number(exp.acumulado_tm) || 0)
-        
-        // Calcular total sumando todas las bodegas
-        let total = 0
-        acumuladoPorBodega.forEach(valor => {
-          total += valor
-        })
-        
-        const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-        puntos.push({
-          hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
-          acumulado: total,
-          bodega: bodega?.nombre || '—',
-          timestamp: new Date(exp.fecha_hora).getTime()
-        })
-      }
+      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+      puntos.push({
+        hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
+        acumulado: Number(exp.acumulado_tm) || 0,
+        bodega: bodega?.nombre || '—',
+        timestamp: new Date(exp.fecha_hora).getTime()
+      })
     })
 
     return puntos
   }, [exportaciones, productoActivo])
 
-  // Datos para gráfica de tendencia (original) - CORREGIDO
-  const datosGrafico = useMemo(() => {
-    if (!productoActivo) return []
-
-    const exportacionesProd = exportaciones
-      .filter(e => e.producto_id === productoActivo.id)
-      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-
-    // CORRECCIÓN: Calcular acumulado total por punto
-    const puntos = []
-    const acumuladoPorBodega = new Map()
-    
-    exportacionesProd.forEach(exp => {
-      if (exp.bodega_id) {
-        acumuladoPorBodega.set(exp.bodega_id, Number(exp.acumulado_tm) || 0)
-        
-        let total = 0
-        acumuladoPorBodega.forEach(valor => {
-          total += valor
-        })
-        
-        const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-        puntos.push({
-          hora: dayjs(exp.fecha_hora).format('DD/MM HH:mm'),
-          acumulado: total,
-          bodega: bodega?.nombre || '—'
-        })
-      }
-    })
-
-    return puntos
-  }, [exportaciones, productoActivo])
-
-  // Resumen por bodega - CORREGIDO
   const resumenPorBodega = useMemo(() => {
     if (!productoActivo) return []
 
@@ -344,7 +878,6 @@ export default function ExportacionPage() {
     
     const mapa = {}
     
-    // Ordenar por fecha para tomar el último de cada bodega
     const ordenadas = [...exportacionesProd].sort(
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
@@ -358,13 +891,13 @@ export default function ExportacionPage() {
           bodega_id: key,
           nombre: BODEGAS_BARCO.find(b => b.id === key)?.nombre || `Bodega ${key}`,
           codigo: BODEGAS_BARCO.find(b => b.id === key)?.codigo || `BDG-${key}`,
-          totalTM: 0,
+          acumuladoFinal: 0,
           lecturas: 0,
           ultimaLectura: null
         }
       }
-      // Actualizar siempre con el valor más reciente (sobrescribe)
-      mapa[key].totalTM = Number(e.acumulado_tm) || 0
+      
+      mapa[key].acumuladoFinal = Number(e.acumulado_tm) || 0
       mapa[key].lecturas++
       
       if (!mapa[key].ultimaLectura || new Date(e.fecha_hora) > new Date(mapa[key].ultimaLectura.fecha_hora)) {
@@ -372,34 +905,24 @@ export default function ExportacionPage() {
       }
     })
 
-    return Object.values(mapa).sort((a, b) => b.totalTM - a.totalTM)
+    return Object.values(mapa).sort((a, b) => b.acumuladoFinal - a.acumuladoFinal)
   }, [exportaciones, productoActivo])
 
-  // Calcular total general - CORREGIDO
   const totalGeneral = useMemo(() => {
     if (!productoActivo) return 0
     
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-    const ultimosPorBodega = new Map()
     
-    exportacionesProd.forEach(exp => {
-      if (exp.bodega_id) {
-        const existente = ultimosPorBodega.get(exp.bodega_id)
-        if (!existente || new Date(exp.fecha_hora) > new Date(existente.fecha_hora)) {
-          ultimosPorBodega.set(exp.bodega_id, exp)
-        }
-      }
-    })
+    if (exportacionesProd.length === 0) return 0
     
-    let total = 0
-    ultimosPorBodega.forEach(exp => {
-      total += Number(exp.acumulado_tm) || 0
-    })
+    const ordenadas = [...exportacionesProd].sort(
+      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+    )
     
-    return total
+    const ultimoRegistro = ordenadas[ordenadas.length - 1]
+    return Number(ultimoRegistro.acumulado_tm) || 0
   }, [exportaciones, productoActivo])
 
-  // Cambiar producto activo
   const cambiarProducto = (producto) => {
     setProductoActivo(producto)
     setNuevaExportacion({
@@ -416,7 +939,6 @@ export default function ExportacionPage() {
     setEditandoBitacora(null)
   }
 
-  // Manejar cambios en formularios
   const handleExportacionChange = (e) => {
     const { name, value } = e.target
     setNuevaExportacion(prev => ({ ...prev, [name]: value }))
@@ -427,7 +949,6 @@ export default function ExportacionPage() {
     setBitacoraActual(prev => ({ ...prev, [name]: value }))
   }
 
-  // Guardar exportación
   const handleGuardarExportacion = async () => {
     try {
       if (barco.estado === 'finalizado') {
@@ -493,7 +1014,6 @@ export default function ExportacionPage() {
         return
       }
 
-      // Resetear formulario
       setNuevaExportacion({
         fecha_hora: getHoraActual(),
         acumulado_tm: '',
@@ -509,7 +1029,6 @@ export default function ExportacionPage() {
     }
   }
 
-  // Guardar bitácora
   const handleGuardarBitacora = async () => {
     try {
       if (barco.estado === 'finalizado') {
@@ -576,7 +1095,6 @@ export default function ExportacionPage() {
     }
   }
 
-  // Editar exportación
   const handleEditarExportacion = (exp) => {
     setEditandoExportacion(exp)
     setNuevaExportacion({
@@ -587,7 +1105,6 @@ export default function ExportacionPage() {
     })
   }
 
-  // Editar bitácora
   const handleEditarBitacora = (reg) => {
     setEditandoBitacora(reg)
     setBitacoraActual({
@@ -596,7 +1113,6 @@ export default function ExportacionPage() {
     })
   }
 
-  // Eliminar exportación
   const handleEliminarExportacion = async (id) => {
     if (!confirm('¿Eliminar este registro de exportación?')) return
 
@@ -626,7 +1142,6 @@ export default function ExportacionPage() {
     }
   }
 
-  // Eliminar bitácora
   const handleEliminarBitacora = async (id) => {
     if (!confirm('¿Eliminar este registro de bitácora?')) return
 
@@ -654,7 +1169,6 @@ export default function ExportacionPage() {
     }
   }
 
-  // Cancelar edición
   const cancelarEdicion = () => {
     setEditandoExportacion(null)
     setEditandoBitacora(null)
@@ -670,9 +1184,13 @@ export default function ExportacionPage() {
     })
   }
 
+  const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
+
+  const puedeRegistrar = barco?.estado !== 'finalizado'
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
       </div>
     )
@@ -680,7 +1198,7 @@ export default function ExportacionPage() {
 
   if (!barco) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#0f172a]">
         <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-8 text-center max-w-md">
           <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h1 className="text-2xl font-black text-white mb-2">Link Inválido</h1>
@@ -690,10 +1208,9 @@ export default function ExportacionPage() {
     )
   }
 
-  // Verificar que sea un barco de exportación
   if (barco.tipo_operacion !== 'exportacion') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#0f172a]">
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-8 text-center max-w-md">
           <Ship className="w-16 h-16 text-yellow-400 mx-auto mb-4" />
           <h1 className="text-2xl font-black text-white mb-2">Operación Incorrecta</h1>
@@ -708,10 +1225,9 @@ export default function ExportacionPage() {
   const bitacoraFiltrada = bitacora.filter(b => b.producto_id === productoActivo?.id)
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
+    <div className="min-h-screen bg-[#0f172a] p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -725,7 +1241,6 @@ export default function ExportacionPage() {
                     {barco.codigo_barco}
                   </span>
                 )}
-                {/* Badge de estado */}
                 <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                   barco.estado === 'activo' 
                     ? 'bg-green-500/20 text-green-400' 
@@ -754,9 +1269,7 @@ export default function ExportacionPage() {
             </div>
           </div>
 
-          {/* Indicadores de inicio/fin de carga (SOLO VISUALIZACIÓN) */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Estado de Inicio de Carga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_iniciada_at 
                 ? 'bg-green-500/20 border border-green-500/30' 
@@ -764,14 +1277,10 @@ export default function ExportacionPage() {
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${
-                  barco.operacion_iniciada_at 
-                    ? 'bg-green-500/30' 
-                    : 'bg-yellow-500/30'
+                  barco.operacion_iniciada_at ? 'bg-green-500/30' : 'bg-yellow-500/30'
                 }`}>
                   <Play className={`w-5 h-5 ${
-                    barco.operacion_iniciada_at 
-                      ? 'text-green-400' 
-                      : 'text-yellow-400'
+                    barco.operacion_iniciada_at ? 'text-green-400' : 'text-yellow-400'
                   }`} />
                 </div>
                 <div className="flex-1">
@@ -808,7 +1317,6 @@ export default function ExportacionPage() {
               </div>
             </div>
 
-            {/* Estado de Fin de Carga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_finalizada_at 
                 ? 'bg-red-500/20 border border-red-500/30' 
@@ -818,18 +1326,14 @@ export default function ExportacionPage() {
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${
-                  barco.operacion_finalizada_at 
-                    ? 'bg-red-500/30' 
-                    : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                    ? 'bg-blue-500/30'
-                    : 'bg-slate-600'
+                  barco.operacion_finalizada_at ? 'bg-red-500/30' 
+                  : barco.operacion_iniciada_at && !barco.operacion_finalizada_at ? 'bg-blue-500/30'
+                  : 'bg-slate-600'
                 }`}>
                   <StopCircle className={`w-5 h-5 ${
-                    barco.operacion_finalizada_at 
-                      ? 'text-red-400' 
-                      : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                      ? 'text-blue-400'
-                      : 'text-slate-400'
+                    barco.operacion_finalizada_at ? 'text-red-400' 
+                    : barco.operacion_iniciada_at && !barco.operacion_finalizada_at ? 'text-blue-400'
+                    : 'text-slate-400'
                   }`} />
                 </div>
                 <div className="flex-1">
@@ -875,86 +1379,8 @@ export default function ExportacionPage() {
               </div>
             </div>
           </div>
-
-          {/* Si hay tiempos de Arribo/Ataque/Recibido, mostrarlos también */}
-          {(barco.tiempo_arribo || barco.tiempo_ataque || barco.tiempo_recibido) && (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {barco.tiempo_arribo && (
-                <div className="bg-blue-500/10 rounded-xl p-3 border border-blue-500/20">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Anchor className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold text-blue-400">ARRIBO</span>
-                    {barco.tiempo_arribo_editado && (
-                      <span className="text-[8px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
-                    )}
-                  </div>
-                  <p className="text-sm font-bold text-white">
-                    {new Date(barco.tiempo_arribo).toLocaleString('es-ES', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              )}
-              
-              {barco.tiempo_ataque && (
-                <div className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Target className="w-4 h-4 text-yellow-400" />
-                    <span className="text-xs font-bold text-yellow-400">ATAQUE</span>
-                    {barco.tiempo_ataque_editado && (
-                      <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
-                    )}
-                  </div>
-                  <p className="text-sm font-bold text-white">
-                    {new Date(barco.tiempo_ataque).toLocaleString('es-ES', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              )}
-              
-              {barco.tiempo_recibido && (
-                <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Package className="w-4 h-4 text-green-400" />
-                    <span className="text-xs font-bold text-green-400">RECIBIDO</span>
-                    {barco.tiempo_recibido_editado && (
-                      <span className="text-[8px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full ml-auto">Editado</span>
-                    )}
-                  </div>
-                  <p className="text-sm font-bold text-white">
-                    {new Date(barco.tiempo_recibido).toLocaleString('es-ES', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Si hay motivo de finalización y está finalizado, mostrarlo destacado */}
-          {barco.estado === 'finalizado' && barco.operacion_motivo_finalizacion && (
-            <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-sm text-red-400">
-                  <span className="font-bold">Motivo de finalización:</span> {barco.operacion_motivo_finalizacion}
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Alerta de operación finalizada */}
         {barco.estado === 'finalizado' && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-3">
@@ -966,7 +1392,53 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Pestañas de productos */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleNuevaDemora}
+            disabled={!puedeRegistrar}
+            className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${
+              puedeRegistrar
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Registrar Demora
+          </button>
+          <button
+            onClick={() => setShowDemorasDashboard(true)}
+            className="px-4 py-3 rounded-xl font-bold flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white transition-all"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Ver Dashboard de Demoras
+            {registrosDemoras.length > 0 && (
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+                {registrosDemoras.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {registrosDemoras.length > 0 && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-orange-400" />
+              Demoras Recientes
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {registrosDemoras.slice(0, 3).map(reg => (
+                <DemoraCard
+                  key={reg.id}
+                  reg={reg}
+                  tiposParo={tiposParo}
+                  onEditar={handleEditarDemora}
+                  onEliminar={handleEliminarDemora}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
           <div className="flex overflow-x-auto">
             {productos.map(prod => {
@@ -999,7 +1471,6 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tarjeta de resumen del producto activo con flujo por hora - CORREGIDO */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -1023,7 +1494,6 @@ export default function ExportacionPage() {
               </div>
             </div>
 
-            {/* Tarjeta de FLUJO POR HORA - NUEVA */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
               {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
                 <>
@@ -1048,7 +1518,6 @@ export default function ExportacionPage() {
                 </>
               )}
               
-              {/* TARJETA DE FLUJO PROMEDIO POR HORA - NUEVA */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4 col-span-2">
                 <div className="flex items-center gap-3">
                   <TrendingUp className="w-6 h-6 text-blue-200" />
@@ -1080,7 +1549,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Gráfica de tendencia con FLUJO ACUMULADO - CORREGIDO */}
         {productoActivo && datosGraficoFlujo.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1113,7 +1581,6 @@ export default function ExportacionPage() {
               </ResponsiveContainer>
             </div>
 
-            {/* Resumen de flujo en la gráfica - CORREGIDO */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-900 rounded-lg p-3">
                 <p className="text-xs text-slate-500">Primera lectura</p>
@@ -1137,7 +1604,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Resumen por bodega - CORREGIDO */}
         {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1161,7 +1627,7 @@ export default function ExportacionPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Total cargado:</span>
-                      <span className="font-bold text-green-400">{bodega.totalTM.toFixed(3)} TM</span>
+                      <span className="font-bold text-green-400">{bodega.acumuladoFinal.toFixed(3)} TM</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Lecturas:</span>
@@ -1180,22 +1646,20 @@ export default function ExportacionPage() {
               ))}
             </div>
 
-            {/* Total general - CORREGIDO */}
             <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
               <div className="bg-slate-900 rounded-lg px-6 py-3">
-                <p className="text-sm text-slate-400">TOTAL GENERAL</p>
+                <p className="text-sm text-slate-400">TOTAL GENERAL (Último acumulado)</p>
                 <p className="text-2xl font-black text-green-400">
                   {totalGeneral.toFixed(3)} TM
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Suma de todas las bodegas
+                  Último registro: {datosGraficoFlujo.length > 0 ? datosGraficoFlujo[datosGraficoFlujo.length - 1]?.hora : '—'}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Formulario de exportación */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -1297,7 +1761,6 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Tabla de exportaciones con flujo por hora - CORREGIDO */}
         {exportacionesFiltradas.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
@@ -1324,25 +1787,34 @@ export default function ExportacionPage() {
                   {exportacionesFiltradas.map((exp, index, array) => {
                     const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
                     
-                    // Calcular flujo entre esta lectura y la anterior (misma bodega)
-                    const lecturasMismaBodega = exportacionesFiltradas
-                      .filter(e => e.bodega_id === exp.bodega_id)
-                      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+                    // CORRECCIÓN: Ordenar todas las lecturas por fecha para encontrar la anterior (cualquier bodega)
+                    const todasOrdenadas = [...exportacionesFiltradas].sort(
+                      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+                    )
                     
-                    const indiceEnBodega = lecturasMismaBodega.findIndex(e => e.id === exp.id)
-                    const lecturaAnteriorMismaBodega = indiceEnBodega > 0 ? lecturasMismaBodega[indiceEnBodega - 1] : null
+                    // Encontrar el índice de esta lectura en el array ordenado global
+                    const indiceGlobal = todasOrdenadas.findIndex(e => e.id === exp.id)
+                    
+                    // Obtener la lectura anterior (si existe) - PUEDE SER DE OTRA BODEGA
+                    const lecturaAnterior = indiceGlobal > 0 ? todasOrdenadas[indiceGlobal - 1] : null
                     
                     let flujo = 0
                     let delta = 0
+                    let tiempoHoras = 0
                     
-                    if (lecturaAnteriorMismaBodega) {
-                      const tiempoMs = new Date(exp.fecha_hora) - new Date(lecturaAnteriorMismaBodega.fecha_hora)
-                      const tiempoHoras = tiempoMs / (1000 * 60 * 60)
-                      delta = Number(exp.acumulado_tm) - Number(lecturaAnteriorMismaBodega.acumulado_tm)
+                    if (lecturaAnterior) {
+                      const tiempoMs = new Date(exp.fecha_hora) - new Date(lecturaAnterior.fecha_hora)
+                      tiempoHoras = tiempoMs / (1000 * 60 * 60)
+                      delta = Number(exp.acumulado_tm) - Number(lecturaAnterior.acumulado_tm)
+                      
+                      // El flujo se calcula con el delta de acumulado (aunque cambie de bodega)
                       if (tiempoHoras > 0 && delta > 0) {
                         flujo = delta / tiempoHoras
                       }
                     }
+                    
+                    // Determinar si hubo cambio de bodega
+                    const cambioBodega = lecturaAnterior && lecturaAnterior.bodega_id !== exp.bodega_id
                     
                     return (
                       <tr key={exp.id} className="hover:bg-white/5">
@@ -1350,12 +1822,19 @@ export default function ExportacionPage() {
                         <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
                         <td className="px-4 py-3">
                           {flujo > 0 ? (
-                            <span className="font-bold text-green-400">{flujo.toFixed(3)}</span>
+                            <div>
+                              <span className="font-bold text-green-400">{flujo.toFixed(3)}</span>
+                              {cambioBodega && (
+                                <span className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full">
+                                  Cambio bodega
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-500 ml-1 block">
+                                (+{delta.toFixed(3)} en {tiempoHoras.toFixed(1)}h)
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-slate-600">—</span>
-                          )}
-                          {delta > 0 && (
-                            <span className="text-[10px] text-slate-500 ml-1">(+{delta.toFixed(3)})</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1363,6 +1842,11 @@ export default function ExportacionPage() {
                             <div>
                               <p className="text-white">{bodega.nombre}</p>
                               <p className="text-xs text-green-400">{bodega.codigo}</p>
+                              {cambioBodega && lecturaAnterior && (
+                                <p className="text-[10px] text-yellow-500 mt-1">
+                                  ← {BODEGAS_BARCO.find(b => b.id === lecturaAnterior.bodega_id)?.nombre || '—'}
+                                </p>
+                              )}
                             </div>
                           ) : '—'}
                         </td>
@@ -1391,7 +1875,7 @@ export default function ExportacionPage() {
                 </tbody>
                 <tfoot className="bg-slate-900">
                   <tr>
-                    <td className="px-4 py-3 font-bold text-white">TOTAL GENERAL</td>
+                    <td className="px-4 py-3 font-bold text-white">TOTAL GENERAL (Último acumulado)</td>
                     <td className="px-4 py-3 font-bold text-blue-400">
                       {totalGeneral.toFixed(3)} TM
                     </td>
@@ -1406,7 +1890,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Sección de Bitácora */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -1512,6 +1995,25 @@ export default function ExportacionPage() {
           )}
         </div>
       </div>
+
+      {showDemoraModal && barco && (
+        <AtrasoModal
+          barco={barco}
+          atraso={demoraEditando}
+          tiposParo={tiposParo}
+          onClose={() => setShowDemoraModal(false)}
+          onSave={handleGuardarDemora}
+        />
+      )}
+
+      {showDemorasDashboard && barco && (
+        <DashboardDemoras
+          barco={barco}
+          registros={registrosDemoras}
+          tiposParo={tiposParo}
+          onClose={() => setShowDemorasDashboard(false)}
+        />
+      )}
     </div>
   )
-} 
+}

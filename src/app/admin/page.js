@@ -23,6 +23,9 @@ import GenerarDashboardModal from './GenerarDashboardModal'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+
+import AccionesBarcoMenu from '../components/adminC/AccionesBarcoMenu'
+
 dayjs.locale('es')
 
 // =====================================================
@@ -2067,138 +2070,22 @@ export default function AdminPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-1">
-                            {/* Botón Ver Detalle */}
-                            <button
-                              onClick={() => handleVerDetalle(barco)}
-                              className="p-2 hover:bg-slate-700 rounded-lg transition-colors group"
-                              title="Ver detalles del barco"
-                            >
-                              <Eye className="w-4 h-4 text-slate-400 group-hover:text-white" />
-                            </button>
-
-                            {/* Botón Editar */}
-                            <button
-                              onClick={() => handleEditarBarco(barco)}
-                              className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors group"
-                              title="Editar Barco"
-                            >
-                              <Edit2 className="w-4 h-4 text-amber-400 group-hover:text-amber-300" />
-                            </button>
-                            
-                            {/* Botón Generar Dashboard */}
-                            <button
-                              onClick={() => handleGenerarDashboard(barco)}
-                              className="p-2 hover:bg-indigo-500/20 rounded-lg transition-colors group"
-                              title="Generar Dashboard Público"
-                            >
-                              <ExternalLink className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300" />
-                            </button>
-                            
-                            {/* Botón Reporte de Atrasos - NUEVO */}
-                            <Link
-                              href={`/admin/reporte-atrasos/${barco.id}`}
-                              className="p-2 hover:bg-orange-500/20 rounded-lg transition-colors group"
-                              title="Ver Reporte de Atrasos"
-                            >
-                              <FileText className="w-4 h-4 text-orange-400 group-hover:text-orange-300" />
-                            </Link>
-                            
-                            {/* Botón Registrar según tipo */}
-                            {barco.tipo_operacion === 'exportacion' ? (
-                              <button
-                                onClick={() => handleVerRegistroViajes(barco.token_compartido, 'exportacion')}
-                                className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
-                                title="Ir a Registrar Recepción"
-                              >
-                                <Export className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleVerRegistroViajes(barco.token_compartido, 'importacion')}
-                                className="p-2 hover:bg-green-500/20 rounded-lg transition-colors group"
-                                title="Ir a Registrar Viajes"
-                              >
-                                <Truck className="w-4 h-4 text-green-400 group-hover:text-green-300" />
-                              </button>
-                            )}
-                            
-                            {/* Botón Ver viajes paso 1 (solo importación) */}
-                            {barco.tipo_operacion !== 'exportacion' && (
-                              <button
-                                onClick={() => handleVerViajesPaso1(barco)}
-                                className="p-2 hover:bg-yellow-500/20 rounded-lg transition-colors group"
-                                title="Ver viajes pendientes"
-                              >
-                                <Clock className="w-4 h-4 text-yellow-400 group-hover:text-yellow-300" />
-                              </button>
-                            )}
-                            
-                            {/* Botón Ver exportaciones recibidas (solo exportación) */}
-                            {barco.tipo_operacion === 'exportacion' && (
-                              <button
-                                onClick={() => handleVerExportaciones(barco)}
-                                className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors group"
-                                title="Ver producto recibido"
-                              >
-                                <BarChart3 className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
-                              </button>
-                            )}
-                            
-                            {/* Botón Ver bitácora */}
-                            <button
-                              onClick={() => handleVerBitacora(barco)}
-                              className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors group"
-                              title="Ver bitácora"
-                            >
-                              <BookOpen className="w-4 h-4 text-purple-400 group-hover:text-purple-300" />
-                            </button>
-                            
-                            {/* Botón Cambiar estado */}
-                            <button
-                              onClick={() => handleCambiarEstado(barco.id, barco.estado)}
-                              className={`p-2 rounded-lg transition-colors group ${
-                                barco.estado === 'activo' 
-                                  ? 'hover:bg-red-500/20' 
-                                  : 'hover:bg-green-500/20'
-                              }`}
-                              title={barco.estado === 'activo' ? 'Finalizar operación' : 'Reanudar operación'}
-                            >
-                              {barco.estado === 'activo' ? (
-                                <Power className="w-4 h-4 text-red-400 group-hover:text-red-300" />
-                              ) : (
-                                <Play className="w-4 h-4 text-green-400 group-hover:text-green-300" />
-                              )}
-                            </button>
-                            
-                            {/* Botón Exportar datos */}
-                            <button
-                              onClick={() => handleExportarBarco(barco)}
-                              disabled={exportando === barco.id}
-                              className={`p-2 rounded-lg transition-colors group relative ${
-                                exportando === barco.id 
-                                  ? 'bg-amber-500/20 cursor-wait' 
-                                  : 'hover:bg-amber-500/20'
-                              }`}
-                              title="Exportar todos los datos"
-                            >
-                              {exportando === barco.id ? (
-                                <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Download className="w-4 h-4 text-amber-400 group-hover:text-amber-300" />
-                              )}
-                            </button>
-                            
-                            {/* Botón Eliminar */}
-                            <button
-                              onClick={() => handleEliminarBarco(barco.id, barco.nombre)}
-                              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
-                              title="Eliminar Barco"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-400 group-hover:text-red-300" />
-                            </button>
-                          </div>
-                        </td>
+  <AccionesBarcoMenu
+    barco={barco}
+    exportando={exportando}
+    onVerDetalle={handleVerDetalle}
+    onEditarBarco={handleEditarBarco}
+    onGenerarDashboard={handleGenerarDashboard}
+    onVerRegistroViajes={handleVerRegistroViajes}
+    onCopiarLink={handleCopiarLink}
+    onVerViajesPaso1={handleVerViajesPaso1}
+    onVerExportaciones={handleVerExportaciones}
+    onVerBitacora={handleVerBitacora}
+    onCambiarEstado={handleCambiarEstado}
+    onExportarBarco={handleExportarBarco}
+    onEliminarBarco={handleEliminarBarco}
+  />
+</td>
                       </tr>
                     )
                   })}
