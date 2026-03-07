@@ -900,43 +900,56 @@ export default function ExportacionPage() {
 
     return puntos
   }, [exportaciones, productoActivo])
+const resumenPorBodega = useMemo(() => {
+  if (!productoActivo) return []
 
-  const resumenPorBodega = useMemo(() => {
-    if (!productoActivo) return []
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  
+  const mapa = {}
+  
+  // Agrupar exportaciones por bodega
+  exportacionesProd.forEach(e => {
+    const key = e.bodega_id
+    if (!key) return
+    
+    if (!mapa[key]) {
+      mapa[key] = []
+    }
+    mapa[key].push(e)
+  })
 
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  // Calcular el total REAL por bodega (diferencia entre última y primera lectura)
+  const resultado = []
+  
+  Object.keys(mapa).forEach(key => {
+    const lecturas = mapa[key].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
     
-    const mapa = {}
+    if (lecturas.length === 0) return
     
-    const ordenadas = [...exportacionesProd].sort(
-      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-    )
+    // Primera lectura de esta bodega
+    const primeraLectura = lecturas[0]
+    // Última lectura de esta bodega
+    const ultimaLectura = lecturas[lecturas.length - 1]
     
-    ordenadas.forEach(e => {
-      const key = e.bodega_id
-      if (!key) return
-      
-      if (!mapa[key]) {
-        mapa[key] = {
-          bodega_id: key,
-          nombre: BODEGAS_BARCO.find(b => b.id === key)?.nombre || `Bodega ${key}`,
-          codigo: BODEGAS_BARCO.find(b => b.id === key)?.codigo || `BDG-${key}`,
-          acumuladoFinal: 0,
-          lecturas: 0,
-          ultimaLectura: null
-        }
-      }
-      
-      mapa[key].acumuladoFinal = Number(e.acumulado_tm) || 0
-      mapa[key].lecturas++
-      
-      if (!mapa[key].ultimaLectura || new Date(e.fecha_hora) > new Date(mapa[key].ultimaLectura.fecha_hora)) {
-        mapa[key].ultimaLectura = e
-      }
+    // Calcular el total cargado en ESTA bodega específica
+    const totalBodega = Number(ultimaLectura.acumulado_tm) - Number(primeraLectura.acumulado_tm)
+    
+    resultado.push({
+      bodega_id: parseInt(key),
+      nombre: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.nombre || `Bodega ${key}`,
+      codigo: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.codigo || `BDG-${key}`,
+      totalCargado: totalBodega > 0 ? totalBodega : Number(ultimaLectura.acumulado_tm), // Si solo hay una lectura, usar ese valor
+      lecturas: lecturas.length,
+      primeraLectura: primeraLectura,
+      ultimaLectura: ultimaLectura,
+      fechaInicio: primeraLectura.fecha_hora,
+      fechaFin: ultimaLectura.fecha_hora
     })
+  })
 
-    return Object.values(mapa).sort((a, b) => b.acumuladoFinal - a.acumuladoFinal)
-  }, [exportaciones, productoActivo])
+  // Ordenar por total cargado (de mayor a menor)
+  return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
+}, [exportaciones, productoActivo])
 
   const totalGeneral = useMemo(() => {
     if (!productoActivo) return 0
@@ -1631,60 +1644,66 @@ export default function ExportacionPage() {
         )}
 
         {productoActivo && resumenPorBodega.length > 0 && (
-          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-green-400" />
-              Carga por Bodega del Barco
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resumenPorBodega.map(bodega => (
-                <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="bg-green-500/20 p-2 rounded-lg">
-                      <Layers className="w-4 h-4 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">{bodega.nombre}</p>
-                      <p className="text-xs text-green-400">{bodega.codigo}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Total cargado:</span>
-                      <span className="font-bold text-green-400">{bodega.acumuladoFinal.toFixed(3)} TM</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Lecturas:</span>
-                      <span className="font-bold text-white">{bodega.lecturas}</span>
-                    </div>
-                    {bodega.ultimaLectura && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Última lectura:</span>
-                        <span className="font-bold text-white">
-                          {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+  <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+      <Layers className="w-5 h-5 text-green-400" />
+      Carga por Bodega del Barco
+    </h3>
+    
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {resumenPorBodega.map(bodega => (
+        <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-green-500/20 p-2 rounded-lg">
+              <Layers className="w-4 h-4 text-green-400" />
             </div>
-
-            <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
-              <div className="bg-slate-900 rounded-lg px-6 py-3">
-                <p className="text-sm text-slate-400">TOTAL GENERAL (Último acumulado)</p>
-                <p className="text-2xl font-black text-green-400">
-                  {totalGeneral.toFixed(3)} TM
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Último registro: {datosGraficoFlujo.length > 0 ? datosGraficoFlujo[datosGraficoFlujo.length - 1]?.hora : '—'}
-                </p>
-              </div>
+            <div>
+              <p className="font-bold text-white">{bodega.nombre}</p>
+              <p className="text-xs text-green-400">{bodega.codigo}</p>
             </div>
           </div>
-        )}
+          
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Total cargado:</span>
+              <span className="font-bold text-green-400">{bodega.totalCargado.toFixed(3)} TM</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Lecturas:</span>
+              <span className="font-bold text-white">{bodega.lecturas}</span>
+            </div>
+            {bodega.ultimaLectura && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Última lectura:</span>
+                <span className="font-bold text-white">
+                  {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
+                </span>
+              </div>
+            )}
+            {bodega.lecturas > 1 && (
+              <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-white/10">
+                <p>Inicio: {formatUTCToSV(bodega.fechaInicio, 'DD/MM HH:mm')}</p>
+                <p>Fin: {formatUTCToSV(bodega.fechaFin, 'DD/MM HH:mm')}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
+      <div className="bg-slate-900 rounded-lg px-6 py-3">
+        <p className="text-sm text-slate-400">TOTAL GENERAL (Suma por bodegas)</p>
+        <p className="text-2xl font-black text-green-400">
+          {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
+        </p>
+        <p className="text-xs text-slate-500 mt-1">
+          {resumenPorBodega.length} bodegas con carga
+        </p>
+      </div>
+    </div>
+  </div>
+)}
 
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">

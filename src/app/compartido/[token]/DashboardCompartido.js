@@ -2153,7 +2153,7 @@ function TablaExportacion({ lecturas, producto }) {
             <thead>
               <tr>
                 <th>#</th>
-                <th>Fecha / Hora (El Salvador)</th>
+                <th>Fecha / Hora</th>
                 <th className="alm-th-num">Acumulado (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Bodega</th>
