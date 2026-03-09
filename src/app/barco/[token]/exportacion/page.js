@@ -775,28 +775,31 @@ export default function ExportacionPage() {
   }
 
   const handleNuevaDemora = () => {
-    if (barco.estado === 'finalizado') {
-      toast.error('Operación finalizada')
-      return
-    }
+    // ELIMINADA la validación de estado finalizado
+    // if (barco.estado === 'finalizado') {
+    //   toast.error('Operación finalizada')
+    //   return
+    // }
     setDemoraEditando(null)
     setShowDemoraModal(true)
   }
 
   const handleEditarDemora = (demora) => {
-    if (barco.estado === 'finalizado') {
-      toast.error('Operación finalizada')
-      return
-    }
+    // ELIMINADA la validación de estado finalizado
+    // if (barco.estado === 'finalizado') {
+    //   toast.error('Operación finalizada')
+    //   return
+    // }
     setDemoraEditando(demora)
     setShowDemoraModal(true)
   }
 
   const handleEliminarDemora = async (id) => {
-    if (barco.estado === 'finalizado') {
-      toast.error('Operación finalizada')
-      return
-    }
+    // ELIMINADA la validación de estado finalizado
+    // if (barco.estado === 'finalizado') {
+    //   toast.error('Operación finalizada')
+    //   return
+    // }
     if (!confirm('¿Eliminar esta demora?')) return
     try {
       const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
@@ -1051,10 +1054,11 @@ export default function ExportacionPage() {
 
   const handleGuardarExportacion = async () => {
     try {
-      if (barco.estado === 'finalizado') {
-        toast.error('Operación finalizada')
-        return
-      }
+      // ELIMINADA la validación de estado finalizado
+      // if (barco.estado === 'finalizado') {
+      //   toast.error('Operación finalizada')
+      //   return
+      // }
 
       if (!productoActivo) {
         toast.error('Selecciona un producto')
@@ -1134,10 +1138,11 @@ export default function ExportacionPage() {
 
   const handleGuardarBitacora = async () => {
     try {
-      if (barco.estado === 'finalizado') {
-        toast.error('Operación finalizada')
-        return
-      }
+      // ELIMINADA la validación de estado finalizado
+      // if (barco.estado === 'finalizado') {
+      //   toast.error('Operación finalizada')
+      //   return
+      // }
 
       if (!productoActivo) {
         toast.error('Selecciona un producto')
@@ -1291,7 +1296,8 @@ export default function ExportacionPage() {
     })
   }
 
-  const puedeRegistrar = barco?.estado !== 'finalizado'
+  // SOLO PARA MOSTRAR - Ya no bloqueamos el registro, solo mostramos una advertencia
+  const puedeRegistrar = true // Siempre true ahora
 
   if (loading) {
     return (
@@ -1476,12 +1482,13 @@ export default function ExportacionPage() {
           </div>
         </div>
 
+        {/* CAMBIADO: Ahora es solo una advertencia, no bloquea */}
         {barco.estado === 'finalizado' && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
-              <p className="text-red-400 font-medium">
-                Operación finalizada. No se pueden registrar nuevos datos.
+              <AlertCircle className="w-5 h-5 text-orange-400" />
+              <p className="text-orange-400 font-medium">
+                ⚠️ Operación finalizada - Puedes agregar datos adicionales si es necesario
               </p>
             </div>
           </div>
@@ -1490,12 +1497,7 @@ export default function ExportacionPage() {
         <div className="flex gap-3">
           <button
             onClick={handleNuevaDemora}
-            disabled={!puedeRegistrar}
-            className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${
-              puedeRegistrar
-                ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
+            className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all bg-orange-500 hover:bg-orange-600 text-white`}
           >
             <Clock className="w-4 h-4" />
             Registrar Demora
@@ -1851,7 +1853,6 @@ export default function ExportacionPage() {
                   value={nuevaExportacion.fecha_hora}
                   onChange={handleExportacionChange}
                   className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10"
-                  disabled={barco.estado === 'finalizado'}
                 />
                 <button
                   type="button"
@@ -1872,7 +1873,6 @@ export default function ExportacionPage() {
                 onChange={handleExportacionChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                 placeholder="150.000"
-                disabled={barco.estado === 'finalizado'}
               />
             </div>
             <div>
@@ -1882,7 +1882,6 @@ export default function ExportacionPage() {
                 value={nuevaExportacion.bodega_id}
                 onChange={handleExportacionChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                disabled={barco.estado === 'finalizado'}
               >
                 <option value="">Seleccionar bodega</option>
                 {BODEGAS_BARCO.map(b => (
@@ -1901,14 +1900,12 @@ export default function ExportacionPage() {
                 onChange={handleExportacionChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                 placeholder="Notas..."
-                disabled={barco.estado === 'finalizado'}
               />
             </div>
             <div className="flex items-end col-span-full gap-2">
               <button
                 onClick={handleGuardarExportacion}
                 className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                disabled={barco.estado === 'finalizado'}
               >
                 <Save className="w-4 h-4" />
                 {editandoExportacion ? 'Actualizar Registro' : 'Guardar Carga'}
@@ -2088,7 +2085,6 @@ export default function ExportacionPage() {
                 value={bitacoraActual.fecha_hora}
                 onChange={handleBitacoraChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10"
-                disabled={barco.estado === 'finalizado'}
               />
               <button
                 type="button"
@@ -2107,14 +2103,12 @@ export default function ExportacionPage() {
                 onChange={handleBitacoraChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                 placeholder="Comentarios..."
-                disabled={barco.estado === 'finalizado'}
               />
             </div>
             <div className="flex gap-2 col-span-full">
               <button
                 onClick={handleGuardarBitacora}
                 className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                disabled={barco.estado === 'finalizado'}
               >
                 <Save className="w-4 h-4" />
                 {editandoBitacora ? 'Actualizar Bitácora' : 'Guardar en Bitácora'}
