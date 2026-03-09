@@ -1775,17 +1775,7 @@ export default function ExportacionPage() {
               ))}
             </div>
 
-            <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
-              <div className="bg-slate-900 rounded-lg px-6 py-3">
-                <p className="text-sm text-slate-400">TOTAL GENERAL (Suma por bodegas)</p>
-                <p className="text-2xl font-black text-green-400">
-                  {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {resumenPorBodega.length} bodegas con carga
-                </p>
-              </div>
-            </div>
+            
           </div>
         )}
 
