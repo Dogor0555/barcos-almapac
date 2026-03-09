@@ -902,55 +902,101 @@ export default function ExportacionPage() {
   }, [exportaciones, productoActivo])
 
   const resumenPorBodega = useMemo(() => {
-    if (!productoActivo) return []
+  if (!productoActivo) return []
 
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  
+  // Ordenar todas las exportaciones por fecha
+  const todasOrdenadas = [...exportacionesProd].sort(
+    (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+  )
+  
+  if (todasOrdenadas.length === 0) return []
+  
+  const resultado = []
+  const bodegasMap = new Map()
+  
+  // Variable para rastrear el período actual
+  let bodegaActual = null
+  let inicioPeriodo = null
+  let acumuladoInicio = 0
+  let lecturasPeriodo = []
+  
+  // Recorrer todas las lecturas en orden
+  todasOrdenadas.forEach((exp, index) => {
+    const bodegaId = exp.bodega_id
     
-    const mapa = {}
-    
-    // Agrupar exportaciones por bodega
-    exportacionesProd.forEach(e => {
-      const key = e.bodega_id
-      if (!key) return
-      
-      if (!mapa[key]) {
-        mapa[key] = []
+    if (bodegaId !== bodegaActual) {
+      // Si hay una bodega anterior, guardar su período
+      if (bodegaActual !== null && inicioPeriodo !== null) {
+        const expAnterior = todasOrdenadas[index - 1]
+        if (expAnterior) {
+          const totalPeriodo = Number(expAnterior.acumulado_tm) - acumuladoInicio
+          
+          if (!bodegasMap.has(bodegaActual)) {
+            bodegasMap.set(bodegaActual, {
+              bodega_id: bodegaActual,
+              lecturas: [],
+              totalCargado: 0,
+              fechaInicio: inicioPeriodo,
+              fechaFin: expAnterior.fecha_hora
+            })
+          }
+          
+          const bodegaData = bodegasMap.get(bodegaActual)
+          bodegaData.lecturas.push(...lecturasPeriodo)
+          bodegaData.totalCargado += totalPeriodo
+        }
       }
-      mapa[key].push(e)
-    })
-
-    // Calcular el total REAL por bodega (diferencia entre última y primera lectura)
-    const resultado = []
+      
+      // Iniciar nuevo período
+      bodegaActual = bodegaId
+      inicioPeriodo = exp.fecha_hora
+      acumuladoInicio = Number(exp.acumulado_tm)
+      lecturasPeriodo = [exp]
+    } else {
+      // Misma bodega, agregar lectura al período actual
+      lecturasPeriodo.push(exp)
+    }
+  })
+  
+  // Procesar el último período
+  if (bodegaActual !== null && inicioPeriodo !== null && lecturasPeriodo.length > 0) {
+    const ultimaExp = lecturasPeriodo[lecturasPeriodo.length - 1]
+    const totalPeriodo = Number(ultimaExp.acumulado_tm) - acumuladoInicio
     
-    Object.keys(mapa).forEach(key => {
-      const lecturas = mapa[key].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-      
-      if (lecturas.length === 0) return
-      
-      // Primera lectura de esta bodega
-      const primeraLectura = lecturas[0]
-      // Última lectura de esta bodega
-      const ultimaLectura = lecturas[lecturas.length - 1]
-      
-      // Calcular el total cargado en ESTA bodega específica
-      const totalBodega = Number(ultimaLectura.acumulado_tm) - Number(primeraLectura.acumulado_tm)
-      
-      resultado.push({
-        bodega_id: parseInt(key),
-        nombre: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.nombre || `Bodega ${key}`,
-        codigo: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.codigo || `BDG-${key}`,
-        totalCargado: totalBodega > 0 ? totalBodega : Number(ultimaLectura.acumulado_tm), // Si solo hay una lectura, usar ese valor
-        lecturas: lecturas.length,
-        primeraLectura: primeraLectura,
-        ultimaLectura: ultimaLectura,
-        fechaInicio: primeraLectura.fecha_hora,
-        fechaFin: ultimaLectura.fecha_hora
+    if (!bodegasMap.has(bodegaActual)) {
+      bodegasMap.set(bodegaActual, {
+        bodega_id: bodegaActual,
+        lecturas: [],
+        totalCargado: 0,
+        fechaInicio: inicioPeriodo,
+        fechaFin: ultimaExp.fecha_hora
       })
+    }
+    
+    const bodegaData = bodegasMap.get(bodegaActual)
+    bodegaData.lecturas.push(...lecturasPeriodo)
+    bodegaData.totalCargado += totalPeriodo
+  }
+  
+  // Convertir Map a array
+  bodegasMap.forEach((data, bodegaId) => {
+    resultado.push({
+      bodega_id: parseInt(bodegaId),
+      nombre: BODEGAS_BARCO.find(b => b.id === parseInt(bodegaId))?.nombre || `Bodega ${bodegaId}`,
+      codigo: BODEGAS_BARCO.find(b => b.id === parseInt(bodegaId))?.codigo || `BDG-${bodegaId}`,
+      totalCargado: data.totalCargado,
+      lecturas: data.lecturas.length,
+      primeraLectura: data.lecturas[0],
+      ultimaLectura: data.lecturas[data.lecturas.length - 1],
+      fechaInicio: data.fechaInicio,
+      fechaFin: data.fechaFin
     })
-
-    // Ordenar por total cargado (de mayor a menor)
-    return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
-  }, [exportaciones, productoActivo])
+  })
+  
+  return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
+}, [exportaciones, productoActivo])
 
   const totalGeneral = useMemo(() => {
     if (!productoActivo) return 0
