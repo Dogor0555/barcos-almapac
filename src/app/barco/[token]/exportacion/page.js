@@ -900,56 +900,57 @@ export default function ExportacionPage() {
 
     return puntos
   }, [exportaciones, productoActivo])
-const resumenPorBodega = useMemo(() => {
-  if (!productoActivo) return []
 
-  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-  
-  const mapa = {}
-  
-  // Agrupar exportaciones por bodega
-  exportacionesProd.forEach(e => {
-    const key = e.bodega_id
-    if (!key) return
-    
-    if (!mapa[key]) {
-      mapa[key] = []
-    }
-    mapa[key].push(e)
-  })
+  const resumenPorBodega = useMemo(() => {
+    if (!productoActivo) return []
 
-  // Calcular el total REAL por bodega (diferencia entre última y primera lectura)
-  const resultado = []
-  
-  Object.keys(mapa).forEach(key => {
-    const lecturas = mapa[key].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
     
-    if (lecturas.length === 0) return
+    const mapa = {}
     
-    // Primera lectura de esta bodega
-    const primeraLectura = lecturas[0]
-    // Última lectura de esta bodega
-    const ultimaLectura = lecturas[lecturas.length - 1]
-    
-    // Calcular el total cargado en ESTA bodega específica
-    const totalBodega = Number(ultimaLectura.acumulado_tm) - Number(primeraLectura.acumulado_tm)
-    
-    resultado.push({
-      bodega_id: parseInt(key),
-      nombre: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.nombre || `Bodega ${key}`,
-      codigo: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.codigo || `BDG-${key}`,
-      totalCargado: totalBodega > 0 ? totalBodega : Number(ultimaLectura.acumulado_tm), // Si solo hay una lectura, usar ese valor
-      lecturas: lecturas.length,
-      primeraLectura: primeraLectura,
-      ultimaLectura: ultimaLectura,
-      fechaInicio: primeraLectura.fecha_hora,
-      fechaFin: ultimaLectura.fecha_hora
+    // Agrupar exportaciones por bodega
+    exportacionesProd.forEach(e => {
+      const key = e.bodega_id
+      if (!key) return
+      
+      if (!mapa[key]) {
+        mapa[key] = []
+      }
+      mapa[key].push(e)
     })
-  })
 
-  // Ordenar por total cargado (de mayor a menor)
-  return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
-}, [exportaciones, productoActivo])
+    // Calcular el total REAL por bodega (diferencia entre última y primera lectura)
+    const resultado = []
+    
+    Object.keys(mapa).forEach(key => {
+      const lecturas = mapa[key].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+      
+      if (lecturas.length === 0) return
+      
+      // Primera lectura de esta bodega
+      const primeraLectura = lecturas[0]
+      // Última lectura de esta bodega
+      const ultimaLectura = lecturas[lecturas.length - 1]
+      
+      // Calcular el total cargado en ESTA bodega específica
+      const totalBodega = Number(ultimaLectura.acumulado_tm) - Number(primeraLectura.acumulado_tm)
+      
+      resultado.push({
+        bodega_id: parseInt(key),
+        nombre: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.nombre || `Bodega ${key}`,
+        codigo: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.codigo || `BDG-${key}`,
+        totalCargado: totalBodega > 0 ? totalBodega : Number(ultimaLectura.acumulado_tm), // Si solo hay una lectura, usar ese valor
+        lecturas: lecturas.length,
+        primeraLectura: primeraLectura,
+        ultimaLectura: ultimaLectura,
+        fechaInicio: primeraLectura.fecha_hora,
+        fechaFin: ultimaLectura.fecha_hora
+      })
+    })
+
+    // Ordenar por total cargado (de mayor a menor)
+    return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
+  }, [exportaciones, productoActivo])
 
   const totalGeneral = useMemo(() => {
     if (!productoActivo) return 0
@@ -965,6 +966,16 @@ const resumenPorBodega = useMemo(() => {
     const ultimoRegistro = ordenadas[ordenadas.length - 1]
     return Number(ultimoRegistro.acumulado_tm) || 0
   }, [exportaciones, productoActivo])
+
+  // NUEVO: Calcular cuánto falta por cargar
+  const faltaPorCargar = useMemo(() => {
+    if (!productoActivo || !barco?.metas_json?.limites?.[productoActivo.codigo]) return 0
+    
+    const limite = barco.metas_json.limites[productoActivo.codigo]
+    const cargado = totalGeneral
+    
+    return Math.max(0, limite - cargado)
+  }, [productoActivo, barco, totalGeneral])
 
   const cambiarProducto = (producto) => {
     setProductoActivo(producto)
@@ -1020,7 +1031,6 @@ const resumenPorBodega = useMemo(() => {
       }
 
       // Convertir hora de El Salvador a UTC antes de guardar
-      // Ejemplo: 2026-03-06T11:00 (11:00 AM El Salvador) → 2026-03-06T17:00:00.000Z (17:00 UTC)
       const fechaUTC = svToUTC(nuevaExportacion.fecha_hora)
 
       const datos = {
@@ -1533,7 +1543,7 @@ const resumenPorBodega = useMemo(() => {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-6 gap-4">
               {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
                 <>
                   <div className="bg-slate-900 rounded-xl p-4">
@@ -1548,11 +1558,35 @@ const resumenPorBodega = useMemo(() => {
                       {estadisticasProducto.totalTM.toFixed(3)} TM
                     </p>
                   </div>
-                  <div className="bg-slate-900 rounded-xl p-4">
-                    <p className="text-xs text-slate-500">Progreso</p>
-                    <p className="text-xl font-bold text-green-400">
-                      {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
+                  
+                  {/* NUEVO: CUÁNTO FALTA POR CARGAR */}
+                  <div className="bg-slate-900 rounded-xl p-4 border-2 border-orange-500/20">
+                    <p className="text-xs text-slate-500">FALTA POR CARGAR</p>
+                    <p className="text-2xl font-black text-orange-400">
+                      {faltaPorCargar.toFixed(3)} TM
                     </p>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}% completado
+                    </p>
+                  </div>
+                  
+                  <div className="bg-slate-900 rounded-xl p-4 col-span-1">
+                    <p className="text-xs text-slate-500">Progreso</p>
+                    <div className="relative pt-1">
+                      <div className="flex mb-2 items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold inline-block text-green-400">
+                            {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="overflow-hidden h-2 text-xs flex rounded bg-slate-700">
+                        <div
+                          style={{ width: `${Math.min(100, (estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` }}
+                          className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-gradient-to-r from-green-500 to-green-400"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -1585,6 +1619,35 @@ const resumenPorBodega = useMemo(() => {
                 </div>
               </div>
             </div>
+
+            {/* NUEVO: BARRA DE PROGRESO GRANDE si hay límite */}
+            {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+              <div className="mt-4 bg-slate-900 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-bold text-white">Progreso de Carga</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-green-400">
+                      {estadisticasProducto.totalTM.toFixed(1)} TM cargadas
+                    </span>
+                    <span className="text-xs text-orange-400 font-bold">
+                      {faltaPorCargar.toFixed(1)} TM por cargar
+                    </span>
+                  </div>
+                </div>
+                <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${Math.min(100, (estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` 
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 mt-2">
+                  <span>0 TM</span>
+                  <span>{barco.metas_json.limites[productoActivo.codigo].toFixed(1)} TM</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1640,70 +1703,91 @@ const resumenPorBodega = useMemo(() => {
                 </p>
               </div>
             </div>
+
+            {/* NUEVO: Mostrar falta por cargar en el gráfico si hay límite */}
+            {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+              <div className="mt-4 bg-slate-900/50 rounded-lg p-3 border border-orange-500/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-orange-400" />
+                    <span className="text-sm text-slate-300">Meta:</span>
+                    <span className="font-bold text-white">
+                      {barco.metas_json.limites[productoActivo.codigo].toFixed(3)} TM
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-300">Falta:</span>
+                    <span className="font-bold text-orange-400">
+                      {faltaPorCargar.toFixed(3)} TM
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {productoActivo && resumenPorBodega.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
-    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-      <Layers className="w-5 h-5 text-green-400" />
-      Carga por Bodega del Barco
-    </h3>
-    
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {resumenPorBodega.map(bodega => (
-        <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="bg-green-500/20 p-2 rounded-lg">
-              <Layers className="w-4 h-4 text-green-400" />
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-green-400" />
+              Carga por Bodega del Barco
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {resumenPorBodega.map(bodega => (
+                <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-green-500/20 p-2 rounded-lg">
+                      <Layers className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-white">{bodega.nombre}</p>
+                      <p className="text-xs text-green-400">{bodega.codigo}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Total cargado:</span>
+                      <span className="font-bold text-green-400">{bodega.totalCargado.toFixed(3)} TM</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Lecturas:</span>
+                      <span className="font-bold text-white">{bodega.lecturas}</span>
+                    </div>
+                    {bodega.ultimaLectura && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Última lectura:</span>
+                        <span className="font-bold text-white">
+                          {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
+                        </span>
+                      </div>
+                    )}
+                    {bodega.lecturas > 1 && (
+                      <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-white/10">
+                        <p>Inicio: {formatUTCToSV(bodega.fechaInicio, 'DD/MM HH:mm')}</p>
+                        <p>Fin: {formatUTCToSV(bodega.fechaFin, 'DD/MM HH:mm')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <p className="font-bold text-white">{bodega.nombre}</p>
-              <p className="text-xs text-green-400">{bodega.codigo}</p>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Total cargado:</span>
-              <span className="font-bold text-green-400">{bodega.totalCargado.toFixed(3)} TM</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Lecturas:</span>
-              <span className="font-bold text-white">{bodega.lecturas}</span>
-            </div>
-            {bodega.ultimaLectura && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Última lectura:</span>
-                <span className="font-bold text-white">
-                  {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
-                </span>
-              </div>
-            )}
-            {bodega.lecturas > 1 && (
-              <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-white/10">
-                <p>Inicio: {formatUTCToSV(bodega.fechaInicio, 'DD/MM HH:mm')}</p>
-                <p>Fin: {formatUTCToSV(bodega.fechaFin, 'DD/MM HH:mm')}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
 
-    <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
-      <div className="bg-slate-900 rounded-lg px-6 py-3">
-        <p className="text-sm text-slate-400">TOTAL GENERAL (Suma por bodegas)</p>
-        <p className="text-2xl font-black text-green-400">
-          {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
-        </p>
-        <p className="text-xs text-slate-500 mt-1">
-          {resumenPorBodega.length} bodegas con carga
-        </p>
-      </div>
-    </div>
-  </div>
-)}
+            <div className="mt-4 border-t border-white/10 pt-4 flex justify-end">
+              <div className="bg-slate-900 rounded-lg px-6 py-3">
+                <p className="text-sm text-slate-400">TOTAL GENERAL (Suma por bodegas)</p>
+                <p className="text-2xl font-black text-green-400">
+                  {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {resumenPorBodega.length} bodegas con carga
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -1927,6 +2011,16 @@ const resumenPorBodega = useMemo(() => {
                     </td>
                     <td colSpan="3"></td>
                   </tr>
+                  {/* NUEVO: Fila con lo que falta por cargar */}
+                  {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+                    <tr className="bg-orange-500/5">
+                      <td className="px-4 py-3 font-bold text-orange-400">FALTA POR CARGAR</td>
+                      <td className="px-4 py-3 font-bold text-orange-400">
+                        {faltaPorCargar.toFixed(3)} TM
+                      </td>
+                      <td colSpan="4"></td>
+                    </tr>
+                  )}
                 </tfoot>
               </table>
             </div>
