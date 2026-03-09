@@ -901,56 +901,112 @@ export default function ExportacionPage() {
     return puntos
   }, [exportaciones, productoActivo])
 
-  const resumenPorBodega = useMemo(() => {
-    if (!productoActivo) return []
+ const resumenPorBodega = useMemo(() => {
+  if (!productoActivo) return []
 
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  
+  // Ordenar todas las exportaciones por fecha
+  const todasOrdenadas = [...exportacionesProd].sort(
+    (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+  )
+  
+  if (todasOrdenadas.length === 0) return []
+  
+  const mapa = {}
+  const resultado = []
+  
+  // PRIMERO: Identificar los períodos de cada bodega
+  // Cuando cambia la bodega, se cierra el período anterior y se abre uno nuevo
+  let bodegaActual = null
+  let inicioPeriodo = null
+  let acumuladoInicioPeriodo = 0
+  
+  todasOrdenadas.forEach((exp, index) => {
+    const bodegaId = exp.bodega_id
     
-    const mapa = {}
-    
-    // Agrupar exportaciones por bodega
-    exportacionesProd.forEach(e => {
-      const key = e.bodega_id
-      if (!key) return
-      
-      if (!mapa[key]) {
-        mapa[key] = []
+    if (bodegaId !== bodegaActual) {
+      // Si cambió la bodega y había una bodega anterior, cerrar su período
+      if (bodegaActual !== null && inicioPeriodo !== null) {
+        // El total de esa bodega es el acumulado al final del período menos el acumulado al inicio
+        const expAnterior = todasOrdenadas[index - 1]
+        const totalBodega = Number(expAnterior.acumulado_tm) - acumuladoInicioPeriodo
+        
+        if (!mapa[bodegaActual]) {
+          mapa[bodegaActual] = {
+            bodega_id: bodegaActual,
+            lecturas: [],
+            totalCargado: 0,
+            fechaInicio: inicioPeriodo,
+            fechaFin: expAnterior.fecha_hora
+          }
+        }
+        
+        mapa[bodegaActual].lecturas.push(...todasOrdenadas.slice(
+          todasOrdenadas.findIndex(e => e.fecha_hora === inicioPeriodo),
+          index
+        ))
+        mapa[bodegaActual].totalCargado += totalBodega
       }
-      mapa[key].push(e)
-    })
-
-    // Calcular el total REAL por bodega (diferencia entre última y primera lectura)
-    const resultado = []
+      
+      // Iniciar nueva bodega
+      bodegaActual = bodegaId
+      inicioPeriodo = exp.fecha_hora
+      acumuladoInicioPeriodo = Number(exp.acumulado_tm)
+    }
+  })
+  
+  // Cerrar la última bodega
+  if (bodegaActual !== null && inicioPeriodo !== null) {
+    const ultimaExp = todasOrdenadas[todasOrdenadas.length - 1]
+    const totalBodega = Number(ultimaExp.acumulado_tm) - acumuladoInicioPeriodo
     
-    Object.keys(mapa).forEach(key => {
-      const lecturas = mapa[key].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-      
-      if (lecturas.length === 0) return
-      
-      // Primera lectura de esta bodega
-      const primeraLectura = lecturas[0]
-      // Última lectura de esta bodega
-      const ultimaLectura = lecturas[lecturas.length - 1]
-      
-      // Calcular el total cargado en ESTA bodega específica
-      const totalBodega = Number(ultimaLectura.acumulado_tm) - Number(primeraLectura.acumulado_tm)
-      
-      resultado.push({
-        bodega_id: parseInt(key),
-        nombre: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.nombre || `Bodega ${key}`,
-        codigo: BODEGAS_BARCO.find(b => b.id === parseInt(key))?.codigo || `BDG-${key}`,
-        totalCargado: totalBodega > 0 ? totalBodega : Number(ultimaLectura.acumulado_tm), // Si solo hay una lectura, usar ese valor
-        lecturas: lecturas.length,
-        primeraLectura: primeraLectura,
-        ultimaLectura: ultimaLectura,
-        fechaInicio: primeraLectura.fecha_hora,
-        fechaFin: ultimaLectura.fecha_hora
-      })
+    if (!mapa[bodegaActual]) {
+      mapa[bodegaActual] = {
+        bodega_id: bodegaActual,
+        lecturas: [],
+        totalCargado: 0,
+        fechaInicio: inicioPeriodo,
+        fechaFin: ultimaExp.fecha_hora
+      }
+    }
+    
+    mapa[bodegaActual].lecturas.push(...todasOrdenadas.slice(
+      todasOrdenadas.findIndex(e => e.fecha_hora === inicioPeriodo)
+    ))
+    mapa[bodegaActual].totalCargado += totalBodega
+  }
+  
+  // Convertir el mapa a array para mostrar
+  Object.keys(mapa).forEach(key => {
+    const bodegaId = parseInt(key)
+    const data = mapa[key]
+    
+    resultado.push({
+      bodega_id: bodegaId,
+      nombre: BODEGAS_BARCO.find(b => b.id === bodegaId)?.nombre || `Bodega ${bodegaId}`,
+      codigo: BODEGAS_BARCO.find(b => b.id === bodegaId)?.codigo || `BDG-${bodegaId}`,
+      totalCargado: data.totalCargado,
+      lecturas: data.lecturas.length,
+      primeraLectura: data.lecturas[0],
+      ultimaLectura: data.lecturas[data.lecturas.length - 1],
+      fechaInicio: data.fechaInicio,
+      fechaFin: data.fechaFin
     })
-
-    // Ordenar por total cargado (de mayor a menor)
-    return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
-  }, [exportaciones, productoActivo])
+  })
+  
+  // Verificar que la suma de todas las bodegas no exceda el total general
+  const sumaBodegas = resultado.reduce((sum, b) => sum + b.totalCargado, 0)
+  if (Math.abs(sumaBodegas - totalGeneral) > 0.1) { // Tolerancia de 0.1 TM
+    console.warn('⚠️ Discrepancia en suma por bodegas:', {
+      sumaBodegas,
+      totalGeneral,
+      diferencia: sumaBodegas - totalGeneral
+    })
+  }
+  
+  return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
+}, [exportaciones, productoActivo, totalGeneral])
 
   const totalGeneral = useMemo(() => {
     if (!productoActivo) return 0
