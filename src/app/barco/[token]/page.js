@@ -422,7 +422,7 @@ export default function BarcoPesadorPage() {
     return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
   }, [productoActivo, viajes, lecturasBanda, destinos, barco])
 
-  // 👇 ALERTAS AUTOMÁTICAS CUANDO SE ACERCA AL LÍMITE DE UN DESTINO
+   // 👇 ALERTAS AUTOMÁTICAS CORREGIDAS - usa toast() en lugar de toast.warning()
   useEffect(() => {
     if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
       resumenPorDestino.forEach(dest => {
@@ -430,12 +430,16 @@ export default function BarcoPesadorPage() {
           const toastId = `limite-${dest.destino_id}`
           if (!window[toastId]) {
             window[toastId] = true
-            toast.warning(
+            toast(
               `⚠️ ${dest.nombre} está al ${dest.porcentaje.toFixed(1)}% de su límite (${dest.limite_tm.toFixed(3)} TM)`,
               {
                 id: toastId,
                 duration: 8000,
-                icon: '⚠️'
+                icon: '⚠️',
+                style: {
+                  background: '#fbbf24',
+                  color: '#000',
+                },
               }
             )
           }
@@ -448,7 +452,6 @@ export default function BarcoPesadorPage() {
               {
                 id: toastId,
                 duration: 8000,
-                icon: '✅'
               }
             )
           }
