@@ -1259,7 +1259,7 @@ export default function BarcoPesadorPage() {
             <div className={`rounded-xl p-4 ${
               barco.operacion_iniciada_at 
                 ? 'bg-green-500/20 border border-green-500/30' 
-                : 'bg-yellow-500/20 border border-yellow-500/30 animate-pulse'
+                : 'bg-yellow-500/20 border border-yellow-500/30'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${
