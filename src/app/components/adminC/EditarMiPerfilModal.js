@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getCurrentUser, isAdmin } from '../../lib/auth'
+import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Save, Loader2, User, Key, AlertCircle, 
   CheckCircle, Eye, EyeOff, Lock, Shield
@@ -81,86 +81,105 @@ export default function EditarMiPerfilModal({ onClose, onSuccess }) {
       // Verificar que el usuario existe en la base de datos
       const { data: userExists, error: checkError } = await supabase
         .from('usuarios')
-        .select('id')
+        .select('id, nombre, username, rol')
         .eq('id', currentUser.id)
-        .single()
+        .maybeSingle()
 
-      if (checkError || !userExists) {
-        console.error('Usuario no encontrado en DB:', currentUser.id)
+      if (checkError) {
+        console.error('Error verificando usuario:', checkError)
+      }
+
+      let userId = currentUser.id
+
+      // Si no existe el usuario con ese ID, intentar buscar por username
+      if (!userExists) {
+        console.log('Usuario no encontrado por ID, buscando por username:', currentUser.username)
         
-        // Intentar obtener el usuario por username si el ID falla
-        const { data: userByUsername } = await supabase
+        const { data: userByUsername, error: usernameError } = await supabase
           .from('usuarios')
-          .select('*')
+          .select('id, nombre, username, rol')
           .eq('username', currentUser.username)
-          .single()
+          .maybeSingle()
+
+        if (usernameError) {
+          console.error('Error buscando por username:', usernameError)
+        }
 
         if (userByUsername) {
+          console.log('Usuario encontrado por username:', userByUsername)
+          userId = userByUsername.id
+          
           // Actualizar localStorage con el ID correcto
           const updatedUser = {
             ...currentUser,
-            id: userByUsername.id
+            id: userByUsername.id,
+            nombre: userByUsername.nombre,
+            username: userByUsername.username,
+            rol: userByUsername.rol
           }
           localStorage.setItem('user', JSON.stringify(updatedUser))
-          currentUser.id = userByUsername.id
         } else {
           throw new Error('No se pudo verificar el usuario en la base de datos')
         }
       }
 
-      // Usar RPC para actualizar perfil (similar a como se hace en page.js)
-      const { data: result, error: rpcError } = await supabase
-        .rpc('actualizar_mi_perfil', {
-          p_user_id: currentUser.id,
-          p_nombre: formData.nombre,
-          p_username: formData.username,
-          p_password: formData.password || null
-        })
+      // Actualizar información básica SIN updated_at
+      const updates = {
+        nombre: formData.nombre,
+        username: formData.username
+      }
 
-      if (rpcError) {
-        console.error('Error en RPC:', rpcError)
-        
-        // Fallback: intentar update directo solo de datos básicos
-        const updates = {
-          nombre: formData.nombre,
-          username: formData.username,
-          updated_at: new Date().toISOString()
-        }
+      const { error: updateError } = await supabase
+        .from('usuarios')
+        .update(updates)
+        .eq('id', userId)
 
-        const { error: updateError } = await supabase
-          .from('usuarios')
-          .update(updates)
-          .eq('id', currentUser.id)
+      if (updateError) {
+        console.error('Error en update:', updateError)
+        throw updateError
+      }
 
-        if (updateError) throw updateError
-
-        // Si hay contraseña, intentar actualizarla
-        if (formData.password) {
-          const { error: passError } = await supabase
+      // Actualizar contraseña si se proporcionó una nueva
+      if (formData.password) {
+        try {
+          // Intentar con RPC primero
+          const { error: passwordError } = await supabase
             .rpc('cambiar_password', {
-              p_user_id: currentUser.id,
+              p_user_id: userId,
               p_new_password: formData.password
             })
-          
-          if (passError) {
-            console.error('Error actualizando password:', passError)
-            toast.warning('Perfil actualizado pero hubo un problema con la contraseña')
+
+          if (passwordError) {
+            console.error('Error con RPC password:', passwordError)
+            
+            // Fallback: intentar update directo si existe el campo
+            const { error: directUpdateError } = await supabase
+              .from('usuarios')
+              .update({ password: formData.password })
+              .eq('id', userId)
+
+            if (directUpdateError) {
+              console.error('Error en update directo password:', directUpdateError)
+              toast.warning('Perfil actualizado pero hubo un problema con la contraseña')
+            }
           }
+        } catch (passwordError) {
+          console.error('Error actualizando contraseña:', passwordError)
+          toast.warning('Perfil actualizado pero hubo un problema con la contraseña')
         }
-      } else if (result && !result.success) {
-        throw new Error(result.error || 'Error al actualizar perfil')
       }
 
       // Obtener el usuario actualizado
       const { data: updatedUserData } = await supabase
         .from('usuarios')
-        .select('*')
-        .eq('id', currentUser.id)
+        .select('id, nombre, username, rol, activo')
+        .eq('id', userId)
         .single()
 
       // Actualizar localStorage
       const updatedUser = {
         ...currentUser,
+        id: userId,
         nombre: formData.nombre,
         username: formData.username,
         ...(updatedUserData || {})
