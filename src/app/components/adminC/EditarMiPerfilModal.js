@@ -65,6 +65,11 @@ export default function EditarMiPerfilModal({ onClose, onSuccess }) {
     return Object.keys(newErrors).length === 0
   }
 
+  const isValidUUID = (uuid) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(uuid)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -78,10 +83,17 @@ export default function EditarMiPerfilModal({ onClose, onSuccess }) {
         throw new Error('Usuario no autenticado')
       }
 
+      // Validar que el ID sea un UUID válido
+      if (!isValidUUID(currentUser.id)) {
+        console.error('ID de usuario inválido:', currentUser.id)
+        throw new Error('El ID del usuario no es válido')
+      }
+
       // Actualizar información básica
       const updates = {
         nombre: formData.nombre,
-        username: formData.username
+        username: formData.username,
+        updated_at: new Date().toISOString()
       }
 
       const { error: updateError } = await supabase
@@ -93,12 +105,29 @@ export default function EditarMiPerfilModal({ onClose, onSuccess }) {
 
       // Actualizar contraseña si se proporcionó una nueva
       if (formData.password) {
-        const { error: passwordError } = await supabase.rpc('cambiar_password', {
-          p_user_id: currentUser.id,
-          p_new_password: formData.password
-        })
+        try {
+          // Primero intentamos con la función RPC
+          const { error: passwordError } = await supabase.rpc('cambiar_password', {
+            p_user_id: currentUser.id,
+            p_new_password: formData.password
+          })
 
-        if (passwordError) throw passwordError
+          if (passwordError) {
+            console.error('Error con RPC:', passwordError)
+            
+            // Si falla RPC, intentamos con update directo si existe el campo password_hash
+            const { error: directUpdateError } = await supabase
+              .from('usuarios')
+              .update({ password: formData.password })
+              .eq('id', currentUser.id)
+
+            if (directUpdateError) throw directUpdateError
+          }
+        } catch (passwordError) {
+          console.error('Error actualizando contraseña:', passwordError)
+          toast.error('Error al actualizar la contraseña')
+          throw passwordError
+        }
       }
 
       // Actualizar el usuario en localStorage
