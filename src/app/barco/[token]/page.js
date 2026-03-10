@@ -38,12 +38,11 @@ export default function BarcoPesadorPage() {
   const [editandoBitacora, setEditandoBitacora] = useState(null)
   const [vistaGraficos, setVistaGraficos] = useState(false)
 
-  // Estados para búsquedas
+  // Estado para el buscador de la tabla de viajes completos
   const [searchTerm, setSearchTerm] = useState('')
-  const [buscarPlaca, setBuscarPlaca] = useState('')
   
-  // Estado para detectar números de viaje en uso
-  const [numeroEnUso, setNumeroEnUso] = useState(false)
+  // Estado para el buscador de placas
+  const [buscarPlaca, setBuscarPlaca] = useState('')
   
   const [nuevoViaje, setNuevoViaje] = useState({
     viaje_numero: 1,
@@ -77,69 +76,21 @@ export default function BarcoPesadorPage() {
     comentarios: ''
   })
 
-  // ✅ Función mejorada para obtener el siguiente número de viaje de manera SEGURA
-  const getSiguienteNumeroViaje = async (productoId, isEditando = false) => {
-    if (!productoId) return 1
-    
-    try {
-      const { data, error } = await supabase
-        .rpc('get_next_viaje_numero_seguro', {
-          p_producto_id: productoId
-        })
-      
-      if (error) {
-        console.error('Error en RPC:', error)
-        const { data: viajesData, error: viajesError } = await supabase
-          .from('viajes')
-          .select('viaje_numero')
-          .eq('producto_id', productoId)
-          .order('viaje_numero', { ascending: false })
-          .limit(1)
-        
-        if (viajesError || !viajesData?.length) return 1
-        return viajesData[0].viaje_numero + 1
-      }
-      
-      return data
-    } catch (error) {
-      console.error('Error obteniendo siguiente número:', error)
-      return 1
-    }
-  }
-
-  // ✅ Efecto para verificar en tiempo real si el número de viaje ya existe
-  useEffect(() => {
-    if (!productoActivo || !nuevoViaje.viaje_numero || editandoViaje) {
-      setNumeroEnUso(false)
-      return
-    }
-
-    const checkNumeroExistente = async () => {
-      const { data } = await supabase
-        .from('viajes')
-        .select('id, updated_at')
-        .eq('producto_id', productoActivo.id)
-        .eq('viaje_numero', nuevoViaje.viaje_numero)
-        .maybeSingle()
-
-      if (data) {
-        setNumeroEnUso({
-          id: data.id,
-          timestamp: new Date(data.updated_at).toLocaleTimeString()
-        })
-      } else {
-        setNumeroEnUso(false)
-      }
-    }
-
-    checkNumeroExistente()
-    const interval = setInterval(checkNumeroExistente, 2000)
-    return () => clearInterval(interval)
-  }, [productoActivo, nuevoViaje.viaje_numero, editandoViaje])
-
   // Función para limpiar el buscador
   const limpiarBuscador = () => {
     setBuscarPlaca('')
+  }
+
+  // Función para obtener el siguiente número de viaje para un producto específico
+  const getSiguienteNumeroViaje = (productoId) => {
+    if (!viajes.length || !productoId) return 1
+    
+    const viajesProducto = viajes.filter(v => v.producto_id === productoId)
+    
+    if (viajesProducto.length === 0) return 1
+    
+    const maxViaje = Math.max(...viajesProducto.map(v => v.viaje_numero))
+    return maxViaje + 1
   }
 
   // ✅ Función mejorada para obtener hora actual en formato 24h HH:MM
@@ -312,6 +263,7 @@ export default function BarcoPesadorPage() {
       const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
       const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
       
+      // ✅ TRES ACUMULADOS NUEVOS
       const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
       const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
       const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
@@ -357,6 +309,7 @@ export default function BarcoPesadorPage() {
         viajesTM: totalViajesTM,
         bandaTM: totalBandaTM,
         totalTM,
+        // ✅ AGREGAR LOS TRES NUEVOS ACUMULADOS AQUÍ
         acumuladoUPDP: acumuladoUPDP,
         acumuladoAlmapac: acumuladoAlmapac,
         acumuladoSistema: acumuladoSistema,
@@ -397,10 +350,11 @@ export default function BarcoPesadorPage() {
     )
   }, [viajes, productoActivo, searchTerm])
 
-  // Resumen por destino del producto activo CON LÍMITES
+  // 👇 NUEVO: Resumen por destino del producto activo CON LÍMITES
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
 
+    // Obtener límites por destino del barco
     const limitesDestino = barco?.metas_json?.limites_destino || {}
 
     const mapa = {}
@@ -457,6 +411,7 @@ export default function BarcoPesadorPage() {
       }
       d.total_tm = d.viajes_tm + d.banda_tm
       
+      // 👇 Calcular porcentaje y estado respecto al límite del destino
       d.porcentaje = d.limite_tm > 0 ? (d.total_tm / d.limite_tm) * 100 : 0
       d.faltante_tm = Math.max(0, d.limite_tm - d.total_tm)
       d.excedente_tm = Math.max(0, d.total_tm - d.limite_tm)
@@ -467,7 +422,7 @@ export default function BarcoPesadorPage() {
     return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
   }, [productoActivo, viajes, lecturasBanda, destinos, barco])
 
-  // Alertas automáticas cuando se acerca al límite de un destino
+   // 👇 ALERTAS AUTOMÁTICAS CORREGIDAS - usa toast() en lugar de toast.warning()
   useEffect(() => {
     if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
       resumenPorDestino.forEach(dest => {
@@ -475,12 +430,16 @@ export default function BarcoPesadorPage() {
           const toastId = `limite-${dest.destino_id}`
           if (!window[toastId]) {
             window[toastId] = true
-            toast.warning(
+            toast(
               `⚠️ ${dest.nombre} está al ${dest.porcentaje.toFixed(1)}% de su límite (${dest.limite_tm.toFixed(3)} TM)`,
               {
                 id: toastId,
                 duration: 8000,
-                icon: '⚠️'
+                icon: '⚠️',
+                style: {
+                  background: '#fbbf24',
+                  color: '#000',
+                },
               }
             )
           }
@@ -493,7 +452,6 @@ export default function BarcoPesadorPage() {
               {
                 id: toastId,
                 duration: 8000,
-                icon: '✅'
               }
             )
           }
@@ -514,6 +472,7 @@ export default function BarcoPesadorPage() {
       .sort((a, b) => b.viaje_numero - a.viaje_numero)
   }, [viajes, productoActivo])
 
+  // ✅ PRIMERO: Definir viajesIncompletosProducto
   const viajesIncompletosProducto = useMemo(() => {
     if (!productoActivo) return []
     return viajes
@@ -521,6 +480,7 @@ export default function BarcoPesadorPage() {
       .sort((a, b) => b.viaje_numero - a.viaje_numero)
   }, [viajes, productoActivo])
 
+  // ✅ SEGUNDO: Definir viajesIncompletosFiltrados (depende del anterior)
   const viajesIncompletosFiltrados = useMemo(() => {
     if (!viajesIncompletosProducto.length) return []
     
@@ -554,14 +514,14 @@ export default function BarcoPesadorPage() {
     if (productos.length > 0 && !productoActivo) {
       setProductoActivo(productos[0])
       
-      getSiguienteNumeroViaje(productos[0].id).then(siguienteNumero => {
-        setNuevoViaje(prev => ({ 
-          ...prev, 
-          producto_id: productos[0].id,
-          viaje_numero: siguienteNumero,
-          fecha: getLocalDateString()
-        }))
-      })
+      const siguienteNumero = getSiguienteNumeroViaje(productos[0].id)
+      
+      setNuevoViaje(prev => ({ 
+        ...prev, 
+        producto_id: productos[0].id,
+        viaje_numero: siguienteNumero,
+        fecha: getLocalDateString()
+      }))
       
       if (productos[0].tipo_registro === 'banda') {
         setTipoRegistro('banda')
@@ -571,14 +531,13 @@ export default function BarcoPesadorPage() {
 
   useEffect(() => {
     if (productoActivo && modoRegistro === 'nuevo' && !editandoViaje) {
-      getSiguienteNumeroViaje(productoActivo.id).then(siguienteNumero => {
-        setNuevoViaje(prev => ({ 
-          ...prev, 
-          producto_id: productoActivo.id,
-          viaje_numero: siguienteNumero,
-          fecha: getLocalDateString()
-        }))
-      })
+      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
+      setNuevoViaje(prev => ({ 
+        ...prev, 
+        producto_id: productoActivo.id,
+        viaje_numero: siguienteNumero,
+        fecha: getLocalDateString()
+      }))
     }
   }, [productoActivo, viajes, modoRegistro])
 
@@ -788,9 +747,9 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  // ✅ VERSIÓN MEJORADA CON MANEJO DE CONCURRENCIA
   const handleGuardarIncompleto = async () => {
     try {
+      // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
         toast.error('No se pueden registrar datos. La operación está finalizada.')
         return
@@ -806,17 +765,9 @@ export default function BarcoPesadorPage() {
         return
       }
 
-      // Para NUEVOS viajes (no edición), obtener el número de manera segura
-      let viajeNumero = nuevoViaje.viaje_numero
-      
-      if (!editandoViaje) {
-        const siguienteNumero = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
-        viajeNumero = siguienteNumero
-        
-        setNuevoViaje(prev => ({
-          ...prev,
-          viaje_numero: siguienteNumero
-        }))
+      if (!barco || !barco.id) {
+        toast.error('Error: No hay información del barco')
+        return
       }
 
       let horaSalidaUPDP = null
@@ -838,7 +789,7 @@ export default function BarcoPesadorPage() {
 
       const datosInsertar = {
         barco_id: barco.id,
-        viaje_numero: viajeNumero,
+        viaje_numero: Number(nuevoViaje.viaje_numero),
         fecha: nuevoViaje.fecha,
         hora_salida_updp: horaSalidaUPDP,
         hora_entrada_almapac: horaEntradaAlmapac,
@@ -865,51 +816,32 @@ export default function BarcoPesadorPage() {
           toast.success('Viaje actualizado correctamente')
           setEditandoViaje(null)
           setModoRegistro('nuevo')
+          
+          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
+          setNuevoViaje(prev => ({
+            ...prev,
+            viaje_numero: siguienteNumero,
+            fecha: getLocalDateString(),
+            hora_salida_updp: '',
+            hora_entrada_almapac: '',
+            placa: 'C-',
+            peso_neto_updp_tm: '',
+            peso_bruto_almapac_tm: '',
+            peso_bruto_updp_tm: '',
+            destino_id: '',
+            observaciones: ''
+          }))
         }
       } else {
-        // Verificar si el número ya fue tomado (doble verificación)
-        const { data: checkExiste, error: checkError } = await supabase
-          .from('viajes')
-          .select('id')
-          .eq('producto_id', nuevoViaje.producto_id)
-          .eq('viaje_numero', viajeNumero)
-          .maybeSingle()
-
-        if (checkExiste) {
-          toast.error(
-            <div className="flex flex-col gap-2">
-              <p className="font-bold">⚠️ Conflicto de número de viaje</p>
-              <p className="text-sm">El viaje #{viajeNumero} fue registrado por otro usuario mientras digitabas.</p>
-              <button 
-                onClick={() => {
-                  cargarDatos().then(async () => {
-                    const nuevoNumero = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
-                    setNuevoViaje(prev => ({
-                      ...prev,
-                      viaje_numero: nuevoNumero
-                    }))
-                    toast.success(`Usando viaje #${nuevoNumero} automáticamente`)
-                  })
-                }}
-                className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs"
-              >
-                Usar siguiente número
-              </button>
-            </div>,
-            { duration: 10000 }
-          )
-          return
-        }
-
         result = await supabase
           .from('viajes')
           .insert([datosInsertar])
           .select()
         
         if (!result.error) {
-          toast.success(`Viaje #${viajeNumero} registrado exitosamente`)
+          toast.success('Viaje registrado exitosamente')
           
-          const siguienteNumero = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
+          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
           
           setNuevoViaje({
             viaje_numero: siguienteNumero,
@@ -927,33 +859,9 @@ export default function BarcoPesadorPage() {
         }
       }
 
-      if (result?.error) {
-        if (result.error.code === '23505') {
-          toast.error(
-            <div className="flex flex-col gap-2">
-              <p className="font-bold">❌ Error de concurrencia</p>
-              <p className="text-sm">El viaje #{viajeNumero} ya existe en la base de datos.</p>
-              <button 
-                onClick={() => {
-                  cargarDatos().then(async () => {
-                    const nuevoNumero = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
-                    setNuevoViaje(prev => ({
-                      ...prev,
-                      viaje_numero: nuevoNumero
-                    }))
-                  })
-                }}
-                className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs"
-              >
-                Intentar con #{viajeNumero + 1}
-              </button>
-            </div>,
-            { duration: 10000 }
-          )
-        } else {
-          console.error('Error:', result.error)
-          toast.error(`Error: ${result.error.message}`)
-        }
+      if (result.error) {
+        console.error('Error:', result.error)
+        toast.error(`Error: ${result.error.message}`)
         return
       }
 
@@ -967,6 +875,7 @@ export default function BarcoPesadorPage() {
 
   const handleCompletarViaje = async () => {
     try {
+      // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
         toast.error('No se pueden registrar datos. La operación está finalizada.')
         return
@@ -1050,6 +959,7 @@ export default function BarcoPesadorPage() {
 
   const handleGuardarLectura = async () => {
     try {
+      // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
         toast.error('No se pueden registrar datos. La operación está finalizada.')
         return
@@ -1127,6 +1037,7 @@ export default function BarcoPesadorPage() {
 
   const handleGuardarBitacora = async () => {
     try {
+      // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
         toast.error('No se pueden registrar datos. La operación está finalizada.')
         return
@@ -1189,10 +1100,10 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  const cambiarProducto = async (producto) => {
+  const cambiarProducto = (producto) => {
     setProductoActivo(producto)
     
-    const siguienteNumero = await getSiguienteNumeroViaje(producto.id)
+    const siguienteNumero = getSiguienteNumeroViaje(producto.id)
     
     setNuevoViaje(prev => ({ 
       ...prev, 
@@ -1206,7 +1117,7 @@ export default function BarcoPesadorPage() {
     setEditandoLectura(null)
     setEditandoBitacora(null)
     setVistaGraficos(false)
-    setBuscarPlaca('')
+    setBuscarPlaca('') // Limpiar búsqueda al cambiar producto
     
     if (producto.tipo_registro === 'banda') {
       setTipoRegistro('banda')
@@ -1235,21 +1146,20 @@ export default function BarcoPesadorPage() {
     setModoRegistro('nuevo')
     
     if (productoActivo) {
-      getSiguienteNumeroViaje(productoActivo.id).then(siguienteNumero => {
-        setNuevoViaje(prev => ({
-          ...prev,
-          viaje_numero: siguienteNumero,
-          fecha: getLocalDateString(),
-          hora_salida_updp: '',
-          hora_entrada_almapac: '',
-          placa: 'C-',
-          peso_neto_updp_tm: '',
-          peso_bruto_almapac_tm: '',
-          peso_bruto_updp_tm: '',
-          destino_id: '',
-          observaciones: ''
-        }))
-      })
+      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
+      setNuevoViaje(prev => ({
+        ...prev,
+        viaje_numero: siguienteNumero,
+        fecha: getLocalDateString(),
+        hora_salida_updp: '',
+        hora_entrada_almapac: '',
+        placa: 'C-',
+        peso_neto_updp_tm: '',
+        peso_bruto_almapac_tm: '',
+        peso_bruto_updp_tm: '',
+        destino_id: '',
+        observaciones: ''
+      }))
     }
     
     setCompletarViaje({
@@ -1307,6 +1217,7 @@ export default function BarcoPesadorPage() {
                     {barco.codigo_barco}
                   </span>
                 )}
+                {/* Badge de estado */}
                 <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                   barco.estado === 'activo' 
                     ? 'bg-green-500/20 text-green-400' 
@@ -1344,10 +1255,11 @@ export default function BarcoPesadorPage() {
 
           {/* Indicadores de inicio/fin de descarga */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Estado de Inicio de Descarga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_iniciada_at 
                 ? 'bg-green-500/20 border border-green-500/30' 
-                : 'bg-yellow-500/20 border border-yellow-500/30 animate-pulse'
+                : 'bg-yellow-500/20 border border-yellow-500/30'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${
@@ -1395,6 +1307,7 @@ export default function BarcoPesadorPage() {
               </div>
             </div>
 
+            {/* Estado de Fin de Descarga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_finalizada_at 
                 ? 'bg-red-500/20 border border-red-500/30' 
@@ -1835,6 +1748,7 @@ export default function BarcoPesadorPage() {
         {/* RESUMEN POR DESTINO CON LÍMITES */}
         {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+            {/* Cabecera */}
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Warehouse className="w-5 h-5 text-teal-400" />
@@ -1853,6 +1767,7 @@ export default function BarcoPesadorPage() {
               </span>
             </div>
 
+            {/* Tarjetas de destinos */}
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {resumenPorDestino.map((dest) => {
                 const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
@@ -2146,13 +2061,12 @@ export default function BarcoPesadorPage() {
                     setViajeSeleccionado(null)
                     setEditandoViaje(null)
                     if (productoActivo) {
-                      getSiguienteNumeroViaje(productoActivo.id).then(siguienteNumero => {
-                        setNuevoViaje(prev => ({ 
-                          ...prev, 
-                          viaje_numero: siguienteNumero,
-                          fecha: getLocalDateString()
-                        }))
-                      })
+                      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
+                      setNuevoViaje(prev => ({ 
+                        ...prev, 
+                        viaje_numero: siguienteNumero,
+                        fecha: getLocalDateString()
+                      }))
                     }
                   }}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
@@ -2206,44 +2120,6 @@ export default function BarcoPesadorPage() {
                     Barco: {barco.nombre}
                   </span>
                 </h2>
-
-                {/* 🚨 ALERTA DE NÚMERO EN USO */}
-                {numeroEnUso && (
-                  <div className="col-span-4 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-red-400">
-                          ⚠️ NÚMERO DE VIAJE EN USO
-                        </p>
-                        <p className="text-xs text-red-300 mt-1">
-                          El viaje #{nuevoViaje.viaje_numero} ya fue registrado por otro usuario.
-                          {numeroEnUso.timestamp && ` (Última actualización: ${numeroEnUso.timestamp})`}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={async () => {
-                              const nuevoNumero = await getSiguienteNumeroViaje(productoActivo.id)
-                              setNuevoViaje(prev => ({
-                                ...prev,
-                                viaje_numero: nuevoNumero
-                              }))
-                            }}
-                            className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-lg"
-                          >
-                            Usar #{nuevoViaje.viaje_numero + 1}
-                          </button>
-                          <button
-                            onClick={cargarDatos}
-                            className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded-lg"
-                          >
-                            Recargar datos
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
@@ -2393,6 +2269,7 @@ export default function BarcoPesadorPage() {
                     />
                   </div>
                   
+                  {/* Destino en paso 1 */}
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Destino (opcional en paso 1)
@@ -2432,7 +2309,7 @@ export default function BarcoPesadorPage() {
                     <button
                       onClick={handleGuardarIncompleto}
                       className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                      disabled={barco.estado === 'finalizado' || numeroEnUso}
+                      disabled={barco.estado === 'finalizado'}
                     >
                       <Save className="w-4 h-4" />
                       {editandoViaje ? 'Actualizar Viaje' : 'Registrar Viaje'}
@@ -2464,6 +2341,7 @@ export default function BarcoPesadorPage() {
 
                 {!viajeSeleccionado ? (
                   <div className="mb-6">
+                    {/* BUSCADOR DE PLACAS */}
                     <div className="mb-4">
                       <label className="block text-sm font-bold text-slate-400 mb-2">
                         Buscar por placa:
@@ -2733,6 +2611,7 @@ export default function BarcoPesadorPage() {
                       </span>
                     </h3>
                     
+                    {/* Barra de búsqueda */}
                     <div className="relative w-64">
                       <input
                         type="text"
@@ -2754,6 +2633,7 @@ export default function BarcoPesadorPage() {
                   </div>
                 </div>
                 
+                {/* Contenedor con scroll */}
                 <div className="overflow-x-auto">
                   <div className="max-h-[500px] overflow-y-auto relative">
                     <table className="w-full">
@@ -2846,6 +2726,7 @@ export default function BarcoPesadorPage() {
                   </div>
                 </div>
                 
+                {/* Indicador de resultados */}
                 {searchTerm && (
                   <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
                     Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
