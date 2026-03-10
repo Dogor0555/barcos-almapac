@@ -13,13 +13,15 @@ import {
   Upload as Export,
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
-  Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus
+  Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus,
+  User
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
 import EditarBarcoModal from '../components/adminC/EditarBarcoModal'
 import ProductoForm from '../components/adminC/productoForm'
 import GenerarDashboardModal from './GenerarDashboardModal'
+import EditarMiPerfilModal from '../components/adminC/EditarMiPerfilModal' // 👈 IMPORTAR EL NUEVO MODAL
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -1175,6 +1177,7 @@ export default function AdminPage() {
   const [vista, setVista] = useState('barcos')
   const [filtroTipo, setFiltroTipo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showEditarMiPerfil, setShowEditarMiPerfil] = useState(false) // 👈 NUEVO ESTADO
   
   // Estado para los modales
   const [barcoSeleccionado, setBarcoSeleccionado] = useState(null)
@@ -1662,6 +1665,17 @@ export default function AdminPage() {
                 <RefreshCw className="w-4 h-4" />
                 <span className="hidden md:inline">Recargar</span>
               </button>
+
+              {/* 👇 NUEVO BOTÓN MI PERFIL */}
+              <button
+                onClick={() => setShowEditarMiPerfil(true)}
+                className="bg-blue-500/20 hover:bg-blue-500/30 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
+                title="Editar mi perfil"
+              >
+                <User className="w-4 h-4" />
+                <span className="hidden md:inline">Mi Perfil</span>
+              </button>
+
               <button
                 onClick={handleLogout}
                 className="bg-red-500/20 hover:bg-red-500/30 text-red-200 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -2344,6 +2358,16 @@ export default function AdminPage() {
           onClose={() => {
             setShowGenerarDashboardModal(false)
             setBarcoSeleccionado(null)
+          }}
+        />
+      )}
+
+      {/* 👇 MODAL DE EDICIÓN DE PERFIL */}
+      {showEditarMiPerfil && (
+        <EditarMiPerfilModal
+          onClose={() => setShowEditarMiPerfil(false)}
+          onSuccess={(updatedUser) => {
+            setUser(updatedUser)
           }}
         />
       )}
