@@ -1,4 +1,3 @@
-// components/adminC/BarcoForm.js
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Ship, Calendar, User, Package, Save, Anchor, Hash, 
-  ChevronDown, ChevronUp, Import, Upload as Export, Layers
+  ChevronDown, ChevronUp, Import, Upload as Export, Layers, Target
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -14,6 +13,8 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
   const [loading, setLoading] = useState(false)
   const [productosExpandido, setProductosExpandido] = useState(true)
   const [bodegasExpandido, setBodegasExpandido] = useState(true)
+  const [limitesExpandido, setLimitesExpandido] = useState(true)
+  const [destinos, setDestinos] = useState([])
   const [formData, setFormData] = useState({
     nombre: '',
     codigo_barco: '',
@@ -33,7 +34,30 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06', activa: true },
     { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07', activa: true },
     { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08', activa: true },
+    { id: 9, nombre: 'Bodega 9', codigo: 'BDG-09', activa: true },
   ])
+
+  // Estado para límites por destino
+  const [limitesDestino, setLimitesDestino] = useState({})
+
+  // Cargar destinos
+  useEffect(() => {
+    cargarDestinos()
+  }, [])
+
+  const cargarDestinos = async () => {
+    try {
+      const { data } = await supabase
+        .from('destinos')
+        .select('*')
+        .eq('activo', true)
+        .order('nombre')
+      
+      setDestinos(data || [])
+    } catch (error) {
+      console.error('Error cargando destinos:', error)
+    }
+  }
 
   useEffect(() => {
     if (productos && productos.length > 0) {
@@ -131,6 +155,14 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     ))
   }
 
+  // Función para manejar límite por destino
+  const handleLimiteDestinoChange = (destinoId, value) => {
+    setLimitesDestino(prev => ({
+      ...prev,
+      [destinoId]: value ? parseFloat(value) : null
+    }))
+  }
+
   const activarTodasBodegas = () => {
     setBodegas(bodegas.map(b => ({ ...b, activa: true })))
   }
@@ -187,6 +219,14 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         }
       })
 
+      // Filtrar límites de destino válidos
+      const limitesDestinoValidos = {}
+      Object.entries(limitesDestino).forEach(([destinoId, valor]) => {
+        if (valor && !isNaN(valor) && valor > 0) {
+          limitesDestinoValidos[destinoId] = valor
+        }
+      })
+
       const datosInsertar = {
         nombre: formData.nombre.trim(),
         codigo_barco: formData.codigo_barco?.trim() || null,
@@ -195,7 +235,8 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         tipo_operacion: formData.tipo_operacion,
         metas_json: {
           productos: productosSeleccionados,
-          limites: metasValidas
+          limites: metasValidas,
+          limites_destino: limitesDestinoValidos // LÍMITES POR DESTINO
         },
         bodegas_json: bodegasActivas.map(b => ({
           id: b.id,
@@ -504,6 +545,67 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             )}
           </div>
 
+          {/* LÍMITES POR DESTINO - NUEVA SECCIÓN */}
+          <div className="bg-slate-900/50 rounded-xl p-5 border border-amber-500/20">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setLimitesExpandido(!limitesExpandido)}
+            >
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-amber-400" />
+                <h4 className="text-white font-bold">
+                  Límites por Destino (opcional)
+                </h4>
+                <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs">
+                  {Object.keys(limitesDestino).length} configurados
+                </span>
+              </div>
+              <button type="button" className="text-slate-400 hover:text-white">
+                {limitesExpandido ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+            
+            {limitesExpandido && (
+              <>
+                <p className="text-xs text-slate-400 mb-3 mt-2">
+                  Define límites de tonelaje para destinos específicos. El pesador verá cuánto falta para llegar al límite.
+                </p>
+                
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                  {destinos.map(destino => (
+                    <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-white">{destino.nombre}</p>
+                          <p className="text-xs text-slate-500">{destino.codigo}</p>
+                        </div>
+                        <div className="relative w-48">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            value={limitesDestino[destino.id] || ''}
+                            onChange={(e) => handleLimiteDestinoChange(destino.id, e.target.value)}
+                            className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
+                            placeholder="Límite en TM"
+                          />
+                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
+                            TM
+                          </span>
+                        </div>
+                      </div>
+                      {limitesDestino[destino.id] > 0 && (
+                        <p className="text-[10px] text-amber-400/70 mt-2">
+                          ⚠️ El pesador verá alerta al acercarse a {limitesDestino[destino.id]} TM
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Selección de Productos */}
           {productos && productos.length > 0 && (
             <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
@@ -656,6 +758,12 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                 <p className="text-slate-500 text-xs">Bodegas:</p>
                 <p className="font-bold text-white">{bodegasActivasCount} activas</p>
               </div>
+              {Object.keys(limitesDestino).length > 0 && (
+                <div className="col-span-2">
+                  <p className="text-slate-500 text-xs">Límites por destino:</p>
+                  <p className="font-bold text-amber-400">{Object.keys(limitesDestino).length} destino(s) con límite</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -692,23 +800,6 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
           </div>
         </form>
       </div>
-
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #1e293b;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #475569;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #64748b;
-        }
-      `}</style>
     </div>
   )
 }

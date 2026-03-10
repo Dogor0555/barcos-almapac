@@ -39,7 +39,7 @@ export default function BarcoPesadorPage() {
   const [vistaGraficos, setVistaGraficos] = useState(false)
 
   // Estado para el buscador de la tabla de viajes completos
-const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
   
   // Estado para el buscador de placas
   const [buscarPlaca, setBuscarPlaca] = useState('')
@@ -251,111 +251,111 @@ const [searchTerm, setSearchTerm] = useState('')
     return deltaAcumulado / diferenciaHoras
   }, [lecturasBanda, productoActivo])
 
-// Calcular resumen por producto
-const resumenProductos = useMemo(() => {
-  if (!productos.length) return {}
+  // Calcular resumen por producto
+  const resumenProductos = useMemo(() => {
+    if (!productos.length) return {}
 
-  const resumen = {}
-  
-  productos.forEach(prod => {
-    const metaTM = barco?.metas_json?.limites?.[prod.codigo] || 0
+    const resumen = {}
     
-    const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
-    const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-    
-    // ✅ TRES ACUMULADOS NUEVOS
-    const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-    const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
-    const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
-    
-    const incompletosProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'incompleto')
-    
-    const lecturasProd = lecturasBanda.filter(l => l.producto_id === prod.id)
+    productos.forEach(prod => {
+      const metaTM = barco?.metas_json?.limites?.[prod.codigo] || 0
+      
+      const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
+      const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+      
+      // ✅ TRES ACUMULADOS NUEVOS
+      const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+      const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
+      const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
+      
+      const incompletosProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'incompleto')
+      
+      const lecturasProd = lecturasBanda.filter(l => l.producto_id === prod.id)
 
-    const ultimaLecturaPorDestino = {}
-    lecturasProd.forEach(l => {
-      const dId = l.destino_id
-      if (!dId) return
-      if (
-        !ultimaLecturaPorDestino[dId] ||
-        new Date(l.fecha_hora) > new Date(ultimaLecturaPorDestino[dId].fecha_hora)
-      ) {
-        ultimaLecturaPorDestino[dId] = l
+      const ultimaLecturaPorDestino = {}
+      lecturasProd.forEach(l => {
+        const dId = l.destino_id
+        if (!dId) return
+        if (
+          !ultimaLecturaPorDestino[dId] ||
+          new Date(l.fecha_hora) > new Date(ultimaLecturaPorDestino[dId].fecha_hora)
+        ) {
+          ultimaLecturaPorDestino[dId] = l
+        }
+      })
+      const totalBandaTM = Object.values(ultimaLecturaPorDestino)
+        .reduce((sum, l) => sum + (Number(l.acumulado_tm) || 0), 0)
+
+      const ultimaLectura = lecturasProd.length > 0 
+        ? [...lecturasProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
+        : null
+      
+      const bitacoraProd = bitacora.filter(b => b.producto_id === prod.id)
+      const ultimaBitacora = bitacoraProd.length > 0
+        ? [...bitacoraProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
+        : null
+      
+      const totalTM = prod.tipo_registro === 'banda' ? totalBandaTM : 
+                      prod.tipo_registro === 'viajes' ? totalViajesTM :
+                      totalViajesTM + totalBandaTM
+
+      resumen[prod.id] = {
+        id: prod.id,
+        codigo: prod.codigo,
+        nombre: prod.nombre,
+        icono: prod.icono,
+        tipo: prod.tipo_registro,
+        metaTM: metaTM,
+        viajesTM: totalViajesTM,
+        bandaTM: totalBandaTM,
+        totalTM,
+        // ✅ AGREGAR LOS TRES NUEVOS ACUMULADOS AQUÍ
+        acumuladoUPDP: acumuladoUPDP,
+        acumuladoAlmapac: acumuladoAlmapac,
+        acumuladoSistema: acumuladoSistema,
+        viajes: viajesProd.length,
+        incompletos: incompletosProd.length,
+        lecturas: lecturasProd.length,
+        bitacora: bitacoraProd.length,
+        ultimaLectura: ultimaLectura,
+        ultimoViaje: viajesProd.length > 0 ? viajesProd[0] : null,
+        ultimaBitacora: ultimaBitacora
       }
     })
-    const totalBandaTM = Object.values(ultimaLecturaPorDestino)
-      .reduce((sum, l) => sum + (Number(l.acumulado_tm) || 0), 0)
 
-    const ultimaLectura = lecturasProd.length > 0 
-      ? [...lecturasProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
-      : null
-    
-    const bitacoraProd = bitacora.filter(b => b.producto_id === prod.id)
-    const ultimaBitacora = bitacoraProd.length > 0
-      ? [...bitacoraProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
-      : null
-    
-    const totalTM = prod.tipo_registro === 'banda' ? totalBandaTM : 
-                    prod.tipo_registro === 'viajes' ? totalViajesTM :
-                    totalViajesTM + totalBandaTM
+    Object.keys(resumen).forEach(key => {
+      const prod = resumen[key]
+      prod.porcentaje = prod.metaTM > 0 ? (prod.totalTM / prod.metaTM) * 100 : 0
+      prod.faltanteTM = Math.max(0, prod.metaTM - prod.totalTM)
+      prod.completado = prod.totalTM >= prod.metaTM && prod.metaTM > 0
+      prod.excedenteTM = Math.max(0, prod.totalTM - prod.metaTM)
+    })
 
-    resumen[prod.id] = {
-      id: prod.id,
-      codigo: prod.codigo,
-      nombre: prod.nombre,
-      icono: prod.icono,
-      tipo: prod.tipo_registro,
-      metaTM: metaTM,
-      viajesTM: totalViajesTM,
-      bandaTM: totalBandaTM,
-      totalTM,
-      // ✅ AGREGAR LOS TRES NUEVOS ACUMULADOS AQUÍ
-      acumuladoUPDP: acumuladoUPDP,
-      acumuladoAlmapac: acumuladoAlmapac,
-      acumuladoSistema: acumuladoSistema,
-      viajes: viajesProd.length,
-      incompletos: incompletosProd.length,
-      lecturas: lecturasProd.length,
-      bitacora: bitacoraProd.length,
-      ultimaLectura: ultimaLectura,
-      ultimoViaje: viajesProd.length > 0 ? viajesProd[0] : null,
-      ultimaBitacora: ultimaBitacora
-    }
-  })
-
-  Object.keys(resumen).forEach(key => {
-    const prod = resumen[key]
-    prod.porcentaje = prod.metaTM > 0 ? (prod.totalTM / prod.metaTM) * 100 : 0
-    prod.faltanteTM = Math.max(0, prod.metaTM - prod.totalTM)
-    prod.completado = prod.totalTM >= prod.metaTM && prod.metaTM > 0
-    prod.excedenteTM = Math.max(0, prod.totalTM - prod.metaTM)
-  })
-
-  return resumen
-}, [productos, viajes, lecturasBanda, bitacora, barco])
-
+    return resumen
+  }, [productos, viajes, lecturasBanda, bitacora, barco])
 
   // Viajes completos filtrados por búsqueda
-const viajesFiltrados = useMemo(() => {
-  if (!productoActivo) return []
-  
-  const completos = viajes.filter(v => 
-    v.producto_id === productoActivo.id && v.estado === 'completo'
-  )
-  
-  if (!searchTerm.trim()) return completos
-  
-  const termino = searchTerm.trim().toLowerCase()
-  return completos.filter(viaje => 
-    viaje.placa.toLowerCase().includes(termino)
-  )
-}, [viajes, productoActivo, searchTerm])
+  const viajesFiltrados = useMemo(() => {
+    if (!productoActivo) return []
+    
+    const completos = viajes.filter(v => 
+      v.producto_id === productoActivo.id && v.estado === 'completo'
+    )
+    
+    if (!searchTerm.trim()) return completos
+    
+    const termino = searchTerm.trim().toLowerCase()
+    return completos.filter(viaje => 
+      viaje.placa.toLowerCase().includes(termino)
+    )
+  }, [viajes, productoActivo, searchTerm])
 
-
-
-  // Resumen por destino del producto activo
+  // 👇 NUEVO: Resumen por destino del producto activo CON LÍMITES
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
+
+    // Obtener límites por destino del barco
+    const limitesDestino = barco?.metas_json?.limites_destino || {}
 
     const mapa = {}
 
@@ -367,6 +367,7 @@ const viajesFiltrados = useMemo(() => {
           mapa[key] = {
             destino_id: key,
             nombre: v.destino?.nombre || `Destino ${key}`,
+            limite_tm: limitesDestino[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
             banda_count: 0,
@@ -389,6 +390,7 @@ const viajesFiltrados = useMemo(() => {
           mapa[key] = {
             destino_id: key,
             nombre: l.destino?.nombre || `Destino ${key}`,
+            limite_tm: limitesDestino[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
             banda_count: 0,
@@ -408,10 +410,52 @@ const viajesFiltrados = useMemo(() => {
         d.banda_tm = Number(ultima.acumulado_tm) || 0
       }
       d.total_tm = d.viajes_tm + d.banda_tm
+      
+      // 👇 Calcular porcentaje y estado respecto al límite del destino
+      d.porcentaje = d.limite_tm > 0 ? (d.total_tm / d.limite_tm) * 100 : 0
+      d.faltante_tm = Math.max(0, d.limite_tm - d.total_tm)
+      d.excedente_tm = Math.max(0, d.total_tm - d.limite_tm)
+      d.completado = d.limite_tm > 0 && d.total_tm >= d.limite_tm
+      d.cerca_limite = d.limite_tm > 0 && d.porcentaje >= 90 && d.porcentaje < 100
     })
 
     return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
-  }, [productoActivo, viajes, lecturasBanda, destinos])
+  }, [productoActivo, viajes, lecturasBanda, destinos, barco])
+
+  // 👇 ALERTAS AUTOMÁTICAS CUANDO SE ACERCA AL LÍMITE DE UN DESTINO
+  useEffect(() => {
+    if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
+      resumenPorDestino.forEach(dest => {
+        if (dest.limite_tm > 0 && dest.cerca_limite) {
+          const toastId = `limite-${dest.destino_id}`
+          if (!window[toastId]) {
+            window[toastId] = true
+            toast.warning(
+              `⚠️ ${dest.nombre} está al ${dest.porcentaje.toFixed(1)}% de su límite (${dest.limite_tm.toFixed(3)} TM)`,
+              {
+                id: toastId,
+                duration: 8000,
+                icon: '⚠️'
+              }
+            )
+          }
+        } else if (dest.limite_tm > 0 && dest.completado) {
+          const toastId = `completo-${dest.destino_id}`
+          if (!window[toastId]) {
+            window[toastId] = true
+            toast.success(
+              `✅ ${dest.nombre} ha alcanzado su límite de ${dest.limite_tm.toFixed(3)} TM`,
+              {
+                id: toastId,
+                duration: 8000,
+                icon: '✅'
+              }
+            )
+          }
+        }
+      })
+    }
+  }, [resumenPorDestino, barco?.estado])
 
   const productoSeleccionado = useMemo(() => {
     if (!productoActivo) return null
@@ -1196,8 +1240,6 @@ const viajesFiltrados = useMemo(() => {
                 </div>
               )}
               
-              {/* ✅ ELIMINADOS: Botones de finalizar/reanudar operación */}
-
               <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -1208,7 +1250,7 @@ const viajesFiltrados = useMemo(() => {
             </div>
           </div>
 
-          {/* ✅ NUEVO: Indicadores de inicio/fin de descarga (SOLO VISUALIZACIÓN) */}
+          {/* Indicadores de inicio/fin de descarga */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Estado de Inicio de Descarga */}
             <div className={`rounded-xl p-4 ${
@@ -1330,7 +1372,7 @@ const viajesFiltrados = useMemo(() => {
             </div>
           </div>
 
-          {/* ✅ Si hay tiempos de Arribo/Ataque/Recibido, mostrarlos también */}
+          {/* Tiempos de Arribo/Ataque/Recibido */}
           {(barco.tiempo_arribo || barco.tiempo_ataque || barco.tiempo_recibido) && (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               {barco.tiempo_arribo && (
@@ -1395,7 +1437,6 @@ const viajesFiltrados = useMemo(() => {
             </div>
           )}
 
-          {/* ✅ Si hay motivo de finalización y está finalizado, mostrarlo destacado */}
           {barco.estado === 'finalizado' && barco.operacion_motivo_finalizacion && (
             <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
               <div className="flex items-center gap-2">
@@ -1473,7 +1514,7 @@ const viajesFiltrados = useMemo(() => {
           </div>
         </div>
 
-        {/* TARJETA DE RESUMEN DEL PRODUCTO ACTIVO CON FLUJOS POR HORA */}
+        {/* TARJETA DE RESUMEN DEL PRODUCTO ACTIVO */}
         {productoActivo && productoSeleccionado && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -1549,7 +1590,6 @@ const viajesFiltrados = useMemo(() => {
                   </p>
                 </div>
 
-                {/* ✅ ACUMULADO UPDP EN AMARILLO */}
                 <div className="bg-slate-900 rounded-xl p-4 border-l-4 border-yellow-500">
                   <p className="text-xs text-slate-500">Acumulado UPDP</p>
                   <p className="text-xl font-bold text-yellow-400">
@@ -1557,7 +1597,6 @@ const viajesFiltrados = useMemo(() => {
                   </p>
                 </div>
 
-                {/* TARJETA DE FLUJO ACTUAL PARA BANDA */}
                 {productoActivo.tipo_registro === 'banda' && (
                   <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-4 col-span-2">
                     <div className="flex items-center gap-3">
@@ -1591,7 +1630,6 @@ const viajesFiltrados = useMemo(() => {
               </div>
             )}
 
-            {/* Botones para ver gráfica y alternar vistas */}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setVistaGraficos(!vistaGraficos)}
@@ -1608,7 +1646,7 @@ const viajesFiltrados = useMemo(() => {
           </div>
         )}
 
-        {/* GRÁFICA DE FLUJO ACUMULADO POR HORA - TENDENCIA */}
+        {/* GRÁFICA DE FLUJO ACUMULADO */}
         {vistaGraficos && productoActivo && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1704,7 +1742,7 @@ const viajesFiltrados = useMemo(() => {
           </div>
         )}
 
-        {/* RESUMEN POR DESTINO */}
+        {/* RESUMEN POR DESTINO CON LÍMITES */}
         {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             {/* Cabecera */}
@@ -1731,43 +1769,138 @@ const viajesFiltrados = useMemo(() => {
               {resumenPorDestino.map((dest) => {
                 const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
                 const pct = totalGeneral > 0 ? (dest.total_tm / totalGeneral) * 100 : 0
+                
+                let limiteColor = 'teal'
+                let limiteMensaje = ''
+                if (dest.limite_tm > 0) {
+                  if (dest.completado) {
+                    limiteColor = 'green'
+                    limiteMensaje = `✓ COMPLETADO`
+                  } else if (dest.cerca_limite) {
+                    limiteColor = 'amber'
+                    limiteMensaje = `⚠️ Faltan ${dest.faltante_tm.toFixed(3)} TM`
+                  } else {
+                    limiteColor = 'blue'
+                    limiteMensaje = `${dest.porcentaje.toFixed(1)}% de ${dest.limite_tm.toFixed(3)} TM`
+                  }
+                }
 
                 return (
                   <div
                     key={dest.destino_id}
-                    className="bg-slate-900 border border-white/5 rounded-xl overflow-hidden"
+                    className={`bg-slate-900 border rounded-xl overflow-hidden transition-all ${
+                      dest.limite_tm > 0 && dest.completado 
+                        ? 'border-green-500/30 ring-1 ring-green-500/20' 
+                        : dest.limite_tm > 0 && dest.cerca_limite
+                        ? 'border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
+                        : 'border-white/5'
+                    }`}
                   >
-                    {/* Header de tarjeta */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+                    <div className={`flex items-center justify-between px-4 py-3 border-b ${
+                      dest.limite_tm > 0 && dest.completado
+                        ? 'border-green-500/20 bg-green-500/5'
+                        : dest.limite_tm > 0 && dest.cerca_limite
+                        ? 'border-amber-500/20 bg-amber-500/5'
+                        : 'border-white/5'
+                    }`}>
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-teal-400" />
+                        <MapPin className={`w-4 h-4 ${
+                          dest.limite_tm > 0 && dest.completado
+                            ? 'text-green-400'
+                            : dest.limite_tm > 0 && dest.cerca_limite
+                            ? 'text-amber-400'
+                            : 'text-teal-400'
+                        }`} />
                         <span className="font-bold text-white">{dest.nombre}</span>
+                        {dest.limite_tm > 0 && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            dest.completado
+                              ? 'bg-green-500/20 text-green-400'
+                              : dest.cerca_limite
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : 'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {dest.completado ? 'COMPLETO' : `${dest.porcentaje.toFixed(0)}%`}
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">
                         {pct.toFixed(1)}%
                       </span>
                     </div>
 
-                    {/* Barra de progreso */}
                     <div className="px-4 pt-3">
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-teal-500 rounded-full transition-all"
+                          className={`h-full rounded-full transition-all ${
+                            dest.limite_tm > 0 && dest.completado
+                              ? 'bg-green-500'
+                              : dest.limite_tm > 0 && dest.cerca_limite
+                              ? 'bg-amber-500'
+                              : 'bg-teal-500'
+                          }`}
                           style={{ width: `${Math.min(pct, 100)}%` }}
                         />
                       </div>
                     </div>
 
-                    {/* Total grande */}
                     <div className="px-4 py-3">
-                      <p className="text-2xl font-black text-teal-400">
-                        {dest.total_tm.toFixed(3)} TM
-                      </p>
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className={`text-2xl font-black ${
+                            dest.limite_tm > 0 && dest.completado
+                              ? 'text-green-400'
+                              : dest.limite_tm > 0 && dest.cerca_limite
+                              ? 'text-amber-400'
+                              : 'text-teal-400'
+                          }`}>
+                            {dest.total_tm.toFixed(3)} TM
+                          </p>
+                          {dest.limite_tm > 0 && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              Límite: {dest.limite_tm.toFixed(3)} TM
+                            </p>
+                          )}
+                        </div>
+                        
+                        {limiteMensaje && (
+                          <div className={`text-right ${
+                            dest.completado
+                              ? 'text-green-400'
+                              : dest.cerca_limite
+                              ? 'text-amber-400'
+                              : 'text-blue-400'
+                          }`}>
+                            <p className="text-xs font-bold">{limiteMensaje}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Desglose */}
+                    {dest.limite_tm > 0 && (
+                      <div className="px-4 pb-2">
+                        <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                          <span>Progreso vs límite</span>
+                          <span className={dest.completado ? 'text-green-400' : dest.cerca_limite ? 'text-amber-400' : 'text-blue-400'}>
+                            {dest.porcentaje.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              dest.completado
+                                ? 'bg-green-500'
+                                : dest.cerca_limite
+                                ? 'bg-amber-500'
+                                : 'bg-blue-500'
+                            }`}
+                            style={{ width: `${Math.min(dest.porcentaje, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="px-4 pb-4 grid grid-cols-2 gap-3">
-                      {/* Viajes */}
                       {dest.viajes_count > 0 && (
                         <div className="bg-slate-800 rounded-lg p-3">
                           <div className="flex items-center gap-1 mb-1">
@@ -1781,7 +1914,6 @@ const viajesFiltrados = useMemo(() => {
                           <p className="text-[10px] text-slate-500 mt-0.5">
                             {dest.viajes_count} viaje{dest.viajes_count !== 1 ? 's' : ''}
                           </p>
-                          {/* Mini listado de viajes */}
                           <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
                             {dest.detalle_viajes
                               .sort((a, b) => a.viaje_numero - b.viaje_numero)
@@ -1803,7 +1935,6 @@ const viajesFiltrados = useMemo(() => {
                         </div>
                       )}
 
-                      {/* Banda */}
                       {dest.banda_count > 0 && (
                         <div className="bg-slate-800 rounded-lg p-3">
                           <div className="flex items-center gap-1 mb-1">
@@ -1817,7 +1948,6 @@ const viajesFiltrados = useMemo(() => {
                           <p className="text-[10px] text-slate-500 mt-0.5">
                             Última de {dest.banda_count} lectura{dest.banda_count !== 1 ? 's' : ''}
                           </p>
-                          {/* Mini listado lecturas */}
                           <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
                             {dest.detalle_banda
                               .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
@@ -1841,7 +1971,6 @@ const viajesFiltrados = useMemo(() => {
               })}
             </div>
 
-            {/* Fila de totales */}
             <div className="border-t border-white/10 bg-slate-900 px-6 py-3 flex flex-wrap gap-6">
               <div>
                 <p className="text-[10px] text-slate-500 uppercase font-bold">Total viajes</p>
@@ -2209,7 +2338,7 @@ const viajesFiltrados = useMemo(() => {
 
                 {!viajeSeleccionado ? (
                   <div className="mb-6">
-                    {/* 🔥 BUSCADOR DE PLACAS */}
+                    {/* BUSCADOR DE PLACAS */}
                     <div className="mb-4">
                       <label className="block text-sm font-bold text-slate-400 mb-2">
                         Buscar por placa:
@@ -2284,7 +2413,6 @@ const viajesFiltrados = useMemo(() => {
                                 </div>
                               </button>
                               
-                              {/* DOS BOTONES: VERDE para completar, AZUL para editar */}
                               <div className="flex gap-2 ml-4">
                                 <button
                                   onClick={() => seleccionarViajeParaCompletar(viaje)}
@@ -2315,7 +2443,6 @@ const viajesFiltrados = useMemo(() => {
                       <div className="flex justify-between items-center mb-3">
                         <p className="text-sm text-slate-400">Completando Viaje #{viajeSeleccionado.viaje_numero} · {viajeSeleccionado.placa} - {productoActivo?.nombre}</p>
                         <div className="flex gap-2">
-                          {/* BOTÓN AZUL también aquí */}
                           <button
                             onClick={() => handleEditarViajeDesdePaso2(viajeSeleccionado)}
                             className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
@@ -2470,148 +2597,148 @@ const viajesFiltrados = useMemo(() => {
             )}
 
             {viajesCompletos.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-    <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-white flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-400" />
-          Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
-          <span className="text-sm font-normal text-slate-500 ml-2">
-            Barco: {barco.nombre}
-          </span>
-        </h3>
-        
-        {/* Barra de búsqueda */}
-        <div className="relative w-64">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por placa..."
-            className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
-          />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-    
-    {/* Contenedor con scroll */}
-    <div className="overflow-x-auto">
-      <div className="max-h-[500px] overflow-y-auto relative">
-        <table className="w-full">
-          <thead className="bg-slate-800 sticky top-0 z-10">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {viajesFiltrados
-              .sort((a, b) => a.viaje_numero - b.viaje_numero)
-              .map((viaje, index, array) => {
-                const acumulado = array
-                  .slice(0, index + 1)
-                  .reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+              <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-white flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
+                      <span className="text-sm font-normal text-slate-500 ml-2">
+                        Barco: {barco.nombre}
+                      </span>
+                    </h3>
+                    
+                    {/* Barra de búsqueda */}
+                    <div className="relative w-64">
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Buscar por placa..."
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                      />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      {searchTerm && (
+                        <button
+                          onClick={() => setSearchTerm('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 
-                return (
-                  <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
-                    <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
-                    <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
-                    <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
-                    <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
-                    <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">{acumulado.toFixed(3)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditarViaje(viaje)}
-                          className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                          title="Editar"
-                          disabled={barco.estado === 'finalizado'}
-                        >
-                          <Edit2 className="w-4 h-4 text-blue-400" />
-                        </button>
-                        <button
-                          onClick={() => handleEliminarViaje(viaje.id)}
-                          className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                          title="Eliminar"
-                          disabled={barco.estado === 'finalizado'}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-          </tbody>
-          <tfoot className="bg-slate-900 border-t border-white/10 sticky bottom-0">
-            <tr>
-              <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
-              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td></td>
-              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-    
-    {/* Indicador de resultados */}
-    {searchTerm && (
-      <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
-        Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
-        {viajesFiltrados.length === 0 && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="ml-2 text-blue-400 hover:text-blue-300"
-          >
-            Limpiar búsqueda
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-)}
+                {/* Contenedor con scroll */}
+                <div className="overflow-x-auto">
+                  <div className="max-h-[500px] overflow-y-auto relative">
+                    <table className="w-full">
+                      <thead className="bg-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {viajesFiltrados
+                          .sort((a, b) => a.viaje_numero - b.viaje_numero)
+                          .map((viaje, index, array) => {
+                            const acumulado = array
+                              .slice(0, index + 1)
+                              .reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+                            
+                            return (
+                              <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
+                                <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
+                                <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
+                                <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
+                                <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
+                                <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
+                                <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
+                                <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">{acumulado.toFixed(3)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleEditarViaje(viaje)}
+                                      className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                                      title="Editar"
+                                      disabled={barco.estado === 'finalizado'}
+                                    >
+                                      <Edit2 className="w-4 h-4 text-blue-400" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEliminarViaje(viaje.id)}
+                                      className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                      title="Eliminar"
+                                      disabled={barco.estado === 'finalizado'}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-400" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                      <tfoot className="bg-slate-900 border-t border-white/10 sticky bottom-0">
+                        <tr>
+                          <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
+                          <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td></td>
+                          <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+                
+                {/* Indicador de resultados */}
+                {searchTerm && (
+                  <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
+                    Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
+                    {viajesFiltrados.length === 0 && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="ml-2 text-blue-400 hover:text-blue-300"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 

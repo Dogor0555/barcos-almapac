@@ -1,4 +1,3 @@
-// components/adminC/EditarBarcoModal.js
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,8 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Ship, Calendar, User, Package, Save, Anchor, Hash, 
-  ChevronDown, ChevronUp, Import, Upload as Export, Layers,Edit2,
-  AlertCircle
+  ChevronDown, ChevronUp, Import, Upload as Export, Layers, Edit2, Target
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -15,6 +13,8 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   const [loading, setLoading] = useState(false)
   const [productosExpandido, setProductosExpandido] = useState(true)
   const [bodegasExpandido, setBodegasExpandido] = useState(true)
+  const [limitesExpandido, setLimitesExpandido] = useState(true)
+  const [destinos, setDestinos] = useState([])
   const [formData, setFormData] = useState({
     nombre: '',
     codigo_barco: '',
@@ -26,6 +26,26 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   })
 
   const [bodegas, setBodegas] = useState([])
+  const [limitesDestino, setLimitesDestino] = useState({})
+
+  // Cargar destinos
+  useEffect(() => {
+    cargarDestinos()
+  }, [])
+
+  const cargarDestinos = async () => {
+    try {
+      const { data } = await supabase
+        .from('destinos')
+        .select('*')
+        .eq('activo', true)
+        .order('nombre')
+      
+      setDestinos(data || [])
+    } catch (error) {
+      console.error('Error cargando destinos:', error)
+    }
+  }
 
   // Cargar datos del barco
   useEffect(() => {
@@ -44,6 +64,10 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
       // Cargar bodegas del barco
       const bodegasBarco = barco.bodegas_json || []
       setBodegas(bodegasBarco.map(b => ({ ...b, activa: true })))
+
+      // Cargar límites por destino
+      const limitesGuardados = barco.metas_json?.limites_destino || {}
+      setLimitesDestino(limitesGuardados)
 
       // Inicializar productos seleccionados
       const productosDelBarco = barco.metas_json?.productos || []
@@ -116,6 +140,14 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
     ))
   }
 
+  // Función para manejar límite por destino
+  const handleLimiteDestinoChange = (destinoId, value) => {
+    setLimitesDestino(prev => ({
+      ...prev,
+      [destinoId]: value ? parseFloat(value) : null
+    }))
+  }
+
   const activarTodasBodegas = () => {
     setBodegas(bodegas.map(b => ({ ...b, activa: true })))
   }
@@ -167,6 +199,14 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         }
       })
 
+      // Filtrar límites de destino válidos
+      const limitesDestinoValidos = {}
+      Object.entries(limitesDestino).forEach(([destinoId, valor]) => {
+        if (valor && !isNaN(valor) && valor > 0) {
+          limitesDestinoValidos[destinoId] = valor
+        }
+      })
+
       const datosActualizar = {
         nombre: formData.nombre.trim(),
         codigo_barco: formData.codigo_barco?.trim() || null,
@@ -175,7 +215,8 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         tipo_operacion: formData.tipo_operacion,
         metas_json: {
           productos: productosSeleccionados,
-          limites: metasValidas
+          limites: metasValidas,
+          limites_destino: limitesDestinoValidos
         },
         bodegas_json: bodegasActivas.map(b => ({
           id: b.id,
@@ -431,6 +472,62 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             )}
           </div>
 
+          {/* LÍMITES POR DESTINO */}
+          <div className="bg-slate-900/50 rounded-xl p-5 border border-amber-500/20">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setLimitesExpandido(!limitesExpandido)}
+            >
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-amber-400" />
+                <h4 className="text-white font-bold">
+                  Límites por Destino (opcional)
+                </h4>
+                <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs">
+                  {Object.keys(limitesDestino).length} configurados
+                </span>
+              </div>
+              <button type="button" className="text-slate-400 hover:text-white">
+                {limitesExpandido ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+            
+            {limitesExpandido && (
+              <>
+                <p className="text-xs text-slate-400 mb-3 mt-2">
+                  Define límites de tonelaje para destinos específicos.
+                </p>
+                
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                  {destinos.map(destino => (
+                    <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-white">{destino.nombre}</p>
+                          <p className="text-xs text-slate-500">{destino.codigo}</p>
+                        </div>
+                        <div className="relative w-48">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            value={limitesDestino[destino.id] || ''}
+                            onChange={(e) => handleLimiteDestinoChange(destino.id, e.target.value)}
+                            className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
+                            placeholder="Límite en TM"
+                          />
+                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
+                            TM
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Selección de Productos */}
           {productos && productos.length > 0 && (
             <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
@@ -529,6 +626,27 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Resumen de límites */}
+          {Object.keys(limitesDestino).length > 0 && (
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+              <h4 className="font-bold text-amber-400 mb-2 flex items-center gap-2">
+                <Target className="w-4 h-4" />
+                Límites configurados por destino
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {Object.entries(limitesDestino).map(([id, valor]) => {
+                  const destino = destinos.find(d => d.id === parseInt(id))
+                  return (
+                    <div key={id} className="flex justify-between items-center bg-slate-800 rounded-lg px-3 py-2">
+                      <span className="text-slate-300">{destino?.nombre || `Destino ${id}`}</span>
+                      <span className="font-bold text-amber-400">{valor.toFixed(3)} TM</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
