@@ -14,7 +14,7 @@ import {
   Clock, AlertCircle, Play, CheckSquare, XCircle,
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
-  Pencil, Search, X, Lock, Unlock, Anchor, StopCircle
+  Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox  
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
