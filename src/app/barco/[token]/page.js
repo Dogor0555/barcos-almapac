@@ -3049,7 +3049,7 @@ export default function BarcoPesadorPage() {
                   <table className="w-full border-collapse table-auto">
                     <thead className="bg-slate-800">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 whitespace-nowrap">FECHA/HORA (El Salvador)</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 whitespace-nowrap">FECHA/HORA</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 w-px whitespace-nowrap">ACUMULADO (TM)</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 w-px whitespace-nowrap">FLUJO (TM/H)</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10">DESTINO</th>
