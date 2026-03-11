@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { verificarNumeroViaje, getSiguienteNumeroViaje } from '../../utils/viajeConflict'
 
 export default function BarcoPesadorPage() {
   const { token } = useParams()
@@ -37,6 +38,10 @@ export default function BarcoPesadorPage() {
   const [editandoLectura, setEditandoLectura] = useState(null)
   const [editandoBitacora, setEditandoBitacora] = useState(null)
   const [vistaGraficos, setVistaGraficos] = useState(false)
+
+  const [conflicto, setConflicto] = useState(null) // { ocupado, sugerido }
+const [validando, setValidando] = useState(false)
+
 
   // Estado para el buscador de la tabla de viajes completos
   const [searchTerm, setSearchTerm] = useState('')
@@ -146,6 +151,34 @@ export default function BarcoPesadorPage() {
     setModoRegistro('editar')
     setViajeSeleccionado(null)
     toast.success('Editando viaje en Paso 1')
+  }
+
+  // Llama esto cuando el usuario termina de escribir el número (onBlur o onChange con debounce)
+  const handleValidarNumeroViaje = async (numero) => {
+    if (!numero || !barco?.id || !productoActivo?.id) return
+    setValidando(true)
+    try {
+      const resultado = await verificarNumeroViaje(barco.id, productoActivo.id, Number(numero))
+      if (!resultado.libre) {
+        setConflicto(resultado)
+        toast.error(`⚠️ El viaje #${numero} ya está registrado por otro usuario`, {
+          duration: 5000,
+          id: 'viaje-conflicto'
+        })
+      } else {
+        setConflicto(null)
+      }
+    } catch (err) {
+      console.error('Error validando viaje:', err)
+    } finally {
+      setValidando(false)
+    }
+  }
+
+  const handleAceptarSugerido = () => {
+    setNuevoViaje(prev => ({ ...prev, viaje_numero: conflicto.sugerido }))
+    setConflicto(null)
+    toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
   }
 
   // Datos para gráfica de flujo acumulado por hora
@@ -747,131 +780,157 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  const handleGuardarIncompleto = async () => {
-    try {
-      // Verificar si la operación está finalizada
-      if (barco.estado === 'finalizado') {
-        toast.error('No se pueden registrar datos. La operación está finalizada.')
-        return
+ const handleGuardarIncompleto = async () => {
+  try {
+    // Verificar si la operación está finalizada
+    if (barco.estado === 'finalizado') {
+      toast.error('No se pueden registrar datos. La operación está finalizada.')
+      return
+    }
+
+    if (!nuevoViaje.placa || nuevoViaje.placa === 'C-') {
+      toast.error('La placa es obligatoria')
+      return
+    }
+
+    if (!nuevoViaje.producto_id) {
+      toast.error('Debes seleccionar un producto')
+      return
+    }
+
+    if (!barco || !barco.id) {
+      toast.error('Error: No hay información del barco')
+      return
+    }
+
+    let horaSalidaUPDP = null
+    let horaEntradaAlmapac = null
+
+    if (nuevoViaje.hora_salida_updp) {
+      if (detectarFormatoAmPm(nuevoViaje.hora_salida_updp)) {
+        toast.warning('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
       }
+      horaSalidaUPDP = validateHora24h(nuevoViaje.hora_salida_updp)
+    }
 
-      if (!nuevoViaje.placa || nuevoViaje.placa === 'C-') {
-        toast.error('La placa es obligatoria')
-        return
+    if (nuevoViaje.hora_entrada_almapac) {
+      if (detectarFormatoAmPm(nuevoViaje.hora_entrada_almapac)) {
+        toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
       }
+      horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
+    }
 
-      if (!nuevoViaje.producto_id) {
-        toast.error('Debes seleccionar un producto')
-        return
-      }
+    const datosInsertar = {
+      barco_id: barco.id,
+      viaje_numero: Number(nuevoViaje.viaje_numero),
+      fecha: nuevoViaje.fecha,
+      hora_salida_updp: horaSalidaUPDP,
+      hora_entrada_almapac: horaEntradaAlmapac,
+      placa: nuevoViaje.placa,
+      peso_neto_updp_tm: Number(nuevoViaje.peso_neto_updp_tm) || null,
+      peso_bruto_almapac_tm: Number(nuevoViaje.peso_bruto_almapac_tm) || null,
+      peso_bruto_updp_tm: Number(nuevoViaje.peso_bruto_updp_tm) || null,
+      producto_id: Number(nuevoViaje.producto_id),
+      destino_id: nuevoViaje.destino_id ? Number(nuevoViaje.destino_id) : null,
+      estado: 'incompleto',
+      observaciones: nuevoViaje.observaciones || null
+    }
 
-      if (!barco || !barco.id) {
-        toast.error('Error: No hay información del barco')
-        return
-      }
-
-      let horaSalidaUPDP = null
-      let horaEntradaAlmapac = null
-
-      if (nuevoViaje.hora_salida_updp) {
-        if (detectarFormatoAmPm(nuevoViaje.hora_salida_updp)) {
-          toast.warning('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
-        }
-        horaSalidaUPDP = validateHora24h(nuevoViaje.hora_salida_updp)
-      }
-
-      if (nuevoViaje.hora_entrada_almapac) {
-        if (detectarFormatoAmPm(nuevoViaje.hora_entrada_almapac)) {
-          toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
-        }
-        horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
-      }
-
-      const datosInsertar = {
-        barco_id: barco.id,
-        viaje_numero: Number(nuevoViaje.viaje_numero),
-        fecha: nuevoViaje.fecha,
-        hora_salida_updp: horaSalidaUPDP,
-        hora_entrada_almapac: horaEntradaAlmapac,
-        placa: nuevoViaje.placa,
-        peso_neto_updp_tm: Number(nuevoViaje.peso_neto_updp_tm) || null,
-        peso_bruto_almapac_tm: Number(nuevoViaje.peso_bruto_almapac_tm) || null,
-        peso_bruto_updp_tm: Number(nuevoViaje.peso_bruto_updp_tm) || null,
-        producto_id: Number(nuevoViaje.producto_id),
-        destino_id: nuevoViaje.destino_id ? Number(nuevoViaje.destino_id) : null,
-        estado: 'incompleto',
-        observaciones: nuevoViaje.observaciones || null
-      }
-
-      let result
+    let result
+    
+    if (editandoViaje) {
+      result = await supabase
+        .from('viajes')
+        .update(datosInsertar)
+        .eq('id', editandoViaje.id)
+        .select()
       
-      if (editandoViaje) {
-        result = await supabase
-          .from('viajes')
-          .update(datosInsertar)
-          .eq('id', editandoViaje.id)
-          .select()
+      if (!result.error) {
+        toast.success('Viaje actualizado correctamente')
+        setEditandoViaje(null)
+        setModoRegistro('nuevo')
         
-        if (!result.error) {
-          toast.success('Viaje actualizado correctamente')
-          setEditandoViaje(null)
-          setModoRegistro('nuevo')
-          
-          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
-          setNuevoViaje(prev => ({
-            ...prev,
-            viaje_numero: siguienteNumero,
-            fecha: getLocalDateString(),
-            hora_salida_updp: '',
-            hora_entrada_almapac: '',
-            placa: 'C-',
-            peso_neto_updp_tm: '',
-            peso_bruto_almapac_tm: '',
-            peso_bruto_updp_tm: '',
-            destino_id: '',
-            observaciones: ''
-          }))
-        }
-      } else {
-        result = await supabase
-          .from('viajes')
-          .insert([datosInsertar])
-          .select()
-        
-        if (!result.error) {
-          toast.success('Viaje registrado exitosamente')
-          
-          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
-          
-          setNuevoViaje({
-            viaje_numero: siguienteNumero,
-            fecha: getLocalDateString(),
-            hora_salida_updp: '',
-            hora_entrada_almapac: '',
-            placa: 'C-',
-            peso_neto_updp_tm: '',
-            peso_bruto_almapac_tm: '',
-            peso_bruto_updp_tm: '',
-            producto_id: nuevoViaje.producto_id,
-            destino_id: '',
-            observaciones: ''
-          })
-        }
+        const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
+        setNuevoViaje(prev => ({
+          ...prev,
+          viaje_numero: siguienteNumero,
+          fecha: getLocalDateString(),
+          hora_salida_updp: '',
+          hora_entrada_almapac: '',
+          placa: 'C-',
+          peso_neto_updp_tm: '',
+          peso_bruto_almapac_tm: '',
+          peso_bruto_updp_tm: '',
+          destino_id: '',
+          observaciones: ''
+        }))
       }
-
+    } else {
+      result = await supabase
+        .from('viajes')
+        .insert([datosInsertar])
+        .select()
+      
+      // ✅ NUEVO: Manejar específicamente el error de duplicado
       if (result.error) {
+        // Verificar si es el error de unique constraint
+        if (result.error.code === '23505' && result.error.message.includes('viajes_barco_id_producto_id_viaje_numero')) {
+          // Obtener el siguiente número disponible automáticamente
+          const siguienteLibre = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
+          
+          setConflicto({
+            ocupado: nuevoViaje.viaje_numero,
+            sugerido: siguienteLibre
+          })
+          
+          toast.error(`⚠️ El viaje #${nuevoViaje.viaje_numero} fue tomado por otro usuario justo ahora. Intenta con el #${siguienteLibre}`, {
+            duration: 6000,
+            id: 'viaje-conflicto-insert'
+          })
+          return
+        }
+        
+        // Si es otro tipo de error, mostrarlo normalmente
         console.error('Error:', result.error)
         toast.error(`Error: ${result.error.message}`)
         return
       }
-
-      await cargarDatos()
-
-    } catch (error) {
-      console.error('Error inesperado:', error)
-      toast.error('Error inesperado al guardar')
+      
+      if (!result.error) {
+        toast.success('Viaje registrado exitosamente')
+        
+        const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
+        
+        setNuevoViaje({
+          viaje_numero: siguienteNumero,
+          fecha: getLocalDateString(),
+          hora_salida_updp: '',
+          hora_entrada_almapac: '',
+          placa: 'C-',
+          peso_neto_updp_tm: '',
+          peso_bruto_almapac_tm: '',
+          peso_bruto_updp_tm: '',
+          producto_id: nuevoViaje.producto_id,
+          destino_id: '',
+          observaciones: ''
+        })
+      }
     }
+
+    if (result.error) {
+      console.error('Error:', result.error)
+      toast.error(`Error: ${result.error.message}`)
+      return
+    }
+
+    await cargarDatos()
+    setConflicto(null) // Limpiar conflicto si todo salió bien
+
+  } catch (error) {
+    console.error('Error inesperado:', error)
+    toast.error('Error inesperado al guardar')
   }
+}
 
   const handleCompletarViaje = async () => {
     try {
@@ -2122,6 +2181,42 @@ export default function BarcoPesadorPage() {
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* CAMBIO 3: Input de # Viaje con validación */}
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1"># Viaje</label>
+                    <input
+                      type="number"
+                      name="viaje_numero"
+                      value={nuevoViaje.viaje_numero}
+                      onChange={handleNuevoViajeChange}
+                      onBlur={(e) => !editandoViaje && handleValidarNumeroViaje(e.target.value)}
+                      className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${
+                        conflicto ? 'border-red-500 bg-red-500/10' : 'border-white/10'
+                      }`}
+                      disabled={barco.estado === 'finalizado'}
+                    />
+                    {validando && (
+                      <p className="text-xs text-slate-400 mt-1">⏳ Verificando disponibilidad...</p>
+                    )}
+                    {conflicto && (
+                      <div className="mt-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm text-red-400">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>
+                            Viaje <strong>#{nuevoViaje.viaje_numero}</strong> ya ocupado. 
+                            Siguiente libre: <strong>#{conflicto.sugerido}</strong>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAceptarSugerido}
+                          className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap"
+                        >
+                          Usar #{conflicto.sugerido}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Fecha <span className="text-red-400">*</span>
@@ -2700,7 +2795,7 @@ export default function BarcoPesadorPage() {
                             )
                           })}
                       </tbody>
-                      <tfoot className="bg-slate-900 border-t border-white/10 sticky bottom-0">
+                      <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
                         <tr>
                           <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
                           <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
