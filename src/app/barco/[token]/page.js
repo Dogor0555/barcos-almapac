@@ -19,6 +19,13 @@ import {
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { verificarNumeroViaje, getSiguienteNumeroViaje } from '../../utils/viajeConflict'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+
+// Extender dayjs con plugins de zona horaria
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 export default function BarcoPesadorPage() {
   const { token } = useParams()
@@ -39,9 +46,8 @@ export default function BarcoPesadorPage() {
   const [editandoBitacora, setEditandoBitacora] = useState(null)
   const [vistaGraficos, setVistaGraficos] = useState(false)
 
-  const [conflicto, setConflicto] = useState(null) // { ocupado, sugerido }
-const [validando, setValidando] = useState(false)
-
+  const [conflicto, setConflicto] = useState(null)
+  const [validando, setValidando] = useState(false)
 
   // Estado para el buscador de la tabla de viajes completos
   const [searchTerm, setSearchTerm] = useState('')
@@ -80,6 +86,47 @@ const [validando, setValidando] = useState(false)
     fecha_hora: '',
     comentarios: ''
   })
+
+  // =====================================================
+  // CONFIGURACIÓN DE HORARIO EL SALVADOR (GMT-6)
+  // =====================================================
+  const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
+
+  // Para GUARDAR: Convertir hora de El Salvador del input a UTC
+  const svToUTC = (svDateTime) => {
+    if (!svDateTime) return null
+    return dayjs.tz(svDateTime, TIMEZONE_EL_SALVADOR).utc().toISOString()
+  }
+
+  // Para MOSTRAR: Convertir UTC de BD a hora de El Salvador
+  const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm') => {
+    if (!utcDate) return '—'
+    return dayjs.utc(utcDate).tz(TIMEZONE_EL_SALVADOR).format(format)
+  }
+
+  // Obtener hora actual en El Salvador para inputs
+  const getCurrentSVTimeForInput = () => {
+    return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm')
+  }
+
+  // Función para calcular flujo entre lecturas consecutivas del mismo destino
+  const calcularFlujoLectura = (lecturaActual, lecturaAnterior) => {
+    if (!lecturaAnterior) return { flujo: 0, delta: 0, horas: 0 }
+    
+    const tiempoMs = new Date(lecturaActual.fecha_hora) - new Date(lecturaAnterior.fecha_hora)
+    const tiempoHoras = tiempoMs / (1000 * 60 * 60)
+    const delta = Number(lecturaActual.acumulado_tm) - Number(lecturaAnterior.acumulado_tm)
+    
+    if (tiempoHoras > 0 && delta > 0) {
+      return {
+        flujo: delta / tiempoHoras,
+        delta: delta,
+        horas: tiempoHoras
+      }
+    }
+    
+    return { flujo: 0, delta: 0, horas: tiempoHoras }
+  }
 
   // Función para limpiar el buscador
   const limpiarBuscador = () => {
@@ -699,8 +746,9 @@ const [validando, setValidando] = useState(false)
 
   const handleEditarLectura = (lectura) => {
     setEditandoLectura(lectura)
+    // CONVERTIR de UTC a hora El Salvador para editar
     setLecturaActual({
-      fecha_hora: lectura.fecha_hora?.slice(0, 16) || '',
+      fecha_hora: formatUTCToSV(lectura.fecha_hora, 'YYYY-MM-DDTHH:mm'),
       acumulado_tm: lectura.acumulado_tm || '',
       destino_id: lectura.destino_id || ''
     })
@@ -1043,9 +1091,12 @@ const [validando, setValidando] = useState(false)
 
       const acumuladoTM = Number(lecturaActual.acumulado_tm)
       
+      // ¡CONVERTIR a UTC antes de guardar!
+      const fechaUTC = svToUTC(lecturaActual.fecha_hora)
+      
       const datosInsertar = {
         barco_id: barco.id,
-        fecha_hora: lecturaActual.fecha_hora,
+        fecha_hora: fechaUTC,
         producto_id: productoActivo.id,
         acumulado_tm: acumuladoTM,
         acumulado_kg: acumuladoTM * 1000,
@@ -1081,7 +1132,7 @@ const [validando, setValidando] = useState(false)
       }
 
       setLecturaActual({
-        fecha_hora: '',
+        fecha_hora: getCurrentSVTimeForInput(),
         acumulado_tm: '',
         destino_id: ''
       })
@@ -1228,7 +1279,7 @@ const [validando, setValidando] = useState(false)
       observaciones_destino: ''
     })
     setLecturaActual({
-      fecha_hora: '',
+      fecha_hora: getCurrentSVTimeForInput(),
       acumulado_tm: '',
       destino_id: ''
     })
@@ -2840,7 +2891,7 @@ const [validando, setValidando] = useState(false)
           </>
         )}
 
-        {/* SECCIÓN DE BANDA */}
+               {/* SECCIÓN DE BANDA */}
         {!vistaGraficos && tipoRegistro === 'banda' && (
           <>
             <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
@@ -2895,58 +2946,37 @@ const [validando, setValidando] = useState(false)
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">
-                    Fecha y Hora <span className="text-red-400">*</span>
+                    Fecha y Hora<span className="text-red-400">*</span>
                   </label>
-                  <div className="flex gap-2">
+                  <div className="relative">
                     <input
-                      type="date"
-                      value={lecturaActual.fecha_hora ? lecturaActual.fecha_hora.split('T')[0] : ''}
-                      onChange={(e) => {
-                        const fecha = e.target.value
-                        const horaActual = lecturaActual.fecha_hora?.split('T')[1] || '00:00'
-                        setLecturaActual(prev => ({ 
-                          ...prev, 
-                          fecha_hora: `${fecha}T${horaActual}`
-                        }))
-                      }}
-                      className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
+                      type="datetime-local"
+                      name="fecha_hora"
+                      value={lecturaActual.fecha_hora}
+                      onChange={(e) => setLecturaActual(prev => ({ 
+                        ...prev, 
+                        fecha_hora: e.target.value 
+                      }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10"
+                      step="1"
                       disabled={barco.estado === 'finalizado'}
                     />
-                    <div className="relative">
-                      <input
-                        type="time"
-                        value={lecturaActual.fecha_hora ? lecturaActual.fecha_hora.split('T')[1] : ''}
-                        onChange={(e) => {
-                          const hora = e.target.value
-                          const fechaActual = lecturaActual.fecha_hora?.split('T')[0] || getLocalDateString()
-                          setLecturaActual(prev => ({ 
-                            ...prev, 
-                            fecha_hora: `${fechaActual}T${hora}`
-                          }))
-                        }}
-                        step="1"
-                        className="w-32 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
-                        disabled={barco.estado === 'finalizado'}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const ahora = new Date()
-                          const fecha = getLocalDateString(ahora)
-                          const hora = getHoraActual24h()
-                          setLecturaActual(prev => ({ 
-                            ...prev, 
-                            fecha_hora: `${fecha}T${hora}`
-                          }))
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
-                        title="Usar fecha y hora actual"
-                        disabled={barco.estado === 'finalizado'}
-                      >
-                        <Clock className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLecturaActual(prev => ({ 
+                        ...prev, 
+                        fecha_hora: getCurrentSVTimeForInput() 
+                      }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
+                      title="Usar fecha y hora actual de El Salvador"
+                      disabled={barco.estado === 'finalizado'}
+                    >
+                      <Clock className="w-4 h-4" />
+                    </button>
                   </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Hora local de El Salvador (GMT-6)
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">
@@ -2985,7 +3015,7 @@ const [validando, setValidando] = useState(false)
                 <div className="flex items-end col-span-3 gap-2">
                   <button
                     onClick={handleGuardarLectura}
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
                     disabled={barco.estado === 'finalizado'}
                   >
                     <Save className="w-4 h-4" />
@@ -2994,7 +3024,7 @@ const [validando, setValidando] = useState(false)
                   {editandoLectura && (
                     <button
                       onClick={() => handleEliminarLectura(editandoLectura.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
+                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
                       disabled={barco.estado === 'finalizado'}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -3019,7 +3049,7 @@ const [validando, setValidando] = useState(false)
                   <table className="w-full border-collapse table-auto">
                     <thead className="bg-slate-800">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 whitespace-nowrap">FECHA/HORA</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 whitespace-nowrap">FECHA/HORA (El Salvador)</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 w-px whitespace-nowrap">ACUMULADO (TM)</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10 w-px whitespace-nowrap">FLUJO (TM/H)</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase border-b border-white/10">DESTINO</th>
@@ -3049,7 +3079,9 @@ const [validando, setValidando] = useState(false)
                         
                         return (
                           <tr key={lectura.id} className="hover:bg-white/5">
-                            <td className="px-4 py-3 whitespace-nowrap text-slate-300">{formatFechaHora(lectura.fecha_hora)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-slate-300">
+                              {formatUTCToSV(lectura.fecha_hora)}
+                            </td>
                             <td className="px-4 py-3 whitespace-nowrap font-bold text-blue-400 text-center">
                               {lectura.acumulado_tm?.toFixed(3)}
                             </td>
