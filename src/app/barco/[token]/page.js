@@ -2119,7 +2119,6 @@ export default function BarcoPesadorPage() {
                       ? 'bg-green-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
-                  disabled={barco.estado === 'finalizado'}
                 >
                   <Truck className="w-4 h-4" />
                   Viajes
@@ -2133,7 +2132,6 @@ export default function BarcoPesadorPage() {
                       ? 'bg-blue-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
-                  disabled={barco.estado === 'finalizado'}
                 >
                   <Scale className="w-4 h-4" />
                   Banda
@@ -2146,7 +2144,6 @@ export default function BarcoPesadorPage() {
                     ? 'bg-purple-500 text-white'
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                 }`}
-                disabled={barco.estado === 'finalizado'}
               >
                 <BookOpen className="w-4 h-4" />
                 Bitácora
@@ -2184,7 +2181,6 @@ export default function BarcoPesadorPage() {
                       ? 'bg-blue-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
-                  disabled={barco.estado === 'finalizado'}
                 >
                   <ArrowRight className="w-4 h-4" />
                   {editandoViaje ? 'Editando Viaje' : 'Paso 1: Registrar Viaje'}
@@ -2196,7 +2192,7 @@ export default function BarcoPesadorPage() {
                       ? 'bg-green-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
-                  disabled={viajesIncompletosProducto.length === 0 || barco.estado === 'finalizado'}
+                  disabled={viajesIncompletosProducto.length === 0 }
                 >
                   <MapPin className="w-4 h-4" />
                   Paso 2: Asignar Destino
@@ -2244,7 +2240,6 @@ export default function BarcoPesadorPage() {
                       className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${
                         conflicto ? 'border-red-500 bg-red-500/10' : 'border-white/10'
                       }`}
-                      disabled={barco.estado === 'finalizado'}
                     />
                     {validando && (
                       <p className="text-xs text-slate-400 mt-1">⏳ Verificando disponibilidad...</p>
@@ -2279,7 +2274,6 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
                       required
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   <div>
@@ -2303,7 +2297,6 @@ export default function BarcoPesadorPage() {
                         }}
                         step="1"
                         className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
-                        disabled={barco.estado === 'finalizado'}
                       />
                       <button
                         type="button"
@@ -2312,7 +2305,6 @@ export default function BarcoPesadorPage() {
                         }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
                         title="Usar hora actual"
-                        disabled={barco.estado === 'finalizado'}
                       >
                         <Clock className="w-4 h-4" />
                       </button>
@@ -2339,7 +2331,6 @@ export default function BarcoPesadorPage() {
                         }}
                         step="1"
                         className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
-                        disabled={barco.estado === 'finalizado'}
                       />
                       <button
                         type="button"
@@ -2348,7 +2339,6 @@ export default function BarcoPesadorPage() {
                         }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
                         title="Usar hora actual"
-                        disabled={barco.estado === 'finalizado'}
                       >
                         <Clock className="w-4 h-4" />
                       </button>
@@ -2366,7 +2356,6 @@ export default function BarcoPesadorPage() {
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="C-909389"
                       required
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   <div>
@@ -2381,7 +2370,6 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="19.815"
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   <div>
@@ -2396,7 +2384,6 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="30.865"
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   <div>
@@ -2411,7 +2398,6 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="31.500"
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   
@@ -2425,7 +2411,6 @@ export default function BarcoPesadorPage() {
                       value={nuevoViaje.destino_id}
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      disabled={barco.estado === 'finalizado'}
                     >
                       <option value="">Seleccionar destino (opcional)</option>
                       {destinos.map(d => (
@@ -2448,14 +2433,12 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="Notas del viaje"
-                      disabled={barco.estado === 'finalizado'}
                     />
                   </div>
                   <div className="flex items-end col-span-4 gap-2">
                     <button
                       onClick={handleGuardarIncompleto}
                       className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                      disabled={barco.estado === 'finalizado'}
                     >
                       <Save className="w-4 h-4" />
                       {editandoViaje ? 'Actualizar Viaje' : 'Registrar Viaje'}
@@ -2464,7 +2447,6 @@ export default function BarcoPesadorPage() {
                       <button
                         onClick={() => handleEliminarViaje(editandoViaje.id)}
                         className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                        disabled={barco.estado === 'finalizado'}
                       >
                         <Trash2 className="w-4 h-4" />
                         Eliminar
@@ -2499,14 +2481,12 @@ export default function BarcoPesadorPage() {
                           onChange={(e) => setBuscarPlaca(e.target.value)}
                           placeholder="Ej: C-123456"
                           className="w-full bg-slate-900 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white"
-                          disabled={barco.estado === 'finalizado'}
                         />
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                         {buscarPlaca && (
                           <button
                             onClick={limpiarBuscador}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                            disabled={barco.estado === 'finalizado'}
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -2528,7 +2508,6 @@ export default function BarcoPesadorPage() {
                         <button
                           onClick={limpiarBuscador}
                           className="mt-3 text-sm text-blue-400 hover:text-blue-300"
-                          disabled={barco.estado === 'finalizado'}
                         >
                           Limpiar búsqueda
                         </button>
@@ -2544,7 +2523,6 @@ export default function BarcoPesadorPage() {
                               <button
                                 onClick={() => seleccionarViajeParaCompletar(viaje)}
                                 className="flex-1 text-left"
-                                disabled={barco.estado === 'finalizado'}
                               >
                                 <div>
                                   <p className="font-bold text-white">Viaje #{viaje.viaje_numero} · {viaje.placa}</p>
@@ -2567,7 +2545,6 @@ export default function BarcoPesadorPage() {
                                   onClick={() => seleccionarViajeParaCompletar(viaje)}
                                   className="p-2 bg-green-500/20 hover:bg-green-500/30 rounded-lg transition-all"
                                   title="Completar este viaje"
-                                  disabled={barco.estado === 'finalizado'}
                                 >
                                   <CheckCircle className="w-5 h-5 text-green-400" />
                                 </button>
@@ -2575,7 +2552,6 @@ export default function BarcoPesadorPage() {
                                   onClick={() => handleEditarViajeDesdePaso2(viaje)}
                                   className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition-all"
                                   title="Editar este viaje en Paso 1"
-                                  disabled={barco.estado === 'finalizado'}
                                 >
                                   <Pencil className="w-5 h-5 text-blue-400" />
                                 </button>
@@ -2596,7 +2572,6 @@ export default function BarcoPesadorPage() {
                             onClick={() => handleEditarViajeDesdePaso2(viajeSeleccionado)}
                             className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
                             title="Editar este viaje en Paso 1"
-                            disabled={barco.estado === 'finalizado'}
                           >
                             <Pencil className="w-3 h-3" />
                             Editar en Paso 1
@@ -2604,7 +2579,6 @@ export default function BarcoPesadorPage() {
                           <button
                             onClick={() => setViajeSeleccionado(null)}
                             className="text-xs text-blue-400 hover:text-blue-300"
-                            disabled={barco.estado === 'finalizado'}
                           >
                             Cambiar viaje
                           </button>
@@ -2649,7 +2623,6 @@ export default function BarcoPesadorPage() {
                           onChange={handleCompletarViajeChange}
                           className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                           required
-                          disabled={barco.estado === 'finalizado'}
                         >
                           <option value="">Seleccionar</option>
                           {destinos.map(d => (
@@ -2684,7 +2657,6 @@ export default function BarcoPesadorPage() {
                             step="1"
                             className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
                             required
-                            disabled={barco.estado === 'finalizado'}
                           />
                           <button
                             type="button"
@@ -2693,7 +2665,6 @@ export default function BarcoPesadorPage() {
                             }}
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-green-400 transition-colors"
                             title="Usar hora actual"
-                            disabled={barco.estado === 'finalizado'}
                           >
                             <Clock className="w-4 h-4" />
                           </button>
@@ -2712,7 +2683,6 @@ export default function BarcoPesadorPage() {
                           className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                           placeholder="19.815"
                           required
-                          disabled={barco.estado === 'finalizado'}
                         />
                       </div>
                       <div>
@@ -2726,14 +2696,12 @@ export default function BarcoPesadorPage() {
                           onChange={handleCompletarViajeChange}
                           className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                           placeholder="Notas del destino"
-                          disabled={barco.estado === 'finalizado'}
                         />
                       </div>
                       <div className="flex items-end col-span-4">
                         <button
                           onClick={handleCompletarViaje}
                           className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                          disabled={barco.estado === 'finalizado'}
                         >
                           <CheckCircle className="w-4 h-4" />
                           Completar Viaje
@@ -2828,7 +2796,6 @@ export default function BarcoPesadorPage() {
                                       onClick={() => handleEditarViaje(viaje)}
                                       className="p-1 hover:bg-blue-500/20 rounded transition-colors"
                                       title="Editar"
-                                      disabled={barco.estado === 'finalizado'}
                                     >
                                       <Edit2 className="w-4 h-4 text-blue-400" />
                                     </button>
@@ -2836,7 +2803,7 @@ export default function BarcoPesadorPage() {
                                       onClick={() => handleEliminarViaje(viaje.id)}
                                       className="p-1 hover:bg-red-500/20 rounded transition-colors"
                                       title="Eliminar"
-                                      disabled={barco.estado === 'finalizado'}
+                                    
                                     >
                                       <Trash2 className="w-4 h-4 text-red-400" />
                                     </button>
@@ -2959,7 +2926,6 @@ export default function BarcoPesadorPage() {
                       }))}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10"
                       step="1"
-                      disabled={barco.estado === 'finalizado'}
                     />
                     <button
                       type="button"
@@ -2969,7 +2935,6 @@ export default function BarcoPesadorPage() {
                       }))}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
                       title="Usar fecha y hora actual de El Salvador"
-                      disabled={barco.estado === 'finalizado'}
                     >
                       <Clock className="w-4 h-4" />
                     </button>
@@ -2991,7 +2956,6 @@ export default function BarcoPesadorPage() {
                     className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                     placeholder="15.000"
                     required
-                    disabled={barco.estado === 'finalizado'}
                   />
                 </div>
                 <div>
@@ -3004,7 +2968,6 @@ export default function BarcoPesadorPage() {
                     onChange={handleLecturaChange}
                     className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                     required
-                    disabled={barco.estado === 'finalizado'}
                   >
                     <option value="">Seleccionar</option>
                     {destinos.map(d => (
@@ -3016,7 +2979,6 @@ export default function BarcoPesadorPage() {
                   <button
                     onClick={handleGuardarLectura}
                     className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                    disabled={barco.estado === 'finalizado'}
                   >
                     <Save className="w-4 h-4" />
                     {editandoLectura ? 'Actualizar Lectura' : 'Guardar Lectura'}
@@ -3025,7 +2987,6 @@ export default function BarcoPesadorPage() {
                     <button
                       onClick={() => handleEliminarLectura(editandoLectura.id)}
                       className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                      disabled={barco.estado === 'finalizado'}
                     >
                       <Trash2 className="w-4 h-4" />
                       Eliminar
@@ -3099,7 +3060,6 @@ export default function BarcoPesadorPage() {
                                   onClick={() => handleEditarLectura(lectura)}
                                   className="p-1 hover:bg-blue-500/20 rounded transition-colors"
                                   title="Editar"
-                                  disabled={barco.estado === 'finalizado'}
                                 >
                                   <Edit2 className="w-4 h-4 text-blue-400" />
                                 </button>
@@ -3107,7 +3067,6 @@ export default function BarcoPesadorPage() {
                                   onClick={() => handleEliminarLectura(lectura.id)}
                                   className="p-1 hover:bg-red-500/20 rounded transition-colors"
                                   title="Eliminar"
-                                  disabled={barco.estado === 'finalizado'}
                                 >
                                   <Trash2 className="w-4 h-4 text-red-400" />
                                 </button>
@@ -3173,7 +3132,6 @@ export default function BarcoPesadorPage() {
                         }))
                       }}
                       className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
-                      disabled={barco.estado === 'finalizado'}
                     />
                     <div className="relative">
                       <input
@@ -3189,7 +3147,6 @@ export default function BarcoPesadorPage() {
                         }}
                         step="1"
                         className="w-32 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
-                        disabled={barco.estado === 'finalizado'}
                       />
                       <button
                         type="button"
@@ -3204,7 +3161,6 @@ export default function BarcoPesadorPage() {
                         }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-400"
                         title="Usar fecha y hora actual"
-                        disabled={barco.estado === 'finalizado'}
                       >
                         <Clock className="w-4 h-4" />
                       </button>
@@ -3222,14 +3178,12 @@ export default function BarcoPesadorPage() {
                     rows="3"
                     className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white resize-none"
                     placeholder="Observaciones..."
-                    disabled={barco.estado === 'finalizado'}
                   />
                 </div>
                 <div className="flex items-end col-span-full gap-2">
                   <button
                     onClick={handleGuardarBitacora}
                     className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                    disabled={barco.estado === 'finalizado'}
                   >
                     <Save className="w-4 h-4" />
                     {editandoBitacora ? 'Actualizar Registro' : 'Guardar en Bitácora'}
@@ -3238,7 +3192,6 @@ export default function BarcoPesadorPage() {
                     <button
                       onClick={() => handleEliminarBitacora(editandoBitacora.id)}
                       className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
-                      disabled={barco.estado === 'finalizado'}
                     >
                       <Trash2 className="w-4 h-4" />
                       Eliminar
@@ -3278,7 +3231,6 @@ export default function BarcoPesadorPage() {
                                 onClick={() => handleEditarBitacora(registro)}
                                 className="p-1 hover:bg-blue-500/20 rounded transition-colors"
                                 title="Editar"
-                                disabled={barco.estado === 'finalizado'}
                               >
                                 <Edit2 className="w-4 h-4 text-blue-400" />
                               </button>
@@ -3286,7 +3238,6 @@ export default function BarcoPesadorPage() {
                                 onClick={() => handleEliminarBitacora(registro.id)}
                                 className="p-1 hover:bg-red-500/20 rounded transition-colors"
                                 title="Eliminar"
-                                disabled={barco.estado === 'finalizado'}
                               >
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
