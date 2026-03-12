@@ -1,12 +1,8 @@
 // AccionesBarcoMenu.jsx
-// Reemplaza la fila de íconos confusos por un menú desplegable con etiquetas claras.
-// Úsalo así en la tabla de barcos:
-//   <AccionesBarcoMenu barco={barco} ... />
-
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  MoreVertical, Eye, Edit2, ExternalLink, FileText,
+  MoreVertical, Eye, Package, Edit2, ExternalLink, FileText,
   Truck, Clock, BarChart3, BookOpen, Power, Play,
   Download, Trash2, Copy, Upload as Export, ChevronRight
 } from 'lucide-react'
@@ -17,6 +13,7 @@ export default function AccionesBarcoMenu({
   onVerDetalle,
   onEditarBarco,
   onGenerarDashboard,
+  onGenerarDashboardSacos,
   onVerRegistroViajes,
   onCopiarLink,
   onVerViajesPaso1,
@@ -29,7 +26,6 @@ export default function AccionesBarcoMenu({
   const [open, setOpen] = useState(false)
   const menuRef = useRef(null)
 
-  // Cerrar al hacer clic fuera
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -42,7 +38,6 @@ export default function AccionesBarcoMenu({
 
   const close = () => setOpen(false)
 
-  // ── Secciones del menú ──────────────────────────────────────────────────────
   const grupos = [
     {
       titulo: 'Información',
@@ -60,6 +55,13 @@ export default function AccionesBarcoMenu({
           color: 'text-indigo-400',
           hoverBg: 'hover:bg-indigo-500/20',
           onClick: () => { onGenerarDashboard(barco); close() },
+        },
+        {
+          icon: Package,
+          label: 'Dashboard de Sacos',
+          color: 'text-green-400',
+          hoverBg: 'hover:bg-green-500/20',
+          onClick: () => { onGenerarDashboardSacos(barco); close() },
         },
       ],
     },
@@ -81,6 +83,14 @@ export default function AccionesBarcoMenu({
               hoverBg: 'hover:bg-green-500/20',
               onClick: () => { onVerRegistroViajes(barco.token_compartido, 'importacion'); close() },
             },
+        {
+          icon: Package, // 👈 AGREGADO: Registrar Sacos
+          label: 'Registrar Sacos',
+          color: 'text-green-400',
+          hoverBg: 'hover:bg-green-500/20',
+          isLink: true,
+          href: `/barco/${barco.token_compartido}/sacos`, // 👈 Link directo al registro de sacos
+        },
         {
           icon: Copy,
           label: 'Copiar link de registro',
@@ -118,7 +128,6 @@ export default function AccionesBarcoMenu({
           hoverBg: 'hover:bg-purple-500/20',
           onClick: () => { onVerBitacora(barco); close() },
         },
-        // Link a reporte de atrasos (usa Link de Next, no onClick)
         {
           icon: FileText,
           label: 'Reporte de atrasos',
@@ -168,7 +177,6 @@ export default function AccionesBarcoMenu({
 
   return (
     <div className="relative" ref={menuRef}>
-      {/* Botón principal */}
       <button
         onClick={() => setOpen((v) => !v)}
         className={`p-2 rounded-lg transition-all flex items-center gap-1.5 text-sm font-semibold
@@ -182,7 +190,6 @@ export default function AccionesBarcoMenu({
         <span className="hidden sm:inline text-xs">Acciones</span>
       </button>
 
-      {/* Menú desplegable */}
       {open && (
         <div
           className="
@@ -195,7 +202,6 @@ export default function AccionesBarcoMenu({
         >
           {grupos.map((grupo, gi) => (
             <div key={gi}>
-              {/* Separador + título de grupo */}
               {gi > 0 && <div className="h-px bg-white/10 mx-2" />}
               <p className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                 {grupo.titulo}
@@ -234,7 +240,7 @@ export default function AccionesBarcoMenu({
                       w-full flex items-center gap-3 px-3 py-2 mx-1 rounded-lg
                       transition-colors text-left
                       ${item.disabled ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
-                      ${item.danger ? item.hoverBg : item.hoverBg}
+                      ${item.hoverBg}
                     `}
                     style={{ width: 'calc(100% - 0.5rem)' }}
                   >

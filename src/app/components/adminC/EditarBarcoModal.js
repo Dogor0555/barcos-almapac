@@ -14,6 +14,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   const [productosExpandido, setProductosExpandido] = useState(true)
   const [bodegasExpandido, setBodegasExpandido] = useState(true)
   const [limitesExpandido, setLimitesExpandido] = useState(true)
+  const [metasSacosExpandido, setMetasSacosExpandido] = useState(true)
   const [destinos, setDestinos] = useState([])
   const [formData, setFormData] = useState({
     nombre: '',
@@ -27,6 +28,8 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
 
   const [bodegas, setBodegas] = useState([])
   const [limitesDestino, setLimitesDestino] = useState({})
+  // 👇 NUEVO: Estado para metas por bodega (sacos)
+  const [metasBodegaSacos, setMetasBodegaSacos] = useState({})
 
   // Cargar destinos
   useEffect(() => {
@@ -68,6 +71,10 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
       // Cargar límites por destino
       const limitesGuardados = barco.metas_json?.limites_destino || {}
       setLimitesDestino(limitesGuardados)
+
+      // 👇 NUEVO: Cargar metas por bodega para sacos
+      const metasSacosGuardadas = barco.metas_json?.sacos_bodega || {}
+      setMetasBodegaSacos(metasSacosGuardadas)
 
       // Inicializar productos seleccionados
       const productosDelBarco = barco.metas_json?.productos || []
@@ -148,6 +155,14 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
     }))
   }
 
+  // 👇 NUEVO: Función para manejar meta por bodega (sacos)
+  const handleMetaBodegaSacos = (bodegaNombre, value) => {
+    setMetasBodegaSacos(prev => ({
+      ...prev,
+      [bodegaNombre]: value ? parseFloat(value) : null
+    }))
+  }
+
   const activarTodasBodegas = () => {
     setBodegas(bodegas.map(b => ({ ...b, activa: true })))
   }
@@ -207,6 +222,14 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         }
       })
 
+      // 👇 NUEVO: Filtrar metas de bodega para sacos válidas
+      const metasBodegaSacosValidas = {}
+      Object.entries(metasBodegaSacos).forEach(([bodegaNombre, valor]) => {
+        if (valor && !isNaN(valor) && valor > 0) {
+          metasBodegaSacosValidas[bodegaNombre] = valor
+        }
+      })
+
       const datosActualizar = {
         nombre: formData.nombre.trim(),
         codigo_barco: formData.codigo_barco?.trim() || null,
@@ -216,7 +239,9 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         metas_json: {
           productos: productosSeleccionados,
           limites: metasValidas,
-          limites_destino: limitesDestinoValidos
+          limites_destino: limitesDestinoValidos,
+          // 👇 NUEVO: Guardar metas de bodega para sacos
+          sacos_bodega: metasBodegaSacosValidas
         },
         bodegas_json: bodegasActivas.map(b => ({
           id: b.id,
@@ -528,6 +553,67 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             )}
           </div>
 
+          {/* 👇 NUEVA SECCIÓN: METAS POR BODEGA PARA SACOS */}
+          <div className="bg-slate-900/50 rounded-xl p-5 border border-green-500/20">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setMetasSacosExpandido(!metasSacosExpandido)}
+            >
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-green-400" />
+                <h4 className="text-white font-bold">
+                  Metas por Bodega (Sacos)
+                </h4>
+                <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full text-xs">
+                  {Object.keys(metasBodegaSacos).length} configuradas
+                </span>
+              </div>
+              <button type="button" className="text-slate-400 hover:text-white">
+                {metasSacosExpandido ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+            
+            {metasSacosExpandido && (
+              <>
+                <p className="text-xs text-slate-400 mb-3 mt-2">
+                  Define la cantidad estimada de toneladas que se espera recibir en cada bodega.
+                </p>
+                
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                  {bodegas.filter(b => b.activa).map(bodega => (
+                    <div key={bodega.id} className="bg-slate-800 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-white">{bodega.nombre}</p>
+                          <p className="text-xs text-slate-500">{bodega.codigo}</p>
+                        </div>
+                        <div className="relative w-48">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            value={metasBodegaSacos[bodega.nombre] || ''}
+                            onChange={(e) => handleMetaBodegaSacos(bodega.nombre, e.target.value)}
+                            className="w-full bg-slate-900 border border-green-500/30 rounded-lg px-3 py-2 text-white pr-12"
+                            placeholder="Meta en TM"
+                          />
+                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-400 text-xs font-bold">
+                            TM
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {bodegas.filter(b => b.activa).length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">
+                      No hay bodegas activas para configurar metas
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Selección de Productos */}
           {productos && productos.length > 0 && (
             <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
@@ -646,6 +732,24 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* 👇 NUEVO: Resumen de metas por bodega */}
+          {Object.keys(metasBodegaSacos).length > 0 && (
+            <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4">
+              <h4 className="font-bold text-green-400 mb-2 flex items-center gap-2">
+                <Target className="w-4 h-4" />
+                Metas configuradas por bodega (sacos)
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {Object.entries(metasBodegaSacos).map(([bodegaNombre, valor]) => (
+                  <div key={bodegaNombre} className="flex justify-between items-center bg-slate-800 rounded-lg px-3 py-2">
+                    <span className="text-slate-300">{bodegaNombre}</span>
+                    <span className="font-bold text-green-400">{valor.toFixed(3)} TM</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

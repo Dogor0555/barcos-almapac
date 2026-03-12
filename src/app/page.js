@@ -25,11 +25,11 @@ export default function LoginPage() {
       if (result.user.rol === 'admin') {
         router.push('/admin')
       } else if (result.user.rol === 'pesador') {
-        router.push('/barco/seleccionar')
+        router.push('/admin')
       } else if (result.user.rol === 'electricista') {
-        router.push('/barco/seleccionar')
+        router.push('/admin')
       } else if (result.user.rol === 'chequero') {
-        router.push('/registroatrasos')
+        router.push('/chequero')
       } else {
         router.push('/dashboard')
       }

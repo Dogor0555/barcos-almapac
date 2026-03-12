@@ -21,7 +21,8 @@ import BarcoForm from '../components/adminC/BarcoForm'
 import EditarBarcoModal from '../components/adminC/EditarBarcoModal'
 import ProductoForm from '../components/adminC/productoForm'
 import GenerarDashboardModal from './GenerarDashboardModal'
-import EditarMiPerfilModal from '../components/adminC/EditarMiPerfilModal' // 👈 IMPORTAR EL NUEVO MODAL
+import GenerarDashboardSacosModal from './GenerarDashboardSacosModal' // 👈 NUEVO MODAL
+import EditarMiPerfilModal from '../components/adminC/EditarMiPerfilModal'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -1177,7 +1178,7 @@ export default function AdminPage() {
   const [vista, setVista] = useState('barcos')
   const [filtroTipo, setFiltroTipo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
-  const [showEditarMiPerfil, setShowEditarMiPerfil] = useState(false) // 👈 NUEVO ESTADO
+  const [showEditarMiPerfil, setShowEditarMiPerfil] = useState(false)
   
   // Estado para los modales
   const [barcoSeleccionado, setBarcoSeleccionado] = useState(null)
@@ -1186,6 +1187,7 @@ export default function AdminPage() {
   const [showExportacionesModal, setShowExportacionesModal] = useState(false)
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [showGenerarDashboardModal, setShowGenerarDashboardModal] = useState(false)
+  const [showGenerarDashboardSacosModal, setShowGenerarDashboardSacosModal] = useState(false) // 👈 NUEVO ESTADO
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -1374,6 +1376,16 @@ export default function AdminPage() {
     }
     setBarcoSeleccionado(barco)
     setShowGenerarDashboardModal(true)
+  }
+
+  // 👇 NUEVA FUNCIÓN PARA GENERAR DASHBOARD DE SACOS
+  const handleGenerarDashboardSacos = (barco) => {
+    if (!barco.codigo_barco) {
+      toast.error('Este barco no tiene código de buque asignado')
+      return
+    }
+    setBarcoSeleccionado(barco)
+    setShowGenerarDashboardSacosModal(true)
   }
 
   // =====================================================
@@ -1666,7 +1678,6 @@ export default function AdminPage() {
                 <span className="hidden md:inline">Recargar</span>
               </button>
 
-              {/* 👇 NUEVO BOTÓN MI PERFIL */}
               <button
                 onClick={() => setShowEditarMiPerfil(true)}
                 className="bg-blue-500/20 hover:bg-blue-500/30 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -2084,22 +2095,23 @@ export default function AdminPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-  <AccionesBarcoMenu
-    barco={barco}
-    exportando={exportando}
-    onVerDetalle={handleVerDetalle}
-    onEditarBarco={handleEditarBarco}
-    onGenerarDashboard={handleGenerarDashboard}
-    onVerRegistroViajes={handleVerRegistroViajes}
-    onCopiarLink={handleCopiarLink}
-    onVerViajesPaso1={handleVerViajesPaso1}
-    onVerExportaciones={handleVerExportaciones}
-    onVerBitacora={handleVerBitacora}
-    onCambiarEstado={handleCambiarEstado}
-    onExportarBarco={handleExportarBarco}
-    onEliminarBarco={handleEliminarBarco}
-  />
-</td>
+                          <AccionesBarcoMenu
+                            barco={barco}
+                            exportando={exportando}
+                            onVerDetalle={handleVerDetalle}
+                            onEditarBarco={handleEditarBarco}
+                            onGenerarDashboard={handleGenerarDashboard}
+  onGenerarDashboardSacos={handleGenerarDashboardSacos} // 👈 ESTA LÍNEA DEBE ESTAR
+                            onVerRegistroViajes={handleVerRegistroViajes}
+                            onCopiarLink={handleCopiarLink}
+                            onVerViajesPaso1={handleVerViajesPaso1}
+                            onVerExportaciones={handleVerExportaciones}
+                            onVerBitacora={handleVerBitacora}
+                            onCambiarEstado={handleCambiarEstado}
+                            onExportarBarco={handleExportarBarco}
+                            onEliminarBarco={handleEliminarBarco}
+                          />
+                        </td>
                       </tr>
                     )
                   })}
@@ -2357,6 +2369,17 @@ export default function AdminPage() {
           barco={barcoSeleccionado}
           onClose={() => {
             setShowGenerarDashboardModal(false)
+            setBarcoSeleccionado(null)
+          }}
+        />
+      )}
+
+      {/* 👇 NUEVO MODAL DE DASHBOARD DE SACOS */}
+      {showGenerarDashboardSacosModal && barcoSeleccionado && (
+        <GenerarDashboardSacosModal
+          barco={barcoSeleccionado}
+          onClose={() => {
+            setShowGenerarDashboardSacosModal(false)
             setBarcoSeleccionado(null)
           }}
         />
