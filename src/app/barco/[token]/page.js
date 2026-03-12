@@ -832,8 +832,8 @@ export default function BarcoPesadorPage() {
   try {
     // Verificar si la operación está finalizada
     if (barco.estado === 'finalizado') {
-      toast.error('No se pueden registrar datos. La operación está finalizada.')
-      return
+      toast.error('La operación está finalizada.')
+     
     }
 
     if (!nuevoViaje.placa || nuevoViaje.placa === 'C-') {
@@ -984,8 +984,8 @@ export default function BarcoPesadorPage() {
     try {
       // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
-        toast.error('No se pueden registrar datos. La operación está finalizada.')
-        return
+        toast.error('La operación está finalizada.')
+        
       }
 
       if (!viajeSeleccionado) {
@@ -1068,8 +1068,8 @@ export default function BarcoPesadorPage() {
     try {
       // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
-        toast.error('No se pueden registrar datos. La operación está finalizada.')
-        return
+        toast.error('La operación está finalizada.')
+        
       }
 
       if (!lecturaActual.acumulado_tm) {
@@ -1149,7 +1149,7 @@ export default function BarcoPesadorPage() {
     try {
       // Verificar si la operación está finalizada
       if (barco.estado === 'finalizado') {
-        toast.error('No se pueden registrar datos. La operación está finalizada.')
+        toast.error('La operación está finalizada.')
         return
       }
 
