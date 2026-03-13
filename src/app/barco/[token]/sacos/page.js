@@ -25,6 +25,7 @@ const useTheme = () => {
   const toggle = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
     setTheme(newTheme)
+    localStorage.setItem('theme', newTheme)
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
   }
   return { theme, toggleTheme: toggle }
@@ -437,72 +438,6 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
-// ─── COMPONENTE DE VIAJE PARA SCROLL ────────────────────────────────────────
-const ViajeCard = ({ reg, onEdit, onDelete, theme, sub, text, dk }) => {
-  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-    : null
-
-  return (
-    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl p-4 border ${dk ? 'border-white/5' : 'border-gray-200'} hover:shadow-lg transition-all duration-300`}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className={`font-black ${text}`}>#{reg.viaje_numero}</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`}>
-            {reg.bodega}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onEdit(reg)}
-            className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors">
-            <Edit2 className="w-3.5 h-3.5 text-blue-400" />
-          </button>
-          <button onClick={() => onDelete(reg.id)}
-            className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors">
-            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-2 mb-2">
-        <div>
-          <p className={`text-[10px] ${sub}`}>Placa</p>
-          <p className="text-xs font-mono text-blue-400 font-bold truncate">{reg.placa_camion}</p>
-        </div>
-        <div>
-          <p className={`text-[10px] ${sub}`}>Ingenio</p>
-          <p className={`text-xs font-medium ${text}`}>{(reg.peso_ingenio_kg/1000).toFixed(1)}t</p>
-        </div>
-        <div>
-          <p className={`text-[10px] ${sub}`}>Sacos</p>
-          <p className={`text-xs font-bold ${text}`}>
-            {reg.cantidad_paquetes}
-            {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
-          </p>
-        </div>
-        <div>
-          <p className={`text-[10px] ${sub}`}>TM</p>
-          <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
-            {reg.peso_total_calculado_tm?.toFixed(2)}
-            {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 mt-1.5 text-[11px]">
-        <Clock className={`w-3 h-3 ${sub}`} />
-        <span className={sub}>{dayjs(reg.fecha).format('DD/MM/YY')} · {reg.hora_inicio} – {reg.hora_fin}</span>
-      </div>
-
-      {reg.observaciones && (
-        <p className={`text-[10px] ${sub} mt-2 italic border-t ${dk ? 'border-white/5' : 'border-gray-200'} pt-2`}>
-          📝 {reg.observaciones}
-        </p>
-      )}
-    </div>
-  )
-}
-
 // ─── PÁGINA PRINCIPAL ────────────────────────────────────────────────────────
 export default function RegistroSacosPage() {
   const router   = useRouter()
@@ -521,7 +456,6 @@ export default function RegistroSacosPage() {
   const [searchPlaca, setSearchPlaca] = useState('')
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
-  const [vista, setVista]             = useState('tabla') // 'tabla' o 'scroll'
 
   const bg      = dk ? 'bg-[#0f172a]'   : 'bg-gray-50'
   const card    = dk ? 'bg-slate-900'   : 'bg-white'
@@ -556,10 +490,11 @@ export default function RegistroSacosPage() {
   const cargarRegistros = async (barcoId) => {
     try {
       const { data, error } = await supabase.from('registros_sacos').select('*')
-        .eq('barco_id', barcoId).order('viaje_numero', { ascending: true })
+        .eq('barco_id', barcoId).order('viaje_numero', { ascending: false })
       if (error) throw error
       
-      const registrosOrdenados = data || []
+      // Ordenar por viaje_numero ascendente para mantener el correlativo
+      const registrosOrdenados = (data || []).sort((a, b) => a.viaje_numero - b.viaje_numero)
       setRegistros(registrosOrdenados)
       
       // Calcular estadísticas generales
@@ -764,39 +699,13 @@ export default function RegistroSacosPage() {
         {/* Acciones + Filtros */}
         <div className={`${card} border ${border} rounded-2xl p-3 sm:p-4`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setRegistroEditando(null); setShowModal(true) }}
-                className="bg-green-500 hover:bg-green-600 active:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
-              >
-                <Plus className="w-4 h-4" />
-                Nuevo
-              </button>
-              
-              {/* Botones de cambio de vista */}
-              <div className={`flex rounded-xl border ${border} overflow-hidden`}>
-                <button
-                  onClick={() => setVista('tabla')}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    vista === 'tabla' 
-                      ? 'bg-green-500 text-white' 
-                      : `${dk ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`
-                  }`}
-                >
-                  Tabla
-                </button>
-                <button
-                  onClick={() => setVista('scroll')}
-                  className={`px-3 py-2 text-sm font-medium transition-colors ${
-                    vista === 'scroll' 
-                      ? 'bg-green-500 text-white' 
-                      : `${dk ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`
-                  }`}
-                >
-                  Scroll
-                </button>
-              </div>
-            </div>
+            <button
+              onClick={() => { setRegistroEditando(null); setShowModal(true) }}
+              className="bg-green-500 hover:bg-green-600 active:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors sm:w-auto w-full text-sm sm:text-base"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Registro
+            </button>
 
             <div className="flex gap-2">
               <input type="date" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}
@@ -811,96 +720,65 @@ export default function RegistroSacosPage() {
           </div>
         </div>
 
-        {/* Contenido principal con scroll */}
+        {/* Tabla desktop / Cards mobile */}
         <div className={`${card} border ${border} rounded-2xl overflow-hidden`}>
-          
-          {/* Vista de Tabla (escritorio) */}
-          {vista === 'tabla' && (
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full">
-                <thead className={dk ? 'bg-slate-800' : 'bg-gray-100'}>
+
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full">
+              <thead className={dk ? 'bg-slate-800' : 'bg-gray-100'}>
+                <tr>
+                  {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Horario',''].map(h => (
+                    <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
+                {registrosFiltrados.length === 0 ? (
                   <tr>
-                    {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Horario',''].map(h => (
-                      <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
-                    ))}
+                    <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
+                      <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                      <p>No hay registros para mostrar</p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
-                  {registrosFiltrados.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
-                        <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                        <p>No hay registros para mostrar</p>
+                ) : registrosFiltrados.map(reg => {
+                  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                    : null
+                  return (
+                    <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
+                      <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
+                      <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
+                      <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
+                      <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
+                      <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
+                      <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-green-400">
+                        {reg.peso_total_calculado_tm?.toFixed(3)}
+                        {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
+                      </td>
+                      <td className={`px-4 py-3 text-xs ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
+                            className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
+                            <Edit2 className="w-4 h-4 text-blue-400" />
+                          </button>
+                          <button onClick={() => handleEliminar(reg.id)}
+                            className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : registrosFiltrados.map(reg => {
-                    const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-                      ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-                      : null
-                    return (
-                      <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
-                        <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
-                        <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
-                        <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
-                        <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
-                        <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
-                        <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-green-400">
-                          {reg.peso_total_calculado_tm?.toFixed(3)}
-                          {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
-                        </td>
-                        <td className={`px-4 py-3 text-xs ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
-                              className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
-                              <Edit2 className="w-4 h-4 text-blue-400" />
-                            </button>
-                            <button onClick={() => handleEliminar(reg.id)}
-                              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-          {/* Vista de Scroll (responsive) */}
-          {vista === 'scroll' && (
-            <div className="p-4">
-              {registrosFiltrados.length === 0 ? (
-                <div className={`text-center py-12 ${sub}`}>
-                  <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">No hay registros para mostrar</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                  {registrosFiltrados.map(reg => (
-                    <ViajeCard
-                      key={reg.id}
-                      reg={reg}
-                      onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
-                      onDelete={handleEliminar}
-                      theme={theme}
-                      sub={sub}
-                      text={text}
-                      dk={dk}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Vista móvil por defecto (cards) */}
           <div className="sm:hidden">
             {registrosFiltrados.length === 0 ? (
               <div className={`text-center py-12 ${sub}`}>
@@ -1007,24 +885,6 @@ export default function RegistroSacosPage() {
           theme={theme}
         />
       )}
-
-      {/* Estilos para el scroll personalizado */}
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: ${dk ? '#1e293b' : '#f1f5f9'};
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: ${dk ? '#475569' : '#94a3b8'};
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: ${dk ? '#64748b' : '#64748b'};
-        }
-      `}</style>
     </div>
   )
 }
