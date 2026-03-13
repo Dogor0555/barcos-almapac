@@ -8,7 +8,7 @@ import {
   Package, Ship, ArrowLeft, Plus, Clock, 
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
-  Sun, Moon, Search
+  Sun, Moon, Search, Grid, Layers
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -150,6 +150,9 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
       if (!formData.cantidad_paquetes || formData.cantidad_paquetes <= 0) { toast.error('Cantidad inválida');  setLoading(false); return }
       if (!formData.peso_saco_kg || formData.peso_saco_kg <= 0)          { toast.error('Peso del saco inválido'); setLoading(false); return }
 
+      const pesoTotalCalculado = (parseFloat(formData.peso_saco_kg) * parseInt(formData.cantidad_paquetes)) / 1000
+      const pesoTotalCalculadoKg = parseFloat(formData.peso_saco_kg) * parseInt(formData.cantidad_paquetes)
+
       const datos = {
         barco_id: barco.id,
         viaje_numero: registro?.viaje_numero || viajeNumero,
@@ -167,6 +170,8 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         observaciones: formData.observaciones || null,
         duracion: calcularDuracion(),
         hora_flujo: formData.hora_fin ? parseInt(formData.hora_fin.split(':')[0]) : null,
+        peso_total_calculado_tm: pesoTotalCalculado,
+        peso_total_calculado_kg: pesoTotalCalculadoKg,
         created_by: user.id
       }
 
@@ -450,6 +455,7 @@ export default function RegistroSacosPage() {
   const [filtroFecha, setFiltroFecha] = useState(dayjs().format('YYYY-MM-DD'))
   const [searchPlaca, setSearchPlaca] = useState('')
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
+  const [statsPorBodega, setStatsPorBodega] = useState([])
 
   const bg      = dk ? 'bg-[#0f172a]'   : 'bg-gray-50'
   const card    = dk ? 'bg-slate-900'   : 'bg-white'
@@ -486,11 +492,44 @@ export default function RegistroSacosPage() {
       const { data, error } = await supabase.from('registros_sacos').select('*')
         .eq('barco_id', barcoId).order('viaje_numero', { ascending: false })
       if (error) throw error
-      setRegistros(data || [])
-      const tv = data?.length || 0
-      const ts = data?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
-      const tt = data?.reduce((s, r) => s + (r.peso_total_calculado_tm||0), 0) || 0
-      setStats({ totalViajes:tv, totalSacos:ts, totalTM:tt, promedioViaje: tv > 0 ? tt/tv : 0 })
+      
+      // Ordenar por viaje_numero ascendente para mantener el correlativo
+      const registrosOrdenados = (data || []).sort((a, b) => a.viaje_numero - b.viaje_numero)
+      setRegistros(registrosOrdenados)
+      
+      // Calcular estadísticas generales
+      const tv = registrosOrdenados?.length || 0
+      const ts = registrosOrdenados?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
+      const tt = registrosOrdenados?.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) || 0
+      setStats({ 
+        totalViajes: tv, 
+        totalSacos: ts, 
+        totalTM: tt, 
+        promedioViaje: tv > 0 ? tt / tv : 0 
+      })
+
+      // Calcular estadísticas por bodega
+      const bodegasMap = new Map()
+      registrosOrdenados.forEach(reg => {
+        if (!bodegasMap.has(reg.bodega)) {
+          bodegasMap.set(reg.bodega, {
+            bodega: reg.bodega,
+            totalSacos: 0,
+            totalDanados: 0,
+            totalTM: 0,
+            viajes: 0
+          })
+        }
+        const bodegaStat = bodegasMap.get(reg.bodega)
+        bodegaStat.totalSacos += reg.cantidad_paquetes || 0
+        bodegaStat.totalDanados += reg.paquetes_danados || 0
+        bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
+        bodegaStat.viajes += 1
+      })
+
+      const statsArray = Array.from(bodegasMap.values())
+      setStatsPorBodega(statsArray)
+
     } catch (err) {
       console.error(err)
       toast.error('Error al cargar registros')
@@ -581,6 +620,81 @@ export default function RegistroSacosPage() {
 
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
+
+        {/* Cards de Resumen por Bodega */}
+        {statsPorBodega.length > 0 && (
+          <div className="space-y-3">
+            <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
+              <Layers className="w-5 h-5 text-green-500" />
+              Resumen por Bodega
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {statsPorBodega.map((bodega, index) => {
+                const porcentajeDanados = bodega.totalSacos > 0 
+                  ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
+                  : 0
+
+                return (
+                  <div key={index} 
+                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1`}>
+                    
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+                          <Package className="w-4 h-4 text-green-500" />
+                        </div>
+                        <div>
+                          <h3 className={`font-bold ${text}`}>{bodega.bodega}</h3>
+                          <p className={`text-xs ${sub}`}>{bodega.viajes} viaje{bodega.viajes !== 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      <div className={`text-xs px-2 py-1 rounded-full ${
+                        porcentajeDanados < 1 ? 'bg-green-500/20 text-green-500' :
+                        porcentajeDanados < 3 ? 'bg-yellow-500/20 text-yellow-500' :
+                        'bg-red-500/20 text-red-500'
+                      }`}>
+                        {porcentajeDanados}% dañados
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center">
+                        <p className={`text-xs ${sub}`}>Sacos</p>
+                        <p className={`font-bold ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-xs ${sub}`}>Dañados</p>
+                        <p className="font-bold text-red-400">{bodega.totalDanados}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-xs ${sub}`}>TM</p>
+                        <p className="font-bold text-green-500">{bodega.totalTM.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso de sacos buenos vs dañados */}
+                    <div className="mt-3">
+                      <div className="flex justify-between text-[10px] ${sub} mb-1">
+                        <span>Sacos buenos: {bodega.totalSacos - bodega.totalDanados}</span>
+                        <span>Dañados: {bodega.totalDanados}</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500 rounded-full"
+                          style={{ 
+                            width: bodega.totalSacos > 0 
+                              ? `${((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos) * 100}%` 
+                              : '0%' 
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Acciones + Filtros */}
         <div className={`${card} border ${border} rounded-2xl p-3 sm:p-4`}>
