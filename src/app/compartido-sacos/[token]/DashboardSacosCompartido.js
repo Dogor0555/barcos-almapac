@@ -66,55 +66,95 @@ function getTipoColor(nombre = '') {
 // ============================================================================
 function mergeIntervalos(intervalos) {
   if (!intervalos.length) return 0;
+  
+  // Ordenar por hora de inicio
   intervalos.sort((a, b) => a[0] - b[0]);
-  let merged = [[...intervalos[0]]];
+  
+  // Fusionar intervalos solapados
+  const merged = [];
+  let current = intervalos[0];
+  
   for (let i = 1; i < intervalos.length; i++) {
-    const ultimo = merged[merged.length - 1];
-    const actual = intervalos[i];
-    if (actual[0] <= ultimo[1]) {
-      ultimo[1] = Math.max(ultimo[1], actual[1]);
+    const next = intervalos[i];
+    
+    if (next[0] <= current[1]) {
+      // Hay solapamiento, extender el fin si es necesario
+      current[1] = Math.max(current[1], next[1]);
     } else {
-      merged.push([...actual]);
+      // No hay solapamiento, guardar el actual y empezar uno nuevo
+      merged.push(current);
+      current = next;
     }
   }
+  merged.push(current);
+  
+  // Sumar la duración de los intervalos fusionados
   return merged.reduce((sum, [ini, fin]) => sum + (fin - ini), 0);
 }
 
 function calcularMinutosReales(registros) {
+  if (!registros || registros.length === 0) return 0;
+  
+  // Agrupar intervalos por fecha
   const porFecha = {};
+  
   registros.forEach(reg => {
     if (!reg.hora_inicio || !reg.duracion_minutos) return;
+    
     const fecha = reg.fecha;
     if (!porFecha[fecha]) porFecha[fecha] = [];
+    
     const [hh, mm] = reg.hora_inicio.split(':').map(Number);
     const inicio = hh * 60 + mm;
-    const fin    = inicio + (reg.duracion_minutos || 0);
+    const fin = inicio + (reg.duracion_minutos || 0);
+    
     porFecha[fecha].push([inicio, fin]);
   });
-  return Object.values(porFecha).reduce((total, ivs) => total + mergeIntervalos(ivs), 0);
+  
+  // Sumar los minutos reales por cada fecha (sin solapamientos)
+  return Object.values(porFecha).reduce((total, intervalos) => {
+    return total + mergeIntervalos(intervalos);
+  }, 0);
 }
 
 function calcularMinutosRealesPorImputabilidad(registros, tiposParo) {
-  const porFechaImp   = {};
+  if (!registros || registros.length === 0) {
+    return { imputables: 0, noImputables: 0 };
+  }
+  
+  const porFechaImp = {};
   const porFechaNoImp = {};
+  
   registros.forEach(reg => {
     if (!reg.hora_inicio || !reg.duracion_minutos) return;
-    const tipo  = tiposParo.find(t => t.id === reg.tipo_paro_id);
+    
+    const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id);
     const fecha = reg.fecha;
+    
     const [hh, mm] = reg.hora_inicio.split(':').map(Number);
     const inicio = hh * 60 + mm;
-    const fin    = inicio + (reg.duracion_minutos || 0);
-    const iv     = [inicio, fin];
+    const fin = inicio + (reg.duracion_minutos || 0);
+    const intervalo = [inicio, fin];
+    
     if (tipo?.es_imputable_almapac) {
-      if (!porFechaImp[fecha])   porFechaImp[fecha]   = [];
-      porFechaImp[fecha].push(iv);
+      if (!porFechaImp[fecha]) porFechaImp[fecha] = [];
+      porFechaImp[fecha].push(intervalo);
     } else {
       if (!porFechaNoImp[fecha]) porFechaNoImp[fecha] = [];
-      porFechaNoImp[fecha].push(iv);
+      porFechaNoImp[fecha].push(intervalo);
     }
   });
-  const sumar = (pf) => Object.values(pf).reduce((t, ivs) => t + mergeIntervalos(ivs), 0);
-  return { imputables: sumar(porFechaImp), noImputables: sumar(porFechaNoImp) };
+  
+  const sumar = (porFecha) => {
+    return Object.values(porFecha).reduce((total, intervalos) => {
+      return total + mergeIntervalos(intervalos);
+    }, 0);
+  };
+  
+  return {
+    imputables: sumar(porFechaImp),
+    noImputables: sumar(porFechaNoImp)
+  };
 }
 
 // ============================================================================
@@ -192,7 +232,9 @@ function AtrasosBarco({ barcoId }) {
 
   const formatTiempo = (min) => {
     if (!min) return '0h 0m';
-    return `${Math.floor(min / 60)}h ${min % 60}m`;
+    const horas = Math.floor(min / 60);
+    const minutos = min % 60;
+    return `${horas}h ${minutos}m`;
   };
 
   const atrasosFiltrados = useMemo(() => {
@@ -448,6 +490,7 @@ function AtrasosBarco({ barcoId }) {
                 <strong style={{ color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.noImputables)}</strong>
               </span>
             </div>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>Tiempo real · sin doble conteo de solapamientos</span>
           </div>
 
         </div>
@@ -565,6 +608,23 @@ function KpiCard({ label, value, sub, icon, accent, animate }) {
 export default function DashboardSacosCompartido({ barco }) {
   const { registros, loading, error, lastUpdate, refetch } = useSacosData(barco.id);
 
+  // ── Filtro global por bodega ──
+  const [filtroBodegaGlobal, setFiltroBodegaGlobal] = useState('todas');
+
+  const bodegasDisponibles = useMemo(() => {
+    const s = new Set(registros.map(r => r.bodega).filter(Boolean));
+    return ['todas', ...Array.from(s).sort((a, b) => {
+      const na = parseInt(a.match(/\d+/)?.[0] || '0');
+      const nb = parseInt(b.match(/\d+/)?.[0] || '0');
+      return na - nb;
+    })];
+  }, [registros]);
+
+  const registrosFiltrados = useMemo(() => {
+    if (filtroBodegaGlobal === 'todas') return registros;
+    return registros.filter(r => r.bodega === filtroBodegaGlobal);
+  }, [registros, filtroBodegaGlobal]);
+
   const metasBodega = useMemo(() => {
     const metas = parsearMetasJson(barco.metas_json);
     console.log("🎯 Metas de bodega:", metas);
@@ -572,12 +632,12 @@ export default function DashboardSacosCompartido({ barco }) {
   }, [barco.metas_json]);
 
   const statsGenerales = useMemo(() => {
-    const totalViajes  = registros.length;
-    const totalSacos   = registros.reduce((sum, r) => sum + r.cantidad_paquetes, 0);
-    const totalTM      = registros.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
-    const totalDanados = registros.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
+    const totalViajes  = registrosFiltrados.length;
+    const totalSacos   = registrosFiltrados.reduce((sum, r) => sum + r.cantidad_paquetes, 0);
+    const totalTM      = registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+    const totalDanados = registrosFiltrados.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
     const placasMap = {};
-    registros.forEach(r => {
+    registrosFiltrados.forEach(r => {
       if (!placasMap[r.placa_camion]) placasMap[r.placa_camion] = { placa: r.placa_camion, viajes: 0, sacos: 0, tm: 0 };
       placasMap[r.placa_camion].viajes++;
       placasMap[r.placa_camion].sacos += r.cantidad_paquetes;
@@ -586,11 +646,11 @@ export default function DashboardSacosCompartido({ barco }) {
     return { totalViajes, totalSacos, totalTM, totalDanados,
       topPlacas: Object.values(placasMap).sort((a, b) => b.viajes - a.viajes).slice(0, 5)
     };
-  }, [registros]);
+  }, [registrosFiltrados]);
 
   const flujoPorHora = useMemo(() => {
-    if (registros.length === 0) return [];
-    const ord = [...registros].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
+    if (registrosFiltrados.length === 0) return [];
+    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
     const map = new Map();
     ord.forEach(reg => {
       const hora = dayjs(reg.fecha_hora).format('YYYY-MM-DD HH:00');
@@ -601,27 +661,30 @@ export default function DashboardSacosCompartido({ barco }) {
       d.sacos     += reg.cantidad_paquetes;
     });
     return Array.from(map.values()).sort((a, b) => a.horaCompleta.localeCompare(b.horaCompleta)).slice(-24);
-  }, [registros]);
+  }, [registrosFiltrados]);
 
   const flujoPromedioGeneral = useMemo(() => {
-    if (registros.length < 2) return 0;
-    const ord = [...registros].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
+    if (registrosFiltrados.length < 2) return 0;
+    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
     const horas = dayjs(ord[ord.length - 1].fecha_hora).diff(dayjs(ord[0].fecha_hora), 'hour', true);
     if (horas <= 0) return 0;
-    return registros.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0) / horas;
-  }, [registros]);
+    return registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0) / horas;
+  }, [registrosFiltrados]);
 
   const flujoUltimaHora = useMemo(() => {
-    if (registros.length === 0) return 0;
+    if (registrosFiltrados.length === 0) return 0;
     const hace1Hora = dayjs().subtract(1, 'hour');
-    return registros.filter(r => dayjs(r.fecha_hora).isAfter(hace1Hora)).reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
-  }, [registros]);
+    return registrosFiltrados.filter(r => dayjs(r.fecha_hora).isAfter(hace1Hora)).reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+  }, [registrosFiltrados]);
 
   const totalMetas = useMemo(() => {
+    if (filtroBodegaGlobal !== 'todas') {
+      return Number(metasBodega[filtroBodegaGlobal]) || 0;
+    }
     const total = Object.values(metasBodega).reduce((sum, meta) => sum + (Number(meta) || 0), 0);
     console.log("📊 Total metas:", total);
     return total;
-  }, [metasBodega]);
+  }, [metasBodega, filtroBodegaGlobal]);
 
   const progresoGeneral = useMemo(() => {
     if (totalMetas === 0) return 0;
@@ -634,11 +697,13 @@ export default function DashboardSacosCompartido({ barco }) {
       const arr = typeof barco.bodegas_json === "string" ? JSON.parse(barco.bodegas_json) : barco.bodegas_json;
       if (Array.isArray(arr)) {
         arr.forEach(b => {
-          bodegasMap[b.nombre] = { bodega: b.nombre, viajes: 0, sacos: 0, tm: 0, meta: Number(metasBodega[b.nombre]) || 0, flujoHora: 0 };
+          if (filtroBodegaGlobal === 'todas' || filtroBodegaGlobal === b.nombre) {
+            bodegasMap[b.nombre] = { bodega: b.nombre, viajes: 0, sacos: 0, tm: 0, meta: Number(metasBodega[b.nombre]) || 0, flujoHora: 0 };
+          }
         });
       }
     }
-    registros.forEach(r => {
+    registrosFiltrados.forEach(r => {
       if (!bodegasMap[r.bodega]) bodegasMap[r.bodega] = { bodega: r.bodega, viajes: 0, sacos: 0, tm: 0, meta: Number(metasBodega[r.bodega]) || 0, flujoHora: 0 };
       bodegasMap[r.bodega].viajes++;
       bodegasMap[r.bodega].sacos += r.cantidad_paquetes;
@@ -647,7 +712,7 @@ export default function DashboardSacosCompartido({ barco }) {
     return Object.values(bodegasMap)
       .sort((a, b) => parseInt(b.bodega.match(/\d+/)?.[0] || "0") - parseInt(a.bodega.match(/\d+/)?.[0] || "0"))
       .map(b => {
-        const rbs = registros.filter(r => r.bodega === b.bodega);
+        const rbs = registrosFiltrados.filter(r => r.bodega === b.bodega);
         if (rbs.length >= 2) {
           const ord   = [...rbs].sort((a, c) => dayjs(a.fecha_hora).unix() - dayjs(c.fecha_hora).unix());
           const horas = dayjs(ord[ord.length - 1].fecha_hora).diff(dayjs(ord[0].fecha_hora), 'hour', true);
@@ -660,11 +725,11 @@ export default function DashboardSacosCompartido({ barco }) {
         } else { b.porcentaje = 0; b.faltante = 0; b.completado = false; }
         return b;
       });
-  }, [registros, metasBodega, barco.bodegas_json]);
+  }, [registrosFiltrados, metasBodega, barco.bodegas_json, filtroBodegaGlobal]);
 
   const flujoPorHoraBodega = useMemo(() => {
-    if (registros.length === 0) return [];
-    const ord = [...registros].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()).slice(-48);
+    if (registrosFiltrados.length === 0) return [];
+    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()).slice(-48);
     const map = new Map();
     ord.forEach(reg => {
       const key = `${dayjs(reg.fecha_hora).format('YYYY-MM-DD HH:00')}|${reg.bodega}`;
@@ -672,13 +737,13 @@ export default function DashboardSacosCompartido({ barco }) {
       map.get(key).toneladas += reg.peso_total_calculado_tm;
     });
     const horas   = [...new Set(Array.from(map.values()).map(v => v.hora))].sort();
-    const bodegas = [...new Set(registros.map(r => r.bodega))];
+    const bodegas = [...new Set(registrosFiltrados.map(r => r.bodega))];
     return horas.map(hora => {
       const dp = { hora };
       bodegas.forEach(bod => { const e = Array.from(map.values()).find(v => v.hora === hora && v.bodega === bod); dp[bod] = e ? e.toneladas : 0; });
       return dp;
     }).slice(-12);
-  }, [registros]);
+  }, [registrosFiltrados]);
 
   const proyeccionesBodega = useMemo(() => {
     if (flujoPromedioGeneral === 0) return [];
@@ -873,7 +938,57 @@ export default function DashboardSacosCompartido({ barco }) {
 
         <div className="alm-body">
 
-          {/* KPIs */}
+          {/* ── FILTRO GLOBAL POR BODEGA ── */}
+          {bodegasDisponibles.length > 2 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 20,
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 14,
+              padding: '10px 16px',
+              flexWrap: 'wrap',
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
+                📦 Bodega
+              </span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                {bodegasDisponibles.map(b => (
+                  <button
+                    key={b}
+                    onClick={() => setFiltroBodegaGlobal(b)}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: 999,
+                      border: filtroBodegaGlobal === b ? 'none' : '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: "'Sora', sans-serif",
+                      transition: 'all .15s',
+                      background: filtroBodegaGlobal === b ? '#0f172a' : '#f8fafc',
+                      color:      filtroBodegaGlobal === b ? '#fff'    : '#64748b',
+                    }}
+                  >
+                    {b === 'todas' ? 'Todas' : b}
+                  </button>
+                ))}
+              </div>
+              {filtroBodegaGlobal !== 'todas' && (
+                <button
+                  onClick={() => setFiltroBodegaGlobal('todas')}
+                  style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
+                >
+                  ✕ Limpiar
+                </button>
+              )}
+            </div>
+          )}
+
+
           <div className="alm-kpis-row">
             <KpiCard label="Total Viajes"    value={statsGenerales.totalViajes}                icon="🚛" accent="#10b981" animate />
             <KpiCard label="Total Sacos"     value={fmtNumber(statsGenerales.totalSacos)}      icon="📦" accent="#3b82f6" animate />
