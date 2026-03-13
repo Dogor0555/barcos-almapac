@@ -21,10 +21,10 @@ export default function ClientPage({ token }) {
         setLoading(true)
         console.log("🔑 Buscando barco con token (sacos):", token)
 
-        // Buscar el barco por su token_compartido
         const { data: barcos, error } = await supabase
           .from('barcos')
-          .select('id, nombre, codigo_barco, token_compartido, bodegas_json, created_at')
+          .select('id, nombre, codigo_barco, token_compartido, bodegas_json, metas_json, created_at')
+          //                                                                   ^^^^^^^^^^^ FIX
           .eq('token_compartido', token)
 
         if (error) throw error
@@ -35,6 +35,7 @@ export default function ClientPage({ token }) {
         }
 
         console.log("✅ Barco encontrado:", barcos[0].nombre)
+        console.log("🎯 metas_json raw:", barcos[0].metas_json)
         setBarco(barcos[0])
       } catch (err) {
         console.error('Error:', err)

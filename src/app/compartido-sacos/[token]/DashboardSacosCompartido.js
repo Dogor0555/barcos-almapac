@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from "react";
 import { createClient } from '@supabase/supabase-js';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Line, Legend 
+  ComposedChart, Line, Legend
 } from "recharts";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
@@ -37,6 +37,34 @@ const COLORES = [
 ];
 
 // ============================================================================
+// HELPER: parsear metas_json de forma segura (puede llegar como string o objeto)
+// ============================================================================
+function parsearMetasJson(metasJson) {
+  try {
+    if (!metasJson) return {};
+    
+    // Si es string, parsear una vez
+    let obj = typeof metasJson === "string" ? JSON.parse(metasJson) : metasJson;
+    
+    // A veces Supabase/Next devuelve string dentro de string (doble encode)
+    if (typeof obj === "string") obj = JSON.parse(obj);
+    
+    console.log("✅ metas_json parseado:", obj);
+    
+    const sacosBodega = obj?.sacos_bodega;
+    if (!sacosBodega) {
+      console.warn("❌ No existe sacos_bodega en:", obj);
+      return {};
+    }
+    
+    return sacosBodega;
+  } catch (e) {
+    console.error("💥 Error parseando metas_json:", e, "| Valor recibido:", metasJson);
+    return {};
+  }
+}
+
+// ============================================================================
 // HOOK
 // ============================================================================
 function useSacosData(barcoId) {
@@ -65,7 +93,7 @@ function useSacosData(barcoId) {
         peso_total_calculado_kg: r.peso_saco_kg * r.cantidad_paquetes,
         peso_total_calculado_tm: (r.peso_saco_kg * r.cantidad_paquetes) / 1000,
         diferencia_kg: Math.abs((r.peso_saco_kg * r.cantidad_paquetes) - r.peso_ingenio_kg),
-        porcentaje_diferencia: r.peso_ingenio_kg > 0 
+        porcentaje_diferencia: r.peso_ingenio_kg > 0
           ? Math.abs(((r.peso_saco_kg * r.cantidad_paquetes) - r.peso_ingenio_kg) / r.peso_ingenio_kg * 100)
           : 0,
         fecha_hora: dayjs(`${r.fecha} ${r.hora_inicio}`).toISOString()
@@ -154,22 +182,14 @@ function KpiCard({ label, value, sub, icon, accent, animate }) {
 // COMPONENTE PRINCIPAL
 // ============================================================================
 export default function DashboardSacosCompartido({ barco }) {
-  const [vista, setVista] = useState("general");
-  const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const { registros, loading, error, lastUpdate, refetch } = useSacosData(barco.id);
-  const [metasBodega, setMetasBodega] = useState({});
 
-  useEffect(() => {
-    const cargarMetas = async () => {
-      try {
-        const metasGuardadas = barco.metas_json?.sacos_bodega || {};
-        setMetasBodega(metasGuardadas);
-      } catch (error) {
-        console.error("Error cargando metas:", error);
-      }
-    };
-    cargarMetas();
-  }, [barco]);
+  // ── FIX PRINCIPAL: parsear metas_json correctamente ──
+  const metasBodega = useMemo(() => {
+    const metas = parsearMetasJson(barco.metas_json);
+    console.log("🎯 Metas de bodega:", metas);
+    return metas;
+  }, [barco.metas_json]);
 
   const productos = useMemo(() => {
     const pesosSaco = [...new Set(registros.map(r => r.peso_saco_kg))].sort((a, b) => a - b);
@@ -272,25 +292,54 @@ export default function DashboardSacosCompartido({ barco }) {
       .reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
   }, [registros]);
 
+  // ── FIX: totalMetas calculado desde metasBodega ya parseado ──
+  const totalMetas = useMemo(() => {
+    const valores = Object.values(metasBodega);
+    const total = valores.reduce((sum, meta) => sum + (Number(meta) || 0), 0);
+    console.log("📊 Total metas calculado:", total, "| Valores:", valores);
+    return total;
+  }, [metasBodega]);
+
+  // ── FIX: progresoGeneral depende de totalMetas correcto ──
+  const progresoGeneral = useMemo(() => {
+    if (totalMetas === 0) return 0;
+    return Math.min(100, (statsGenerales.totalTM / totalMetas) * 100);
+  }, [statsGenerales.totalTM, totalMetas]);
+
   // Orden inverso de bodegas (de popa a proa)
   const datosPorBodegaCompleto = useMemo(() => {
     const bodegasMap = {};
-    if (barco.bodegas_json && barco.bodegas_json.length > 0) {
-      barco.bodegas_json.forEach(bodega => {
-        const nombreBodega = bodega.nombre;
-        bodegasMap[nombreBodega] = {
-          bodega: nombreBodega,
-          viajes: 0, sacos: 0, tm: 0,
-          meta: metasBodega[nombreBodega] || 0,
-          flujoHora: 0
-        };
-      });
+
+    if (barco.bodegas_json) {
+      // parsear bodegas_json si viene como string
+      const bodegasArr = typeof barco.bodegas_json === "string"
+        ? JSON.parse(barco.bodegas_json)
+        : barco.bodegas_json;
+
+      if (Array.isArray(bodegasArr)) {
+        bodegasArr.forEach(bodega => {
+          const nombreBodega = bodega.nombre;
+          bodegasMap[nombreBodega] = {
+            bodega: nombreBodega,
+            viajes: 0,
+            sacos: 0,
+            tm: 0,
+            meta: Number(metasBodega[nombreBodega]) || 0,
+            flujoHora: 0
+          };
+        });
+      }
     }
+
     registros.forEach(r => {
       if (!bodegasMap[r.bodega]) {
         bodegasMap[r.bodega] = {
-          bodega: r.bodega, viajes: 0, sacos: 0, tm: 0,
-          meta: metasBodega[r.bodega] || 0, flujoHora: 0
+          bodega: r.bodega,
+          viajes: 0,
+          sacos: 0,
+          tm: 0,
+          meta: Number(metasBodega[r.bodega]) || 0,
+          flujoHora: 0
         };
       }
       bodegasMap[r.bodega].viajes++;
@@ -298,25 +347,30 @@ export default function DashboardSacosCompartido({ barco }) {
       bodegasMap[r.bodega].tm += r.peso_total_calculado_tm;
     });
 
-    // Ordenar en orden inverso: de popa (última) a proa (primera)
     const bodegasOrdenadas = Object.values(bodegasMap).sort((a, b) => {
-      // Extraer número de bodega si existe (ej: "Bodega 1", "Bodega 2")
       const numA = parseInt(a.bodega.match(/\d+/)?.[0] || "0");
       const numB = parseInt(b.bodega.match(/\d+/)?.[0] || "0");
-      // Orden descendente (mayor a menor) para que la última bodega (número más alto) esté cerca de la proa
       return numB - numA;
     });
 
     return bodegasOrdenadas.map(b => {
       const registrosBodega = registros.filter(r => r.bodega === b.bodega);
       if (registrosBodega.length >= 2) {
-        const ord = [...registrosBodega].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
+        const ord = [...registrosBodega].sort((a, c) => dayjs(a.fecha_hora).unix() - dayjs(c.fecha_hora).unix());
         const horas = dayjs(ord[ord.length - 1].fecha_hora).diff(dayjs(ord[0].fecha_hora), 'hour', true);
         if (horas > 0) b.flujoHora = b.tm / horas;
       }
-      b.porcentaje = b.meta > 0 ? (b.tm / b.meta * 100) : 0;
-      b.faltante = Math.max(0, b.meta - b.tm);
-      b.completado = b.meta > 0 && b.tm >= b.meta;
+
+      if (b.meta > 0) {
+        b.porcentaje = Math.min(100, (b.tm / b.meta) * 100);
+        b.faltante = Math.max(0, b.meta - b.tm);
+        b.completado = b.tm >= b.meta;
+      } else {
+        b.porcentaje = 0;
+        b.faltante = 0;
+        b.completado = false;
+      }
+
       return b;
     });
   }, [registros, metasBodega, barco.bodegas_json]);
@@ -428,7 +482,6 @@ export default function DashboardSacosCompartido({ barco }) {
         }
 
         body { background: var(--bg); color: var(--text); }
-
         .alm-root { min-height: 100vh; background: var(--bg); padding: 0; }
 
         /* ── TOPBAR ── */
@@ -444,435 +497,159 @@ export default function DashboardSacosCompartido({ barco }) {
           z-index: 100;
           box-shadow: 0 2px 12px rgba(0,0,0,.18);
         }
-
-        .alm-topbar-left {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex: 1;
-          min-width: 0;
-        }
-
-        .alm-logo {
-          height: 32px;
-          width: auto;
-          object-fit: contain;
-          filter: brightness(0) invert(1);
-          flex-shrink: 0;
-        }
-
-        .alm-divider {
-          width: 1px;
-          height: 30px;
-          background: rgba(255,255,255,.18);
-          flex-shrink: 0;
-        }
-
-        .alm-ship-id {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-          flex: 1;
-        }
-
-        .alm-ship-name {
-          font-size: 14px;
-          font-weight: 800;
-          color: #fff;
-          letter-spacing: -.3px;
-          line-height: 1.2;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .alm-ship-code {
-          font-size: 10px;
-          color: rgba(255,255,255,.5);
-          font-family: 'DM Mono', monospace;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .alm-topbar-right {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-shrink: 0;
-        }
-
-        .alm-status-pill {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(16,185,129,.15);
-          border: 1px solid rgba(16,185,129,.3);
-          border-radius: 999px;
-          padding: 4px 10px;
-          font-size: 11px;
-          font-weight: 700;
-          color: #6ee7b7;
-          text-transform: uppercase;
-          letter-spacing: .5px;
-          white-space: nowrap;
-        }
-
-        .alm-status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #10b981;
-          animation: pulse-dot 2s infinite;
-          flex-shrink: 0;
-        }
-
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.2); }
-        }
-
+        .alm-topbar-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+        .alm-logo { height: 32px; width: auto; object-fit: contain; filter: brightness(0) invert(1); flex-shrink: 0; }
+        .alm-divider { width: 1px; height: 30px; background: rgba(255,255,255,.18); flex-shrink: 0; }
+        .alm-ship-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+        .alm-ship-name { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: -.3px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .alm-ship-code { font-size: 10px; color: rgba(255,255,255,.5); font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .alm-topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .alm-status-pill { display: flex; align-items: center; gap: 6px; background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.3); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: #6ee7b7; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+        .alm-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulse-dot 2s infinite; flex-shrink: 0; }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.2); } }
         .alm-update-container { display: none; }
-
-        .alm-refresh-btn {
-          background: rgba(255,255,255,.08);
-          border: 1px solid rgba(255,255,255,.12);
-          border-radius: 8px;
-          color: rgba(255,255,255,.8);
-          padding: 6px 10px;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all .2s;
-          font-family: 'Sora', sans-serif;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          white-space: nowrap;
-        }
-
-        .alm-refresh-btn:hover {
-          background: rgba(255,255,255,.15);
-          color: #fff;
-        }
-
+        .alm-refresh-btn { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: rgba(255,255,255,.8); padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: 'Sora', sans-serif; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .alm-refresh-btn:hover { background: rgba(255,255,255,.15); color: #fff; }
         @media (min-width: 768px) {
           .alm-topbar { padding: 0 24px; }
           .alm-logo { height: 36px; }
           .alm-ship-name { font-size: 15px; }
           .alm-update-container { display: block; }
-          .alm-update-time {
-            font-size: 11px;
-            color: rgba(255,255,255,.4);
-            font-family: 'DM Mono', monospace;
-          }
+          .alm-update-time { font-size: 11px; color: rgba(255,255,255,.4); font-family: 'DM Mono', monospace; }
         }
 
         /* ── BODY ── */
-        .alm-body {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 28px 24px 48px;
-        }
+        .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
 
         /* ── KPIs ── */
-        .alm-kpis-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 14px;
-          margin-bottom: 20px;
-        }
-
-        .alm-kpi {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          padding: 20px;
-          display: flex;
-          align-items: flex-start;
-          gap: 14px;
-          box-shadow: var(--shadow);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .alm-kpi::after {
-          content: '';
-          position: absolute;
-          bottom: 0; left: 0; right: 0;
-          height: 2px;
-          background: var(--accent);
-        }
-
+        .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; align-items: flex-start; gap: 14px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+        .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--accent); }
         .alm-kpi-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
         .alm-kpi-body { flex: 1; }
-
-        .alm-kpi-label {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          color: var(--text-3);
-          margin-bottom: 4px;
-        }
-
-        .alm-kpi-value {
-          font-size: 22px;
-          font-weight: 900;
-          color: var(--text);
-          line-height: 1.1;
-          font-family: 'DM Mono', monospace;
-        }
-
+        .alm-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); margin-bottom: 4px; }
+        .alm-kpi-value { font-size: 22px; font-weight: 900; color: var(--text); line-height: 1.1; font-family: 'DM Mono', monospace; }
         .alm-kpi-sub { font-size: 11px; color: var(--text-3); margin-top: 3px; }
-
-        .alm-kpi-bar {
-          position: absolute;
-          top: 0; left: 0;
-          width: 4px;
-          height: 100%;
-          background: var(--accent);
-          border-radius: 0 2px 2px 0;
-        }
-
-        @keyframes count-up {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
+        .alm-kpi-bar { position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent); border-radius: 0 2px 2px 0; }
+        @keyframes count-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .alm-pulse-num { animation: count-up .6s ease; }
 
-        /* ── CHART CARDS ── */
-        .alm-charts-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          grid-template-rows: auto auto;
-          gap: 16px;
-          margin-bottom: 20px;
-        }
-
-        .alm-chart-card {
+        /* ── BARRA DE PROGRESO GENERAL ── */
+        .alm-progress-container {
           background: var(--surface);
           border: 1px solid var(--border);
           border-radius: var(--radius);
-          padding: 20px;
-          box-shadow: var(--shadow);
+          padding: 24px;
           margin-bottom: 20px;
+          box-shadow: var(--shadow);
         }
-
-        .alm-chart-wide { grid-column: 1 / -1; }
-
-        .alm-chart-title {
-          font-size: 13px;
+        .alm-progress-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .alm-progress-title {
+          font-size: 14px;
           font-weight: 700;
           color: var(--text-2);
-          margin-bottom: 14px;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 6px;
+          gap: 8px;
         }
-
-        .alm-no-data {
-          height: 200px;
+        .alm-progress-stats {
           display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-3);
+          gap: 20px;
           font-size: 13px;
+          flex-wrap: wrap;
         }
-
-        /* ── TOOLTIP ── */
-        .alm-tooltip {
-          background: var(--navy);
-          border: 1px solid rgba(255,255,255,.1);
-          border-radius: 10px;
-          padding: 10px 14px;
-          box-shadow: 0 4px 16px rgba(0,0,0,.3);
-        }
-
-        .alm-tooltip-label {
-          font-size: 11px;
-          font-weight: 700;
-          color: rgba(255,255,255,.6);
-          margin-bottom: 4px;
-          font-family: 'DM Mono', monospace;
-        }
-
-        .alm-tooltip-value {
-          font-size: 12px;
-          font-family: 'DM Mono', monospace;
-          color: rgba(255,255,255,.9);
-        }
-
-        /* ── SHIP LAYOUT - MEJORADO PARA MÓVIL ── */
-        .alm-ship-layout {
-          background: linear-gradient(145deg, #0b1a2e 0%, #0f172a 100%);
-          border-radius: 24px;
-          padding: 24px 16px;
-          margin-bottom: 28px;
-          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-          border: 1px solid rgba(59,130,246,0.3);
-          position: relative;
+        .alm-progress-stat { display: flex; align-items: center; gap: 6px; }
+        .alm-progress-stat-label { color: var(--text-3); font-size: 12px; }
+        .alm-progress-stat-value { font-weight: 700; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; }
+        .alm-progress-bar-container {
+          width: 100%;
+          height: 28px;
+          background: #1e293b;
+          border-radius: 14px;
           overflow: hidden;
+          position: relative;
         }
-
-        .alm-ship-layout::before {
+        .alm-progress-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #3b82f6, #10b981);
+          border-radius: 14px;
+          transition: width 1s cubic-bezier(.4,0,.2,1);
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          padding-right: 12px;
+          color: white;
+          font-size: 12px;
+          font-weight: 700;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+          min-width: 0;
+          position: relative;
+        }
+        .alm-progress-bar-fill::after {
           content: '';
           position: absolute;
-          top: 0; left: 0; right: 0;
-          height: 2px;
-          background: linear-gradient(90deg, transparent, #3b82f6, #10b981, #f59e0b, transparent);
-          opacity: 0.5;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+          border-radius: inherit;
+          pointer-events: none;
         }
-
-        .alm-ship-title {
-          font-size: 16px;
-          font-weight: 800;
-          color: white;
-          margin-bottom: 16px;
+        .alm-progress-pct-outside {
+          margin-top: 6px;
+          text-align: right;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-2);
+          font-family: 'DM Mono', monospace;
+        }
+        .alm-progress-markers {
           display: flex;
-          align-items: center;
           justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 8px;
-          padding: 0 4px;
-          text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-          position: relative;
-          z-index: 2;
-        }
-
-        .alm-ship-title span:first-child {
-          background: rgba(255,255,255,0.1);
-          padding: 6px 18px;
-          border-radius: 40px;
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .alm-ship-container {
-          position: relative;
-          width: 100%;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding: 8px 0;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: thin;
-          scrollbar-color: #10b981 #1e293b;
-        }
-
-        .alm-ship-container::-webkit-scrollbar {
-          height: 6px;
-        }
-
-        .alm-ship-container::-webkit-scrollbar-track {
-          background: #1e293b;
-          border-radius: 10px;
-        }
-
-        .alm-ship-container::-webkit-scrollbar-thumb {
-          background: #10b981;
-          border-radius: 10px;
-        }
-
-        .alm-ship-container::-webkit-scrollbar-thumb:hover {
-          background: #059669;
-        }
-
-        /* SVG del barco — responsivo con tamaño mínimo */
-        .alm-ship-svg {
-          min-width: 900px;
-          width: 100%;
-          height: auto;
-          display: block;
-        }
-
-        .alm-ship-legend {
-          display: flex;
-          gap: 12px;
-          margin-top: 16px;
-          justify-content: center;
-          padding: 12px 16px;
-          background: rgba(0,0,0,0.4);
-          border-radius: 60px;
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255,255,255,0.1);
-          flex-wrap: wrap;
-        }
-
-        .alm-legend-item {
-          display: flex;
-          align-items: center;
-          gap: 6px;
+          margin-top: 8px;
+          color: var(--text-3);
           font-size: 11px;
-          color: rgba(255,255,255,0.9);
-          font-weight: 600;
+          padding: 0 4px;
         }
 
-        .alm-legend-dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 3px;
-          display: inline-block;
-          flex-shrink: 0;
-        }
+        /* ── CHART CARDS ── */
+        .alm-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+        .alm-chart-title { font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+        .alm-no-data { height: 200px; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 13px; }
+
+        /* ── TOOLTIP ── */
+        .alm-tooltip { background: var(--navy); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+        .alm-tooltip-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.6); margin-bottom: 4px; font-family: 'DM Mono', monospace; }
+        .alm-tooltip-value { font-size: 12px; font-family: 'DM Mono', monospace; color: rgba(255,255,255,.9); }
+
+        /* ── SHIP LAYOUT ── */
+        .alm-ship-layout { background: linear-gradient(145deg, #0b1a2e 0%, #0f172a 100%); border-radius: 24px; padding: 24px 16px; margin-bottom: 28px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid rgba(59,130,246,0.3); position: relative; overflow: hidden; }
+        .alm-ship-layout::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #3b82f6, #10b981, #f59e0b, transparent); opacity: 0.5; }
+        .alm-ship-title { font-size: 16px; font-weight: 800; color: white; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 0 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); position: relative; z-index: 2; }
+        .alm-ship-title span:first-child { background: rgba(255,255,255,0.1); padding: 6px 18px; border-radius: 40px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .alm-ship-container { position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; padding: 8px 0; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #10b981 #1e293b; }
+        .alm-ship-container::-webkit-scrollbar { height: 6px; }
+        .alm-ship-container::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
+        .alm-ship-container::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        .alm-ship-svg { min-width: 900px; width: 100%; height: auto; display: block; }
+        .alm-ship-legend { display: flex; gap: 12px; margin-top: 16px; justify-content: center; padding: 12px 16px; background: rgba(0,0,0,0.4); border-radius: 60px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap; }
+        .alm-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.9); font-weight: 600; }
+        .alm-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
 
         /* ── TABLA ── */
-        .alm-table-card {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          box-shadow: var(--shadow);
-          overflow: hidden;
-          margin-top: 20px;
-        }
-
-        .alm-table-header {
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--border);
-          background: #f8fafc;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-
+        .alm-table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-top: 20px; }
+        .alm-table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: #f8fafc; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
         .alm-section-title { font-size: 15px; font-weight: 800; color: var(--text); }
-
-        .alm-badge {
-          margin-left: 10px;
-          font-size: 11px;
-          font-weight: 600;
-          background: #e2e8f0;
-          color: var(--text-2);
-          padding: 2px 9px;
-          border-radius: 999px;
-        }
-
+        .alm-badge { margin-left: 10px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--text-2); padding: 2px 9px; border-radius: 999px; }
         .alm-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-
-        .alm-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-          min-width: 1000px;
-        }
-
+        .alm-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1000px; }
         .alm-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 2; }
-
-        .alm-table th {
-          padding: 11px 16px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: .8px;
-          color: var(--text-3);
-          border-bottom: 1px solid var(--border);
-          white-space: nowrap;
-        }
-
+        .alm-table th { padding: 11px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
         .alm-table td { padding: 11px 16px; color: var(--text-2); white-space: nowrap; }
         .alm-table tbody tr:hover { background: #f8fafc; }
         .alm-th-num, .alm-td-num { text-align: right; }
@@ -884,158 +661,51 @@ export default function DashboardSacosCompartido({ barco }) {
         .alm-mono { font-family: 'DM Mono', monospace; }
 
         /* ── FOOTER ── */
-        .alm-footer {
-          text-align: center;
-          padding: 24px;
-          font-size: 11px;
-          color: var(--text-3);
-          font-family: 'DM Mono', monospace;
-          margin-top: 20px;
-        }
+        .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-3); font-family: 'DM Mono', monospace; margin-top: 20px; }
 
         /* ── SPLASH ── */
-        .alm-splash {
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: var(--navy);
-          gap: 20px;
-        }
-
+        .alm-splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--navy); gap: 20px; }
         .alm-splash-logo { height: 48px; filter: brightness(0) invert(1); }
-
-        .alm-splash-ship {
-          font-size: 64px;
-          animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-12px); }
-        }
-
+        .alm-splash-ship { font-size: 64px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
         .alm-splash-text { color: rgba(255,255,255,.6); font-size: 16px; font-weight: 600; }
-
-        .alm-loader {
-          width: 40px; height: 40px;
-          border: 3px solid rgba(255,255,255,.1);
-          border-top-color: #10b981;
-          border-radius: 50%;
-          animation: spin .8s linear infinite;
-        }
-
+        .alm-loader { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,.1); border-top-color: #10b981; border-radius: 50%; animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* ── ERROR BOX ── */
-        .alm-error-box {
-          background: #fff;
-          border-radius: 20px;
-          padding: 36px;
-          text-align: center;
-          max-width: 380px;
-        }
-
+        .alm-error-box { background: #fff; border-radius: 20px; padding: 36px; text-align: center; max-width: 380px; }
         .alm-error-title { font-size: 18px; font-weight: 700; color: #dc2626; margin-bottom: 8px; }
         .alm-error-msg { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
-        .alm-retry-btn {
-          background: #fee2e2;
-          border: none;
-          border-radius: 10px;
-          color: #dc2626;
-          padding: 10px 20px;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          font-family: 'Sora', sans-serif;
-        }
+        .alm-retry-btn { background: #fee2e2; border: none; border-radius: 10px; color: #dc2626; padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Sora', sans-serif; }
 
         /* ── SCROLLBAR ── */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-        /* ── RESPONSIVE MEJORADO ── */
+        /* ── RESPONSIVE ── */
         @media (max-width: 768px) {
           .alm-body { padding: 16px 12px 40px; }
-          .alm-charts-row { grid-template-columns: 1fr; }
-          .alm-chart-wide { grid-column: auto; }
           .alm-kpis-row { grid-template-columns: 1fr 1fr; gap: 10px; }
           .alm-kpi { padding: 14px 12px; gap: 10px; }
           .alm-kpi-icon { font-size: 22px; }
           .alm-kpi-value { font-size: 18px; }
-          
-          /* Mejoras para el barco en móvil */
-          .alm-ship-layout { 
-            padding: 16px 8px; 
-            border-radius: 16px; 
-            margin-left: -4px;
-            margin-right: -4px;
-          }
-          
-          .alm-ship-title { 
-            font-size: 13px; 
-            flex-direction: column; 
-            align-items: flex-start; 
-            gap: 6px; 
-          }
-          
-          .alm-ship-title span:first-child { 
-            padding: 5px 14px; 
-            font-size: 12px; 
-            width: 100%;
-            text-align: center;
-          }
-          
-          .alm-ship-container {
-            min-width: 100%;
-            overflow-x: auto;
-          }
-          
-          .alm-ship-svg {
-            min-width: 850px; /* Aumentado para mejor visibilidad */
-          }
-          
-          .alm-ship-legend { 
-            gap: 8px; 
-            padding: 10px 12px; 
-            border-radius: 20px; 
-            flex-wrap: wrap;
-            justify-content: flex-start;
-          }
-          
-          .alm-legend-item { 
-            font-size: 10px; 
-            gap: 4px; 
-          }
-          
-          .alm-legend-dot { 
-            width: 8px; 
-            height: 8px; 
-          }
+          .alm-ship-layout { padding: 16px 8px; border-radius: 16px; margin-left: -4px; margin-right: -4px; }
+          .alm-ship-title { font-size: 13px; flex-direction: column; align-items: flex-start; gap: 6px; }
+          .alm-ship-title span:first-child { padding: 5px 14px; font-size: 12px; width: 100%; text-align: center; }
+          .alm-ship-svg { min-width: 850px; }
+          .alm-ship-legend { gap: 8px; padding: 10px 12px; border-radius: 20px; flex-wrap: wrap; justify-content: flex-start; }
+          .alm-legend-item { font-size: 10px; gap: 4px; }
+          .alm-legend-dot { width: 8px; height: 8px; }
+          .alm-progress-stats { flex-direction: column; gap: 6px; }
         }
-
         @media (max-width: 480px) {
           .alm-kpis-row { grid-template-columns: 1fr 1fr; }
           .alm-kpi-label { font-size: 9px; }
           .alm-kpi-value { font-size: 16px; }
-          
-          /* Aún más grande para pantallas muy pequeñas */
-          .alm-ship-svg {
-            min-width: 900px;
-          }
-          
-          .alm-ship-legend { 
-            flex-direction: row; 
-            align-items: flex-start; 
-            border-radius: 12px;
-            gap: 6px;
-          }
-          
-          .alm-legend-item {
-            font-size: 9px;
-          }
+          .alm-ship-svg { min-width: 900px; }
+          .alm-ship-legend { flex-direction: row; align-items: flex-start; border-radius: 12px; gap: 6px; }
+          .alm-legend-item { font-size: 9px; }
         }
       `}</style>
 
@@ -1055,13 +725,11 @@ export default function DashboardSacosCompartido({ barco }) {
               <span className="alm-status-dot" />
               <span className="alm-status-text">SACOS</span>
             </div>
-
             {lastUpdate && (
               <div className="alm-update-container">
                 <span className="alm-update-time">↻ {lastUpdate.format("HH:mm:ss")}</span>
               </div>
             )}
-
             <button onClick={refetch} className="alm-refresh-btn" title="Actualizar datos">
               <span>🔄</span>
               <span>Actualizar</span>
@@ -1083,6 +751,60 @@ export default function DashboardSacosCompartido({ barco }) {
               accent="#ef4444"
               sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / statsGenerales.totalSacos) * 100).toFixed(1) : 0}% del total`}
             />
+          </div>
+
+          {/* BARRA DE PROGRESO GENERAL */}
+          <div className="alm-progress-container">
+            <div className="alm-progress-header">
+              <div className="alm-progress-title">
+                <span>📊 PROGRESO GENERAL DE LA OPERACIÓN</span>
+              </div>
+              <div className="alm-progress-stats">
+                <div className="alm-progress-stat">
+                  <span className="alm-progress-stat-label">Meta total:</span>
+                  <span className="alm-progress-stat-value">{fmtTM(totalMetas, 2)} TM</span>
+                </div>
+                <div className="alm-progress-stat">
+                  <span className="alm-progress-stat-label">Actual:</span>
+                  <span className="alm-progress-stat-value" style={{ color: '#10b981' }}>{fmtTM(statsGenerales.totalTM, 2)} TM</span>
+                </div>
+                <div className="alm-progress-stat">
+                  <span className="alm-progress-stat-label">Faltante:</span>
+                  <span className="alm-progress-stat-value" style={{ color: '#ef4444' }}>
+                    {fmtTM(Math.max(0, totalMetas - statsGenerales.totalTM), 2)} TM
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="alm-progress-bar-container">
+              <div
+                className="alm-progress-bar-fill"
+                style={{ width: `${Math.min(100, progresoGeneral)}%` }}
+              >
+                {progresoGeneral >= 10 && `${progresoGeneral.toFixed(1)}%`}
+              </div>
+            </div>
+
+            <div className="alm-progress-markers">
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+
+            {progresoGeneral < 10 && progresoGeneral > 0 && (
+              <div className="alm-progress-pct-outside">
+                {progresoGeneral.toFixed(1)}% completado
+              </div>
+            )}
+
+            {totalMetas === 0 && (
+              <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: 600 }}>
+                ⚠️ No se encontraron metas configuradas para este barco
+              </div>
+            )}
           </div>
 
           {/* FLUJO POR HORA */}
@@ -1116,12 +838,12 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* ===== BARCO SVG RESPONSIVO CON PROA Y POPA Y BODEGAS EN ORDEN INVERSO ===== */}
+          {/* BARCO SVG */}
           <div className="alm-ship-layout">
             <div className="alm-ship-title">
               <span>⚓ DISTRIBUCIÓN DE CARGA POR BODEGA</span>
               <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: '13px', padding: '4px 14px', borderRadius: '20px', fontWeight: 700 }}>
-                Total: {fmtTM(statsGenerales.totalTM, 2)} TM
+                Total: {fmtTM(statsGenerales.totalTM, 2)} TM / {fmtTM(totalMetas, 2)} TM
               </span>
             </div>
 
@@ -1200,26 +922,24 @@ export default function DashboardSacosCompartido({ barco }) {
                   <circle cx="600" cy="130" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
                   <circle cx="660" cy="130" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
 
-                  {/* PROA - lado izquierdo */}
+                  {/* PROA */}
                   <path d="M150 350 L130 300 L180 200 L200 200 L150 350" fill="#4a5568" stroke="#718096" strokeWidth="3" />
                   <circle cx="140" cy="285" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
                   <line x1="140" y1="277" x2="140" y2="293" stroke="#d97706" strokeWidth="2" />
                   <line x1="132" y1="285" x2="148" y2="285" stroke="#d97706" strokeWidth="2" />
 
-                  {/* POPA - lado derecho */}
+                  {/* POPA */}
                   <path d="M1250 350 L1270 300 L1220 200 L1200 200 L1250 350" fill="#4a5568" stroke="#718096" strokeWidth="3" />
                   <circle cx="1260" cy="285" r="6" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
 
-                  {/* Bodegas dinámicas en orden inverso (de popa a proa) */}
+                  {/* Bodegas dinámicas */}
                   {datosPorBodegaCompleto.map((bodega, index) => {
                     const totalBodegas = datosPorBodegaCompleto.length;
                     const anchoBodega = 700 / totalBodegas;
-                    // Las bodegas se dibujan de izquierda a derecha
-                    // Con el orden inverso, la primera en el array (popa) va a la izquierda
                     const inicioX = 300 + (index * anchoBodega) + (anchoBodega * 0.1);
                     const ancho = anchoBodega * 0.8;
                     const altoMaximo = 160;
-                    const porcentaje = Math.min(100, bodega.porcentaje);
+                    const porcentaje = Math.min(100, bodega.porcentaje || 0);
                     const altoRelleno = (altoMaximo * porcentaje) / 100;
 
                     let colorBodega = "#3b82f6";
@@ -1229,54 +949,53 @@ export default function DashboardSacosCompartido({ barco }) {
 
                     return (
                       <g key={bodega.bodega}>
-                        {/* Contenedor exterior */}
                         <rect x={inicioX} y={190} width={ancho} height={altoMaximo} fill="#1e293b" stroke={colorBorde} strokeWidth="4" rx="12" />
-
-                        {/* Relleno */}
-                        <rect x={inicioX + 4} y={190 + (altoMaximo - altoRelleno)} width={ancho - 8} height={Math.max(0, altoRelleno - 4)} fill={colorBodega} opacity="0.9" rx="8">
+                        <rect
+                          x={inicioX + 4}
+                          y={190 + (altoMaximo - altoRelleno)}
+                          width={ancho - 8}
+                          height={Math.max(0, altoRelleno - 4)}
+                          fill={colorBodega}
+                          opacity="0.9"
+                          rx="8"
+                        >
                           <animate attributeName="height" from="0" to={Math.max(0, altoRelleno - 4)} dur="1s" fill="freeze" />
                         </rect>
-
-                        {/* Patrón de remaches */}
                         <rect x={inicioX} y={190} width={ancho} height={altoMaximo} fill="url(#rivets)" opacity="0.5" rx="12" />
-
-                        {/* Etiqueta bodega */}
                         <rect x={inicioX + ancho / 2 - 25} y="165" width="50" height="25" fill="#0f172a" rx="12" stroke={colorBorde} strokeWidth="2" />
                         <text x={inicioX + ancho / 2} y="183" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
                           {bodega.bodega.replace('Bodega ', 'B')}
                         </text>
-
-                        {/* Toneladas */}
                         <text x={inicioX + ancho / 2} y={230} textAnchor="middle" fill="white" fontSize="14" fontWeight="800" fontFamily="DM Mono, monospace">
                           {fmtTM(bodega.tm, 1)}
                         </text>
                         <text x={inicioX + ancho / 2} y={250} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10" fontWeight="600">
                           TM
                         </text>
-
-                        {/* Porcentaje */}
                         <text x={inicioX + ancho / 2} y={310} textAnchor="middle" fill="white" fontSize="16" fontWeight="900">
                           {porcentaje.toFixed(0)}%
                         </text>
-
-                        {/* Barra progreso */}
                         <rect x={inicioX + 15} y={330} width={ancho - 30} height="8" fill="#334155" rx="4" />
-                        <rect x={inicioX + 15} y={330} width={(ancho - 30) * (porcentaje / 100)} height="8" fill={colorBodega} rx="4">
+                        <rect
+                          x={inicioX + 15}
+                          y={330}
+                          width={(ancho - 30) * (porcentaje / 100)}
+                          height="8"
+                          fill={colorBodega}
+                          rx="4"
+                        >
                           <animate attributeName="width" from="0" to={(ancho - 30) * (porcentaje / 100)} dur="1s" fill="freeze" />
                         </rect>
                       </g>
                     );
                   })}
 
-                  {/* Texto indicador de proa y popa */}
                   <text x="150" y="380" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">
                     ⚓ PROA
                   </text>
                   <text x="1250" y="380" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">
                     POPA ⚓
                   </text>
-
-                  {/* Nombre del barco en casco */}
                   <text x="700" y="280" textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize="28" fontWeight="800" fontFamily="DM Mono, monospace">
                     {barco.nombre.toUpperCase()}
                   </text>
@@ -1284,7 +1003,6 @@ export default function DashboardSacosCompartido({ barco }) {
               </svg>
             </div>
 
-            {/* Leyenda */}
             <div className="alm-ship-legend">
               <span className="alm-legend-item">
                 <span style={{ background: '#10b981' }} className="alm-legend-dot" />
@@ -1299,12 +1017,8 @@ export default function DashboardSacosCompartido({ barco }) {
                 En progreso
               </span>
               <span className="alm-legend-item">
-                <span style={{ background: '#475569' }} className="alm-legend-dot" />
-                Estructura
-              </span>
-              <span className="alm-legend-item">
                 <span style={{ background: '#fbbf24' }} className="alm-legend-dot" />
-                Meta: {fmtTM(Object.values(metasBodega).reduce((s, m) => s + m, 0), 2)} TM
+                Meta: {fmtTM(totalMetas, 2)} TM
               </span>
             </div>
           </div>
@@ -1369,21 +1083,20 @@ export default function DashboardSacosCompartido({ barco }) {
                         <td className="alm-td-num">{b.viajes}</td>
                         <td className="alm-td-num">{fmtNumber(b.sacos)}</td>
                         <td className="alm-td-num alm-green">{fmtTM(b.tm, 2)}</td>
-                        <td className="alm-td-num">{b.meta > 0 ? fmtTM(b.meta, 2) : '—'}</td>
+                        <td className="alm-td-num">{fmtTM(b.meta, 2)}</td>
                         <td className="alm-td-num alm-bold" style={{ color: b.completado ? '#10b981' : (b.porcentaje > 75 ? '#f59e0b' : '#3b82f6') }}>
-                          {b.meta > 0 ? b.porcentaje.toFixed(1) + '%' : '—'}
+                          {b.porcentaje.toFixed(1)}%
                         </td>
                         <td className="alm-td-num" style={{ color: b.faltante > 0 ? '#ef4444' : '#10b981' }}>
-                          {b.meta > 0 ? (b.faltante > 0 ? fmtTM(b.faltante, 2) : '✓') : '—'}
+                          {b.faltante > 0 ? fmtTM(b.faltante, 2) : '✓'}
                         </td>
                         <td className="alm-td-num">{b.flujoHora > 0 ? fmtTM(b.flujoHora, 2) : '—'}</td>
                         <td>
-                          {b.completado
-                            ? <span style={{ color: '#10b981', fontWeight: 'bold' }}>COMPLETADA</span>
-                            : b.meta > 0
-                              ? <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>EN PROGRESO</span>
-                              : <span style={{ color: '#94a3b8' }}>SIN META</span>
-                          }
+                          {b.completado ? (
+                            <span style={{ color: '#10b981', fontWeight: 'bold' }}>COMPLETADA</span>
+                          ) : (
+                            <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>EN PROGRESO</span>
+                          )}
                         </td>
                         <td className="alm-td-num alm-amber">
                           {proyeccion?.fechaEstimada ? proyeccion.fechaEstimada : '—'}
@@ -1398,18 +1111,10 @@ export default function DashboardSacosCompartido({ barco }) {
                     <td className="alm-td-num alm-bold">{statsGenerales.totalViajes}</td>
                     <td className="alm-td-num alm-bold">{fmtNumber(statsGenerales.totalSacos)}</td>
                     <td className="alm-td-num alm-bold alm-green">{fmtTM(statsGenerales.totalTM, 2)}</td>
-                    <td className="alm-td-num alm-bold">
-                      {fmtTM(Object.values(metasBodega).reduce((s, m) => s + m, 0), 2)}
-                    </td>
-                    <td className="alm-td-num alm-bold">
-                      {Object.values(metasBodega).reduce((s, m) => s + m, 0) > 0
-                        ? ((statsGenerales.totalTM / Object.values(metasBodega).reduce((s, m) => s + m, 0)) * 100).toFixed(1) + '%'
-                        : '—'}
-                    </td>
+                    <td className="alm-td-num alm-bold">{fmtTM(totalMetas, 2)}</td>
+                    <td className="alm-td-num alm-bold">{progresoGeneral.toFixed(1)}%</td>
                     <td className="alm-td-num alm-bold" style={{ color: '#ef4444' }}>
-                      {Object.values(metasBodega).reduce((s, m) => s + m, 0) > 0
-                        ? fmtTM(Math.max(0, Object.values(metasBodega).reduce((s, m) => s + m, 0) - statsGenerales.totalTM), 2)
-                        : '—'}
+                      {fmtTM(Math.max(0, totalMetas - statsGenerales.totalTM), 2)}
                     </td>
                     <td className="alm-td-num alm-bold">{fmtTM(flujoPromedioGeneral, 2)}</td>
                     <td></td>

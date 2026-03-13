@@ -9,7 +9,7 @@ import {
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
   Sun, Moon, Search, Grid, Layers, ChevronRight,
-  Timer, TrendingUp, Award, Zap, Star
+  Timer, TrendingUp, Award, Zap, Star, Hash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -39,10 +39,11 @@ const InputField = ({ label, lblClass, children, className = '' }) => (
   </div>
 )
 
-// ─── MODAL ──────────────────────────────────────────────────────────────────
+// ─── MODAL CON MANEJO DE CONCURRENCIA ─────────────────────────────────────
 const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, theme }) => {
   const [loading, setLoading] = useState(false)
-  const [viajeNumero, setViajeNumero] = useState(1)
+  const [proximoViaje, setProximoViaje] = useState(null)
+  const [verificandoViaje, setVerificandoViaje] = useState(false)
   const [calculosExpandido, setCalculosExpandido] = useState(false)
 
   const dk = theme === 'dark'
@@ -70,8 +71,10 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
     observaciones: ''
   })
 
+  // Cargar datos iniciales y calcular próximo viaje
   useEffect(() => {
     if (registro) {
+      // Si es edición, cargamos los datos existentes
       setFormData({
         bodega: registro.bodega || '',
         fecha: registro.fecha || dayjs().format('YYYY-MM-DD'),
@@ -87,6 +90,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         observaciones: registro.observaciones || ''
       })
     } else {
+      // Si es nuevo, establecer valores por defecto y calcular próximo viaje
       setFormData({
         bodega: bodegas.length > 0 ? bodegas[0].nombre : '',
         fecha: dayjs().format('YYYY-MM-DD'),
@@ -101,18 +105,80 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         hora_fin: '',
         observaciones: ''
       })
-      cargarUltimoViaje()
+      calcularProximoViaje()
     }
   }, [registro, barco, bodegas])
 
-  const cargarUltimoViaje = async () => {
+  // Función para calcular el próximo número de viaje disponible
+  const calcularProximoViaje = async () => {
     try {
-      const { data } = await supabase
-        .from('registros_sacos').select('viaje_numero')
+      setVerificandoViaje(true)
+      
+      // Obtener todos los números de viaje existentes para este barco
+      const { data, error } = await supabase
+        .from('registros_sacos')
+        .select('viaje_numero')
         .eq('barco_id', barco.id)
-        .order('viaje_numero', { ascending: false }).limit(1)
-      if (data && data.length > 0) setViajeNumero(data[0].viaje_numero + 1)
-    } catch (e) { console.error(e) }
+        .order('viaje_numero', { ascending: true })
+      
+      if (error) throw error
+      
+      if (!data || data.length === 0) {
+        // No hay viajes, el primero es el #1
+        setProximoViaje(1)
+        return
+      }
+      
+      // Extraer los números de viaje existentes
+      const numerosExistentes = data.map(r => r.viaje_numero)
+      
+      // Buscar el primer número faltante en la secuencia
+      let numeroSugerido = 1
+      for (let i = 0; i < numerosExistentes.length; i++) {
+        if (numerosExistentes[i] > numeroSugerido) {
+          // Encontramos un hueco
+          break
+        }
+        numeroSugerido = numerosExistentes[i] + 1
+      }
+      
+      setProximoViaje(numeroSugerido)
+    } catch (error) {
+      console.error('Error calculando próximo viaje:', error)
+      // Si hay error, usamos el método simple de último + 1
+      try {
+        const { data } = await supabase
+          .from('registros_sacos')
+          .select('viaje_numero')
+          .eq('barco_id', barco.id)
+          .order('viaje_numero', { ascending: false })
+          .limit(1)
+        
+        setProximoViaje(data && data.length > 0 ? data[0].viaje_numero + 1 : 1)
+      } catch {
+        setProximoViaje(1)
+      }
+    } finally {
+      setVerificandoViaje(false)
+    }
+  }
+
+  // Función para verificar si un número de viaje específico está disponible
+  const verificarViajeDisponible = async (numeroViaje) => {
+    try {
+      const { data, error } = await supabase
+        .from('registros_sacos')
+        .select('id')
+        .eq('barco_id', barco.id)
+        .eq('viaje_numero', numeroViaje)
+      
+      if (error) throw error
+      
+      return !data || data.length === 0 // Está disponible si no hay resultados
+    } catch (error) {
+      console.error('Error verificando viaje:', error)
+      return false
+    }
   }
 
   const handleChange = (e) => {
@@ -143,16 +209,53 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    
     try {
       const user = getCurrentUser()
       if (!user) throw new Error('No autenticado')
-      if (!formData.placa_camion?.trim())                               { toast.error('Placa obligatoria'); setLoading(false); return }
-      if (!formData.cantidad_paquetes || formData.cantidad_paquetes <= 0) { toast.error('Cantidad inválida');  setLoading(false); return }
-      if (!formData.peso_saco_kg || formData.peso_saco_kg <= 0)          { toast.error('Peso del saco inválido'); setLoading(false); return }
+      
+      // Validaciones básicas
+      if (!formData.placa_camion?.trim()) { 
+        toast.error('Placa obligatoria'); 
+        setLoading(false); 
+        return 
+      }
+      if (!formData.cantidad_paquetes || formData.cantidad_paquetes <= 0) { 
+        toast.error('Cantidad inválida');  
+        setLoading(false); 
+        return 
+      }
+      if (!formData.peso_saco_kg || formData.peso_saco_kg <= 0) { 
+        toast.error('Peso del saco inválido'); 
+        setLoading(false); 
+        return 
+      }
 
+      // Determinar el número de viaje a usar
+      let numeroViajeAGuardar
+      
+      if (registro) {
+        // Es edición, mantener el mismo número
+        numeroViajeAGuardar = registro.viaje_numero
+      } else {
+        // Es nuevo, verificar que el próximo viaje aún esté disponible
+        const disponible = await verificarViajeDisponible(proximoViaje)
+        
+        if (!disponible) {
+          // El viaje ya fue tomado por alguien más, recalcular
+          toast.error(`⚠️ El Viaje #${proximoViaje} ya fue registrado por otro usuario`)
+          await calcularProximoViaje()
+          setLoading(false)
+          return
+        }
+        
+        numeroViajeAGuardar = proximoViaje
+      }
+
+      // Preparar datos para guardar (SIN las columnas generadas)
       const datos = {
         barco_id: barco.id,
-        viaje_numero: registro?.viaje_numero || viajeNumero,
+        viaje_numero: numeroViajeAGuardar,
         bodega: formData.bodega,
         fecha: formData.fecha,
         nota_remision: formData.nota_remision || null,
@@ -170,18 +273,33 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         created_by: user.id
       }
 
+      // Intentar guardar
       let error
       if (registro) {
         ({ error } = await supabase.from('registros_sacos').update(datos).eq('id', registro.id))
       } else {
         ({ error } = await supabase.from('registros_sacos').insert([datos]))
       }
-      if (error) throw error
+      
+      if (error) {
+        // Verificar si es error de duplicado
+        if (error.code === '23505' || error.message?.includes('duplicate')) {
+          toast.error(`❌ El Viaje #${numeroViajeAGuardar} ya fue registrado`)
+          await calcularProximoViaje() // Recalcular próximo disponible
+        } else {
+          throw error
+        }
+        setLoading(false)
+        return
+      }
 
-      toast.success(registro ? 'Registro actualizado' : `Viaje #${viajeNumero} registrado`)
+      // Éxito
+      toast.success(registro ? 'Registro actualizado' : `✅ Viaje #${numeroViajeAGuardar} registrado`)
+      
       const v = verificarPeso()
       if (v === 'advertencia') toast.warning('⚠️ Peso difiere del ingenio')
       else if (v === 'error')  toast.error('❌ Peso NO coincide con el ingenio')
+      
       onSuccess()
     } catch (err) {
       console.error(err)
@@ -201,8 +319,12 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-4 sm:px-6 py-4 sticky top-0 flex items-center justify-between rounded-t-2xl sm:rounded-t-2xl z-10">
           <h3 className="text-base sm:text-xl font-black text-white flex items-center gap-2">
             <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">{registro ? 'Editar Registro' : `Nuevo Registro · Viaje #${viajeNumero}`}</span>
-            <span className="sm:hidden">{registro ? 'Editar' : `Viaje #${viajeNumero}`}</span>
+            <span className="hidden sm:inline">
+              {registro ? 'Editar Registro' : 'Nuevo Registro'}
+            </span>
+            <span className="sm:hidden">
+              {registro ? 'Editar' : 'Nuevo'}
+            </span>
           </h3>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
             <X className="w-5 h-5 text-white" />
@@ -210,6 +332,45 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+
+          {/* Indicador de número de viaje - SOLO PARA NUEVOS REGISTROS */}
+          {!registro && (
+            <div className={`${sectionBg} rounded-xl p-4 border ${bdM} bg-gradient-to-r from-blue-500/10 to-purple-500/10`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                    <Hash className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className={`text-xs ${lblM}`}>Viaje a registrar</p>
+                    {verificandoViaje ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <span className={`text-sm ${txtM}`}>Verificando...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <p className={`text-2xl font-black text-blue-500`}>
+                          #{proximoViaje || '...'}
+                        </p>
+                        <p className={`text-[10px] ${lblM}`}>
+                          Siguiente número disponible
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={calcularProximoViaje}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  title="Verificar nuevamente"
+                >
+                  <RefreshCw className="w-4 h-4 text-blue-400" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Bodega + Fecha */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -414,19 +575,34 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
 
           {/* Botones */}
           <div className="flex gap-3 pt-2">
-            <button type="submit" disabled={loading}
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base">
-              {loading
-                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <CheckCircle className="w-4 h-4" />
-              }
+            <button 
+              type="submit" 
+              disabled={loading || (!registro && verificandoViaje)}
+              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
               {registro ? 'Actualizar' : 'Registrar Viaje'}
             </button>
-            <button type="button" onClick={onClose} disabled={loading}
-              className={`flex-1 ${dk ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${txtM} font-bold py-3 px-4 rounded-xl text-sm sm:text-base transition-colors`}>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              disabled={loading}
+              className={`flex-1 ${dk ? 'bg-slate-800 hover:bg-slate-700' : 'bg-gray-200 hover:bg-gray-300'} ${txtM} font-bold py-3 px-4 rounded-xl text-sm sm:text-base transition-colors`}
+            >
               Cancelar
             </button>
           </div>
+
+          {/* Mensaje de advertencia para nuevos registros */}
+          {!registro && (
+            <p className={`text-[10px] text-center ${lblM} mt-2`}>
+              ⚡ El número de viaje se verifica al guardar para evitar duplicados
+            </p>
+          )}
         </form>
       </div>
     </div>
@@ -508,8 +684,6 @@ const TarjetaBodegaUnificada = ({
             <p className={`text-[10px] ${sub} mt-1 text-right`}>por viaje</p>
           </div>
         )}
-
-       
       </div>
     )
   }
@@ -517,10 +691,6 @@ const TarjetaBodegaUnificada = ({
   // Card para bodegas específicas
   const porcentajeDanados = bodega.totalSacos > 0 
     ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
-    : 0
-
-  const eficiencia = bodega.totalSacos > 0 
-    ? ((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)
     : 0
 
   return (
@@ -580,8 +750,6 @@ const TarjetaBodegaUnificada = ({
           </div>
         </div>
       )}
-
-     
 
       {/* Indicador de expansión */}
       <div className="mt-2 flex justify-center">
