@@ -375,7 +375,7 @@ function AtrasosBarco({ barcoId }) {
             ))}
           </div>
 
-          {/* ── Distribución por tipo ── */}
+          {/* ── Distribución por tipo ── 
           {Object.keys(s.porTipo).length > 0 && (
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '18px 20px', marginBottom: 24 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -414,7 +414,7 @@ function AtrasosBarco({ barcoId }) {
                   })}
               </div>
             </div>
-          )}
+          )} */}
 
           {/* ── Tabla de registros ── */}
           <div className="alm-table-scroll">
