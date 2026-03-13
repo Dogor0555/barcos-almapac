@@ -9,7 +9,7 @@ import {
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
   Sun, Moon, Search, Grid, Layers, ChevronRight,
-  Timer, TrendingUp
+  Timer, TrendingUp, Award, Zap, Star
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -438,47 +438,209 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
-// ─── COMPONENTE DE TARJETA DE DURACIÓN ────────────────────────────────────
-const TarjetaDuracion = ({ titulo, duracion, viajes, icon: Icon, color = 'green', theme, sub, text, dk, card }) => {
+// ─── COMPONENTE DE TARJETA DE DURACIÓN - CORREGIDA ────────────────────────────
+const TarjetaDuracion = ({ titulo, duracion, viajes, icon: Icon, color = 'green', theme, sub, text, dk, card, border, destacado = false }) => {
   const colores = {
-    green: 'text-green-500 bg-green-500/20',
-    blue: 'text-blue-500 bg-blue-500/20',
-    yellow: 'text-yellow-500 bg-yellow-500/20',
-    purple: 'text-purple-500 bg-purple-500/20'
+    green: {
+      bg: 'from-green-500/20 to-emerald-500/20',
+      text: 'text-green-500',
+      border: 'border-green-500/30',
+      icon: 'bg-gradient-to-br from-green-500 to-emerald-600'
+    },
+    blue: {
+      bg: 'from-blue-500/20 to-cyan-500/20',
+      text: 'text-blue-500',
+      border: 'border-blue-500/30',
+      icon: 'bg-gradient-to-br from-blue-500 to-cyan-600'
+    },
+    yellow: {
+      bg: 'from-yellow-500/20 to-amber-500/20',
+      text: 'text-yellow-500',
+      border: 'border-yellow-500/30',
+      icon: 'bg-gradient-to-br from-yellow-500 to-amber-600'
+    },
+    purple: {
+      bg: 'from-purple-500/20 to-pink-500/20',
+      text: 'text-purple-500',
+      border: 'border-purple-500/30',
+      icon: 'bg-gradient-to-br from-purple-500 to-pink-600'
+    }
   }
 
-  // Convertir duración de minutos a formato HH:MM
-  const formatearDuracion = (minutos) => {
+  // duracion YA ES el promedio por viaje en minutos (lo calculamos en la página principal)
+  const promedioMinutos = Math.round(duracion)
+
+  // Formatear el promedio para mostrarlo bonito
+  const formatearPromedio = (minutos) => {
     if (!minutos || minutos === 0) return '—'
-    const h = Math.floor(minutos / 60)
-    const m = Math.floor(minutos % 60)
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} h`
+    
+    // Si es menos de 60 minutos, mostrar solo minutos
+    if (minutos < 60) {
+      return `${minutos} min`
+    }
+    
+    // Si es más de 60 minutos, mostrar horas y minutos
+    const horas = Math.floor(minutos / 60)
+    const mins = minutos % 60
+    
+    if (mins === 0) {
+      return `${horas}h`
+    } else {
+      return `${horas}h ${mins}m`
+    }
   }
 
   return (
-    <div className={`${card} border ${dk ? 'border-white/10' : 'border-gray-200'} rounded-xl p-4 hover:shadow-lg transition-all duration-200`}>
+    <div className={`${card} border ${border} rounded-xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${
+      destacado ? 'ring-2 ring-green-500 shadow-lg' : ''
+    }`}>
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 ${colores[color]} rounded-lg flex items-center justify-center`}>
-            <Icon className="w-4 h-4" />
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 ${colores[color].icon} rounded-xl flex items-center justify-center shadow-lg`}>
+            <Icon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className={`font-semibold ${text} text-sm`}>{titulo}</h3>
+            <h3 className={`font-bold ${text} ${destacado ? 'text-lg' : 'text-base'}`}>
+              {titulo}
+              {destacado && <Star className="w-4 h-4 text-yellow-500 inline ml-2" />}
+            </h3>
             <p className={`text-xs ${sub}`}>{viajes} viaje{viajes !== 1 ? 's' : ''}</p>
           </div>
         </div>
+        {destacado && (
+          <span className="text-xs px-2 py-1 bg-green-500/20 text-green-500 rounded-full font-medium">
+            General
+          </span>
+        )}
       </div>
 
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between mt-2">
         <div>
-          <p className={`text-2xl font-bold ${text}`}>{formatearDuracion(duracion)}</p>
-          <p className={`text-[10px] ${sub} mt-1`}>Promedio por viaje</p>
+          <p className={`text-3xl font-black ${destacado ? 'text-green-500' : text}`}>
+            {formatearPromedio(promedioMinutos)}
+          </p>
+          <p className={`text-[10px] ${sub} mt-1 flex items-center gap-1`}>
+            <Timer className="w-3 h-3" />
+            Promedio por viaje
+          </p>
         </div>
-        {viajes > 0 && (
-          <div className={`text-xs px-2 py-1 rounded-full ${colores[color]} bg-opacity-30`}>
-            ⏱️ {Math.round(duracion / viajes)} min/viaje
+      </div>
+
+      {/* Barra de progreso visual */}
+      {viajes > 0 && (
+        <div className="mt-3 pt-2 border-t border-dashed border-white/10">
+          <div className="flex items-center gap-2">
+            <Zap className={`w-3 h-3 ${colores[color].text}`} />
+            <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full bg-gradient-to-r ${colores[color].bg}`}
+                style={{ width: `${Math.min(100, (promedioMinutos / 120) * 100)}%` }}
+              />
+            </div>
+            <span className={`text-[9px] ${sub}`}>120 min máx</span>
           </div>
-        )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── COMPONENTE DE TARJETA DE BODEGA MEJORADA ────────────────────────────
+const TarjetaBodega = ({ bodega, seleccionada, onClick, duracionPromedio, viajesConDuracion, text, sub, card, border, dk }) => {
+  const porcentajeDanados = bodega.totalSacos > 0 
+    ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
+    : 0
+
+  const eficiencia = bodega.totalSacos > 0 
+    ? ((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)
+    : 0
+
+  // Formatear duración promedio
+  const formatearDuracion = (minutos) => {
+    if (!minutos || minutos === 0) return '—'
+    if (minutos < 60) return `${Math.round(minutos)} min`
+    const h = Math.floor(minutos / 60)
+    const m = Math.round(minutos % 60)
+    return m > 0 ? `${h}h ${m}m` : `${h}h`
+  }
+
+  return (
+    <div 
+      onClick={onClick}
+      className={`${card} border ${border} rounded-xl p-4 hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1 ${
+        seleccionada ? 'ring-2 ring-green-500 shadow-lg' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+            <Package className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className={`font-bold ${text}`}>{bodega.bodega}</h3>
+            <p className={`text-xs ${sub}`}>{bodega.viajes} viaje{bodega.viajes !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+        <div className={`text-xs px-2 py-1 rounded-full font-medium ${
+          porcentajeDanados < 1 ? 'bg-green-500/20 text-green-500' :
+          porcentajeDanados < 3 ? 'bg-yellow-500/20 text-yellow-500' :
+          'bg-red-500/20 text-red-500'
+        }`}>
+          {porcentajeDanados}% dañados
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="text-center p-2 rounded-lg bg-white/5">
+          <p className={`text-xs ${sub}`}>Sacos</p>
+          <p className={`font-bold text-lg ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
+        </div>
+        <div className="text-center p-2 rounded-lg bg-white/5">
+          <p className={`text-xs ${sub}`}>Dañados</p>
+          <p className={`font-bold text-lg ${bodega.totalDanados > 0 ? 'text-red-400' : text}`}>
+            {bodega.totalDanados}
+          </p>
+        </div>
+        <div className="text-center p-2 rounded-lg bg-white/5">
+          <p className={`text-xs ${sub}`}>TM</p>
+          <p className="font-bold text-lg text-green-500">{bodega.totalTM.toFixed(1)}</p>
+        </div>
+      </div>
+
+      {/* Duración promedio */}
+      {viajesConDuracion > 0 && (
+        <div className="mb-3 p-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Timer className="w-3 h-3 text-blue-400" />
+              <span className={`text-xs ${sub}`}>Promedio:</span>
+            </div>
+            <span className={`font-bold text-blue-400`}>
+              {formatearDuracion(duracionPromedio)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de eficiencia */}
+      <div className="mt-2">
+        <div className="flex justify-between text-[10px] mb-1">
+          <span className={sub}>Eficiencia</span>
+          <span className="font-bold text-green-500">{eficiencia}%</span>
+        </div>
+        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+            style={{ width: `${eficiencia}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Indicador de expansión */}
+      <div className="mt-2 flex justify-center">
+        <ChevronRight className={`w-5 h-5 ${sub} transition-transform duration-300 ${
+          seleccionada ? 'rotate-90' : ''
+        }`} />
       </div>
     </div>
   )
@@ -487,11 +649,11 @@ const TarjetaDuracion = ({ titulo, duracion, viajes, icon: Icon, color = 'green'
 // ─── COMPONENTE DE TABLA DE VIAJES POR BODEGA ────────────────────────────
 const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, text, dk, onClose }) => {
   return (
-    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl border ${dk ? 'border-white/10' : 'border-gray-200'} overflow-hidden`}>
-      <div className={`px-4 py-3 ${dk ? 'bg-slate-800' : 'bg-gray-100'} border-b ${dk ? 'border-white/10' : 'border-gray-200'} flex items-center justify-between`}>
+    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl border ${dk ? 'border-white/10' : 'border-gray-200'} overflow-hidden animate-slideDown`}>
+      <div className={`px-4 py-3 ${dk ? 'bg-gradient-to-r from-slate-800 to-slate-700' : 'bg-gradient-to-r from-gray-100 to-gray-50'} border-b ${dk ? 'border-white/10' : 'border-gray-200'} flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <Package className="w-4 h-4 text-green-500" />
-          <h3 className={`font-semibold ${text}`}>
+          <h3 className={`font-bold ${text}`}>
             Viajes - {bodega}
           </h3>
           <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'} ${sub}`}>
@@ -678,7 +840,6 @@ export default function RegistroSacosPage() {
       toast.success('Registro eliminado')
       await cargarRegistros(barco.id)
       
-      // Si la bodega seleccionada ya no tiene registros, cerrarla
       if (bodegaSeleccionada) {
         const bodegaActualizada = statsPorBodega.find(b => b.bodega === bodegaSeleccionada)
         if (!bodegaActualizada || bodegaActualizada.viajes === 0) {
@@ -691,7 +852,7 @@ export default function RegistroSacosPage() {
     }
   }
 
-  // Calcular duración promedio general
+  // Calcular duración promedio general EN MINUTOS
   const calcularDuracionPromedio = () => {
     const registrosConDuracion = registros.filter(r => r.duracion && r.duracion !== '—')
     if (registrosConDuracion.length === 0) return 0
@@ -701,10 +862,11 @@ export default function RegistroSacosPage() {
       return sum + (h * 60 + m)
     }, 0)
     
+    // ESTO ES EL PROMEDIO EN MINUTOS
     return totalMinutos / registrosConDuracion.length
   }
 
-  // Calcular duración promedio por bodega
+  // Calcular duración promedio por bodega EN MINUTOS
   const calcularDuracionPorBodega = (bodega) => {
     const registrosBodega = registros.filter(r => r.bodega === bodega && r.duracion && r.duracion !== '—')
     if (registrosBodega.length === 0) return 0
@@ -714,6 +876,7 @@ export default function RegistroSacosPage() {
       return sum + (h * 60 + m)
     }, 0)
     
+    // ESTO ES EL PROMEDIO EN MINUTOS
     return totalMinutos / registrosBodega.length
   }
 
@@ -778,7 +941,7 @@ export default function RegistroSacosPage() {
               { label: 'Total TM',     value: stats.totalTM.toFixed(3) },
               { label: 'Prom. / Viaje',value: `${stats.promedioViaje.toFixed(3)} TM` },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-white/10 rounded-xl px-3 py-3 sm:py-4">
+              <div key={label} className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-3 sm:py-4">
                 <p className="text-green-200 text-[10px] sm:text-xs">{label}</p>
                 <p className="text-white font-bold text-lg sm:text-2xl leading-tight">{value}</p>
               </div>
@@ -790,12 +953,12 @@ export default function RegistroSacosPage() {
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
 
-        {/* Tarjetas de duración promedio */}
+        {/* Tarjetas de duración promedio - AHORA MUESTRA EL PROMEDIO CORRECTO */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* General */}
+          {/* General - DESTACADO */}
           <TarjetaDuracion
             titulo="Promedio General"
-            duracion={duracionPromedioGeneral * registrosConDuracion}
+            duracion={duracionPromedioGeneral} // ← ESTO YA ESTÁ EN MINUTOS
             viajes={registrosConDuracion}
             icon={TrendingUp}
             color="green"
@@ -804,19 +967,21 @@ export default function RegistroSacosPage() {
             text={text}
             dk={dk}
             card={card}
+            border={border}
+            destacado={true}
           />
           
           {/* Por bodega (top 3) */}
           {statsPorBodega.slice(0, 3).map((bodega, index) => {
             const colores = ['blue', 'yellow', 'purple']
-            const duracion = calcularDuracionPorBodega(bodega.bodega)
+            const duracion = calcularDuracionPorBodega(bodega.bodega) // ← ESTO YA ESTÁ EN MINUTOS
             const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
             
             return (
               <TarjetaDuracion
                 key={index}
                 titulo={bodega.bodega}
-                duracion={duracion * viajesConDuracion}
+                duracion={duracion} // ← PASAMOS EL PROMEDIO EN MINUTOS
                 viajes={viajesConDuracion}
                 icon={Timer}
                 color={colores[index]}
@@ -825,12 +990,14 @@ export default function RegistroSacosPage() {
                 text={text}
                 dk={dk}
                 card={card}
+                border={border}
+                destacado={false}
               />
             )
           })}
         </div>
 
-        {/* Cards de Resumen por Bodega */}
+        {/* Cards de Resumen por Bodega - MEJORADAS */}
         {statsPorBodega.length > 0 && (
           <div className="space-y-3">
             <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
@@ -839,82 +1006,25 @@ export default function RegistroSacosPage() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {statsPorBodega.map((bodega, index) => {
-                const porcentajeDanados = bodega.totalSacos > 0 
-                  ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
-                  : 0
-
-                const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
+                const duracionPromedio = calcularDuracionPorBodega(bodega.bodega) // ← ESTO YA ESTÁ EN MINUTOS
                 const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
 
                 return (
-                  <div key={index} 
+                  <TarjetaBodega
+                    key={index}
+                    bodega={bodega}
+                    seleccionada={bodegaSeleccionada === bodega.bodega}
                     onClick={() => setBodegaSeleccionada(
                       bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
                     )}
-                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-200 cursor-pointer ${
-                      bodegaSeleccionada === bodega.bodega ? 'ring-2 ring-green-500' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-                          <Package className="w-4 h-4 text-green-500" />
-                        </div>
-                        <div>
-                          <h3 className={`font-bold ${text}`}>{bodega.bodega}</h3>
-                          <p className={`text-xs ${sub}`}>{bodega.viajes} viaje{bodega.viajes !== 1 ? 's' : ''}</p>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 ${sub} transition-transform ${
-                        bodegaSeleccionada === bodega.bodega ? 'rotate-90' : ''
-                      }`} />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="text-center">
-                        <p className={`text-xs ${sub}`}>Sacos</p>
-                        <p className={`font-bold ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className={`text-xs ${sub}`}>Dañados</p>
-                        <p className={`font-bold ${
-                          bodega.totalDanados > 0 ? 'text-red-400' : text
-                        }`}>{bodega.totalDanados}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className={`text-xs ${sub}`}>TM</p>
-                        <p className="font-bold text-green-500">{bodega.totalTM.toFixed(2)}</p>
-                      </div>
-                    </div>
-
-                    {/* Duración promedio */}
-                    {viajesConDuracion > 0 && (
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className={sub}>⏱️ Prom. duración:</span>
-                        <span className={`font-medium ${text}`}>
-                          {Math.floor(duracionPromedio / 60)}h {Math.floor(duracionPromedio % 60)}m
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Barra de progreso simple */}
-                    <div className="mt-3">
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className={sub}>Buenos: {((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)}%</span>
-                        <span className={sub}>Dañados: {porcentajeDanados}%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-green-500 rounded-full"
-                          style={{ 
-                            width: bodega.totalSacos > 0 
-                              ? `${((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos) * 100}%` 
-                              : '0%' 
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                    duracionPromedio={duracionPromedio} // ← PASAMOS EL PROMEDIO EN MINUTOS
+                    viajesConDuracion={viajesConDuracion}
+                    text={text}
+                    sub={sub}
+                    card={card}
+                    border={border}
+                    dk={dk}
+                  />
                 )
               })}
             </div>
@@ -941,7 +1051,7 @@ export default function RegistroSacosPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <button
               onClick={() => { setRegistroEditando(null); setShowModal(true) }}
-              className="bg-green-500 hover:bg-green-600 active:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors sm:w-auto w-full text-sm sm:text-base"
+              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 transform hover:scale-105 sm:w-auto w-full text-sm sm:text-base shadow-lg"
             >
               <Plus className="w-4 h-4" />
               Nuevo Registro
@@ -1094,7 +1204,7 @@ export default function RegistroSacosPage() {
         </div>
 
         {/* Resumen del día */}
-        <div className={`${card} border ${border} rounded-2xl p-4 sm:p-5`}>
+        <div className={`${card} border ${border} rounded-2xl p-4 sm:p-5 bg-gradient-to-br ${dk ? 'from-slate-900 to-slate-800' : 'from-white to-gray-50'}`}>
           <h3 className={`font-bold ${text} mb-3 flex items-center gap-2 text-sm sm:text-base`}>
             <BarChart3 className="w-4 h-4 text-green-500" />
             Resumen del {dayjs(filtroFecha).format('DD/MM/YYYY')}
@@ -1105,7 +1215,7 @@ export default function RegistroSacosPage() {
               { label: 'Sacos hoy',     value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               color: text },
               { label: 'Toneladas hoy', value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  color: 'text-green-500' },
             ].map(({ label, value, color }) => (
-              <div key={label}>
+              <div key={label} className="text-center p-2 rounded-lg bg-white/5">
                 <p className={`text-xs ${sub}`}>{label}</p>
                 <p className={`text-lg sm:text-xl font-bold ${color}`}>{value}</p>
               </div>
@@ -1125,6 +1235,23 @@ export default function RegistroSacosPage() {
           theme={theme}
         />
       )}
+
+      {/* Estilos para animaciones */}
+      <style jsx>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }
