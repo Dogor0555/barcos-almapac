@@ -150,9 +150,6 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
       if (!formData.cantidad_paquetes || formData.cantidad_paquetes <= 0) { toast.error('Cantidad inválida');  setLoading(false); return }
       if (!formData.peso_saco_kg || formData.peso_saco_kg <= 0)          { toast.error('Peso del saco inválido'); setLoading(false); return }
 
-      const pesoTotalCalculado = (parseFloat(formData.peso_saco_kg) * parseInt(formData.cantidad_paquetes)) / 1000
-      const pesoTotalCalculadoKg = parseFloat(formData.peso_saco_kg) * parseInt(formData.cantidad_paquetes)
-
       const datos = {
         barco_id: barco.id,
         viaje_numero: registro?.viaje_numero || viajeNumero,
@@ -170,7 +167,6 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         observaciones: formData.observaciones || null,
         duracion: calcularDuracion(),
         hora_flujo: formData.hora_fin ? parseInt(formData.hora_fin.split(':')[0]) : null,
-        peso_total_calculado_tm: pesoTotalCalculado,
         created_by: user.id
       }
 
