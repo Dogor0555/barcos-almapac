@@ -438,123 +438,21 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
-// ─── COMPONENTE DE TARJETA DE DURACIÓN - CORREGIDA ────────────────────────────
-const TarjetaDuracion = ({ titulo, duracion, viajes, icon: Icon, color = 'green', theme, sub, text, dk, card, border, destacado = false }) => {
-  const colores = {
-    green: {
-      bg: 'from-green-500/20 to-emerald-500/20',
-      text: 'text-green-500',
-      border: 'border-green-500/30',
-      icon: 'bg-gradient-to-br from-green-500 to-emerald-600'
-    },
-    blue: {
-      bg: 'from-blue-500/20 to-cyan-500/20',
-      text: 'text-blue-500',
-      border: 'border-blue-500/30',
-      icon: 'bg-gradient-to-br from-blue-500 to-cyan-600'
-    },
-    yellow: {
-      bg: 'from-yellow-500/20 to-amber-500/20',
-      text: 'text-yellow-500',
-      border: 'border-yellow-500/30',
-      icon: 'bg-gradient-to-br from-yellow-500 to-amber-600'
-    },
-    purple: {
-      bg: 'from-purple-500/20 to-pink-500/20',
-      text: 'text-purple-500',
-      border: 'border-purple-500/30',
-      icon: 'bg-gradient-to-br from-purple-500 to-pink-600'
-    }
-  }
-
-  // duracion YA ES el promedio por viaje en minutos (lo calculamos en la página principal)
-  const promedioMinutos = Math.round(duracion)
-
-  // Formatear el promedio para mostrarlo bonito
-  const formatearPromedio = (minutos) => {
-    if (!minutos || minutos === 0) return '—'
-    
-    // Si es menos de 60 minutos, mostrar solo minutos
-    if (minutos < 60) {
-      return `${minutos} min`
-    }
-    
-    // Si es más de 60 minutos, mostrar horas y minutos
-    const horas = Math.floor(minutos / 60)
-    const mins = minutos % 60
-    
-    if (mins === 0) {
-      return `${horas}h`
-    } else {
-      return `${horas}h ${mins}m`
-    }
-  }
-
-  return (
-    <div className={`${card} border ${border} rounded-xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${
-      destacado ? 'ring-2 ring-green-500 shadow-lg' : ''
-    }`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 ${colores[color].icon} rounded-xl flex items-center justify-center shadow-lg`}>
-            <Icon className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className={`font-bold ${text} ${destacado ? 'text-lg' : 'text-base'}`}>
-              {titulo}
-              {destacado && <Star className="w-4 h-4 text-yellow-500 inline ml-2" />}
-            </h3>
-            <p className={`text-xs ${sub}`}>{viajes} viaje{viajes !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-        {destacado && (
-          <span className="text-xs px-2 py-1 bg-green-500/20 text-green-500 rounded-full font-medium">
-            General
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-end justify-between mt-2">
-        <div>
-          <p className={`text-3xl font-black ${destacado ? 'text-green-500' : text}`}>
-            {formatearPromedio(promedioMinutos)}
-          </p>
-          <p className={`text-[10px] ${sub} mt-1 flex items-center gap-1`}>
-            <Timer className="w-3 h-3" />
-            Promedio por viaje
-          </p>
-        </div>
-      </div>
-
-      {/* Barra de progreso visual */}
-      {viajes > 0 && (
-        <div className="mt-3 pt-2 border-t border-dashed border-white/10">
-          <div className="flex items-center gap-2">
-            <Zap className={`w-3 h-3 ${colores[color].text}`} />
-            <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full bg-gradient-to-r ${colores[color].bg}`}
-                style={{ width: `${Math.min(100, (promedioMinutos / 120) * 100)}%` }}
-              />
-            </div>
-            <span className={`text-[9px] ${sub}`}>120 min máx</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── COMPONENTE DE TARJETA DE BODEGA MEJORADA ────────────────────────────
-const TarjetaBodega = ({ bodega, seleccionada, onClick, duracionPromedio, viajesConDuracion, text, sub, card, border, dk }) => {
-  const porcentajeDanados = bodega.totalSacos > 0 
-    ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
-    : 0
-
-  const eficiencia = bodega.totalSacos > 0 
-    ? ((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)
-    : 0
-
+// ─── COMPONENTE DE TARJETA DE BODEGA UNIFICADA ────────────────────────────
+const TarjetaBodegaUnificada = ({ 
+  bodega, 
+  duracionPromedio, 
+  viajesConDuracion,
+  esGeneral = false,
+  text, 
+  sub, 
+  card, 
+  border, 
+  dk,
+  onClick,
+  seleccionada
+}) => {
+  
   // Formatear duración promedio
   const formatearDuracion = (minutos) => {
     if (!minutos || minutos === 0) return '—'
@@ -563,6 +461,72 @@ const TarjetaBodega = ({ bodega, seleccionada, onClick, duracionPromedio, viajes
     const m = Math.round(minutos % 60)
     return m > 0 ? `${h}h ${m}m` : `${h}h`
   }
+
+  if (esGeneral) {
+    return (
+      <div className={`${card} border ${border} rounded-xl p-4 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ring-2 ring-green-500 shadow-lg bg-gradient-to-br from-green-500/10 to-emerald-500/10`}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className={`font-bold text-lg ${text}`}>
+                Promedio General
+                <Star className="w-4 h-4 text-yellow-500 inline ml-2" />
+              </h3>
+              <p className={`text-xs ${sub}`}>{bodega.viajes} viaje{bodega.viajes !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <span className="text-xs px-2 py-1 bg-green-500/20 text-green-500 rounded-full font-medium">
+            General
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="text-center p-2 rounded-lg bg-white/5">
+            <p className={`text-xs ${sub}`}>Sacos</p>
+            <p className={`font-bold text-lg ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
+          </div>
+          <div className="text-center p-2 rounded-lg bg-white/5">
+            <p className={`text-xs ${sub}`}>TM</p>
+            <p className="font-bold text-lg text-green-500">{bodega.totalTM.toFixed(1)}</p>
+          </div>
+          <div className="text-center p-2 rounded-lg bg-white/5">
+            <p className={`text-xs ${sub}`}>Viajes</p>
+            <p className={`font-bold text-lg ${text}`}>{bodega.viajes}</p>
+          </div>
+        </div>
+
+        {/* Duración promedio destacada */}
+        {viajesConDuracion > 0 && (
+          <div className="mb-3 p-3 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Timer className="w-4 h-4 text-blue-400" />
+                <span className={`text-sm ${sub}`}>Duración promedio:</span>
+              </div>
+              <span className={`text-xl font-black text-blue-400`}>
+                {formatearDuracion(duracionPromedio)}
+              </span>
+            </div>
+            <p className={`text-[10px] ${sub} mt-1 text-right`}>por viaje</p>
+          </div>
+        )}
+
+       
+      </div>
+    )
+  }
+
+  // Card para bodegas específicas
+  const porcentajeDanados = bodega.totalSacos > 0 
+    ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
+    : 0
+
+  const eficiencia = bodega.totalSacos > 0 
+    ? ((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)
+    : 0
 
   return (
     <div 
@@ -607,7 +571,7 @@ const TarjetaBodega = ({ bodega, seleccionada, onClick, duracionPromedio, viajes
         </div>
       </div>
 
-      {/* Duración promedio */}
+      {/* Duración promedio integrada */}
       {viajesConDuracion > 0 && (
         <div className="mb-3 p-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg">
           <div className="flex items-center justify-between">
@@ -622,19 +586,7 @@ const TarjetaBodega = ({ bodega, seleccionada, onClick, duracionPromedio, viajes
         </div>
       )}
 
-      {/* Barra de eficiencia */}
-      <div className="mt-2">
-        <div className="flex justify-between text-[10px] mb-1">
-          <span className={sub}>Eficiencia</span>
-          <span className="font-bold text-green-500">{eficiencia}%</span>
-        </div>
-        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
-            style={{ width: `${eficiencia}%` }}
-          />
-        </div>
-      </div>
+     
 
       {/* Indicador de expansión */}
       <div className="mt-2 flex justify-center">
@@ -822,6 +774,14 @@ export default function RegistroSacosPage() {
       })
 
       const statsArray = Array.from(bodegasMap.values())
+      
+      // Calcular eficiencia para cada bodega
+      statsArray.forEach(b => {
+        b.eficiencia = b.totalSacos > 0 
+          ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100)
+          : 0
+      })
+
       setStatsPorBodega(statsArray)
 
     } catch (err) {
@@ -862,7 +822,6 @@ export default function RegistroSacosPage() {
       return sum + (h * 60 + m)
     }, 0)
     
-    // ESTO ES EL PROMEDIO EN MINUTOS
     return totalMinutos / registrosConDuracion.length
   }
 
@@ -876,8 +835,18 @@ export default function RegistroSacosPage() {
       return sum + (h * 60 + m)
     }, 0)
     
-    // ESTO ES EL PROMEDIO EN MINUTOS
     return totalMinutos / registrosBodega.length
+  }
+
+  // Crear objeto para la tarjeta general
+  const statsGenerales = {
+    bodega: 'General',
+    totalSacos: stats.totalSacos,
+    totalTM: stats.totalTM,
+    viajes: stats.totalViajes,
+    eficiencia: stats.totalSacos > 0 
+      ? Math.round(((stats.totalSacos - registros.reduce((s, r) => s + r.paquetes_danados, 0)) / stats.totalSacos) * 100)
+      : 0
   }
 
   const duracionPromedioGeneral = calcularDuracionPromedio()
@@ -953,83 +922,53 @@ export default function RegistroSacosPage() {
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
 
-        {/* Tarjetas de duración promedio - AHORA MUESTRA EL PROMEDIO CORRECTO */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* General - DESTACADO */}
-          <TarjetaDuracion
-            titulo="Promedio General"
-            duracion={duracionPromedioGeneral} // ← ESTO YA ESTÁ EN MINUTOS
-            viajes={registrosConDuracion}
-            icon={TrendingUp}
-            color="green"
-            theme={theme}
-            sub={sub}
-            text={text}
-            dk={dk}
-            card={card}
-            border={border}
-            destacado={true}
-          />
+        {/* Cards de Resumen Unificadas - General + Bodegas */}
+        <div className="space-y-3">
+          <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
+            <Layers className="w-5 h-5 text-green-500" />
+            Resumen de Operaciones
+          </h2>
           
-          {/* Por bodega (top 3) */}
-          {statsPorBodega.slice(0, 3).map((bodega, index) => {
-            const colores = ['blue', 'yellow', 'purple']
-            const duracion = calcularDuracionPorBodega(bodega.bodega) // ← ESTO YA ESTÁ EN MINUTOS
-            const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
-            
-            return (
-              <TarjetaDuracion
-                key={index}
-                titulo={bodega.bodega}
-                duracion={duracion} // ← PASAMOS EL PROMEDIO EN MINUTOS
-                viajes={viajesConDuracion}
-                icon={Timer}
-                color={colores[index]}
-                theme={theme}
-                sub={sub}
-                text={text}
-                dk={dk}
-                card={card}
-                border={border}
-                destacado={false}
-              />
-            )
-          })}
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Tarjeta General - Siempre visible */}
+            <TarjetaBodegaUnificada
+              bodega={statsGenerales}
+              duracionPromedio={duracionPromedioGeneral}
+              viajesConDuracion={registrosConDuracion}
+              esGeneral={true}
+              text={text}
+              sub={sub}
+              card={card}
+              border={border}
+              dk={dk}
+            />
 
-        {/* Cards de Resumen por Bodega - MEJORADAS */}
-        {statsPorBodega.length > 0 && (
-          <div className="space-y-3">
-            <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
-              <Layers className="w-5 h-5 text-green-500" />
-              Resumen por Bodega
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {statsPorBodega.map((bodega, index) => {
-                const duracionPromedio = calcularDuracionPorBodega(bodega.bodega) // ← ESTO YA ESTÁ EN MINUTOS
-                const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
+            {/* Tarjetas de bodegas */}
+            {statsPorBodega.map((bodega, index) => {
+              const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
+              const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
 
-                return (
-                  <TarjetaBodega
-                    key={index}
-                    bodega={bodega}
-                    seleccionada={bodegaSeleccionada === bodega.bodega}
-                    onClick={() => setBodegaSeleccionada(
-                      bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
-                    )}
-                    duracionPromedio={duracionPromedio} // ← PASAMOS EL PROMEDIO EN MINUTOS
-                    viajesConDuracion={viajesConDuracion}
-                    text={text}
-                    sub={sub}
-                    card={card}
-                    border={border}
-                    dk={dk}
-                  />
-                )
-              })}
-            </div>
+              return (
+                <TarjetaBodegaUnificada
+                  key={index}
+                  bodega={bodega}
+                  duracionPromedio={duracionPromedio}
+                  viajesConDuracion={viajesConDuracion}
+                  esGeneral={false}
+                  text={text}
+                  sub={sub}
+                  card={card}
+                  border={border}
+                  dk={dk}
+                  onClick={() => setBodegaSeleccionada(
+                    bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
+                  )}
+                  seleccionada={bodegaSeleccionada === bodega.bodega}
+                />
+              )
+            })}
           </div>
-        )}
+        </div>
 
         {/* Tabla de viajes de la bodega seleccionada */}
         {bodegaSeleccionada && (
