@@ -171,7 +171,6 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         duracion: calcularDuracion(),
         hora_flujo: formData.hora_fin ? parseInt(formData.hora_fin.split(':')[0]) : null,
         peso_total_calculado_tm: pesoTotalCalculado,
-        peso_total_calculado_kg: pesoTotalCalculadoKg,
         created_by: user.id
       }
 
