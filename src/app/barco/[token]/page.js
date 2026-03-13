@@ -2139,11 +2139,7 @@ export default function BarcoPesadorPage() {
                 Bitácora
               </button>
             </div>
-            {barco.estado === 'finalizado' && (
-              <p className="text-xs text-red-400 text-center mt-2">
-                Modo solo lectura - Operación finalizada
-              </p>
-            )}
+            
           </div>
         )}
 
