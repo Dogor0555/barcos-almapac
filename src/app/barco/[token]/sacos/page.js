@@ -8,7 +8,8 @@ import {
   Package, Ship, ArrowLeft, Plus, Clock, 
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
-  Sun, Moon, Search, Grid, Layers, ChevronRight
+  Sun, Moon, Search, Grid, Layers, ChevronRight,
+  Timer, TrendingUp
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -437,6 +438,52 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
+// ─── COMPONENTE DE TARJETA DE DURACIÓN ────────────────────────────────────
+const TarjetaDuracion = ({ titulo, duracion, viajes, icon: Icon, color = 'green', theme, sub, text, dk, card }) => {
+  const colores = {
+    green: 'text-green-500 bg-green-500/20',
+    blue: 'text-blue-500 bg-blue-500/20',
+    yellow: 'text-yellow-500 bg-yellow-500/20',
+    purple: 'text-purple-500 bg-purple-500/20'
+  }
+
+  // Convertir duración de minutos a formato HH:MM
+  const formatearDuracion = (minutos) => {
+    if (!minutos || minutos === 0) return '—'
+    const h = Math.floor(minutos / 60)
+    const m = Math.floor(minutos % 60)
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} h`
+  }
+
+  return (
+    <div className={`${card} border ${dk ? 'border-white/10' : 'border-gray-200'} rounded-xl p-4 hover:shadow-lg transition-all duration-200`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className={`w-8 h-8 ${colores[color]} rounded-lg flex items-center justify-center`}>
+            <Icon className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className={`font-semibold ${text} text-sm`}>{titulo}</h3>
+            <p className={`text-xs ${sub}`}>{viajes} viaje{viajes !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-end justify-between">
+        <div>
+          <p className={`text-2xl font-bold ${text}`}>{formatearDuracion(duracion)}</p>
+          <p className={`text-[10px] ${sub} mt-1`}>Promedio por viaje</p>
+        </div>
+        {viajes > 0 && (
+          <div className={`text-xs px-2 py-1 rounded-full ${colores[color]} bg-opacity-30`}>
+            ⏱️ {Math.round(duracion / viajes)} min/viaje
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── COMPONENTE DE TABLA DE VIAJES POR BODEGA ────────────────────────────
 const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, text, dk, onClose }) => {
   return (
@@ -470,7 +517,7 @@ const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, te
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Sacos</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Dañados</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">TM</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Hora</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400"></th>
             </tr>
           </thead>
@@ -498,7 +545,7 @@ const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, te
                       {reg.peso_total_calculado_tm?.toFixed(2)}
                       {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{reg.hora_inicio}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{reg.duracion}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <button onClick={() => onEdit(reg)}
@@ -644,6 +691,35 @@ export default function RegistroSacosPage() {
     }
   }
 
+  // Calcular duración promedio general
+  const calcularDuracionPromedio = () => {
+    const registrosConDuracion = registros.filter(r => r.duracion && r.duracion !== '—')
+    if (registrosConDuracion.length === 0) return 0
+    
+    const totalMinutos = registrosConDuracion.reduce((sum, r) => {
+      const [h, m] = r.duracion.split(':').map(Number)
+      return sum + (h * 60 + m)
+    }, 0)
+    
+    return totalMinutos / registrosConDuracion.length
+  }
+
+  // Calcular duración promedio por bodega
+  const calcularDuracionPorBodega = (bodega) => {
+    const registrosBodega = registros.filter(r => r.bodega === bodega && r.duracion && r.duracion !== '—')
+    if (registrosBodega.length === 0) return 0
+    
+    const totalMinutos = registrosBodega.reduce((sum, r) => {
+      const [h, m] = r.duracion.split(':').map(Number)
+      return sum + (h * 60 + m)
+    }, 0)
+    
+    return totalMinutos / registrosBodega.length
+  }
+
+  const duracionPromedioGeneral = calcularDuracionPromedio()
+  const registrosConDuracion = registros.filter(r => r.duracion && r.duracion !== '—').length
+
   const registrosFiltrados = registros.filter(r => {
     if (filtroFecha && r.fecha !== filtroFecha) return false
     if (searchPlaca && !r.placa_camion.toLowerCase().includes(searchPlaca.toLowerCase())) return false
@@ -714,6 +790,46 @@ export default function RegistroSacosPage() {
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
 
+        {/* Tarjetas de duración promedio */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* General */}
+          <TarjetaDuracion
+            titulo="Promedio General"
+            duracion={duracionPromedioGeneral * registrosConDuracion}
+            viajes={registrosConDuracion}
+            icon={TrendingUp}
+            color="green"
+            theme={theme}
+            sub={sub}
+            text={text}
+            dk={dk}
+            card={card}
+          />
+          
+          {/* Por bodega (top 3) */}
+          {statsPorBodega.slice(0, 3).map((bodega, index) => {
+            const colores = ['blue', 'yellow', 'purple']
+            const duracion = calcularDuracionPorBodega(bodega.bodega)
+            const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
+            
+            return (
+              <TarjetaDuracion
+                key={index}
+                titulo={bodega.bodega}
+                duracion={duracion * viajesConDuracion}
+                viajes={viajesConDuracion}
+                icon={Timer}
+                color={colores[index]}
+                theme={theme}
+                sub={sub}
+                text={text}
+                dk={dk}
+                card={card}
+              />
+            )
+          })}
+        </div>
+
         {/* Cards de Resumen por Bodega */}
         {statsPorBodega.length > 0 && (
           <div className="space-y-3">
@@ -726,6 +842,9 @@ export default function RegistroSacosPage() {
                 const porcentajeDanados = bodega.totalSacos > 0 
                   ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
                   : 0
+
+                const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
+                const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
 
                 return (
                   <div key={index} 
@@ -767,6 +886,16 @@ export default function RegistroSacosPage() {
                         <p className="font-bold text-green-500">{bodega.totalTM.toFixed(2)}</p>
                       </div>
                     </div>
+
+                    {/* Duración promedio */}
+                    {viajesConDuracion > 0 && (
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className={sub}>⏱️ Prom. duración:</span>
+                        <span className={`font-medium ${text}`}>
+                          {Math.floor(duracionPromedio / 60)}h {Math.floor(duracionPromedio % 60)}m
+                        </span>
+                      </div>
+                    )}
 
                     {/* Barra de progreso simple */}
                     <div className="mt-3">
@@ -837,7 +966,7 @@ export default function RegistroSacosPage() {
             <table className="w-full">
               <thead className={dk ? 'bg-slate-800' : 'bg-gray-100'}>
                 <tr>
-                  {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Horario',''].map(h => (
+                  {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
                     <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
                   ))}
                 </tr>
@@ -869,7 +998,7 @@ export default function RegistroSacosPage() {
                         {reg.peso_total_calculado_tm?.toFixed(3)}
                         {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
                       </td>
-                      <td className={`px-4 py-3 text-xs ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</td>
+                      <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
