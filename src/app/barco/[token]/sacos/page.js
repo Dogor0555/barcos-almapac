@@ -8,7 +8,7 @@ import {
   Package, Ship, ArrowLeft, Plus, Clock, 
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
-  Sun, Moon, Search, Grid, Layers, ChevronRight,
+  Sun, Moon, Search, Grid, Layers, ChevronRight, Card,
   Timer, TrendingUp
 } from 'lucide-react'
 import toast from 'react-hot-toast'
