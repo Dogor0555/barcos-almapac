@@ -761,7 +761,7 @@ export default function DashboardSacosCompartido({ barco }) {
               </div>
               <div className="alm-progress-stats">
                 <div className="alm-progress-stat">
-                  <span className="alm-progress-stat-label">Meta total:</span>
+                  <span className="alm-progress-stat-label">Cantidad Manifestada total:</span>
                   <span className="alm-progress-stat-value">{fmtTM(totalMetas, 2)} TM</span>
                 </div>
                 <div className="alm-progress-stat">
@@ -1018,7 +1018,7 @@ export default function DashboardSacosCompartido({ barco }) {
               </span>
               <span className="alm-legend-item">
                 <span style={{ background: '#fbbf24' }} className="alm-legend-dot" />
-                Meta: {fmtTM(totalMetas, 2)} TM
+                Cantidad Manifestada: {fmtTM(totalMetas, 2)} TM
               </span>
             </div>
           </div>
@@ -1056,7 +1056,7 @@ export default function DashboardSacosCompartido({ barco }) {
           {/* TABLA RESUMEN POR BODEGA */}
           <div className="alm-table-card">
             <div className="alm-table-header">
-              <h3 className="alm-section-title">📊 RESUMEN POR BODEGA CON METAS</h3>
+              <h3 className="alm-section-title">📊 RESUMEN POR BODEGA CON CANTIDADES MANIFESTADAS</h3>
             </div>
             <div className="alm-table-scroll">
               <table className="alm-table">
@@ -1066,7 +1066,7 @@ export default function DashboardSacosCompartido({ barco }) {
                     <th className="alm-th-num">Viajes</th>
                     <th className="alm-th-num">Sacos</th>
                     <th className="alm-th-num">Actual (TM)</th>
-                    <th className="alm-th-num">Meta (TM)</th>
+                    <th className="alm-th-num">Cantidad Manifestada (TM)</th>
                     <th className="alm-th-num">%</th>
                     <th className="alm-th-num">Faltante (TM)</th>
                     <th className="alm-th-num">Flujo/h</th>
