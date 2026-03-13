@@ -8,7 +8,7 @@ import {
   Package, Ship, ArrowLeft, Plus, Clock, 
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
-  Sun, Moon, Search, Grid, Layers, ChevronDown, ChevronUp
+  Sun, Moon, Search, Grid, Layers, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -30,7 +30,7 @@ const useTheme = () => {
   return { theme, toggleTheme: toggle }
 }
 
-// ─── InputField FUERA de cualquier componente para evitar re-montaje ─────────
+// ─── InputField ─────────
 const InputField = ({ label, lblClass, children, className = '' }) => (
   <div className={className}>
     <label className={`block text-xs ${lblClass} mb-1`}>{label}</label>
@@ -437,56 +437,85 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
-// ─── COMPONENTE DE VIAJE PARA SCROLL POR BODEGA ────────────────────────────
-const ViajeDetalleCard = ({ reg, onEdit, onDelete, theme, sub, text, dk }) => {
-  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-    : null
-
+// ─── COMPONENTE DE TABLA DE VIAJES POR BODEGA ────────────────────────────
+const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, text, dk, onClose }) => {
   return (
-    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl p-3 border ${dk ? 'border-white/5' : 'border-gray-200'} hover:shadow-md transition-all duration-200`}>
-      <div className="flex items-center justify-between mb-2">
+    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl border ${dk ? 'border-white/10' : 'border-gray-200'} overflow-hidden`}>
+      <div className={`px-4 py-3 ${dk ? 'bg-slate-800' : 'bg-gray-100'} border-b ${dk ? 'border-white/10' : 'border-gray-200'} flex items-center justify-between`}>
         <div className="flex items-center gap-2">
-          <span className={`font-bold ${text}`}>#{reg.viaje_numero}</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`}>
-            {dayjs(reg.fecha).format('DD/MM/YY')}
+          <Package className="w-4 h-4 text-green-500" />
+          <h3 className={`font-semibold ${text}`}>
+            Viajes - {bodega}
+          </h3>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'} ${sub}`}>
+            {registros.length}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onEdit(reg)}
-            className="p-1 hover:bg-blue-500/20 rounded-lg transition-colors">
-            <Edit2 className="w-3 h-3 text-blue-400" />
-          </button>
-          <button onClick={() => onDelete(reg.id)}
-            className="p-1 hover:bg-red-500/20 rounded-lg transition-colors">
-            <Trash2 className="w-3 h-3 text-red-400" />
-          </button>
-        </div>
+        <button 
+          onClick={onClose}
+          className="p-1 hover:bg-red-500/20 rounded-lg transition-colors"
+          title="Cerrar"
+        >
+          <X className="w-4 h-4 text-red-400" />
+        </button>
       </div>
-
-      <div className="grid grid-cols-4 gap-1 text-xs">
-        <div>
-          <p className={`text-[9px] ${sub}`}>Placa</p>
-          <p className="font-mono text-blue-400 font-bold truncate">{reg.placa_camion}</p>
-        </div>
-        <div>
-          <p className={`text-[9px] ${sub}`}>Sacos</p>
-          <p className={`font-bold ${text}`}>
-            {reg.cantidad_paquetes}
-            {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1 text-[9px]">(-{reg.paquetes_danados})</span>}
-          </p>
-        </div>
-        <div>
-          <p className={`text-[9px] ${sub}`}>TM</p>
-          <p className="font-bold text-green-400 flex items-center gap-0.5">
-            {reg.peso_total_calculado_tm?.toFixed(2)}
-            {pctDif && pctDif > 5 && <AlertCircle className="w-2.5 h-2.5 text-red-400" />}
-          </p>
-        </div>
-        <div>
-          <p className={`text-[9px] ${sub}`}>Hora</p>
-          <p className={`${sub} text-[9px]`}>{reg.hora_inicio}</p>
-        </div>
+      
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className={dk ? 'bg-slate-700/50' : 'bg-gray-200/50'}>
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">#</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Placa</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Sacos</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Dañados</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">TM</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Hora</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400"></th>
+            </tr>
+          </thead>
+          <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-200'}`}>
+            {registros
+              .sort((a, b) => a.viaje_numero - b.viaje_numero)
+              .map(reg => {
+                const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                  ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                  : null
+                
+                return (
+                  <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-100'} transition-colors`}>
+                    <td className="px-3 py-2 font-medium">#{reg.viaje_numero}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{dayjs(reg.fecha).format('DD/MM/YY')}</td>
+                    <td className="px-3 py-2 font-mono text-blue-400 text-xs">{reg.placa_camion}</td>
+                    <td className="px-3 py-2 font-medium">{reg.cantidad_paquetes}</td>
+                    <td className="px-3 py-2">
+                      {reg.paquetes_danados > 0 ? 
+                        <span className="text-red-400">{reg.paquetes_danados}</span> : 
+                        <span className="text-slate-500">-</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 font-medium text-green-400 text-xs">
+                      {reg.peso_total_calculado_tm?.toFixed(2)}
+                      {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{reg.hora_inicio}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => onEdit(reg)}
+                          className="p-1 hover:bg-blue-500/20 rounded transition-colors">
+                          <Edit2 className="w-3 h-3 text-blue-400" />
+                        </button>
+                        <button onClick={() => onDelete(reg.id)}
+                          className="p-1 hover:bg-red-500/20 rounded transition-colors">
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -600,10 +629,11 @@ export default function RegistroSacosPage() {
       const { error } = await supabase.from('registros_sacos').delete().eq('id', id)
       if (error) throw error
       toast.success('Registro eliminado')
-      cargarRegistros(barco.id)
+      await cargarRegistros(barco.id)
+      
       // Si la bodega seleccionada ya no tiene registros, cerrarla
       if (bodegaSeleccionada) {
-        const bodegaActualizada = statsPorBodega.find(b => b.bodega === bodegaSeleccionada.bodega)
+        const bodegaActualizada = statsPorBodega.find(b => b.bodega === bodegaSeleccionada)
         if (!bodegaActualizada || bodegaActualizada.viajes === 0) {
           setBodegaSeleccionada(null)
         }
@@ -697,14 +727,14 @@ export default function RegistroSacosPage() {
                   ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
                   : 0
 
-                const isSelected = bodegaSeleccionada?.bodega === bodega.bodega
-
                 return (
                   <div key={index} 
-                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-300 cursor-pointer ${
-                      isSelected ? 'ring-2 ring-green-500' : ''
+                    onClick={() => setBodegaSeleccionada(
+                      bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
+                    )}
+                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-200 cursor-pointer ${
+                      bodegaSeleccionada === bodega.bodega ? 'ring-2 ring-green-500' : ''
                     }`}
-                    onClick={() => setBodegaSeleccionada(isSelected ? null : bodega)}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
@@ -716,13 +746,9 @@ export default function RegistroSacosPage() {
                           <p className={`text-xs ${sub}`}>{bodega.viajes} viaje{bodega.viajes !== 1 ? 's' : ''}</p>
                         </div>
                       </div>
-                      <div className={`text-xs px-2 py-1 rounded-full ${
-                        porcentajeDanados < 1 ? 'bg-green-500/20 text-green-500' :
-                        porcentajeDanados < 3 ? 'bg-yellow-500/20 text-yellow-500' :
-                        'bg-red-500/20 text-red-500'
-                      }`}>
-                        {porcentajeDanados}% dañados
-                      </div>
+                      <ChevronRight className={`w-4 h-4 ${sub} transition-transform ${
+                        bodegaSeleccionada === bodega.bodega ? 'rotate-90' : ''
+                      }`} />
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
@@ -732,7 +758,9 @@ export default function RegistroSacosPage() {
                       </div>
                       <div className="text-center">
                         <p className={`text-xs ${sub}`}>Dañados</p>
-                        <p className="font-bold text-red-400">{bodega.totalDanados}</p>
+                        <p className={`font-bold ${
+                          bodega.totalDanados > 0 ? 'text-red-400' : text
+                        }`}>{bodega.totalDanados}</p>
                       </div>
                       <div className="text-center">
                         <p className={`text-xs ${sub}`}>TM</p>
@@ -740,13 +768,13 @@ export default function RegistroSacosPage() {
                       </div>
                     </div>
 
-                    {/* Barra de progreso de sacos buenos vs dañados */}
+                    {/* Barra de progreso simple */}
                     <div className="mt-3">
                       <div className="flex justify-between text-[10px] mb-1">
-                        <span className={sub}>Sacos buenos: {bodega.totalSacos - bodega.totalDanados}</span>
-                        <span className={sub}>Dañados: {bodega.totalDanados}</span>
+                        <span className={sub}>Buenos: {((bodega.totalSacos - bodega.totalDanados) / bodega.totalSacos * 100).toFixed(0)}%</span>
+                        <span className={sub}>Dañados: {porcentajeDanados}%</span>
                       </div>
-                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-green-500 rounded-full"
                           style={{ 
@@ -757,15 +785,6 @@ export default function RegistroSacosPage() {
                         />
                       </div>
                     </div>
-
-                    {/* Indicador de expansión */}
-                    <div className="mt-2 flex justify-center">
-                      {isSelected ? (
-                        <ChevronUp className={`w-4 h-4 ${sub}`} />
-                      ) : (
-                        <ChevronDown className={`w-4 h-4 ${sub}`} />
-                      )}
-                    </div>
                   </div>
                 )
               })}
@@ -773,47 +792,19 @@ export default function RegistroSacosPage() {
           </div>
         )}
 
-        {/* Scroll de Viajes por Bodega Seleccionada */}
+        {/* Tabla de viajes de la bodega seleccionada */}
         {bodegaSeleccionada && (
-          <div className={`${card} border ${border} rounded-xl overflow-hidden animate-slideDown`}>
-            <div className={`px-4 py-3 ${dk ? 'bg-slate-800' : 'bg-gray-100'} border-b ${border} flex items-center justify-between`}>
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-green-500" />
-                <h3 className={`font-bold ${text}`}>
-                  Viajes de {bodegaSeleccionada.bodega}
-                </h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'} ${sub}`}>
-                  {bodegaSeleccionada.viajes} viaje{bodegaSeleccionada.viajes !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <button 
-                onClick={() => setBodegaSeleccionada(null)}
-                className={`p-1 rounded-lg hover:bg-red-500/20 transition-colors`}
-              >
-                <X className="w-4 h-4 text-red-400" />
-              </button>
-            </div>
-            
-            <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
-              <div className="space-y-2">
-                {bodegaSeleccionada.registros
-                  .sort((a, b) => a.viaje_numero - b.viaje_numero)
-                  .map(reg => (
-                    <ViajeDetalleCard
-                      key={reg.id}
-                      reg={reg}
-                      onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
-                      onDelete={handleEliminar}
-                      theme={theme}
-                      sub={sub}
-                      text={text}
-                      dk={dk}
-                    />
-                  ))
-                }
-              </div>
-            </div>
-          </div>
+          <TablaViajesBodega
+            bodega={bodegaSeleccionada}
+            registros={statsPorBodega.find(b => b.bodega === bodegaSeleccionada)?.registros || []}
+            onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
+            onDelete={handleEliminar}
+            theme={theme}
+            sub={sub}
+            text={text}
+            dk={dk}
+            onClose={() => setBodegaSeleccionada(null)}
+          />
         )}
 
         {/* Acciones + Filtros */}
@@ -840,9 +831,8 @@ export default function RegistroSacosPage() {
           </div>
         </div>
 
-        {/* Tabla desktop / Cards mobile */}
+        {/* Tabla general */}
         <div className={`${card} border ${border} rounded-2xl overflow-hidden`}>
-
           <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className={dk ? 'bg-slate-800' : 'bg-gray-100'}>
@@ -899,6 +889,7 @@ export default function RegistroSacosPage() {
             </table>
           </div>
 
+          {/* Vista móvil */}
           <div className="sm:hidden">
             {registrosFiltrados.length === 0 ? (
               <div className={`text-center py-12 ${sub}`}>
@@ -1005,37 +996,6 @@ export default function RegistroSacosPage() {
           theme={theme}
         />
       )}
-
-      {/* Estilos para el scroll personalizado y animaciones */}
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: ${dk ? '#1e293b' : '#f1f5f9'};
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: ${dk ? '#475569' : '#94a3b8'};
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: ${dk ? '#64748b' : '#64748b'};
-        }
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slideDown {
-          animation: slideDown 0.3s ease-out;
-        }
-      `}</style>
     </div>
   )
 }
