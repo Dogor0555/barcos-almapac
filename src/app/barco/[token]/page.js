@@ -1562,17 +1562,7 @@ export default function BarcoPesadorPage() {
           )}
         </div>
 
-        {/* Alerta de operación finalizada */}
-        {barco.estado === 'finalizado' && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-            <div className="flex items-center gap-3">
-              <Lock className="w-5 h-5 text-red-400" />
-              <p className="text-red-400 font-medium">
-                Operación finalizada. No se pueden registrar nuevos datos.
-              </p>
-            </div>
-          </div>
-        )}
+        
 
         {/* PESTAÑAS DE PRODUCTOS */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
