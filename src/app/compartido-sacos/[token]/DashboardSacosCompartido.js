@@ -586,7 +586,6 @@ const TarjetaBodegaUnificada = ({
         </div>
       )}
 
-     
       {/* Indicador de expansión */}
       <div className="mt-2 flex justify-center">
         <ChevronRight className={`w-5 h-5 ${sub} transition-transform duration-300 ${
