@@ -8,7 +8,7 @@ import {
   Package, Ship, ArrowLeft, Plus, Clock, 
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
-  Sun, Moon, Search, Grid, Layers
+  Sun, Moon, Search, Grid, Layers, ChevronDown, ChevronUp
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -25,7 +25,6 @@ const useTheme = () => {
   const toggle = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
     setTheme(newTheme)
-    localStorage.setItem('theme', newTheme)
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
   }
   return { theme, toggleTheme: toggle }
@@ -438,6 +437,61 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
+// ─── COMPONENTE DE VIAJE PARA SCROLL POR BODEGA ────────────────────────────
+const ViajeDetalleCard = ({ reg, onEdit, onDelete, theme, sub, text, dk }) => {
+  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+    : null
+
+  return (
+    <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-50'} rounded-xl p-3 border ${dk ? 'border-white/5' : 'border-gray-200'} hover:shadow-md transition-all duration-200`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className={`font-bold ${text}`}>#{reg.viaje_numero}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`}>
+            {dayjs(reg.fecha).format('DD/MM/YY')}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onEdit(reg)}
+            className="p-1 hover:bg-blue-500/20 rounded-lg transition-colors">
+            <Edit2 className="w-3 h-3 text-blue-400" />
+          </button>
+          <button onClick={() => onDelete(reg.id)}
+            className="p-1 hover:bg-red-500/20 rounded-lg transition-colors">
+            <Trash2 className="w-3 h-3 text-red-400" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-1 text-xs">
+        <div>
+          <p className={`text-[9px] ${sub}`}>Placa</p>
+          <p className="font-mono text-blue-400 font-bold truncate">{reg.placa_camion}</p>
+        </div>
+        <div>
+          <p className={`text-[9px] ${sub}`}>Sacos</p>
+          <p className={`font-bold ${text}`}>
+            {reg.cantidad_paquetes}
+            {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1 text-[9px]">(-{reg.paquetes_danados})</span>}
+          </p>
+        </div>
+        <div>
+          <p className={`text-[9px] ${sub}`}>TM</p>
+          <p className="font-bold text-green-400 flex items-center gap-0.5">
+            {reg.peso_total_calculado_tm?.toFixed(2)}
+            {pctDif && pctDif > 5 && <AlertCircle className="w-2.5 h-2.5 text-red-400" />}
+          </p>
+        </div>
+        <div>
+          <p className={`text-[9px] ${sub}`}>Hora</p>
+          <p className={`${sub} text-[9px]`}>{reg.hora_inicio}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ────────────────────────────────────────────────────────
 export default function RegistroSacosPage() {
   const router   = useRouter()
@@ -456,6 +510,7 @@ export default function RegistroSacosPage() {
   const [searchPlaca, setSearchPlaca] = useState('')
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
+  const [bodegaSeleccionada, setBodegaSeleccionada] = useState(null)
 
   const bg      = dk ? 'bg-[#0f172a]'   : 'bg-gray-50'
   const card    = dk ? 'bg-slate-900'   : 'bg-white'
@@ -490,11 +545,10 @@ export default function RegistroSacosPage() {
   const cargarRegistros = async (barcoId) => {
     try {
       const { data, error } = await supabase.from('registros_sacos').select('*')
-        .eq('barco_id', barcoId).order('viaje_numero', { ascending: false })
+        .eq('barco_id', barcoId).order('viaje_numero', { ascending: true })
       if (error) throw error
       
-      // Ordenar por viaje_numero ascendente para mantener el correlativo
-      const registrosOrdenados = (data || []).sort((a, b) => a.viaje_numero - b.viaje_numero)
+      const registrosOrdenados = data || []
       setRegistros(registrosOrdenados)
       
       // Calcular estadísticas generales
@@ -517,7 +571,8 @@ export default function RegistroSacosPage() {
             totalSacos: 0,
             totalDanados: 0,
             totalTM: 0,
-            viajes: 0
+            viajes: 0,
+            registros: []
           })
         }
         const bodegaStat = bodegasMap.get(reg.bodega)
@@ -525,6 +580,7 @@ export default function RegistroSacosPage() {
         bodegaStat.totalDanados += reg.paquetes_danados || 0
         bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
         bodegaStat.viajes += 1
+        bodegaStat.registros.push(reg)
       })
 
       const statsArray = Array.from(bodegasMap.values())
@@ -545,6 +601,13 @@ export default function RegistroSacosPage() {
       if (error) throw error
       toast.success('Registro eliminado')
       cargarRegistros(barco.id)
+      // Si la bodega seleccionada ya no tiene registros, cerrarla
+      if (bodegaSeleccionada) {
+        const bodegaActualizada = statsPorBodega.find(b => b.bodega === bodegaSeleccionada.bodega)
+        if (!bodegaActualizada || bodegaActualizada.viajes === 0) {
+          setBodegaSeleccionada(null)
+        }
+      }
     } catch (err) {
       console.error(err)
       toast.error('Error al eliminar')
@@ -634,10 +697,15 @@ export default function RegistroSacosPage() {
                   ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
                   : 0
 
+                const isSelected = bodegaSeleccionada?.bodega === bodega.bodega
+
                 return (
                   <div key={index} 
-                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1`}>
-                    
+                    className={`${card} border ${border} rounded-xl p-4 hover:shadow-lg transition-all duration-300 cursor-pointer ${
+                      isSelected ? 'ring-2 ring-green-500' : ''
+                    }`}
+                    onClick={() => setBodegaSeleccionada(isSelected ? null : bodega)}
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
@@ -674,9 +742,9 @@ export default function RegistroSacosPage() {
 
                     {/* Barra de progreso de sacos buenos vs dañados */}
                     <div className="mt-3">
-                      <div className="flex justify-between text-[10px] ${sub} mb-1">
-                        <span>Sacos buenos: {bodega.totalSacos - bodega.totalDanados}</span>
-                        <span>Dañados: {bodega.totalDanados}</span>
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className={sub}>Sacos buenos: {bodega.totalSacos - bodega.totalDanados}</span>
+                        <span className={sub}>Dañados: {bodega.totalDanados}</span>
                       </div>
                       <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
                         <div 
@@ -689,9 +757,61 @@ export default function RegistroSacosPage() {
                         />
                       </div>
                     </div>
+
+                    {/* Indicador de expansión */}
+                    <div className="mt-2 flex justify-center">
+                      {isSelected ? (
+                        <ChevronUp className={`w-4 h-4 ${sub}`} />
+                      ) : (
+                        <ChevronDown className={`w-4 h-4 ${sub}`} />
+                      )}
+                    </div>
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Scroll de Viajes por Bodega Seleccionada */}
+        {bodegaSeleccionada && (
+          <div className={`${card} border ${border} rounded-xl overflow-hidden animate-slideDown`}>
+            <div className={`px-4 py-3 ${dk ? 'bg-slate-800' : 'bg-gray-100'} border-b ${border} flex items-center justify-between`}>
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-green-500" />
+                <h3 className={`font-bold ${text}`}>
+                  Viajes de {bodegaSeleccionada.bodega}
+                </h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'} ${sub}`}>
+                  {bodegaSeleccionada.viajes} viaje{bodegaSeleccionada.viajes !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <button 
+                onClick={() => setBodegaSeleccionada(null)}
+                className={`p-1 rounded-lg hover:bg-red-500/20 transition-colors`}
+              >
+                <X className="w-4 h-4 text-red-400" />
+              </button>
+            </div>
+            
+            <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                {bodegaSeleccionada.registros
+                  .sort((a, b) => a.viaje_numero - b.viaje_numero)
+                  .map(reg => (
+                    <ViajeDetalleCard
+                      key={reg.id}
+                      reg={reg}
+                      onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
+                      onDelete={handleEliminar}
+                      theme={theme}
+                      sub={sub}
+                      text={text}
+                      dk={dk}
+                    />
+                  ))
+                }
+              </div>
             </div>
           </div>
         )}
@@ -885,6 +1005,37 @@ export default function RegistroSacosPage() {
           theme={theme}
         />
       )}
+
+      {/* Estilos para el scroll personalizado y animaciones */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: ${dk ? '#1e293b' : '#f1f5f9'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${dk ? '#475569' : '#94a3b8'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${dk ? '#64748b' : '#64748b'};
+        }
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }
