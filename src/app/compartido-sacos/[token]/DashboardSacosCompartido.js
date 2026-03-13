@@ -1581,76 +1581,7 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* Tabla de Registros */}
-          <div className="alm-table-card">
-            <div className="alm-table-header">
-              <h3 className="alm-section-title">
-                📋 Registros Detallados
-                <span className="alm-badge">{registros.length} registros</span>
-              </h3>
-            </div>
-            <div className="alm-table-scroll">
-              <table className="alm-table">
-                <thead>
-                  <tr>
-                    <th># Viaje</th>
-                    <th>Fecha</th>
-                    <th>Bodega</th>
-                    <th>Placa</th>
-                    <th>Remolque</th>
-                    <th className="alm-th-num">Peso Ing. (kg)</th>
-                    <th className="alm-th-num">Saco (kg)</th>
-                    <th className="alm-th-num">Cantidad</th>
-                    <th className="alm-th-num">Dañados</th>
-                    <th className="alm-th-num">Peso Calc. (kg)</th>
-                    <th className="alm-th-num">Total TM</th>
-                    <th>Diferencia</th>
-                    <th>H.Inicio</th>
-                    <th>H.Fin</th>
-                    <th>Dur.</th>
-                    <th>Chequero</th>
-                    <th>Obs.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {registros.slice(0, 50).map((reg, i) => (
-                    <tr key={reg.id} className={i === 0 ? "alm-tr-latest" : ""}>
-                      <td className="alm-bold">#{reg.viaje_numero}</td>
-                      <td>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
-                      <td>{reg.bodega}</td>
-                      <td className="alm-mono">{reg.placa_camion}</td>
-                      <td className="alm-mono">{reg.placa_remolque || '—'}</td>
-                      <td className="alm-td-num">{fmtNumber(reg.peso_ingenio_kg)}</td>
-                      <td className="alm-td-num">{reg.peso_saco_kg}</td>
-                      <td className="alm-td-num">{fmtNumber(reg.cantidad_paquetes)}</td>
-                      <td className="alm-td-num">{reg.paquetes_danados > 0 ? fmtNumber(reg.paquetes_danados) : '—'}</td>
-                      <td className="alm-td-num">{fmtNumber(reg.peso_total_calculado_kg)}</td>
-                      <td className="alm-td-num alm-bold alm-green">{fmtTM(reg.peso_total_calculado_tm, 2)}</td>
-                      <td className={`alm-td-num ${
-                        reg.porcentaje_diferencia < 1 ? 'alm-diferencia-ok' :
-                        reg.porcentaje_diferencia < 5 ? 'alm-diferencia-warn' : 'alm-diferencia-error'
-                      }`}>
-                        {reg.porcentaje_diferencia.toFixed(1)}%
-                      </td>
-                      <td>{reg.hora_inicio}</td>
-                      <td>{reg.hora_fin}</td>
-                      <td>{reg.duracion}</td>
-                      <td>{reg.chequero || '—'}</td>
-                      <td className="alm-mono" style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {reg.observaciones || '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {registros.length > 50 && (
-              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-3)' }}>
-                Mostrando últimos 50 de {registros.length} registros
-              </div>
-            )}
-          </div>
-
+        
           {/* Resumen por Bodega */}
           <div className="alm-table-card">
             <div className="alm-table-header">
