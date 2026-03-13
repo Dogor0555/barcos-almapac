@@ -448,7 +448,6 @@ function AtrasosBarco({ barcoId }) {
                 <strong style={{ color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.noImputables)}</strong>
               </span>
             </div>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>Tiempo real · sin doble conteo de solapamientos</span>
           </div>
 
         </div>
