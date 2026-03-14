@@ -1507,30 +1507,19 @@ export default function RegistroAtrasosPage() {
   }
 
   const handleNuevoAtraso = () => {
-    // CORRECCIÓN: Permitir registrar incluso si la operación no ha iniciado
-    // Solo bloqueamos si el barco está finalizado
-    if (barcoSeleccionado?.estado === 'finalizado') { 
-      toast.error('La operación está finalizada'); 
-      return 
-    }
+    // ✅ CORREGIDO: Siempre permitir registrar, incluso si está finalizado
     setAtrasoEditando(null); 
     setShowAtrasoModal(true)
   }
 
   const handleEditarAtraso = (atraso) => {
-    if (barcoSeleccionado?.estado === 'finalizado') { 
-      toast.error('La operación está finalizada'); 
-      return 
-    }
+    // ✅ CORREGIDO: Siempre permitir editar, incluso si está finalizado
     setAtrasoEditando(atraso); 
     setShowAtrasoModal(true)
   }
 
   const handleEliminarAtraso = async (id) => {
-    if (barcoSeleccionado?.estado === 'finalizado') { 
-      toast.error('La operación está finalizada'); 
-      return 
-    }
+    // ✅ CORREGIDO: Siempre permitir eliminar, incluso si está finalizado
     if (!confirm('¿Eliminar este registro?')) return
     try {
       const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
@@ -1563,9 +1552,8 @@ export default function RegistroAtrasosPage() {
   const barcosFiltrados = barcos.filter(b => b.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
   const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
-  // CORRECCIÓN: Modificar la lógica de puedeRegistrar
-  // Ahora se puede registrar incluso si la operación no ha iniciado
-  const puedeRegistrar = barcoSeleccionado?.estado !== 'finalizado'
+  // ✅ CORREGIDO: Ahora siempre se puede registrar (solo se usa para UI, no para bloquear)
+  const puedeRegistrar = true
 
   const estadoOperacion = !barcoSeleccionado ? null
     : barcoSeleccionado.estado === 'finalizado' ? 'finalizado'
@@ -1962,10 +1950,10 @@ export default function RegistroAtrasosPage() {
                     </div>
                   )}
 
-                  {/* CORRECCIÓN: Mensajes más claros sobre el estado */}
+                  {/* ✅ Mensaje informativo actualizado */}
                   {estadoOperacion === 'finalizado' && (
-                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
-                      <Info className="w-3.5 h-3.5" /> Operación finalizada — modo solo lectura
+                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`}>
+                      <Info className="w-3.5 h-3.5" /> Operación finalizada — aún puedes editar y agregar demoras
                     </p>
                   )}
                 </div>

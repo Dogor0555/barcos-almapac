@@ -859,7 +859,7 @@ export default function RegistroSacosPage() {
   const [loading, setLoading]         = useState(true)
   const [showModal, setShowModal]     = useState(false)
   const [registroEditando, setRegistroEditando] = useState(null)
-  const [filtroFecha, setFiltroFecha] = useState(dayjs().format('YYYY-MM-DD'))
+  const [filtroFecha, setFiltroFecha] = useState('') // Vacío para mostrar todos
   const [searchPlaca, setSearchPlaca] = useState('')
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
@@ -1160,162 +1160,200 @@ export default function RegistroSacosPage() {
             </button>
 
             <div className="flex gap-2">
-              <input type="date" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}
-                className={`${inputBg} border ${border} rounded-xl px-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40 flex-1 sm:flex-none`} />
+              <input 
+                type="date" 
+                value={filtroFecha} 
+                onChange={e => setFiltroFecha(e.target.value)}
+                className={`${inputBg} border ${border} rounded-xl px-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40 flex-1 sm:flex-none`} 
+                placeholder="Todas las fechas"
+              />
               <div className="relative flex-1 sm:flex-none sm:w-44">
                 <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${sub}`} />
-                <input type="text" value={searchPlaca} onChange={e => setSearchPlaca(e.target.value)}
+                <input 
+                  type="text" 
+                  value={searchPlaca} 
+                  onChange={e => setSearchPlaca(e.target.value)}
                   placeholder="Buscar placa..."
-                  className={`w-full ${inputBg} border ${border} rounded-xl pl-9 pr-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} />
+                  className={`w-full ${inputBg} border ${border} rounded-xl pl-9 pr-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} 
+                />
               </div>
             </div>
           </div>
+          {!filtroFecha && (
+            <p className={`text-xs ${sub} mt-2 text-center sm:text-left`}>
+              📅 Mostrando todos los registros sin filtro de fecha
+            </p>
+          )}
         </div>
 
-        {/* Tabla general */}
+        {/* Tabla general con scroll */}
         <div className={`${card} border ${border} rounded-2xl overflow-hidden`}>
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full">
-              <thead className={dk ? 'bg-slate-800' : 'bg-gray-100'}>
-                <tr>
-                  {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
-                    <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
-                {registrosFiltrados.length === 0 ? (
+          <div className="max-h-[600px] overflow-y-auto">
+            <div className="hidden sm:block">
+              <table className="w-full">
+                <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
                   <tr>
-                    <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
-                      <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                      <p>No hay registros para mostrar</p>
-                    </td>
+                    {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
+                      <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
+                    ))}
                   </tr>
-                ) : registrosFiltrados.map(reg => {
-                  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-                    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-                    : null
-                  return (
-                    <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
-                      <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
-                      <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
-                      <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
-                      <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
-                      <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
-                      <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
-                      <td className="px-4 py-3 text-sm">
-                        {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
-                      </td>
-                      <td className="px-4 py-3 font-bold text-green-400">
-                        {reg.peso_total_calculado_tm?.toFixed(3)}
-                        {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
-                      </td>
-                      <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
-                            className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
-                            <Edit2 className="w-4 h-4 text-blue-400" />
-                          </button>
-                          <button onClick={() => handleEliminar(reg.id)}
-                            className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
+                </thead>
+                <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
+                  {registrosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
+                        <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                        <p>No hay registros para mostrar</p>
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                  ) : registrosFiltrados.map(reg => {
+                    const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                      ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                      : null
+                    return (
+                      <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
+                        <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
+                        <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
+                        <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
+                        <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
+                        <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
+                        <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-green-400">
+                          {reg.peso_total_calculado_tm?.toFixed(3)}
+                          {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
+                        </td>
+                        <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
+                              className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
+                              <Edit2 className="w-4 h-4 text-blue-400" />
+                            </button>
+                            <button onClick={() => handleEliminar(reg.id)}
+                              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Vista móvil con scroll */}
+            <div className="sm:hidden max-h-[500px] overflow-y-auto">
+              {registrosFiltrados.length === 0 ? (
+                <div className={`text-center py-12 ${sub}`}>
+                  <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No hay registros para mostrar</p>
+                </div>
+              ) : (
+                <div className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
+                  {registrosFiltrados.map(reg => {
+                    const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                      ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                      : null
+                    return (
+                      <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-black ${text}`}>#{reg.viaje_numero}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'}`}>
+                              {reg.bodega}
+                            </span>
+                            <span className={`text-xs ${sub}`}>{dayjs(reg.fecha).format('DD/MM')}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
+                              className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors">
+                              <Edit2 className="w-3.5 h-3.5 text-blue-400" />
+                            </button>
+                            <button onClick={() => handleEliminar(reg.id)}
+                              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors">
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-2">
+                          <div>
+                            <p className={`text-[10px] ${sub}`}>Placa</p>
+                            <p className="text-xs font-mono text-blue-400 font-bold">{reg.placa_camion}</p>
+                          </div>
+                          <div>
+                            <p className={`text-[10px] ${sub}`}>Ingenio</p>
+                            <p className={`text-xs font-medium ${text}`}>{(reg.peso_ingenio_kg/1000).toFixed(1)}t</p>
+                          </div>
+                          <div>
+                            <p className={`text-[10px] ${sub}`}>Sacos</p>
+                            <p className={`text-xs font-bold ${text}`}>
+                              {reg.cantidad_paquetes}
+                              {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
+                            </p>
+                          </div>
+                          <div>
+                            <p className={`text-[10px] ${sub}`}>Total TM</p>
+                            <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
+                              {reg.peso_total_calculado_tm?.toFixed(3)}
+                              {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Clock className={`w-3 h-3 ${sub}`} />
+                          <span className={`text-[11px] ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</span>
+                          {reg.duracion && reg.duracion !== '—' && (
+                            <span className={`text-[11px] ${dk ? 'text-slate-500' : 'text-gray-400'}`}>({reg.duracion})</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-
-          {/* Vista móvil */}
-          <div className="sm:hidden">
-            {registrosFiltrados.length === 0 ? (
-              <div className={`text-center py-12 ${sub}`}>
-                <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No hay registros para mostrar</p>
-              </div>
-            ) : (
-              <div className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
-                {registrosFiltrados.map(reg => {
-                  const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-                    ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-                    : null
-                  return (
-                    <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-black ${text}`}>#{reg.viaje_numero}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'}`}>
-                            {reg.bodega}
-                          </span>
-                          <span className={`text-xs ${sub}`}>{dayjs(reg.fecha).format('DD/MM')}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
-                            className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors">
-                            <Edit2 className="w-3.5 h-3.5 text-blue-400" />
-                          </button>
-                          <button onClick={() => handleEliminar(reg.id)}
-                            className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors">
-                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-2">
-                        <div>
-                          <p className={`text-[10px] ${sub}`}>Placa</p>
-                          <p className="text-xs font-mono text-blue-400 font-bold">{reg.placa_camion}</p>
-                        </div>
-                        <div>
-                          <p className={`text-[10px] ${sub}`}>Ingenio</p>
-                          <p className={`text-xs font-medium ${text}`}>{(reg.peso_ingenio_kg/1000).toFixed(1)}t</p>
-                        </div>
-                        <div>
-                          <p className={`text-[10px] ${sub}`}>Sacos</p>
-                          <p className={`text-xs font-bold ${text}`}>
-                            {reg.cantidad_paquetes}
-                            {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
-                          </p>
-                        </div>
-                        <div>
-                          <p className={`text-[10px] ${sub}`}>Total TM</p>
-                          <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
-                            {reg.peso_total_calculado_tm?.toFixed(3)}
-                            {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Clock className={`w-3 h-3 ${sub}`} />
-                        <span className={`text-[11px] ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</span>
-                        {reg.duracion && reg.duracion !== '—' && (
-                          <span className={`text-[11px] ${dk ? 'text-slate-500' : 'text-gray-400'}`}>({reg.duracion})</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+          
+          {/* Indicador de scroll y cantidad de registros */}
+          <div className={`px-4 py-2 border-t ${border} flex items-center justify-between text-xs ${sub}`}>
+            <span>Mostrando {registrosFiltrados.length} de {registros.length} registros</span>
+            {registrosFiltrados.length > 10 && (
+              <span className="flex items-center gap-1">
+                <svg className="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7-7-7m14-6l-7 7-7-7" />
+                </svg>
+                Desplázate para ver más
+              </span>
             )}
           </div>
         </div>
 
-        {/* Resumen del día */}
+        {/* Resumen del día (si hay filtro de fecha) o total general */}
         <div className={`${card} border ${border} rounded-2xl p-4 sm:p-5 bg-gradient-to-br ${dk ? 'from-slate-900 to-slate-800' : 'from-white to-gray-50'}`}>
           <h3 className={`font-bold ${text} mb-3 flex items-center gap-2 text-sm sm:text-base`}>
             <BarChart3 className="w-4 h-4 text-green-500" />
-            Resumen del {dayjs(filtroFecha).format('DD/MM/YYYY')}
+            {filtroFecha ? `Resumen del ${dayjs(filtroFecha).format('DD/MM/YYYY')}` : 'Resumen General'}
           </h3>
           <div className="grid grid-cols-3 gap-3 sm:gap-4">
             {[
-              { label: 'Viajes hoy',    value: registrosFiltrados.length,                                                                    color: text },
-              { label: 'Sacos hoy',     value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               color: text },
-              { label: 'Toneladas hoy', value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  color: 'text-green-500' },
+              { label: filtroFecha ? 'Viajes hoy' : 'Total viajes',    
+                value: registrosFiltrados.length,                                                                    
+                color: text 
+              },
+              { label: filtroFecha ? 'Sacos hoy' : 'Total sacos',     
+                value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               
+                color: text 
+              },
+              { label: filtroFecha ? 'Toneladas hoy' : 'Total TM', 
+                value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  
+                color: 'text-green-500' 
+              },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center p-2 rounded-lg bg-white/5">
                 <p className={`text-xs ${sub}`}>{label}</p>
@@ -1352,6 +1390,26 @@ export default function RegistroSacosPage() {
         }
         .animate-slideDown {
           animation: slideDown 0.3s ease-out;
+        }
+        
+        /* Estilos personalizados para la scrollbar */
+        .overflow-y-auto::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        
+        .overflow-y-auto::-webkit-scrollbar-track {
+          background: ${dk ? '#1e293b' : '#f1f1f1'};
+          border-radius: 4px;
+        }
+        
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+          background: ${dk ? '#475569' : '#cbd5e1'};
+          border-radius: 4px;
+        }
+        
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+          background: ${dk ? '#64748b' : '#94a3b8'};
         }
       `}</style>
     </div>
