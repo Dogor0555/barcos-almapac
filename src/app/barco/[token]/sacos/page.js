@@ -9,7 +9,7 @@ import {
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
   Sun, Moon, Search, Grid, Layers, ChevronRight,
-  Timer, TrendingUp, Award, Zap, Star, Hash
+  Timer, TrendingUp, Award, Zap, Star, Hash, Calendar
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -77,7 +77,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
       // Si es edición, cargamos los datos existentes
       setFormData({
         bodega: registro.bodega || '',
-        fecha: registro.fecha || dayjs().format('YYYY-MM-DD'),
+        fecha: registro.fecha || '',
         nota_remision: registro.nota_remision || '',
         placa_camion: registro.placa_camion || '',
         placa_remolque: registro.placa_remolque || '',
@@ -85,15 +85,15 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         peso_saco_kg: registro.peso_saco_kg || 50,
         cantidad_paquetes: registro.cantidad_paquetes || '',
         paquetes_danados: registro.paquetes_danados || '0',
-        hora_inicio: registro.hora_inicio || dayjs().format('HH:mm'),
+        hora_inicio: registro.hora_inicio || '',
         hora_fin: registro.hora_fin || '',
         observaciones: registro.observaciones || ''
       })
     } else {
-      // Si es nuevo, establecer valores por defecto y calcular próximo viaje
+      // Si es nuevo, establecer valores por defecto SIN FECHA PRE-SELECCIONADA
       setFormData({
         bodega: bodegas.length > 0 ? bodegas[0].nombre : '',
-        fecha: dayjs().format('YYYY-MM-DD'),
+        fecha: '', // 👈 IMPORTANTE: Vacío para que el usuario seleccione
         nota_remision: '',
         placa_camion: '',
         placa_remolque: '',
@@ -101,7 +101,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         peso_saco_kg: 50,
         cantidad_paquetes: '',
         paquetes_danados: '0',
-        hora_inicio: dayjs().format('HH:mm'),
+        hora_inicio: '', // 👈 También vacío
         hora_fin: '',
         observaciones: ''
       })
@@ -181,6 +181,26 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
     }
   }
 
+  // Función para validar coherencia entre fecha y horas
+  const validarCoherenciaFechas = () => {
+    if (!formData.fecha || !formData.hora_inicio || !formData.hora_fin) return null
+    
+    const inicio = dayjs(`2000-01-01 ${formData.hora_inicio}`)
+    const fin = dayjs(`2000-01-01 ${formData.hora_fin}`)
+    const fechaRegistro = dayjs(formData.fecha)
+    
+    const cruzaMedianoche = fin.isBefore(inicio)
+    
+    if (cruzaMedianoche) {
+      return {
+        tipo: 'info',
+        mensaje: `🌙 Viaje nocturno: Inicia el ${fechaRegistro.format('DD/MM/YYYY')} a las ${formData.hora_inicio} y termina al día siguiente`
+      }
+    }
+    
+    return null
+  }
+
   const handleChange = (e) => {
     const { name, value, type } = e.target
     setFormData(prev => ({
@@ -215,6 +235,21 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
       if (!user) throw new Error('No autenticado')
       
       // Validaciones básicas
+      if (!formData.fecha) { 
+        toast.error('Debes seleccionar la fecha de inicio del viaje'); 
+        setLoading(false); 
+        return 
+      }
+      if (!formData.hora_inicio) { 
+        toast.error('Hora de inicio obligatoria'); 
+        setLoading(false); 
+        return 
+      }
+      if (!formData.hora_fin) { 
+        toast.error('Hora de fin obligatoria'); 
+        setLoading(false); 
+        return 
+      }
       if (!formData.placa_camion?.trim()) { 
         toast.error('Placa obligatoria'); 
         setLoading(false); 
@@ -229,6 +264,12 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         toast.error('Peso del saco inválido'); 
         setLoading(false); 
         return 
+      }
+
+      // Validar coherencia de fechas (solo advertencia, no bloquea)
+      const coherencia = validarCoherenciaFechas()
+      if (coherencia) {
+        toast.success(coherencia.mensaje, { duration: 5000 })
       }
 
       // Determinar el número de viaje a usar
@@ -257,7 +298,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         barco_id: barco.id,
         viaje_numero: numeroViajeAGuardar,
         bodega: formData.bodega,
-        fecha: formData.fecha,
+        fecha: formData.fecha, // 👈 Se guarda la fecha que el usuario seleccionó (día de inicio)
         nota_remision: formData.nota_remision || null,
         placa_camion: formData.placa_camion?.toUpperCase() || '',
         placa_remolque: formData.placa_remolque?.toUpperCase() || null,
@@ -310,6 +351,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   }
 
   const verif = verificarPeso()
+  const coherencia = validarCoherenciaFechas()
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -372,30 +414,50 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
             </div>
           )}
 
-          {/* Bodega + Fecha */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <InputField label="Bodega" lblClass={lblM}>
-              <select 
-                name="bodega"
-                value={formData.bodega} 
-                onChange={handleChange} 
-                className={inputClass} 
-                required
-              >
-                {bodegas.map(b => <option key={b.id} value={b.nombre}>{b.nombre} ({b.codigo})</option>)}
-              </select>
-            </InputField>
-            <InputField label="Fecha" lblClass={lblM}>
-              <input 
-                type="date" 
-                name="fecha"
-                value={formData.fecha} 
-                onChange={handleChange} 
-                className={inputClass} 
-                required 
-              />
-            </InputField>
+          {/* 📅 FECHA - AHORA ES OBLIGATORIA Y SIN VALOR POR DEFECTO */}
+          <div className={`${sectionBg} rounded-xl p-4 border ${bdM} ${!formData.fecha ? 'border-yellow-500/50 ring-1 ring-yellow-500/50' : ''}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                <Calendar className="w-4 h-4 text-yellow-500" />
+              </div>
+              <h4 className={`font-bold ${txtM} text-sm sm:text-base`}>
+                Fecha del Viaje <span className="text-red-400">*</span>
+              </h4>
+            </div>
+            
+            <p className={`text-xs ${lblM} mb-2`}>
+              📌 Selecciona la fecha en que INICIÓ el viaje (si cruza medianoche, es el día de inicio)
+            </p>
+            
+            <input 
+              type="date" 
+              name="fecha"
+              value={formData.fecha} 
+              onChange={handleChange} 
+              className={`${inputClass} ${!formData.fecha ? 'border-yellow-500' : ''}`}
+              required 
+            />
+            
+            {!formData.fecha && (
+              <p className="text-yellow-500 text-xs mt-2 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Debes seleccionar la fecha de inicio del viaje
+              </p>
+            )}
           </div>
+
+          {/* Bodega */}
+          <InputField label="Bodega" lblClass={lblM}>
+            <select 
+              name="bodega"
+              value={formData.bodega} 
+              onChange={handleChange} 
+              className={inputClass} 
+              required
+            >
+              {bodegas.map(b => <option key={b.id} value={b.nombre}>{b.nombre} ({b.codigo})</option>)}
+            </select>
+          </InputField>
 
           {/* Nota remisión */}
           <InputField label="Nota de Remisión" lblClass={lblM}>
@@ -561,6 +623,14 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
             </InputField>
           </div>
 
+          {/* Mensaje de coherencia de fechas */}
+          {coherencia && (
+            <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-3 text-sm text-blue-400 flex items-start gap-2">
+              <Clock className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{coherencia.mensaje}</span>
+            </div>
+          )}
+
           {/* Observaciones */}
           <InputField label="Observaciones" lblClass={lblM}>
             <textarea 
@@ -600,7 +670,7 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
           {/* Mensaje de advertencia para nuevos registros */}
           {!registro && (
             <p className={`text-[10px] text-center ${lblM} mt-2`}>
-              ⚡ El número de viaje se verifica al guardar para evitar duplicados
+              ⚡ La fecha debe ser el día de INICIO del viaje (si cruza medianoche, es el día que empezó)
             </p>
           )}
         </form>

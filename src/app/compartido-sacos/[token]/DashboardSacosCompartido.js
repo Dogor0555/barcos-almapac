@@ -13,7 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Calendar } from 'lucide-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -54,64 +54,38 @@ function getTipoColor(nombre = '') {
 }
 
 // ============================================================================
-// HELPER CRÍTICO: calcular minutos reales sin doble conteo
-//
-// Si en el mismo día tenemos:
-//   Bodega 1: 06:30 → 08:50 (140 min)
-//   Bodega 5: 06:30 → 08:50 (140 min)
-// El tiempo REAL de paro es solo 140 min, no 280.
-//
-// Algoritmo: fusionar todos los intervalos del día en una línea de tiempo
-// unificada (merge of overlapping intervals) y sumar solo los minutos cubiertos.
+// HELPER: Fusionar intervalos para evitar doble conteo
 // ============================================================================
 function mergeIntervalos(intervalos) {
   if (!intervalos.length) return 0;
-  
-  // Ordenar por hora de inicio
   intervalos.sort((a, b) => a[0] - b[0]);
-  
-  // Fusionar intervalos solapados
   const merged = [];
   let current = intervalos[0];
-  
   for (let i = 1; i < intervalos.length; i++) {
     const next = intervalos[i];
-    
     if (next[0] <= current[1]) {
-      // Hay solapamiento, extender el fin si es necesario
       current[1] = Math.max(current[1], next[1]);
     } else {
-      // No hay solapamiento, guardar el actual y empezar uno nuevo
       merged.push(current);
       current = next;
     }
   }
   merged.push(current);
-  
-  // Sumar la duración de los intervalos fusionados
   return merged.reduce((sum, [ini, fin]) => sum + (fin - ini), 0);
 }
 
 function calcularMinutosReales(registros) {
   if (!registros || registros.length === 0) return 0;
-  
-  // Agrupar intervalos por fecha
   const porFecha = {};
-  
   registros.forEach(reg => {
     if (!reg.hora_inicio || !reg.duracion_minutos) return;
-    
     const fecha = reg.fecha;
     if (!porFecha[fecha]) porFecha[fecha] = [];
-    
     const [hh, mm] = reg.hora_inicio.split(':').map(Number);
     const inicio = hh * 60 + mm;
     const fin = inicio + (reg.duracion_minutos || 0);
-    
     porFecha[fecha].push([inicio, fin]);
   });
-  
-  // Sumar los minutos reales por cada fecha (sin solapamientos)
   return Object.values(porFecha).reduce((total, intervalos) => {
     return total + mergeIntervalos(intervalos);
   }, 0);
@@ -121,21 +95,16 @@ function calcularMinutosRealesPorImputabilidad(registros, tiposParo) {
   if (!registros || registros.length === 0) {
     return { imputables: 0, noImputables: 0 };
   }
-  
   const porFechaImp = {};
   const porFechaNoImp = {};
-  
   registros.forEach(reg => {
     if (!reg.hora_inicio || !reg.duracion_minutos) return;
-    
     const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id);
     const fecha = reg.fecha;
-    
     const [hh, mm] = reg.hora_inicio.split(':').map(Number);
     const inicio = hh * 60 + mm;
     const fin = inicio + (reg.duracion_minutos || 0);
     const intervalo = [inicio, fin];
-    
     if (tipo?.es_imputable_almapac) {
       if (!porFechaImp[fecha]) porFechaImp[fecha] = [];
       porFechaImp[fecha].push(intervalo);
@@ -144,13 +113,11 @@ function calcularMinutosRealesPorImputabilidad(registros, tiposParo) {
       porFechaNoImp[fecha].push(intervalo);
     }
   });
-  
   const sumar = (porFecha) => {
     return Object.values(porFecha).reduce((total, intervalos) => {
       return total + mergeIntervalos(intervalos);
     }, 0);
   };
-  
   return {
     imputables: sumar(porFechaImp),
     noImputables: sumar(porFechaNoImp)
@@ -158,20 +125,129 @@ function calcularMinutosRealesPorImputabilidad(registros, tiposParo) {
 }
 
 // ============================================================================
-// COMPONENTE DE ATRASOS
+// COMPONENTE SELECTOR DE RANGO DE FECHAS
+// ============================================================================
+function DateRangeSelector({ fechaInicio, fechaFin, onChange, onClose }) {
+  const [inicio, setInicio] = useState(fechaInicio ? dayjs(fechaInicio).format('YYYY-MM-DDTHH:mm') : '');
+  const [fin, setFin] = useState(fechaFin ? dayjs(fechaFin).format('YYYY-MM-DDTHH:mm') : '');
+
+  const handleAplicar = () => {
+    if (inicio && fin) {
+      onChange(dayjs(inicio).toDate(), dayjs(fin).toDate());
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '100%',
+      right: 0,
+      marginTop: 8,
+      background: 'white',
+      border: '1px solid #e2e8f0',
+      borderRadius: 12,
+      padding: 16,
+      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+      zIndex: 50,
+      minWidth: 280
+    }}>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+          Desde
+        </label>
+        <input
+          type="datetime-local"
+          value={inicio}
+          onChange={(e) => setInicio(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            fontSize: 13,
+            fontFamily: "'DM Mono', monospace"
+          }}
+        />
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+          Hasta
+        </label>
+        <input
+          type="datetime-local"
+          value={fin}
+          onChange={(e) => setFin(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            fontSize: 13,
+            fontFamily: "'DM Mono', monospace"
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={handleAplicar}
+          style={{
+            flex: 1,
+            background: '#0f172a',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          Aplicar
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            flex: 1,
+            background: '#f1f5f9',
+            color: '#475569',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTE DE ATRASOS MEJORADO
 // ============================================================================
 function AtrasosBarco({ barcoId }) {
   const [atrasos, setAtrasos] = useState([]);
   const [tiposParo, setTiposParo] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [periodo, setPeriodo] = useState('semana');
   const [expandido, setExpandido] = useState(true);
   const [filtroBodega, setFiltroBodega] = useState('todas');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [rangoPersonalizado, setRangoPersonalizado] = useState({
+    activo: false,
+    fechaInicio: null,
+    fechaFin: null
+  });
   const [stats, setStats] = useState({
     totalMinutos: 0, imputables: 0, noImputables: 0, porBodega: {}, porTipo: {}
   });
+  const [periodoActivo, setPeriodoActivo] = useState('semana');
 
-  useEffect(() => { if (barcoId) cargarDatos(); }, [barcoId, periodo]);
+  useEffect(() => {
+    if (barcoId) cargarDatos();
+  }, [barcoId, periodoActivo, rangoPersonalizado]);
 
   const cargarDatos = async () => {
     try {
@@ -179,14 +255,21 @@ function AtrasosBarco({ barcoId }) {
       const { data: tipos } = await supabase.from('tipos_paro').select('*').eq('activo', true);
       setTiposParo(tipos || []);
 
-      const fechaLimite = obtenerFechaLimite();
       let query = supabase
         .from('registro_atrasos')
         .select('*, tipo_paro:tipos_paro(*)')
         .eq('barco_id', barcoId)
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false });
-      if (fechaLimite) query = query.gte('fecha', fechaLimite);
+
+      if (rangoPersonalizado.activo && rangoPersonalizado.fechaInicio && rangoPersonalizado.fechaFin) {
+        query = query
+          .gte('fecha_hora_completa', dayjs(rangoPersonalizado.fechaInicio).format('YYYY-MM-DD HH:mm:ss'))
+          .lte('fecha_hora_completa', dayjs(rangoPersonalizado.fechaFin).format('YYYY-MM-DD HH:mm:ss'));
+      } else {
+        const fechaLimite = obtenerFechaLimite();
+        if (fechaLimite) query = query.gte('fecha', fechaLimite);
+      }
 
       const { data } = await query;
       setAtrasos(data || []);
@@ -199,20 +282,24 @@ function AtrasosBarco({ barcoId }) {
   };
 
   const obtenerFechaLimite = () => {
-    switch (periodo) {
+    switch (periodoActivo) {
       case 'hoy':    return dayjs().format('YYYY-MM-DD');
       case 'semana': return dayjs().subtract(7, 'day').format('YYYY-MM-DD');
       case 'mes':    return dayjs().subtract(30, 'day').format('YYYY-MM-DD');
-      default:       return null;
+      case 'todo':   return null;
+      default:       return dayjs().subtract(7, 'day').format('YYYY-MM-DD');
     }
   };
 
+  const handleRangoPersonalizado = (inicio, fin) => {
+    setRangoPersonalizado({ activo: true, fechaInicio: inicio, fechaFin: fin });
+    setPeriodoActivo('personalizado');
+    setShowDatePicker(false);
+  };
+
   const calcularEstadisticas = (registros, tipos) => {
-    // Tiempo total real: merge de intervalos por día (sin doble conteo entre bodegas)
     const totalMinutos = calcularMinutosReales(registros);
     const { imputables, noImputables } = calcularMinutosRealesPorImputabilidad(registros, tipos);
-
-    // Por bodega y por tipo: sumamos individual (info de cada bodega/tipo por separado)
     const porBodega = {}, porTipo = {};
     registros.forEach(reg => {
       const min = reg.duracion_minutos || 0;
@@ -222,7 +309,9 @@ function AtrasosBarco({ barcoId }) {
       porBodega[bk].count  += 1;
       const tipo = tipos.find(t => t.id === reg.tipo_paro_id);
       if (tipo) {
-        if (!porTipo[tipo.nombre]) porTipo[tipo.nombre] = { minutos: 0, count: 0, imputable: tipo.es_imputable_almapac };
+        if (!porTipo[tipo.nombre]) porTipo[tipo.nombre] = {
+          minutos: 0, count: 0, imputable: tipo.es_imputable_almapac
+        };
         porTipo[tipo.nombre].minutos += min;
         porTipo[tipo.nombre].count  += 1;
       }
@@ -231,19 +320,22 @@ function AtrasosBarco({ barcoId }) {
   };
 
   const formatTiempo = (min) => {
-    if (!min) return '0h 0m';
+    if (!min && min !== 0) return '0h 0m';
     const horas = Math.floor(min / 60);
     const minutos = min % 60;
     return `${horas}h ${minutos}m`;
   };
 
   const atrasosFiltrados = useMemo(() => {
-    if (filtroBodega === 'todas')     return atrasos;
-    if (filtroBodega === 'generales') return atrasos.filter(a => a.es_general);
-    return atrasos.filter(a => a.bodega_nombre === filtroBodega);
+    let filtrados = atrasos;
+    if (filtroBodega === 'generales') {
+      filtrados = atrasos.filter(a => a.es_general);
+    } else if (filtroBodega !== 'todas') {
+      filtrados = atrasos.filter(a => a.bodega_nombre === filtroBodega);
+    }
+    return filtrados;
   }, [atrasos, filtroBodega]);
 
-  // Al filtrar por bodega recalculamos el total real también
   const statsFiltrados = useMemo(() => {
     if (filtroBodega === 'todas') return stats;
     const totalMinutos = calcularMinutosReales(atrasosFiltrados);
@@ -257,23 +349,12 @@ function AtrasosBarco({ barcoId }) {
     return ['todas', 'generales', ...Array.from(s).sort()];
   }, [atrasos]);
 
-  if (loading && !atrasos.length) {
-    return (
-      <div className="alm-table-card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)' }}>
-        <div style={{ display: 'inline-block', width: 18, height: 18, border: '2px solid #f97316', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite', marginRight: 8, verticalAlign: 'middle' }} />
-        Cargando atrasos...
-      </div>
-    );
-  }
-
   const s = statsFiltrados;
-  const pctImputable   = s.totalMinutos > 0 ? (s.imputables   / s.totalMinutos * 100).toFixed(1) : '0.0';
+  const pctImputable = s.totalMinutos > 0 ? (s.imputables / s.totalMinutos * 100).toFixed(1) : '0.0';
   const pctNoImputable = s.totalMinutos > 0 ? (s.noImputables / s.totalMinutos * 100).toFixed(1) : '0.0';
 
   return (
     <div className="alm-table-card" style={{ marginBottom: 20 }}>
-
-      {/* ── Cabecera colapsable ── */}
       <div
         className="alm-table-header"
         onClick={() => setExpandido(!expandido)}
@@ -306,14 +387,22 @@ function AtrasosBarco({ barcoId }) {
 
       {expandido && (
         <div style={{ padding: '20px 20px 24px' }}>
-
-          {/* Nota explicativa */}
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontSize: 12, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 8,
+            padding: '8px 14px',
+            marginBottom: 16,
+            fontSize: 12,
+            color: '#1d4ed8',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
             <span>ℹ️</span>
             <span>El <strong>tiempo real</strong> de paro no duplica atrasos simultáneos en distintas bodegas — se cuentan una sola vez por solapamiento.</span>
           </div>
 
-          {/* ── Filtros ── */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 }}>
               {[
@@ -324,41 +413,105 @@ function AtrasosBarco({ barcoId }) {
               ].map(p => (
                 <button
                   key={p.key}
-                  onClick={e => { e.stopPropagation(); setPeriodo(p.key); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPeriodoActivo(p.key);
+                    setRangoPersonalizado({ activo: false, fechaInicio: null, fechaFin: null });
+                  }}
                   style={{
                     padding: '5px 13px', borderRadius: 8, border: 'none', cursor: 'pointer',
                     fontSize: 12, fontWeight: 700, fontFamily: "'Sora', sans-serif", transition: 'all .15s',
-                    background: periodo === p.key ? '#0f172a' : 'transparent',
-                    color:      periodo === p.key ? '#fff'    : '#64748b',
+                    background: periodoActivo === p.key && !rangoPersonalizado.activo ? '#0f172a' : 'transparent',
+                    color: periodoActivo === p.key && !rangoPersonalizado.activo ? '#fff' : '#64748b',
                   }}
                 >
                   {p.label}
                 </button>
               ))}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowDatePicker(!showDatePicker); }}
+                  style={{
+                    padding: '5px 13px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 700, fontFamily: "'Sora', sans-serif",
+                    background: rangoPersonalizado.activo ? '#0f172a' : 'transparent',
+                    color: rangoPersonalizado.activo ? '#fff' : '#64748b',
+                    display: 'flex', alignItems: 'center', gap: 4
+                  }}
+                >
+                  <Calendar size={12} />
+                  Rango
+                </button>
+                {showDatePicker && (
+                  <DateRangeSelector
+                    fechaInicio={rangoPersonalizado.fechaInicio}
+                    fechaFin={rangoPersonalizado.fechaFin}
+                    onChange={handleRangoPersonalizado}
+                    onClose={() => setShowDatePicker(false)}
+                  />
+                )}
+              </div>
             </div>
 
             <select
               value={filtroBodega}
               onClick={e => e.stopPropagation()}
               onChange={e => setFiltroBodega(e.target.value)}
-              style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 13, color: '#0f172a', cursor: 'pointer', fontFamily: "'Sora', sans-serif" }}
+              style={{
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                padding: '6px 12px',
+                fontSize: 13,
+                color: '#0f172a',
+                cursor: 'pointer',
+                fontFamily: "'Sora', sans-serif"
+              }}
             >
               {bodegasUnicas.map(b => (
                 <option key={b} value={b}>
-                  {b === 'todas' ? '📋 Todas las bodegas' : b === 'generales' ? '⚡ Solo generales' : `📦 ${b}`}
+                  {b === 'todas' ? '📋 Todas las bodegas' :
+                   b === 'generales' ? '⚡ Solo generales' : `📦 ${b}`}
                 </option>
               ))}
             </select>
 
+            {rangoPersonalizado.activo && (
+              <span style={{
+                fontSize: 11,
+                background: '#e2e8f0',
+                padding: '4px 10px',
+                borderRadius: 999,
+                color: '#475569',
+                fontFamily: "'DM Mono', monospace"
+              }}>
+                {dayjs(rangoPersonalizado.fechaInicio).format('DD/MM/YY HH:mm')} - {dayjs(rangoPersonalizado.fechaFin).format('DD/MM/YY HH:mm')}
+              </span>
+            )}
+
             <button
-              onClick={e => { e.stopPropagation(); cargarDatos(); }}
-              style={{ marginLeft: 'auto', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontSize: 12, color: '#475569', fontFamily: "'Sora', sans-serif", fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={(e) => { e.stopPropagation(); cargarDatos(); }}
+              style={{
+                marginLeft: 'auto',
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                fontSize: 12,
+                color: '#475569',
+                fontFamily: "'Sora', sans-serif",
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}
             >
               <RefreshCw size={13} /> Actualizar
             </button>
           </div>
 
-          {/* ── KPIs ── */}
+          {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
             {[
               { label: 'Tiempo real de paro', value: formatTiempo(s.totalMinutos),    sub: `${atrasosFiltrados.length} registros`,  accent: '#0f172a' },
@@ -366,7 +519,14 @@ function AtrasosBarco({ barcoId }) {
               { label: 'Otros atrasos',       value: formatTiempo(s.noImputables),    sub: `${pctNoImputable}% del total`,          accent: '#dc2626' },
               { label: 'Bodegas afectadas',   value: Object.keys(s.porBodega).length, sub: 'incluyendo generales',                  accent: '#2563eb' },
             ].map(k => (
-              <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
+              <div key={k.label} style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '16px 18px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: k.accent, borderRadius: '2px 0 0 2px' }} />
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', marginBottom: 6 }}>{k.label}</p>
                 <p style={{ fontSize: 22, fontWeight: 900, color: k.accent, fontFamily: "'DM Mono', monospace", lineHeight: 1.1 }}>{k.value}</p>
@@ -375,53 +535,13 @@ function AtrasosBarco({ barcoId }) {
             ))}
           </div>
 
-          {/* ── Distribución por tipo ── 
-          {Object.keys(s.porTipo).length > 0 && (
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '18px 20px', marginBottom: 24 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                📊 Distribución por tipo de atraso
-              </p>
-              <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 14 }}>
-                * Tiempo individual por tipo. El total general descuenta solapamientos entre bodegas.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {Object.entries(s.porTipo)
-                  .sort((a, b) => b[1].minutos - a[1].minutos)
-                  .map(([nombre, data]) => {
-                    const totalBruto = Object.values(s.porTipo).reduce((acc, v) => acc + v.minutos, 0);
-                    const pct   = totalBruto > 0 ? (data.minutos / totalBruto * 100) : 0;
-                    const color = getTipoColor(nombre);
-                    return (
-                      <div key={nombre}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 3, background: color, display: 'inline-block', flexShrink: 0 }} />
-                            <span style={{ fontSize: 13, color: '#334155' }}>{nombre}</span>
-                            {data.imputable && (
-                              <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '2px 7px', borderRadius: 999, fontWeight: 700 }}>ALMAPAC</span>
-                            )}
-                          </div>
-                          <span style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#0f172a', fontWeight: 700 }}>
-                            {formatTiempo(data.minutos)}
-                            <span style={{ color: '#94a3b8', fontWeight: 400 }}> ({data.count} reg)</span>
-                          </span>
-                        </div>
-                        <div style={{ height: 6, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width .6s ease' }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )} */}
-
-          {/* ── Tabla de registros ── */}
+          {/* Tabla de registros */}
           <div className="alm-table-scroll">
             <table className="alm-table">
               <thead>
                 <tr>
                   <th>Fecha</th>
+                  <th>Hora</th>
                   <th>Tipo</th>
                   <th>Bodega</th>
                   <th>Inicio</th>
@@ -436,7 +556,12 @@ function AtrasosBarco({ barcoId }) {
                   const color = getTipoColor(tipo?.nombre);
                   return (
                     <tr key={atraso.id} className={idx < 5 ? 'alm-tr-latest' : ''}>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>{dayjs(atraso.fecha).format('DD/MM/YY')}</td>
+                      <td className="alm-mono" style={{ fontSize: 13 }}>
+                        {dayjs(atraso.fecha).format('DD/MM/YY')}
+                      </td>
+                      <td className="alm-mono" style={{ fontSize: 13 }}>
+                        {atraso.hora_inicio?.slice(0, 5)}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0, display: 'inline-block' }} />
@@ -447,19 +572,23 @@ function AtrasosBarco({ barcoId }) {
                         </div>
                       </td>
                       <td style={{ fontSize: 13 }}>
-                        {atraso.es_general
-                          ? <span style={{ color: '#7c3aed', fontWeight: 700, fontSize: 12 }}>TODAS</span>
-                          : <span style={{ color: '#475569' }}>{atraso.bodega_nombre || '—'}</span>
-                        }
+                        {atraso.es_general ? (
+                          <span style={{ color: '#7c3aed', fontWeight: 700, fontSize: 12 }}>TODAS</span>
+                        ) : (
+                          <span style={{ color: '#475569' }}>{atraso.bodega_nombre || '—'}</span>
+                        )}
                       </td>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>{atraso.hora_inicio?.slice(0, 5)}</td>
                       <td className="alm-mono" style={{ fontSize: 13 }}>
-                        {atraso.hora_fin
-                          ? atraso.hora_fin.slice(0, 5)
-                          : <span style={{ color: '#f97316', fontWeight: 700 }}>En curso</span>
-                        }
+                        {atraso.hora_inicio?.slice(0, 5)}
                       </td>
-                      <td className="alm-td-num alm-bold alm-mono">{formatTiempo(atraso.duracion_minutos)}</td>
+                      <td className="alm-mono" style={{ fontSize: 13 }}>
+                        {atraso.hora_fin ? atraso.hora_fin.slice(0, 5) : (
+                          <span style={{ color: '#f97316', fontWeight: 700 }}>En curso</span>
+                        )}
+                      </td>
+                      <td className="alm-td-num alm-bold alm-mono">
+                        {formatTiempo(atraso.duracion_minutos)}
+                      </td>
                       <td style={{ fontSize: 12, color: '#94a3b8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {atraso.observaciones || '—'}
                       </td>
@@ -467,7 +596,7 @@ function AtrasosBarco({ barcoId }) {
                   );
                 }) : (
                   <tr>
-                    <td colSpan={7} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                    <td colSpan={8} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                       No hay registros de atrasos para este período
                     </td>
                   </tr>
@@ -476,8 +605,12 @@ function AtrasosBarco({ barcoId }) {
             </table>
           </div>
 
-          {/* ── Pie de resumen ── */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16, padding: '14px 18px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+          {/* Pie de resumen */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, marginTop: 16, padding: '14px 18px', background: '#f8fafc',
+            border: '1px solid #e2e8f0', borderRadius: 10
+          }}>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13 }}>
                 <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#f59e0b', marginRight: 6, verticalAlign: 'middle' }} />
@@ -490,9 +623,10 @@ function AtrasosBarco({ barcoId }) {
                 <strong style={{ color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.noImputables)}</strong>
               </span>
             </div>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>Tiempo real · sin doble conteo de solapamientos</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              Tiempo real · sin doble conteo de solapamientos
+            </span>
           </div>
-
         </div>
       )}
     </div>
@@ -507,9 +641,8 @@ function parsearMetasJson(metasJson) {
     if (!metasJson) return {};
     let obj = typeof metasJson === "string" ? JSON.parse(metasJson) : metasJson;
     if (typeof obj === "string") obj = JSON.parse(obj);
-    console.log("✅ metas_json parseado:", obj);
     const sacosBodega = obj?.sacos_bodega;
-    if (!sacosBodega) { console.warn("❌ No existe sacos_bodega en:", obj); return {}; }
+    if (!sacosBodega) return {};
     return sacosBodega;
   } catch (e) {
     console.error("💥 Error parseando metas_json:", e, "| Valor recibido:", metasJson);
@@ -518,7 +651,7 @@ function parsearMetasJson(metasJson) {
 }
 
 // ============================================================================
-// HOOK
+// HOOK para datos de sacos
 // ============================================================================
 function useSacosData(barcoId) {
   const [data, setData] = useState({ registros: [], loading: true, error: null, lastUpdate: null });
@@ -527,9 +660,14 @@ function useSacosData(barcoId) {
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
       const { data: registros, error } = await supabase
-        .from('registros_sacos').select('*').eq('barco_id', barcoId)
-        .order('fecha', { ascending: false }).order('viaje_numero', { ascending: false });
+        .from('registros_sacos')
+        .select('*')
+        .eq('barco_id', barcoId)
+        .order('fecha', { ascending: false })
+        .order('viaje_numero', { ascending: false });
+
       if (error) throw error;
+
       const registrosEnriquecidos = (registros || []).map(r => ({
         ...r,
         peso_total_calculado_kg: r.peso_saco_kg * r.cantidad_paquetes,
@@ -538,10 +676,21 @@ function useSacosData(barcoId) {
         porcentaje_diferencia: r.peso_ingenio_kg > 0 ? Math.abs(((r.peso_saco_kg * r.cantidad_paquetes) - r.peso_ingenio_kg) / r.peso_ingenio_kg * 100) : 0,
         fecha_hora: dayjs(`${r.fecha} ${r.hora_inicio}`).toISOString()
       }));
-      setData({ registros: registrosEnriquecidos, loading: false, error: null, lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV) });
+
+      setData({
+        registros: registrosEnriquecidos,
+        loading: false,
+        error: null,
+        lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV)
+      });
     } catch (error) {
       console.error("Error cargando datos de sacos:", error);
-      setData(prev => ({ ...prev, loading: false, error: error.message || "Error al cargar datos", lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV) }));
+      setData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || "Error al cargar datos",
+        lastUpdate: dayjs().utc().tz(ZONA_HORARIA_SV)
+      }));
     }
   };
 
@@ -557,7 +706,7 @@ function useSacosData(barcoId) {
 }
 
 // ============================================================================
-// UTILIDADES
+// UTILIDADES de formato
 // ============================================================================
 const fmtTM = (tm, d = 3) => {
   if (tm == null || isNaN(tm)) return "0.000";
@@ -566,13 +715,14 @@ const fmtTM = (tm, d = 3) => {
   partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return partes.join(".");
 };
+
 const fmtNumber = (num, d = 0) => {
   if (num == null || isNaN(num)) return "0";
   return Number(num).toLocaleString('es-SV', { maximumFractionDigits: d });
 };
 
 // ============================================================================
-// TOOLTIP / KPI CARD
+// TOOLTIP personalizado
 // ============================================================================
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -588,6 +738,9 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
+// ============================================================================
+// KPI Card
+// ============================================================================
 function KpiCard({ label, value, sub, icon, accent, animate }) {
   return (
     <div className="alm-kpi" style={{ "--accent": accent }}>
@@ -603,13 +756,396 @@ function KpiCard({ label, value, sub, icon, accent, animate }) {
 }
 
 // ============================================================================
+// BARRA DE PROGRESO PROFESIONAL MEJORADA
+// ============================================================================
+function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
+  const pct = Math.min(100, Math.max(0, porcentaje));
+  
+  // Sistema de colores semáforo
+  const getColorByProgress = (pct) => {
+    if (pct >= 100) return '#10b981'; // Verde éxito
+    if (pct >= 80) return '#f59e0b';  // Ámbar alerta
+    if (pct >= 50) return '#3b82f6';  // Azul progreso
+    if (pct >= 25) return '#8b5cf6';  // Púrpura inicio
+    return '#64748b';                  // Gris pendiente
+  };
+
+  const color = getColorByProgress(pct);
+  
+  // Escalas de referencia
+  const milestones = [
+    { value: 0, label: 'Inicio' },
+    { value: 25, label: '¼' },
+    { value: 50, label: '½' },
+    { value: 75, label: '¾' },
+    { value: 100, label: 'Meta' }
+  ];
+
+  // Texto de estado
+  const getStatusText = () => {
+    if (pct >= 100) return '¡COMPLETADO!';
+    if (pct >= 80) return '¡Último esfuerzo!';
+    if (pct >= 50) return 'Mitad de camino';
+    if (pct >= 25) return 'Buen inicio';
+    return 'Operación en curso';
+  };
+
+  // Cálculo de tiempo estimado (ejemplo)
+  const getEstimatedTime = () => {
+    if (pct >= 100 || faltante <= 0) return null;
+    const faltanteTM = Number(faltante).toFixed(1);
+    return `${faltanteTM} TM restantes`;
+  };
+
+  return (
+    <div style={{ width: '100%', fontFamily: "'Sora', sans-serif" }}>
+      {/* Cabecera con métricas principales */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            background: color,
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: 20,
+            fontWeight: 800,
+            boxShadow: `0 4px 12px ${color}40`
+          }}>
+            {pct >= 100 ? '✓' : '%'}
+          </div>
+          <div>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#64748b',
+              letterSpacing: '0.5px',
+              marginBottom: 2
+            }}>
+              ESTADO DE OPERACIÓN
+            </div>
+            <div style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: '#0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              {getStatusText()}
+              <span style={{
+                fontSize: 12,
+                background: '#f1f5f9',
+                padding: '4px 8px',
+                borderRadius: 20,
+                color: '#475569',
+                fontWeight: 600
+              }}>
+                {getEstimatedTime() || '✓ Completado'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Indicador de porcentaje principal */}
+        <div style={{
+          background: '#f8fafc',
+          padding: '8px 20px',
+          borderRadius: 40,
+          border: '1px solid #e2e8f0'
+        }}>
+          <span style={{
+            fontSize: 28,
+            fontWeight: 900,
+            color: color,
+            fontFamily: "'DM Mono', monospace",
+            lineHeight: 1
+          }}>
+            {pct.toFixed(1)}%
+          </span>
+          <span style={{
+            fontSize: 12,
+            color: '#94a3b8',
+            marginLeft: 8,
+            fontWeight: 600
+          }}>
+            completado
+          </span>
+        </div>
+      </div>
+
+      {/* Barra principal con diseño moderno */}
+      <div style={{
+        position: 'relative',
+        marginBottom: 24
+      }}>
+        {/* Contenedor de la barra */}
+        <div style={{
+          height: 32,
+          background: '#e9eef3',
+          borderRadius: 20,
+          overflow: 'hidden',
+          border: '1px solid #d1d9e6',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
+          position: 'relative'
+        }}>
+          {/* Líneas divisorias de milestones */}
+          {milestones.filter(m => m.value > 0 && m.value < 100).map(m => (
+            <div
+              key={m.value}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: `${m.value}%`,
+                width: 2,
+                height: '100%',
+                background: 'rgba(255,255,255,0.5)',
+                zIndex: 5,
+                boxShadow: '0 0 4px rgba(0,0,0,0.1)'
+              }}
+            />
+          ))}
+
+          {/* Fill animado con gradiente */}
+          <div style={{
+            height: '100%',
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${color}dd, ${color})`,
+            transition: 'width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            position: 'relative',
+            borderRadius: '20px',
+            boxShadow: `0 0 20px ${color}80`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            paddingRight: pct > 15 ? 12 : 0
+          }}>
+            {/* Efecto de brillo móvil (shimmer) */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+              animation: 'shimmer 2s infinite',
+              borderRadius: 'inherit'
+            }} />
+            
+            {/* Porcentaje dentro de la barra (solo si hay espacio) */}
+            {pct > 15 && (
+              <span style={{
+                position: 'relative',
+                zIndex: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                color: 'white',
+                fontFamily: "'DM Mono', monospace",
+                textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                mixBlendMode: 'overlay'
+              }}>
+                {pct.toFixed(1)}%
+              </span>
+            )}
+          </div>
+
+          {/* Marcador de posición actual */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: `${pct}%`,
+            transform: 'translate(-50%, -50%)',
+            width: 14,
+            height: 14,
+            background: 'white',
+            border: `3px solid ${color}`,
+            borderRadius: '50%',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            zIndex: 20,
+            transition: 'left 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }} />
+        </div>
+
+        {/* Marcadores de milestones */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: 8,
+          padding: '0 4px'
+        }}>
+          {milestones.map(m => (
+            <div
+              key={m.value}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                width: m.value === 0 ? 'auto' : m.value === 100 ? 'auto' : undefined,
+                position: 'relative'
+              }}
+            >
+              <div style={{
+                width: 3,
+                height: 8,
+                background: pct >= m.value ? color : '#cbd5e1',
+                borderRadius: 2,
+                marginBottom: 4,
+                transition: 'background 0.3s'
+              }} />
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: pct >= m.value ? color : '#94a3b8',
+                fontFamily: "'DM Mono', monospace",
+                transition: 'color 0.3s'
+              }}>
+                {m.label}
+              </span>
+              {m.value === 50 && (
+                <span style={{
+                  position: 'absolute',
+                  top: -25,
+                  fontSize: 9,
+                  color: '#94a3b8',
+                  whiteSpace: 'nowrap'
+                }}>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tarjetas de métricas detalladas */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
+        marginTop: 24,
+        padding: 16,
+        background: '#f8fafc',
+        borderRadius: 24,
+        border: '1px solid #e2e8f0'
+      }}>
+        {/* Meta */}
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 6
+          }}>
+            <span style={{ fontSize: 14 }}>🎯</span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: '#64748b'
+            }}>
+              Manifestado
+            </span>
+          </div>
+          <div style={{
+            fontSize: 20,
+            fontWeight: 800,
+            color: '#0f172a',
+            fontFamily: "'DM Mono', monospace"
+          }}>
+            {fmtTM(meta, 2)} TM
+          </div>
+        </div>
+
+        {/* Progreso actual */}
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 6
+          }}>
+            <span style={{ fontSize: 14 }}>⚡</span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: '#64748b'
+            }}>
+              Descargado
+            </span>
+          </div>
+          <div style={{
+            fontSize: 20,
+            fontWeight: 800,
+            color: color,
+            fontFamily: "'DM Mono', monospace"
+          }}>
+            {fmtTM(actual, 2)} TM
+          </div>
+        </div>
+
+        {/* Pendiente */}
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 6
+          }}>
+            <span style={{ fontSize: 14 }}>⏳</span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: '#64748b'
+            }}>
+              Pendiente
+            </span>
+          </div>
+          <div style={{
+            fontSize: 20,
+            fontWeight: 800,
+            color: faltante > 0 ? '#ef4444' : '#10b981',
+            fontFamily: "'DM Mono', monospace"
+          }}>
+            {faltante > 0 ? `${fmtTM(faltante, 2)} TM` : '✓ COMPLETADO'}
+          </div>
+        </div>
+      </div>
+
+      
+
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
 export default function DashboardSacosCompartido({ barco }) {
   const { registros, loading, error, lastUpdate, refetch } = useSacosData(barco.id);
 
-  // ── Filtro global por bodega ──
   const [filtroBodegaGlobal, setFiltroBodegaGlobal] = useState('todas');
+  const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null });
+  const [showDatePickerSacos, setShowDatePickerSacos] = useState(false);
 
   const bodegasDisponibles = useMemo(() => {
     const s = new Set(registros.map(r => r.bodega).filter(Boolean));
@@ -621,14 +1157,21 @@ export default function DashboardSacosCompartido({ barco }) {
   }, [registros]);
 
   const registrosFiltrados = useMemo(() => {
-    if (filtroBodegaGlobal === 'todas') return registros;
-    return registros.filter(r => r.bodega === filtroBodegaGlobal);
-  }, [registros, filtroBodegaGlobal]);
+    let filtrados = registros;
+    if (filtroBodegaGlobal !== 'todas') {
+      filtrados = filtrados.filter(r => r.bodega === filtroBodegaGlobal);
+    }
+    if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
+      filtrados = filtrados.filter(r => {
+        const fechaHora = dayjs(r.fecha_hora);
+        return fechaHora.isAfter(filtroFecha.inicio) && fechaHora.isBefore(filtroFecha.fin);
+      });
+    }
+    return filtrados;
+  }, [registros, filtroBodegaGlobal, filtroFecha]);
 
   const metasBodega = useMemo(() => {
-    const metas = parsearMetasJson(barco.metas_json);
-    console.log("🎯 Metas de bodega:", metas);
-    return metas;
+    return parsearMetasJson(barco.metas_json);
   }, [barco.metas_json]);
 
   const statsGenerales = useMemo(() => {
@@ -638,35 +1181,71 @@ export default function DashboardSacosCompartido({ barco }) {
     const totalDanados = registrosFiltrados.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
     const placasMap = {};
     registrosFiltrados.forEach(r => {
-      if (!placasMap[r.placa_camion]) placasMap[r.placa_camion] = { placa: r.placa_camion, viajes: 0, sacos: 0, tm: 0 };
+      if (!placasMap[r.placa_camion]) {
+        placasMap[r.placa_camion] = { placa: r.placa_camion, viajes: 0, sacos: 0, tm: 0 };
+      }
       placasMap[r.placa_camion].viajes++;
       placasMap[r.placa_camion].sacos += r.cantidad_paquetes;
       placasMap[r.placa_camion].tm    += r.peso_total_calculado_tm;
     });
-    return { totalViajes, totalSacos, totalTM, totalDanados,
+    return {
+      totalViajes,
+      totalSacos,
+      totalTM,
+      totalDanados,
       topPlacas: Object.values(placasMap).sort((a, b) => b.viajes - a.viajes).slice(0, 5)
     };
   }, [registrosFiltrados]);
 
+  // ============================================================================
+  // FLUJO POR HORA — FIX DEDUPLICACIÓN: usar timestamp completo como key del eje X
+  // ============================================================================
   const flujoPorHora = useMemo(() => {
     if (registrosFiltrados.length === 0) return [];
-    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
-    const map = new Map();
-    ord.forEach(reg => {
-      const hora = dayjs(reg.fecha_hora).format('YYYY-MM-DD HH:00');
-      if (!map.has(hora)) map.set(hora, { hora: dayjs(reg.fecha_hora).format('HH:00'), horaCompleta: hora, toneladas: 0, viajes: 0, sacos: 0 });
-      const d = map.get(hora);
-      d.toneladas += reg.peso_total_calculado_tm;
-      d.viajes    += 1;
-      d.sacos     += reg.cantidad_paquetes;
+
+    const ordenados = [...registrosFiltrados].sort(
+      (a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()
+    );
+
+    // Key única por "YYYY-MM-DD HH:00" para evitar colisiones entre días
+    const mapPorHora = new Map();
+
+    ordenados.forEach(reg => {
+      const horaExacta = dayjs(reg.fecha_hora).startOf('hour');
+      const key = horaExacta.format('YYYY-MM-DD HH:00'); // clave única absoluta
+
+      if (!mapPorHora.has(key)) {
+        mapPorHora.set(key, {
+          // Para el eje X mostramos DD/MM HH:00 para evitar confusión cuando cruza medianoche
+          hora: horaExacta.format('DD/MM HH:00'),
+          horaCorta: horaExacta.format('HH:00'),
+          horaCompleta: key,
+          timestamp: horaExacta.valueOf(),
+          toneladas: 0,
+          viajes: 0,
+          sacos: 0
+        });
+      }
+
+      const data = mapPorHora.get(key);
+      data.toneladas += reg.peso_total_calculado_tm;
+      data.viajes += 1;
+      data.sacos += reg.cantidad_paquetes;
     });
-    return Array.from(map.values()).sort((a, b) => a.horaCompleta.localeCompare(b.horaCompleta)).slice(-24);
+
+    const resultado = Array.from(mapPorHora.values())
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    return resultado.length > 24 ? resultado.slice(-24) : resultado;
   }, [registrosFiltrados]);
 
   const flujoPromedioGeneral = useMemo(() => {
     if (registrosFiltrados.length < 2) return 0;
-    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix());
-    const horas = dayjs(ord[ord.length - 1].fecha_hora).diff(dayjs(ord[0].fecha_hora), 'hour', true);
+    const ordenados = [...registrosFiltrados].sort(
+      (a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()
+    );
+    const horas = dayjs(ordenados[ordenados.length - 1].fecha_hora)
+      .diff(dayjs(ordenados[0].fecha_hora), 'hour', true);
     if (horas <= 0) return 0;
     return registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0) / horas;
   }, [registrosFiltrados]);
@@ -674,16 +1253,16 @@ export default function DashboardSacosCompartido({ barco }) {
   const flujoUltimaHora = useMemo(() => {
     if (registrosFiltrados.length === 0) return 0;
     const hace1Hora = dayjs().subtract(1, 'hour');
-    return registrosFiltrados.filter(r => dayjs(r.fecha_hora).isAfter(hace1Hora)).reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+    return registrosFiltrados
+      .filter(r => dayjs(r.fecha_hora).isAfter(hace1Hora))
+      .reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
   }, [registrosFiltrados]);
 
   const totalMetas = useMemo(() => {
     if (filtroBodegaGlobal !== 'todas') {
       return Number(metasBodega[filtroBodegaGlobal]) || 0;
     }
-    const total = Object.values(metasBodega).reduce((sum, meta) => sum + (Number(meta) || 0), 0);
-    console.log("📊 Total metas:", total);
-    return total;
+    return Object.values(metasBodega).reduce((sum, meta) => sum + (Number(meta) || 0), 0);
   }, [metasBodega, filtroBodegaGlobal]);
 
   const progresoGeneral = useMemo(() => {
@@ -693,56 +1272,131 @@ export default function DashboardSacosCompartido({ barco }) {
 
   const datosPorBodegaCompleto = useMemo(() => {
     const bodegasMap = {};
+
     if (barco.bodegas_json) {
-      const arr = typeof barco.bodegas_json === "string" ? JSON.parse(barco.bodegas_json) : barco.bodegas_json;
+      const arr = typeof barco.bodegas_json === "string"
+        ? JSON.parse(barco.bodegas_json)
+        : barco.bodegas_json;
       if (Array.isArray(arr)) {
         arr.forEach(b => {
           if (filtroBodegaGlobal === 'todas' || filtroBodegaGlobal === b.nombre) {
-            bodegasMap[b.nombre] = { bodega: b.nombre, viajes: 0, sacos: 0, tm: 0, meta: Number(metasBodega[b.nombre]) || 0, flujoHora: 0 };
+            bodegasMap[b.nombre] = {
+              bodega: b.nombre, viajes: 0, sacos: 0, tm: 0,
+              meta: Number(metasBodega[b.nombre]) || 0, flujoHora: 0
+            };
           }
         });
       }
     }
+
     registrosFiltrados.forEach(r => {
-      if (!bodegasMap[r.bodega]) bodegasMap[r.bodega] = { bodega: r.bodega, viajes: 0, sacos: 0, tm: 0, meta: Number(metasBodega[r.bodega]) || 0, flujoHora: 0 };
+      if (!bodegasMap[r.bodega]) {
+        bodegasMap[r.bodega] = {
+          bodega: r.bodega, viajes: 0, sacos: 0, tm: 0,
+          meta: Number(metasBodega[r.bodega]) || 0, flujoHora: 0
+        };
+      }
       bodegasMap[r.bodega].viajes++;
       bodegasMap[r.bodega].sacos += r.cantidad_paquetes;
       bodegasMap[r.bodega].tm    += r.peso_total_calculado_tm;
     });
+
     return Object.values(bodegasMap)
-      .sort((a, b) => parseInt(b.bodega.match(/\d+/)?.[0] || "0") - parseInt(a.bodega.match(/\d+/)?.[0] || "0"))
+      .sort((a, b) => {
+        const numA = parseInt(a.bodega.match(/\d+/)?.[0] || "0");
+        const numB = parseInt(b.bodega.match(/\d+/)?.[0] || "0");
+        return numB - numA;
+      })
       .map(b => {
         const rbs = registrosFiltrados.filter(r => r.bodega === b.bodega);
         if (rbs.length >= 2) {
-          const ord   = [...rbs].sort((a, c) => dayjs(a.fecha_hora).unix() - dayjs(c.fecha_hora).unix());
-          const horas = dayjs(ord[ord.length - 1].fecha_hora).diff(dayjs(ord[0].fecha_hora), 'hour', true);
+          const ordenados = [...rbs].sort(
+            (a, c) => dayjs(a.fecha_hora).unix() - dayjs(c.fecha_hora).unix()
+          );
+          const horas = dayjs(ordenados[ordenados.length - 1].fecha_hora)
+            .diff(dayjs(ordenados[0].fecha_hora), 'hour', true);
           if (horas > 0) b.flujoHora = b.tm / horas;
         }
+
+        // Flujo del último bucket de hora con datos (no "últimos 60 min desde ahora")
+        if (rbs.length > 0) {
+          // Encontrar el bucket de hora más reciente que tenga registros
+          const ultimoRegistro = [...rbs].sort(
+            (a, c) => dayjs(c.fecha_hora).unix() - dayjs(a.fecha_hora).unix()
+          )[0];
+          const ultimaBucket = dayjs(ultimoRegistro.fecha_hora).startOf('hour');
+          const tmEnUltimaBucket = rbs
+            .filter(r => dayjs(r.fecha_hora).startOf('hour').isSame(ultimaBucket))
+            .reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+          // Ese bucket representa 1 hora, así que flujo = tmEnUltimaBucket TM/h
+          b.flujoUltimaHora = tmEnUltimaBucket;
+          b.ultimaBucketLabel = ultimaBucket.format('HH:00');
+        } else {
+          b.flujoUltimaHora = 0;
+          b.ultimaBucketLabel = null;
+        }
+
         if (b.meta > 0) {
           b.porcentaje = Math.min(100, (b.tm / b.meta) * 100);
           b.faltante   = Math.max(0, b.meta - b.tm);
           b.completado = b.tm >= b.meta;
-        } else { b.porcentaje = 0; b.faltante = 0; b.completado = false; }
+        } else {
+          b.porcentaje = 0; b.faltante = 0; b.completado = false;
+        }
         return b;
       });
   }, [registrosFiltrados, metasBodega, barco.bodegas_json, filtroBodegaGlobal]);
 
+  // ============================================================================
+  // FLUJO POR HORA POR BODEGA — también fix deduplicación
+  // ============================================================================
   const flujoPorHoraBodega = useMemo(() => {
     if (registrosFiltrados.length === 0) return [];
-    const ord = [...registrosFiltrados].sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()).slice(-48);
+
+    const ordenados = [...registrosFiltrados]
+      .sort((a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix())
+      .slice(-48);
+
     const map = new Map();
-    ord.forEach(reg => {
-      const key = `${dayjs(reg.fecha_hora).format('YYYY-MM-DD HH:00')}|${reg.bodega}`;
-      if (!map.has(key)) map.set(key, { hora: dayjs(reg.fecha_hora).format('HH:00'), bodega: reg.bodega, toneladas: 0 });
+
+    ordenados.forEach(reg => {
+      const horaExacta = dayjs(reg.fecha_hora).startOf('hour');
+      const horaCompleta = horaExacta.format('YYYY-MM-DD HH:00');
+      const key = `${horaCompleta}|${reg.bodega}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          hora: horaExacta.format('DD/MM HH:00'),
+          horaCompleta,
+          timestamp: horaExacta.valueOf(),
+          bodega: reg.bodega,
+          toneladas: 0
+        });
+      }
       map.get(key).toneladas += reg.peso_total_calculado_tm;
     });
-    const horas   = [...new Set(Array.from(map.values()).map(v => v.hora))].sort();
+
+    // Obtener todas las horas únicas (absolutas, sin duplicar)
+    const horasUnicas = [...new Set(Array.from(map.values()).map(v => v.horaCompleta))]
+      .sort()
+      .slice(-12);
+
     const bodegas = [...new Set(registrosFiltrados.map(r => r.bodega))];
-    return horas.map(hora => {
-      const dp = { hora };
-      bodegas.forEach(bod => { const e = Array.from(map.values()).find(v => v.hora === hora && v.bodega === bod); dp[bod] = e ? e.toneladas : 0; });
+
+    return horasUnicas.map(horaCompleta => {
+      const entry = Array.from(map.values()).find(v => v.horaCompleta === horaCompleta);
+      const dp = {
+        hora: entry ? entry.hora : horaCompleta,
+        horaCompleta
+      };
+      bodegas.forEach(bod => {
+        const found = Array.from(map.values()).find(
+          v => v.horaCompleta === horaCompleta && v.bodega === bod
+        );
+        dp[bod] = found ? found.toneladas : 0;
+      });
       return dp;
-    }).slice(-12);
+    });
   }, [registrosFiltrados]);
 
   const proyeccionesBodega = useMemo(() => {
@@ -751,9 +1405,18 @@ export default function DashboardSacosCompartido({ barco }) {
       if (b.meta === 0 || b.completado) return { ...b, fechaEstimada: null };
       const flujo = b.flujoHora > 0 ? b.flujoHora : flujoPromedioGeneral;
       const horas = b.faltante / flujo;
-      return { ...b, horasRestantes: horas, fechaEstimada: dayjs().add(horas, 'hour').format('DD/MM HH:mm') };
+      return {
+        ...b,
+        horasRestantes: horas,
+        fechaEstimada: dayjs().add(horas, 'hour').format('DD/MM HH:mm')
+      };
     });
   }, [datosPorBodegaCompleto, flujoPromedioGeneral]);
+
+  const handleRangoFechaSacos = (inicio, fin) => {
+    setFiltroFecha({ activo: true, inicio, fin });
+    setShowDatePickerSacos(false);
+  };
 
   if (loading && !registros.length) {
     return (
@@ -784,7 +1447,9 @@ export default function DashboardSacosCompartido({ barco }) {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700;800;900&display=swap');
+        
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        
         :root {
           --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; --border-strong: #cbd5e1;
           --text: #0f172a; --text-2: #475569; --text-3: #94a3b8;
@@ -793,9 +1458,23 @@ export default function DashboardSacosCompartido({ barco }) {
           --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
           font-family: 'Sora', sans-serif;
         }
+        
         body { background: var(--bg); color: var(--text); }
         .alm-root { min-height: 100vh; background: var(--bg); padding: 0; }
-        .alm-topbar { background: var(--navy); padding: 0 16px; display: flex; align-items: center; justify-content: space-between; height: 68px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,.18); }
+        
+        .alm-topbar {
+          background: var(--navy);
+          padding: 0 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          height: 68px;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          box-shadow: 0 2px 12px rgba(0,0,0,.18);
+        }
+        
         .alm-topbar-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
         .alm-logo { height: 32px; width: auto; object-fit: contain; filter: brightness(0) invert(1); flex-shrink: 0; }
         .alm-divider { width: 1px; height: 30px; background: rgba(255,255,255,.18); flex-shrink: 0; }
@@ -803,67 +1482,170 @@ export default function DashboardSacosCompartido({ barco }) {
         .alm-ship-name { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: -.3px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .alm-ship-code { font-size: 10px; color: rgba(255,255,255,.5); font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .alm-topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .alm-status-pill { display: flex; align-items: center; gap: 6px; background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.3); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: #6ee7b7; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+        
+        .alm-status-pill {
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.3);
+          border-radius: 999px; padding: 4px 10px;
+          font-size: 11px; font-weight: 700; color: #6ee7b7;
+          text-transform: uppercase; letter-spacing: .5px; white-space: nowrap;
+        }
+        
         .alm-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulse-dot 2s infinite; flex-shrink: 0; }
-        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.2); } }
+        
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        
         .alm-update-container { display: none; }
-        .alm-refresh-btn { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: rgba(255,255,255,.8); padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: 'Sora', sans-serif; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        
+        .alm-refresh-btn {
+          background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+          border-radius: 8px; color: rgba(255,255,255,.8);
+          padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: all .2s; font-family: 'Sora', sans-serif;
+          display: flex; align-items: center; gap: 4px; white-space: nowrap;
+        }
         .alm-refresh-btn:hover { background: rgba(255,255,255,.15); color: #fff; }
+        
         @media (min-width: 768px) {
-          .alm-topbar { padding: 0 24px; } .alm-logo { height: 36px; } .alm-ship-name { font-size: 15px; }
+          .alm-topbar { padding: 0 24px; }
+          .alm-logo { height: 36px; }
+          .alm-ship-name { font-size: 15px; }
           .alm-update-container { display: block; }
           .alm-update-time { font-size: 11px; color: rgba(255,255,255,.4); font-family: 'DM Mono', monospace; }
         }
+        
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-        .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
-        .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; align-items: flex-start; gap: 14px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
-        .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--accent); }
+        
+        .alm-kpis-row {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 14px; margin-bottom: 20px;
+        }
+        
+        .alm-kpi {
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 20px;
+          display: flex; align-items: flex-start; gap: 14px;
+          box-shadow: var(--shadow); position: relative; overflow: hidden;
+        }
+        .alm-kpi::after {
+          content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+          height: 2px; background: var(--accent);
+        }
         .alm-kpi-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
         .alm-kpi-body { flex: 1; }
         .alm-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); margin-bottom: 4px; }
         .alm-kpi-value { font-size: 22px; font-weight: 900; color: var(--text); line-height: 1.1; font-family: 'DM Mono', monospace; }
         .alm-kpi-sub { font-size: 11px; color: var(--text-3); margin-top: 3px; }
         .alm-kpi-bar { position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent); border-radius: 0 2px 2px 0; }
-        @keyframes count-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        
+        @keyframes count-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .alm-pulse-num { animation: count-up .6s ease; }
-        .alm-progress-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
-        .alm-progress-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
-        .alm-progress-title { font-size: 14px; font-weight: 700; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
-        .alm-progress-stats { display: flex; gap: 20px; font-size: 13px; flex-wrap: wrap; }
-        .alm-progress-stat { display: flex; align-items: center; gap: 6px; }
-        .alm-progress-stat-label { color: var(--text-3); font-size: 12px; }
-        .alm-progress-stat-value { font-weight: 700; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; }
-        .alm-progress-bar-container { width: 100%; height: 28px; background: #1e293b; border-radius: 14px; overflow: hidden; position: relative; }
-        .alm-progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); border-radius: 14px; transition: width 1s cubic-bezier(.4,0,.2,1); display: flex; align-items: center; justify-content: flex-end; padding-right: 12px; color: white; font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.4); min-width: 0; position: relative; }
-        .alm-progress-bar-fill::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 60%); border-radius: inherit; pointer-events: none; }
-        .alm-progress-pct-outside { margin-top: 6px; text-align: right; font-size: 12px; font-weight: 700; color: var(--text-2); font-family: 'DM Mono', monospace; }
-        .alm-progress-markers { display: flex; justify-content: space-between; margin-top: 8px; color: var(--text-3); font-size: 11px; padding: 0 4px; }
-        .alm-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
-        .alm-chart-title { font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+        
+        /* PROGRESO CONTAINER — rediseñado */
+        .alm-progress-container {
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 24px;
+          margin-bottom: 20px; box-shadow: var(--shadow);
+        }
+        .alm-progress-header {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+        }
+        .alm-progress-title {
+          font-size: 13px; font-weight: 700; color: var(--text-2);
+          display: flex; align-items: center; gap: 8px;
+          text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        
+        .alm-chart-card {
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 20px;
+          box-shadow: var(--shadow); margin-bottom: 20px;
+        }
+        .alm-chart-title {
+          font-size: 13px; font-weight: 700; color: var(--text-2);
+          margin-bottom: 14px; display: flex; align-items: center;
+          justify-content: space-between; flex-wrap: wrap; gap: 6px;
+        }
         .alm-no-data { height: 200px; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 13px; }
-        .alm-tooltip { background: var(--navy); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+        
+        .alm-tooltip {
+          background: var(--navy); border: 1px solid rgba(255,255,255,.1);
+          border-radius: 10px; padding: 10px 14px;
+          box-shadow: 0 4px 16px rgba(0,0,0,.3);
+        }
         .alm-tooltip-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.6); margin-bottom: 4px; font-family: 'DM Mono', monospace; }
         .alm-tooltip-value { font-size: 12px; font-family: 'DM Mono', monospace; color: rgba(255,255,255,.9); }
-        .alm-ship-layout { background: linear-gradient(145deg, #0b1a2e 0%, #0f172a 100%); border-radius: 24px; padding: 24px 16px; margin-bottom: 28px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid rgba(59,130,246,0.3); position: relative; overflow: hidden; }
-        .alm-ship-layout::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #3b82f6, #10b981, #f59e0b, transparent); opacity: 0.5; }
-        .alm-ship-title { font-size: 16px; font-weight: 800; color: white; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 0 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); position: relative; z-index: 2; }
-        .alm-ship-title span:first-child { background: rgba(255,255,255,0.1); padding: 6px 18px; border-radius: 40px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .alm-ship-container { position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; padding: 8px 0; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #10b981 #1e293b; }
+        
+        .alm-ship-layout {
+          background: linear-gradient(145deg, #0b1a2e 0%, #0f172a 100%);
+          border-radius: 24px; padding: 24px 16px; margin-bottom: 28px;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+          border: 1px solid rgba(59,130,246,0.3);
+          position: relative; overflow: hidden;
+        }
+        .alm-ship-layout::before {
+          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+          background: linear-gradient(90deg, transparent, #3b82f6, #10b981, #f59e0b, transparent);
+          opacity: 0.5;
+        }
+        .alm-ship-title {
+          font-size: 16px; font-weight: 800; color: white;
+          margin-bottom: 16px; display: flex; align-items: center;
+          justify-content: space-between; flex-wrap: wrap; gap: 8px;
+          padding: 0 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          position: relative; z-index: 2;
+        }
+        .alm-ship-title span:first-child {
+          background: rgba(255,255,255,0.1); padding: 6px 18px; border-radius: 40px;
+          backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+        }
+        .alm-ship-container {
+          position: relative; width: 100%; overflow-x: auto; overflow-y: hidden;
+          padding: 8px 0; -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin; scrollbar-color: #10b981 #1e293b;
+        }
         .alm-ship-container::-webkit-scrollbar { height: 6px; }
         .alm-ship-container::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
         .alm-ship-container::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
         .alm-ship-svg { min-width: 900px; width: 100%; height: auto; display: block; }
-        .alm-ship-legend { display: flex; gap: 12px; margin-top: 16px; justify-content: center; padding: 12px 16px; background: rgba(0,0,0,0.4); border-radius: 60px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap; }
+        
+        .alm-ship-legend {
+          display: flex; gap: 12px; margin-top: 16px; justify-content: center;
+          padding: 12px 16px; background: rgba(0,0,0,0.4); border-radius: 60px;
+          backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap;
+        }
         .alm-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.9); font-weight: 600; }
         .alm-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
-        .alm-table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-top: 20px; }
-        .alm-table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: #f8fafc; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        
+        .alm-table-card {
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--radius); box-shadow: var(--shadow);
+          overflow: hidden; margin-top: 20px;
+        }
+        .alm-table-header {
+          padding: 16px 20px; border-bottom: 1px solid var(--border);
+          background: #f8fafc; display: flex; justify-content: space-between;
+          align-items: center; flex-wrap: wrap; gap: 12px;
+        }
         .alm-section-title { font-size: 15px; font-weight: 800; color: var(--text); }
         .alm-badge { margin-left: 10px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--text-2); padding: 2px 9px; border-radius: 999px; }
+        
         .alm-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .alm-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1000px; }
         .alm-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 2; }
-        .alm-table th { padding: 11px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--text-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .alm-table th {
+          padding: 11px 16px; font-size: 10px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: .8px; color: var(--text-3);
+          border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
         .alm-table td { padding: 11px 16px; color: var(--text-2); white-space: nowrap; }
         .alm-table tbody tr:hover { background: #f8fafc; }
         .alm-th-num, .alm-td-num { text-align: right; }
@@ -873,37 +1655,62 @@ export default function DashboardSacosCompartido({ barco }) {
         .alm-amber { color: var(--amber) !important; }
         .alm-red { color: #ef4444 !important; }
         .alm-mono { font-family: 'DM Mono', monospace; }
-        .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-3); font-family: 'DM Mono', monospace; margin-top: 20px; }
-        .alm-splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--navy); gap: 20px; }
+        
+        .alm-footer {
+          text-align: center; padding: 24px; font-size: 11px;
+          color: var(--text-3); font-family: 'DM Mono', monospace; margin-top: 20px;
+        }
+        
+        .alm-splash {
+          min-height: 100vh; display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          background: var(--navy); gap: 20px;
+        }
         .alm-splash-logo { height: 48px; filter: brightness(0) invert(1); }
         .alm-splash-ship { font-size: 64px; animation: float 3s ease-in-out infinite; }
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-12px); }
+        }
         .alm-splash-text { color: rgba(255,255,255,.6); font-size: 16px; font-weight: 600; }
-        .alm-loader { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,.1); border-top-color: #10b981; border-radius: 50%; animation: spin .8s linear infinite; }
+        .alm-loader {
+          width: 40px; height: 40px;
+          border: 3px solid rgba(255,255,255,.1); border-top-color: #10b981;
+          border-radius: 50%; animation: spin .8s linear infinite;
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
         .alm-error-box { background: #fff; border-radius: 20px; padding: 36px; text-align: center; max-width: 380px; }
         .alm-error-title { font-size: 18px; font-weight: 700; color: #dc2626; margin-bottom: 8px; }
         .alm-error-msg { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
-        .alm-retry-btn { background: #fee2e2; border: none; border-radius: 10px; color: #dc2626; padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Sora', sans-serif; }
+        .alm-retry-btn {
+          background: #fee2e2; border: none; border-radius: 10px;
+          color: #dc2626; padding: 10px 20px; font-size: 13px; font-weight: 700;
+          cursor: pointer; font-family: 'Sora', sans-serif;
+        }
+        
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
         @media (max-width: 768px) {
           .alm-body { padding: 16px 12px 40px; }
           .alm-kpis-row { grid-template-columns: 1fr 1fr; gap: 10px; }
           .alm-kpi { padding: 14px 12px; gap: 10px; }
-          .alm-kpi-icon { font-size: 22px; } .alm-kpi-value { font-size: 18px; }
+          .alm-kpi-icon { font-size: 22px; }
+          .alm-kpi-value { font-size: 18px; }
           .alm-ship-layout { padding: 16px 8px; border-radius: 16px; margin-left: -4px; margin-right: -4px; }
           .alm-ship-title { font-size: 13px; flex-direction: column; align-items: flex-start; gap: 6px; }
           .alm-ship-title span:first-child { padding: 5px 14px; font-size: 12px; width: 100%; text-align: center; }
           .alm-ship-svg { min-width: 850px; }
           .alm-ship-legend { gap: 8px; padding: 10px 12px; border-radius: 20px; flex-wrap: wrap; justify-content: flex-start; }
-          .alm-legend-item { font-size: 10px; gap: 4px; } .alm-legend-dot { width: 8px; height: 8px; }
-          .alm-progress-stats { flex-direction: column; gap: 6px; }
+          .alm-legend-item { font-size: 10px; gap: 4px; }
+          .alm-legend-dot { width: 8px; height: 8px; }
         }
         @media (max-width: 480px) {
           .alm-kpis-row { grid-template-columns: 1fr 1fr; }
-          .alm-kpi-label { font-size: 9px; } .alm-kpi-value { font-size: 16px; }
+          .alm-kpi-label { font-size: 9px; }
+          .alm-kpi-value { font-size: 16px; }
           .alm-ship-svg { min-width: 900px; }
           .alm-ship-legend { flex-direction: row; align-items: flex-start; border-radius: 12px; gap: 6px; }
           .alm-legend-item { font-size: 9px; }
@@ -938,56 +1745,92 @@ export default function DashboardSacosCompartido({ barco }) {
 
         <div className="alm-body">
 
-          {/* ── FILTRO GLOBAL POR BODEGA ── */}
-          {bodegasDisponibles.length > 2 && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              marginBottom: 20,
-              background: '#fff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 14,
-              padding: '10px 16px',
-              flexWrap: 'wrap',
-              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
-                📦 Bodega
-              </span>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                {bodegasDisponibles.map(b => (
-                  <button
-                    key={b}
-                    onClick={() => setFiltroBodegaGlobal(b)}
-                    style={{
-                      padding: '5px 14px',
-                      borderRadius: 999,
-                      border: filtroBodegaGlobal === b ? 'none' : '1px solid #e2e8f0',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      fontFamily: "'Sora', sans-serif",
-                      transition: 'all .15s',
-                      background: filtroBodegaGlobal === b ? '#0f172a' : '#f8fafc',
-                      color:      filtroBodegaGlobal === b ? '#fff'    : '#64748b',
-                    }}
-                  >
-                    {b === 'todas' ? 'Todas' : b}
-                  </button>
-                ))}
-              </div>
-              {filtroBodegaGlobal !== 'todas' && (
+          {/* FILTRO GLOBAL POR BODEGA Y FECHA */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
+            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
+            padding: '10px 16px', flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
+              📦 Bodega
+            </span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+              {bodegasDisponibles.map(b => (
                 <button
-                  onClick={() => setFiltroBodegaGlobal('todas')}
-                  style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
+                  key={b}
+                  onClick={() => setFiltroBodegaGlobal(b)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 999,
+                    border: filtroBodegaGlobal === b ? 'none' : '1px solid #e2e8f0',
+                    cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                    fontFamily: "'Sora', sans-serif", transition: 'all .15s',
+                    background: filtroBodegaGlobal === b ? '#0f172a' : '#f8fafc',
+                    color: filtroBodegaGlobal === b ? '#fff' : '#64748b',
+                  }}
                 >
-                  ✕ Limpiar
+                  {b === 'todas' ? 'Todas' : b}
                 </button>
+              ))}
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowDatePickerSacos(!showDatePickerSacos)}
+                style={{
+                  padding: '5px 14px', borderRadius: 999,
+                  border: filtroFecha.activo ? 'none' : '1px solid #e2e8f0',
+                  background: filtroFecha.activo ? '#0f172a' : '#f8fafc',
+                  color: filtroFecha.activo ? '#fff' : '#64748b',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  fontFamily: "'Sora', sans-serif",
+                  display: 'flex', alignItems: 'center', gap: 4
+                }}
+              >
+                <Calendar size={12} />
+                {filtroFecha.activo ? 'Rango activo' : 'Filtrar fechas'}
+              </button>
+              {showDatePickerSacos && (
+                <DateRangeSelector
+                  fechaInicio={filtroFecha.inicio}
+                  fechaFin={filtroFecha.fin}
+                  onChange={handleRangoFechaSacos}
+                  onClose={() => setShowDatePickerSacos(false)}
+                />
               )}
             </div>
-          )}
 
+            {filtroBodegaGlobal !== 'todas' && (
+              <button
+                onClick={() => setFiltroBodegaGlobal('todas')}
+                style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
+              >
+                ✕ Limpiar bodega
+              </button>
+            )}
+            {filtroFecha.activo && (
+              <button
+                onClick={() => setFiltroFecha({ activo: false, inicio: null, fin: null })}
+                style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
+              >
+                ✕ Limpiar fechas
+              </button>
+            )}
+          </div>
+
+          {/* Indicador de rango de fecha activo */}
+          {filtroFecha.activo && (
+            <div style={{
+              marginBottom: 16, padding: '8px 16px',
+              background: '#e0f2fe', border: '1px solid #7dd3fc',
+              borderRadius: 8, fontSize: 12, color: '#0369a1',
+              display: 'flex', alignItems: 'center', gap: 8
+            }}>
+              <Calendar size={14} />
+              <span>
+                Mostrando datos desde <strong>{dayjs(filtroFecha.inicio).format('DD/MM/YYYY HH:mm')}</strong> hasta <strong>{dayjs(filtroFecha.fin).format('DD/MM/YYYY HH:mm')}</strong>
+              </span>
+            </div>
+          )}
 
           <div className="alm-kpis-row">
             <KpiCard label="Total Viajes"    value={statsGenerales.totalViajes}                icon="🚛" accent="#10b981" animate />
@@ -997,57 +1840,78 @@ export default function DashboardSacosCompartido({ barco }) {
               sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / statsGenerales.totalSacos) * 100).toFixed(1) : 0}% del total`} />
           </div>
 
-          {/* PROGRESO GENERAL */}
+          {/* ── PROGRESO GENERAL REDISEÑADO ── */}
           <div className="alm-progress-container">
             <div className="alm-progress-header">
               <div className="alm-progress-title">
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block', animation: 'pulse-dot 2s infinite' }} />
                 Progreso general de la operación
               </div>
-              <div className="alm-progress-stats">
-                <div className="alm-progress-stat"><span className="alm-progress-stat-label">Meta:</span><span className="alm-progress-stat-value">{fmtTM(totalMetas, 2)} TM</span></div>
-                <div className="alm-progress-stat"><span className="alm-progress-stat-label">Actual:</span><span className="alm-progress-stat-value alm-green">{fmtTM(statsGenerales.totalTM, 2)} TM</span></div>
-                <div className="alm-progress-stat"><span className="alm-progress-stat-label">Faltante:</span><span className="alm-progress-stat-value alm-red">{fmtTM(Math.max(0, totalMetas - statsGenerales.totalTM), 2)} TM</span></div>
-              </div>
             </div>
-            <div className="alm-progress-bar-container">
-              <div className="alm-progress-bar-fill" style={{ width: `${progresoGeneral}%` }}>
-                {progresoGeneral >= 8 && `${progresoGeneral.toFixed(1)}%`}
-              </div>
-            </div>
-            {progresoGeneral < 8 && <div className="alm-progress-pct-outside">{progresoGeneral.toFixed(1)}% completado</div>}
-            <div className="alm-progress-markers"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+            <ProgressBarFormal
+              porcentaje={progresoGeneral}
+              actual={statsGenerales.totalTM}
+              meta={totalMetas}
+              faltante={Math.max(0, totalMetas - statsGenerales.totalTM)}
+            />
           </div>
 
-          {/* FLUJO POR HORA */}
+          {/* FLUJO POR HORA — eje X usa hora con fecha para evitar duplicados */}
           <div className="alm-chart-card">
             <h4 className="alm-chart-title">
               ⏱️ FLUJO POR HORA (TM/h)
-              <span>Promedio: {fmtTM(flujoPromedioGeneral, 2)} TM/h | Última hora: {fmtTM(flujoUltimaHora, 2)} TM</span>
+              <span>Promedio: {fmtTM(flujoPromedioGeneral, 2)} TM/h | Última hora: {fmtTM(flujoUltimaHora, 2)} TM | {flujoPorHora.length} horas mostradas</span>
             </h4>
             {flujoPorHora.length > 1 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart data={flujoPorHora}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hora" />
+                  {/* 
+                    FIX DUPLICACIÓN: usamos "hora" como dataKey, 
+                    pero "hora" ya contiene "DD/MM HH:00" lo que hace cada valor único.
+                    Si hay muchos puntos, el formatter acorta a HH:00.
+                  */}
+                  <XAxis
+                    dataKey="hora"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => {
+                      // Si el label tiene formato DD/MM HH:00, mostramos HH:00 para ahorrar espacio
+                      // pero los datos internos siguen siendo únicos
+                      const parts = v.split(' ');
+                      return parts.length === 2 ? parts[1] : v;
+                    }}
+                  />
                   <YAxis yAxisId="left"  tickFormatter={(v) => fmtTM(v, 0)} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtNumber(v, 0)} />
-                  <Tooltip formatter={(value, name) => name === 'toneladas' ? [fmtTM(value, 2) + ' TM', 'Toneladas'] : name === 'viajes' ? [value + ' viajes', 'Viajes'] : [value, name]} />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      if (name === 'toneladas') return [fmtTM(value, 2) + ' TM', 'Toneladas'];
+                      if (name === 'viajes') return [value + ' viajes', 'Viajes'];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label) => `🕐 ${label}`}
+                  />
                   <Bar  yAxisId="left"  dataKey="toneladas" fill="#10b981" name="Toneladas" barSize={20} />
                   <Line yAxisId="right" type="monotone" dataKey="viajes" stroke="#f59e0b" strokeWidth={2} name="Viajes" />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : <div className="alm-no-data">Se necesitan al menos 2 horas de datos para mostrar flujo</div>}
+            ) : (
+              <div className="alm-no-data">
+                {flujoPorHora.length === 1
+                  ? "Solo hay datos de una hora, se necesitan al menos 2 horas para mostrar flujo"
+                  : "No hay datos suficientes para mostrar el flujo por hora"}
+              </div>
+            )}
           </div>
 
-          {/* BARCO SVG */}
+          {/* BARCO SVG — con flujo/h de última hora por bodega */}
           <div className="alm-ship-layout">
             <div className="alm-ship-title">
               <span>⚓ DISTRIBUCIÓN DE CARGA POR BODEGA</span>
               <span>Total: {fmtTM(statsGenerales.totalTM, 2)} TM / {fmtTM(totalMetas, 2)} TM</span>
             </div>
             <div className="alm-ship-container">
-              <svg viewBox="0 0 1000 440" xmlns="http://www.w3.org/2000/svg" className="alm-ship-svg" preserveAspectRatio="xMidYMid meet">
+              <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg" className="alm-ship-svg" preserveAspectRatio="xMidYMid meet">
                 <g transform="scale(0.714)">
                   <defs>
                     <linearGradient id="hullMetal" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1063,66 +1927,119 @@ export default function DashboardSacosCompartido({ barco }) {
                       <circle cx="10" cy="10" r="2" fill="#cbd5e0" opacity="0.3" />
                     </pattern>
                   </defs>
-                  <rect x="0" y="350" width="1400" height="200" fill="url(#oceanWater)" />
-                  <path d="M0 380 Q150 360, 300 380 T600 380 T900 380 T1200 380 T1400 380" stroke="#60a5fa" strokeWidth="3" fill="none" opacity="0.3" />
-                  <path d="M0 420 Q200 400, 400 420 T800 420 T1200 420" stroke="#3b82f6" strokeWidth="2" fill="none" opacity="0.2" />
-                  <path d="M150 350 L200 200 L1200 200 L1250 350 Z" fill="url(#hullMetal)" stroke="#94a3b8" strokeWidth="6" />
-                  <line x1="170" y1="300" x2="1230" y2="300" stroke="#fbbf24" strokeWidth="2" strokeDasharray="10 10" opacity="0.6" />
-                  <rect x="200" y="180" width="1000" height="30" fill="url(#deckWood)" stroke="#b45309" strokeWidth="2" rx="4" />
-                  <line x1="220" y1="150" x2="1180" y2="150" stroke="#cbd5e0" strokeWidth="3" />
-                  <line x1="220" y1="140" x2="1180" y2="140" stroke="#cbd5e0" strokeWidth="2" />
-                  {[250,350,450,550,650,750,850,950,1050,1150].map(x => (<rect key={x} x={x-2} y="130" width="4" height="30" fill="#94a3b8" rx="2" />))}
-                  <rect x="400" y="30" width="12" height="120" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
-                  <circle cx="406" cy="20" r="18" fill="#fbbf24" stroke="#d97706" strokeWidth="3" />
-                  <rect x="1000" y="50" width="8" height="100" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
-                  <circle cx="1004" cy="40" r="12" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
-                  <rect x="650" y="40" width="70" height="140" fill="#475569" stroke="#334155" strokeWidth="3" rx="6" />
-                  <ellipse cx="685" cy="40" rx="35" ry="12" fill="#334155" stroke="#1f2937" strokeWidth="2" />
-                  <circle cx="685" cy="25" r="12" fill="#94a3b8" opacity="0.4"><animate attributeName="r" values="12;15;12" dur="3s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.4;0.6;0.4" dur="3s" repeatCount="indefinite" /></circle>
-                  <circle cx="705" cy="15" r="8" fill="#cbd5e0" opacity="0.3"><animate attributeName="r" values="8;11;8" dur="2.5s" repeatCount="indefinite" /></circle>
-                  <rect x="500" y="100" width="200" height="60" fill="#1f2937" stroke="#4b5563" strokeWidth="3" rx="8" />
-                  <circle cx="540" cy="130" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
-                  <circle cx="600" cy="130" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
-                  <circle cx="660" cy="130" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
-                  <path d="M150 350 L130 300 L180 200 L200 200 L150 350" fill="#4a5568" stroke="#718096" strokeWidth="3" />
-                  <circle cx="140" cy="285" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
-                  <line x1="140" y1="277" x2="140" y2="293" stroke="#d97706" strokeWidth="2" />
-                  <line x1="132" y1="285" x2="148" y2="285" stroke="#d97706" strokeWidth="2" />
-                  <path d="M1250 350 L1270 300 L1220 200 L1200 200 L1250 350" fill="#4a5568" stroke="#718096" strokeWidth="3" />
-                  <circle cx="1260" cy="285" r="6" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
+
+                  {/* Océano */}
+                  <rect x="0" y="390" width="1400" height="200" fill="url(#oceanWater)" />
+                  <path d="M0 410 Q150 390, 300 410 T600 410 T900 410 T1200 410 T1400 410" stroke="#60a5fa" strokeWidth="3" fill="none" opacity="0.3" />
+                  <path d="M0 450 Q200 430, 400 450 T800 450 T1200 450" stroke="#3b82f6" strokeWidth="2" fill="none" opacity="0.2" />
+
+                  {/* Casco */}
+                  <path d="M150 390 L200 220 L1200 220 L1250 390 Z" fill="url(#hullMetal)" stroke="#94a3b8" strokeWidth="6" />
+                  <line x1="170" y1="340" x2="1230" y2="340" stroke="#fbbf24" strokeWidth="2" strokeDasharray="10 10" opacity="0.6" />
+                  <rect x="200" y="200" width="1000" height="30" fill="url(#deckWood)" stroke="#b45309" strokeWidth="2" rx="4" />
+
+                  {/* Barandas */}
+                  <line x1="220" y1="170" x2="1180" y2="170" stroke="#cbd5e0" strokeWidth="3" />
+                  <line x1="220" y1="160" x2="1180" y2="160" stroke="#cbd5e0" strokeWidth="2" />
+                  {[250,350,450,550,650,750,850,950,1050,1150].map(x => (
+                    <rect key={x} x={x-2} y="150" width="4" height="30" fill="#94a3b8" rx="2" />
+                  ))}
+
+                  {/* Mástiles */}
+                  <rect x="400" y="40" width="12" height="120" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
+                  <circle cx="406" cy="30" r="18" fill="#fbbf24" stroke="#d97706" strokeWidth="3" />
+                  <rect x="1000" y="60" width="8" height="100" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
+                  <circle cx="1004" cy="50" r="12" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
+
+                  {/* Superestructura */}
+                  <rect x="650" y="60" width="70" height="140" fill="#475569" stroke="#334155" strokeWidth="3" rx="6" />
+                  <ellipse cx="685" cy="60" rx="35" ry="12" fill="#334155" stroke="#1f2937" strokeWidth="2" />
+                  <circle cx="685" cy="44" r="12" fill="#94a3b8" opacity="0.4">
+                    <animate attributeName="r" values="12;15;12" dur="3s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.4;0.6;0.4" dur="3s" repeatCount="indefinite" />
+                  </circle>
+
+                  {/* Ventanas */}
+                  <rect x="500" y="120" width="200" height="60" fill="#1f2937" stroke="#4b5563" strokeWidth="3" rx="8" />
+                  <circle cx="540" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
+                  <circle cx="600" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
+                  <circle cx="660" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
+
+                  {/* Proa y popa */}
+                  <path d="M150 390 L130 330 L180 220 L200 220 L150 390" fill="#4a5568" stroke="#718096" strokeWidth="3" />
+                  <circle cx="140" cy="315" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
+                  <path d="M1250 390 L1270 330 L1220 220 L1200 220 L1250 390" fill="#4a5568" stroke="#718096" strokeWidth="3" />
+
+                  {/* ── BODEGAS con flujo/h de última hora ── */}
                   {datosPorBodegaCompleto.map((bodega, index) => {
                     const total = datosPorBodegaCompleto.length;
                     const aw = 700 / total;
                     const ix = 300 + (index * aw) + (aw * 0.1);
                     const w  = aw * 0.8;
-                    const am = 160;
+                    const am = 170; // altura máxima del contenedor
                     const pct = Math.min(100, bodega.porcentaje || 0);
                     const ar  = (am * pct) / 100;
                     let cb = "#3b82f6", cbr = "#2563eb";
                     if (bodega.completado)    { cb = "#10b981"; cbr = "#059669"; }
                     else if (pct > 75)        { cb = "#f59e0b"; cbr = "#d97706"; }
+
+                    const flujoUltHora = bodega.flujoUltimaHora || 0;
+                    const bucketLabel = bodega.ultimaBucketLabel ? `Ultimo flujo: ${bodega.ultimaBucketLabel}` : '';
+                    const flujoLabel = flujoUltHora > 0
+                      ? `${Number(flujoUltHora).toFixed(1)} TM`
+                      : '—';
+                    const flujoColor = flujoUltHora > 0 ? '#34d399' : 'rgba(255,255,255,0.4)';
+
                     return (
                       <g key={bodega.bodega}>
-                        <rect x={ix} y={190} width={w} height={am} fill="#1e293b" stroke={cbr} strokeWidth="4" rx="12" />
-                        <rect x={ix+4} y={190+(am-ar)} width={w-8} height={Math.max(0,ar-4)} fill={cb} opacity="0.9" rx="8">
+                        {/* Contenedor */}
+                        <rect x={ix} y={210} width={w} height={am} fill="#1e293b" stroke={cbr} strokeWidth="4" rx="12" />
+                        {/* Fill animado */}
+                        <rect x={ix+4} y={210+(am-ar)} width={w-8} height={Math.max(0,ar-4)} fill={cb} opacity="0.9" rx="8">
                           <animate attributeName="height" from="0" to={Math.max(0,ar-4)} dur="1s" fill="freeze" />
                         </rect>
-                        <rect x={ix} y={190} width={w} height={am} fill="url(#rivets)" opacity="0.5" rx="12" />
-                        <rect x={ix+w/2-25} y="165" width="50" height="25" fill="#0f172a" rx="12" stroke={cbr} strokeWidth="2" />
-                        <text x={ix+w/2} y="183" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">{bodega.bodega.replace('Bodega ','B')}</text>
-                        <text x={ix+w/2} y={230} textAnchor="middle" fill="white" fontSize="14" fontWeight="800" fontFamily="DM Mono, monospace">{fmtTM(bodega.tm,1)}</text>
-                        <text x={ix+w/2} y={250} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10" fontWeight="600">TM</text>
-                        <text x={ix+w/2} y={310} textAnchor="middle" fill="white" fontSize="16" fontWeight="900">{pct.toFixed(0)}%</text>
-                        <rect x={ix+15} y={330} width={w-30} height="8" fill="#334155" rx="4" />
-                        <rect x={ix+15} y={330} width={(w-30)*(pct/100)} height="8" fill={cb} rx="4">
-                          <animate attributeName="width" from="0" to={(w-30)*(pct/100)} dur="1s" fill="freeze" />
+                        {/* Rivets */}
+                        <rect x={ix} y={210} width={w} height={am} fill="url(#rivets)" opacity="0.5" rx="12" />
+
+                        {/* Etiqueta bodega */}
+                        <rect x={ix+w/2-25} y="185" width="50" height="25" fill="#0f172a" rx="12" stroke={cbr} strokeWidth="2" />
+                        <text x={ix+w/2} y="203" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
+                          {bodega.bodega.replace('Bodega ','B')}
+                        </text>
+
+                        {/* TM actual */}
+                        <text x={ix+w/2} y={255} textAnchor="middle" fill="white" fontSize="15" fontWeight="800" fontFamily="DM Mono, monospace">
+                          {fmtTM(bodega.tm,1)}
+                        </text>
+                        <text x={ix+w/2} y={272} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10" fontWeight="600">TM</text>
+
+                        {/* Porcentaje */}
+                        <text x={ix+w/2} y={305} textAnchor="middle" fill="white" fontSize="18" fontWeight="900">{pct.toFixed(0)}%</text>
+
+                        {/* Barra de progreso interna */}
+                        <rect x={ix+10} y={320} width={w-20} height="8" fill="#334155" rx="4" />
+                        <rect x={ix+10} y={320} width={(w-20)*(pct/100)} height="8" fill={cb} rx="4">
+                          <animate attributeName="width" from="0" to={(w-20)*(pct/100)} dur="1s" fill="freeze" />
                         </rect>
+
+                        {/* ── FLUJO DEL ÚLTIMO BUCKET DE HORA ── */}
+                        <rect x={ix+4} y={334} width={w-8} height={32} fill="rgba(0,0,0,0.35)" rx="6" />
+                        <text x={ix+w/2} y={345} textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize="7.5" fontWeight="700" letterSpacing="0.5">
+                          {bucketLabel || 'ÚLT. BUCKET'}
+                        </text>
+                        <text x={ix+w/2} y={360} textAnchor="middle" fill={flujoColor} fontSize="12" fontWeight="900" fontFamily="DM Mono, monospace">
+                          {flujoLabel} TM/h
+                        </text>
                       </g>
                     );
                   })}
-                  <text x="150"  y="380" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">⚓ PROA</text>
-                  <text x="1250" y="380" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">POPA ⚓</text>
-                  <text x="700"  y="280" textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize="28" fontWeight="800" fontFamily="DM Mono, monospace">{barco.nombre.toUpperCase()}</text>
+
+                  {/* Etiquetas proa/popa */}
+                  <text x="150"  y="420" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">⚓ PROA</text>
+                  <text x="1250" y="420" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">POPA ⚓</text>
+                  <text x="700"  y="310" textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize="28" fontWeight="800" fontFamily="DM Mono, monospace">
+                    {barco.nombre.toUpperCase()}
+                  </text>
                 </g>
               </svg>
             </div>
@@ -1130,25 +2047,53 @@ export default function DashboardSacosCompartido({ barco }) {
               <span className="alm-legend-item"><span style={{ background: '#10b981' }} className="alm-legend-dot" />Completada (100%)</span>
               <span className="alm-legend-item"><span style={{ background: '#f59e0b' }} className="alm-legend-dot" />&gt; 75%</span>
               <span className="alm-legend-item"><span style={{ background: '#3b82f6' }} className="alm-legend-dot" />En progreso</span>
-              <span className="alm-legend-item"><span style={{ background: '#fbbf24' }} className="alm-legend-dot" />Cantidad Manifestada: {fmtTM(totalMetas, 2)} TM</span>
+              <span className="alm-legend-item"><span style={{ background: '#34d399' }} className="alm-legend-dot" />TM últ. bucket/h</span>
+              <span className="alm-legend-item"><span style={{ background: '#fbbf24' }} className="alm-legend-dot" />Manifestado: {fmtTM(totalMetas, 2)} TM</span>
             </div>
           </div>
 
-          {/* FLUJO POR HORA POR BODEGA */}
+          {/* FLUJO POR HORA POR BODEGA — también fix */}
           <div className="alm-chart-card">
-            <h4 className="alm-chart-title">📈 FLUJO POR HORA POR BODEGA (TM/h)<span>Últimas 12 horas</span></h4>
+            <h4 className="alm-chart-title">
+              📈 FLUJO POR HORA POR BODEGA (TM/h)
+              <span>Últimas {Math.min(12, flujoPorHoraBodega.length)} horas</span>
+            </h4>
             {flujoPorHoraBodega.length > 1 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={flujoPorHoraBodega} margin={{ top: 10, right: 30, left: 20, bottom: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hora" /><YAxis tickFormatter={(v) => fmtTM(v, 1)} />
-                  <Tooltip formatter={(value) => fmtTM(value, 2) + ' TM'} /><Legend />
+                  <XAxis
+                    dataKey="hora"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => {
+                      const parts = v.split(' ');
+                      return parts.length === 2 ? parts[1] : v;
+                    }}
+                  />
+                  <YAxis tickFormatter={(v) => fmtTM(v, 1)} />
+                  <Tooltip
+                    formatter={(value) => fmtTM(value, 2) + ' TM'}
+                    labelFormatter={(label) => `🕐 ${label}`}
+                  />
+                  <Legend />
                   {datosPorBodegaCompleto.map((bodega, index) => (
-                    <Bar key={bodega.bodega} dataKey={bodega.bodega} stackId="a" fill={COLORES[index % COLORES.length]} name={bodega.bodega} />
+                    <Bar
+                      key={bodega.bodega}
+                      dataKey={bodega.bodega}
+                      stackId="a"
+                      fill={COLORES[index % COLORES.length]}
+                      name={bodega.bodega}
+                    />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="alm-no-data">Se necesitan más datos para mostrar flujo por bodega</div>}
+            ) : (
+              <div className="alm-no-data">
+                {flujoPorHoraBodega.length === 1
+                  ? "Solo hay datos de una hora, se necesitan al menos 2 horas para mostrar flujo por bodega"
+                  : "No hay datos suficientes para mostrar flujo por bodega"}
+              </div>
+            )}
           </div>
 
           {/* ATRASOS */}
@@ -1158,15 +2103,27 @@ export default function DashboardSacosCompartido({ barco }) {
           <div className="alm-table-card">
             <div className="alm-table-header">
               <h3 className="alm-section-title">📊 RESUMEN POR BODEGA CON CANTIDADES MANIFESTADAS</h3>
+              {filtroFecha.activo && (
+                <span style={{ fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>
+                  {dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}
+                </span>
+              )}
             </div>
             <div className="alm-table-scroll">
               <table className="alm-table">
                 <thead>
                   <tr>
-                    <th>Bodega</th><th className="alm-th-num">Viajes</th><th className="alm-th-num">Sacos</th>
-                    <th className="alm-th-num">Actual (TM)</th><th className="alm-th-num">Cantidad Manifestada (TM)</th>
-                    <th className="alm-th-num">%</th><th className="alm-th-num">Faltante (TM)</th>
-                    <th className="alm-th-num">Flujo/h</th><th>Estado</th><th className="alm-th-num">Proyección</th>
+                    <th>Bodega</th>
+                    <th className="alm-th-num">Viajes</th>
+                    <th className="alm-th-num">Sacos</th>
+                    <th className="alm-th-num">Actual (TM)</th>
+                    <th className="alm-th-num">Manifestado (TM)</th>
+                    <th className="alm-th-num">%</th>
+                    <th className="alm-th-num">Faltante (TM)</th>
+                    <th className="alm-th-num">Flujo/h</th>
+                    <th className="alm-th-num">Últ. hora</th>
+                    <th>Estado</th>
+                    <th className="alm-th-num">Proyección</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1179,10 +2136,25 @@ export default function DashboardSacosCompartido({ barco }) {
                         <td className="alm-td-num">{fmtNumber(b.sacos)}</td>
                         <td className="alm-td-num alm-green">{fmtTM(b.tm, 2)}</td>
                         <td className="alm-td-num">{fmtTM(b.meta, 2)}</td>
-                        <td className="alm-td-num alm-bold" style={{ color: b.completado ? '#10b981' : (b.porcentaje > 75 ? '#f59e0b' : '#3b82f6') }}>{b.porcentaje.toFixed(1)}%</td>
-                        <td className="alm-td-num" style={{ color: b.faltante > 0 ? '#ef4444' : '#10b981' }}>{b.faltante > 0 ? fmtTM(b.faltante, 2) : '✓'}</td>
+                        <td className="alm-td-num alm-bold" style={{
+                          color: b.completado ? '#10b981' : (b.porcentaje > 75 ? '#f59e0b' : '#3b82f6')
+                        }}>
+                          {b.porcentaje.toFixed(1)}%
+                        </td>
+                        <td className="alm-td-num" style={{ color: b.faltante > 0 ? '#ef4444' : '#10b981' }}>
+                          {b.faltante > 0 ? fmtTM(b.faltante, 2) : '✓'}
+                        </td>
                         <td className="alm-td-num">{b.flujoHora > 0 ? fmtTM(b.flujoHora, 2) : '—'}</td>
-                        <td>{b.completado ? <span style={{ color: '#10b981', fontWeight: 'bold' }}>COMPLETADA</span> : <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>EN PROGRESO</span>}</td>
+                        <td className="alm-td-num" style={{ color: '#10b981', fontWeight: 700 }}>
+                          {b.flujoUltimaHora > 0 ? `${fmtTM(b.flujoUltimaHora, 2)} TM` : '—'}
+                        </td>
+                        <td>
+                          {b.completado ? (
+                            <span style={{ color: '#10b981', fontWeight: 'bold' }}>COMPLETADA</span>
+                          ) : (
+                            <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>EN PROGRESO</span>
+                          )}
+                        </td>
                         <td className="alm-td-num alm-amber">{proy?.fechaEstimada ?? '—'}</td>
                       </tr>
                     );
@@ -1196,9 +2168,15 @@ export default function DashboardSacosCompartido({ barco }) {
                     <td className="alm-td-num alm-bold alm-green">{fmtTM(statsGenerales.totalTM, 2)}</td>
                     <td className="alm-td-num alm-bold">{fmtTM(totalMetas, 2)}</td>
                     <td className="alm-td-num alm-bold">{progresoGeneral.toFixed(1)}%</td>
-                    <td className="alm-td-num alm-bold" style={{ color: '#ef4444' }}>{fmtTM(Math.max(0, totalMetas - statsGenerales.totalTM), 2)}</td>
+                    <td className="alm-td-num alm-bold" style={{ color: '#ef4444' }}>
+                      {fmtTM(Math.max(0, totalMetas - statsGenerales.totalTM), 2)}
+                    </td>
                     <td className="alm-td-num alm-bold">{fmtTM(flujoPromedioGeneral, 2)}</td>
-                    <td></td><td></td>
+                    <td className="alm-td-num alm-bold" style={{ color: '#10b981' }}>
+                      {fmtTM(flujoUltimaHora, 2)} TM
+                    </td>
+                    <td></td>
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1207,6 +2185,9 @@ export default function DashboardSacosCompartido({ barco }) {
 
           <div className="alm-footer">
             🔄 auto-refresh 30s &nbsp;·&nbsp; {barco.nombre} ({barco.codigo_barco}) &nbsp;·&nbsp; Registro de Sacos
+            {filtroFecha.activo && (
+              <> &nbsp;·&nbsp; Rango: {dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}</>
+            )}
           </div>
         </div>
       </div>
