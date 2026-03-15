@@ -784,9 +784,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
   // Texto de estado
   const getStatusText = () => {
     if (pct >= 100) return '¡COMPLETADO!';
-    if (pct >= 80) return '¡Último esfuerzo!';
-    if (pct >= 50) return 'Mitad de camino';
-    if (pct >= 25) return 'Buen inicio';
     return 'Operación en curso';
   };
 
