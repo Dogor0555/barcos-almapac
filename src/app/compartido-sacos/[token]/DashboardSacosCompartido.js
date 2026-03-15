@@ -1079,7 +1079,7 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
               letterSpacing: '0.5px',
               color: '#64748b'
             }}>
-              Descargado
+              Embarcado
             </span>
           </div>
           <div style={{
