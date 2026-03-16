@@ -10,7 +10,7 @@ import {
   Edit2, Trash2, RefreshCw, BarChart3,
   Sun, Moon, Search, Grid, Layers, ChevronRight,
   Timer, TrendingUp, Award, Zap, Star, Hash, Calendar,
-  TruckIcon, Route, MapPin
+  TruckIcon, Route, MapPin, Filter, Eye, EyeOff
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -40,10 +40,30 @@ const formatearDuracionToMinutos = (duracion) => {
   return (h * 60) + (m || 0)
 }
 
-const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) => {
+const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInicio, filtroFechaFin) => {
   try {
     // Crear un nuevo libro de trabajo
     const wb = XLSX.utils.book_new()
+    
+    // Filtrar registros por rango de fechas si está activo
+    let registrosFiltrados = [...registros]
+    if (filtroFechaInicio && filtroFechaFin) {
+      registrosFiltrados = registros.filter(r => {
+        const fechaReg = dayjs(r.fecha)
+        return fechaReg.isAfter(dayjs(filtroFechaInicio).subtract(1, 'day')) && 
+               fechaReg.isBefore(dayjs(filtroFechaFin).add(1, 'day'))
+      })
+    }
+    
+    // Recalcular stats con los registros filtrados
+    const statsFiltrados = {
+      totalViajes: registrosFiltrados.length,
+      totalSacos: registrosFiltrados.reduce((s, r) => s + r.cantidad_paquetes, 0),
+      totalTM: registrosFiltrados.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0),
+      promedioViaje: registrosFiltrados.length > 0 
+        ? registrosFiltrados.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) / registrosFiltrados.length 
+        : 0
+    }
     
     // ===================================================
     // HOJA 1: RESUMEN GENERAL
@@ -55,17 +75,39 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
       [],
       ['📊 ESTADÍSTICAS GENERALES'],
       ['Métrica', 'Valor'],
-      ['Total Viajes', stats.totalViajes],
-      ['Total Sacos', stats.totalSacos],
-      ['Total Toneladas (TM)', stats.totalTM.toFixed(3)],
-      ['Promedio por Viaje (TM)', stats.promedioViaje.toFixed(3)],
+      ['Total Viajes', statsFiltrados.totalViajes],
+      ['Total Sacos', statsFiltrados.totalSacos],
+      ['Total Toneladas (TM)', statsFiltrados.totalTM.toFixed(3)],
+      ['Promedio por Viaje (TM)', statsFiltrados.promedioViaje.toFixed(3)],
       [],
       ['📦 RESUMEN POR BODEGA'],
       ['Bodega', 'Viajes', 'Sacos', 'Dañados', '% Dañados', 'Toneladas (TM)', 'Eficiencia']
     ]
     
+    // Calcular stats por bodega con datos filtrados
+    const bodegasMap = new Map()
+    registrosFiltrados.forEach(reg => {
+      if (!bodegasMap.has(reg.bodega)) {
+        bodegasMap.set(reg.bodega, {
+          bodega: reg.bodega,
+          totalSacos: 0,
+          totalDanados: 0,
+          totalTM: 0,
+          viajes: 0,
+          registros: []
+        })
+      }
+      const bodegaStat = bodegasMap.get(reg.bodega)
+      bodegaStat.totalSacos += reg.cantidad_paquetes || 0
+      bodegaStat.totalDanados += reg.paquetes_danados || 0
+      bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
+      bodegaStat.viajes += 1
+    })
+    
+    const statsPorBodegaFiltrados = Array.from(bodegasMap.values())
+    
     // Agregar datos por bodega
-    statsPorBodega.forEach(b => {
+    statsPorBodegaFiltrados.forEach(b => {
       const porcentajeDanados = b.totalSacos > 0 
         ? ((b.totalDanados / b.totalSacos) * 100).toFixed(1) + '%'
         : '0%'
@@ -105,7 +147,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
       ['🚢 REGISTRO DETALLADO DE VIAJES'],
       [barco?.nombre || 'Barco sin nombre'],
       [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
-      [filtroFecha ? `Filtrado por fecha: ${dayjs(filtroFecha).format('DD/MM/YYYY')}` : 'Mostrando todos los registros'],
+      [filtroFechaInicio && filtroFechaFin ? `Filtrado por fechas: ${dayjs(filtroFechaInicio).format('DD/MM/YYYY')} - ${dayjs(filtroFechaFin).format('DD/MM/YYYY')}` : 'Mostrando todos los registros'],
       [],
       ['# Viaje', 'Fecha', 'Bodega', 'Placa Camión', 'Placa Remolque', 'Nota Remisión', 
        'Hora Inicio', 'Hora Fin', 'Duración', 'Peso Ing. (kg)', 'Peso Saco (kg)', 
@@ -114,7 +156,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     ]
     
     // Agregar datos de viajes
-    registros.forEach(reg => {
+    registrosFiltrados.forEach(reg => {
       const pesoCalculado = (reg.peso_saco_kg || 0) * (reg.cantidad_paquetes || 0)
       const diferencia = reg.peso_ingenio_kg && pesoCalculado
         ? ((Math.abs(pesoCalculado - reg.peso_ingenio_kg) / reg.peso_ingenio_kg) * 100).toFixed(2) + '%'
@@ -177,8 +219,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     ]
     
     // Calcular duración promedio por bodega
-    statsPorBodega.forEach(b => {
-      const registrosBodega = registros.filter(r => r.bodega === b.bodega && r.duracion && r.duracion !== '—')
+    statsPorBodegaFiltrados.forEach(b => {
+      const registrosBodega = registrosFiltrados.filter(r => r.bodega === b.bodega && r.duracion && r.duracion !== '—')
       let duracionPromedio = '—'
       
       if (registrosBodega.length > 0) {
@@ -211,10 +253,10 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     })
     
     // Agregar totales
-    const totalSacosPorViaje = stats.totalViajes > 0 ? Math.round(stats.totalSacos / stats.totalViajes) : 0
+    const totalSacosPorViaje = statsFiltrados.totalViajes > 0 ? Math.round(statsFiltrados.totalSacos / statsFiltrados.totalViajes) : 0
     rendimientoData.push(
       [],
-      ['TOTALES GENERALES', stats.totalViajes, stats.totalSacos.toLocaleString(), stats.totalTM.toFixed(3), totalSacosPorViaje, stats.promedioViaje.toFixed(2), '—', '—']
+      ['TOTALES GENERALES', statsFiltrados.totalViajes, statsFiltrados.totalSacos.toLocaleString(), statsFiltrados.totalTM.toFixed(3), totalSacosPorViaje, statsFiltrados.promedioViaje.toFixed(2), '—', '—']
     )
     
     const wsRendimiento = XLSX.utils.aoa_to_sheet(rendimientoData)
@@ -234,7 +276,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     // ===================================================
     // Agrupar viajes por hora de finalización
     const viajesPorHora = {}
-    registros.forEach(reg => {
+    registrosFiltrados.forEach(reg => {
       if (reg.hora_flujo !== undefined && reg.hora_flujo !== null) {
         const hora = reg.hora_flujo
         viajesPorHora[hora] = (viajesPorHora[hora] || 0) + 1
@@ -263,12 +305,12 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     wsHora['!cols'] = [{ wch: 25 }, { wch: 20 }]
     
     // ===================================================
-    // HOJA 5: ESTADÍSTICAS DE CAMIONES (NUEVA)
+    // HOJA 5: ESTADÍSTICAS DE CAMIONES
     // ===================================================
     
     // Agrupar viajes por placa de camión
     const viajesPorCamion = {}
-    registros.forEach(viaje => {
+    registrosFiltrados.forEach(viaje => {
       const placaCamion = viaje.placa_camion
       const placaRemolque = viaje.placa_remolque || 'Sin remolque'
       
@@ -456,6 +498,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     toast.error('❌ Error al exportar a Excel')
   }
 }
+
 // ─── InputField ─────────
 const InputField = ({ label, lblClass, children, className = '' }) => (
   <div className={className}>
@@ -1104,7 +1147,178 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
-// ─── NUEVO COMPONENTE: ESTADÍSTICAS DE CAMIONES ───────────────────────────
+// ─── COMPONENTE DE FILTROS AVANZADOS ───────────────────────────
+const FiltrosAvanzados = ({ 
+  filtroFechaInicio, 
+  setFiltroFechaInicio, 
+  filtroFechaFin, 
+  setFiltroFechaFin,
+  searchPlaca,
+  setSearchPlaca,
+  mostrarStatsCamiones,
+  setMostrarStatsCamiones,
+  mostrarTablaGeneral,
+  setMostrarTablaGeneral,
+  mostrarResumen,
+  setMostrarResumen,
+  theme,
+  onAplicarFiltro
+}) => {
+  const dk = theme === 'dark'
+  const card = dk ? 'bg-slate-900' : 'bg-white'
+  const border = dk ? 'border-white/10' : 'border-gray-200'
+  const text = dk ? 'text-white' : 'text-gray-900'
+  const sub = dk ? 'text-slate-400' : 'text-gray-600'
+  const inputBg = dk ? 'bg-slate-800' : 'bg-gray-100'
+
+  const [expandido, setExpandido] = useState(false)
+
+  return (
+    <div className={`${card} border ${border} rounded-2xl p-4 space-y-4`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Filter className={`w-5 h-5 ${sub}`} />
+          <h3 className={`font-bold ${text}`}>Filtros y Visibilidad</h3>
+        </div>
+        <button 
+          onClick={() => setExpandido(!expandido)} 
+          className="text-sm text-green-500 hover:text-green-400 flex items-center gap-1"
+        >
+          {expandido ? 'Ocultar' : 'Mostrar'} filtros
+        </button>
+      </div>
+
+      {expandido && (
+        <div className="space-y-4 pt-2">
+          {/* Filtros de fecha */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={`block text-xs ${sub} mb-1`}>Fecha desde</label>
+              <input 
+                type="date" 
+                value={filtroFechaInicio} 
+                onChange={(e) => setFiltroFechaInicio(e.target.value)}
+                className={`w-full ${inputBg} border ${border} rounded-xl px-3 py-2.5 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} 
+              />
+            </div>
+            <div>
+              <label className={`block text-xs ${sub} mb-1`}>Fecha hasta</label>
+              <input 
+                type="date" 
+                value={filtroFechaFin} 
+                onChange={(e) => setFiltroFechaFin(e.target.value)}
+                className={`w-full ${inputBg} border ${border} rounded-xl px-3 py-2.5 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} 
+              />
+            </div>
+          </div>
+
+          {/* Búsqueda por placa */}
+          <div>
+            <label className={`block text-xs ${sub} mb-1`}>Buscar por placa</label>
+            <div className="relative">
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${sub}`} />
+              <input 
+                type="text" 
+                value={searchPlaca} 
+                onChange={(e) => setSearchPlaca(e.target.value)}
+                placeholder="Ingrese placa del camión..."
+                className={`w-full ${inputBg} border ${border} rounded-xl pl-9 pr-3 py-2.5 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} 
+              />
+            </div>
+          </div>
+
+          {/* Controles de visibilidad */}
+          <div className={`${dk ? 'bg-slate-800/50' : 'bg-gray-100'} rounded-xl p-4`}>
+            <h4 className={`text-sm font-bold ${text} mb-3`}>Mostrar / Ocultar secciones</h4>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className={`text-sm ${text}`}>Resumen general</span>
+                <button 
+                  onClick={() => setMostrarResumen(!mostrarResumen)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    mostrarResumen 
+                      ? 'bg-green-500 text-white' 
+                      : `${dk ? 'bg-slate-700 text-slate-400' : 'bg-gray-200 text-gray-600'}`
+                  }`}
+                >
+                  {mostrarResumen ? 'Visible' : 'Oculto'}
+                </button>
+              </label>
+              
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className={`text-sm ${text}`}>Estadísticas de camiones</span>
+                <button 
+                  onClick={() => setMostrarStatsCamiones(!mostrarStatsCamiones)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    mostrarStatsCamiones 
+                      ? 'bg-green-500 text-white' 
+                      : `${dk ? 'bg-slate-700 text-slate-400' : 'bg-gray-200 text-gray-600'}`
+                  }`}
+                >
+                  {mostrarStatsCamiones ? 'Visible' : 'Oculto'}
+                </button>
+              </label>
+              
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className={`text-sm ${text}`}>Tabla general de viajes</span>
+                <button 
+                  onClick={() => setMostrarTablaGeneral(!mostrarTablaGeneral)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    mostrarTablaGeneral 
+                      ? 'bg-green-500 text-white' 
+                      : `${dk ? 'bg-slate-700 text-slate-400' : 'bg-gray-200 text-gray-600'}`
+                  }`}
+                >
+                  {mostrarTablaGeneral ? 'Visible' : 'Oculto'}
+                </button>
+              </label>
+            </div>
+          </div>
+
+          {/* Botón para aplicar filtros */}
+          <button 
+            onClick={onAplicarFiltro}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-105"
+          >
+            <Filter className="w-4 h-4" />
+            Aplicar filtros
+          </button>
+        </div>
+      )}
+
+      {/* Indicadores de filtros activos */}
+      <div className="flex flex-wrap gap-2 pt-2">
+        {filtroFechaInicio && filtroFechaFin && (
+          <span className={`text-xs px-2 py-1 rounded-full ${dk ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-700'}`}>
+            📅 {dayjs(filtroFechaInicio).format('DD/MM/YY')} - {dayjs(filtroFechaFin).format('DD/MM/YY')}
+          </span>
+        )}
+        {searchPlaca && (
+          <span className={`text-xs px-2 py-1 rounded-full ${dk ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
+            🔍 {searchPlaca}
+          </span>
+        )}
+        {!mostrarStatsCamiones && (
+          <span className={`text-xs px-2 py-1 rounded-full ${dk ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-700'}`}>
+            👁️ Stats camiones ocultos
+          </span>
+        )}
+        {!mostrarTablaGeneral && (
+          <span className={`text-xs px-2 py-1 rounded-full ${dk ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-700'}`}>
+            👁️ Tabla general oculta
+          </span>
+        )}
+        {!mostrarResumen && (
+          <span className={`text-xs px-2 py-1 rounded-full ${dk ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-700'}`}>
+            👁️ Resumen oculto
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── COMPONENTE: ESTADÍSTICAS DE CAMIONES ───────────────────────────
 const CamionesStats = ({ registros, theme }) => {
   const dk = theme === 'dark'
   const card = dk ? 'bg-slate-900' : 'bg-white'
@@ -1603,11 +1817,21 @@ export default function RegistroSacosPage() {
   const [user, setUser]               = useState(null)
   const [barco, setBarco]             = useState(null)
   const [registros, setRegistros]     = useState([])
+  const [registrosFiltrados, setRegistrosFiltrados] = useState([])
   const [loading, setLoading]         = useState(true)
   const [showModal, setShowModal]     = useState(false)
   const [registroEditando, setRegistroEditando] = useState(null)
-  const [filtroFecha, setFiltroFecha] = useState('') // Vacío para mostrar todos
+  
+  // Filtros mejorados
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
+  const [filtroFechaFin, setFiltroFechaFin] = useState('')
   const [searchPlaca, setSearchPlaca] = useState('')
+  
+  // Controles de visibilidad
+  const [mostrarStatsCamiones, setMostrarStatsCamiones] = useState(false)
+  const [mostrarTablaGeneral, setMostrarTablaGeneral] = useState(true)
+  const [mostrarResumen, setMostrarResumen] = useState(true)
+  
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
   const [bodegaSeleccionada, setBodegaSeleccionada] = useState(null)
@@ -1652,55 +1876,79 @@ export default function RegistroSacosPage() {
       const registrosOrdenados = data || []
       setRegistros(registrosOrdenados)
       
-      // Calcular estadísticas generales
-      const tv = registrosOrdenados?.length || 0
-      const ts = registrosOrdenados?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
-      const tt = registrosOrdenados?.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) || 0
-      setStats({ 
-        totalViajes: tv, 
-        totalSacos: ts, 
-        totalTM: tt, 
-        promedioViaje: tv > 0 ? tt / tv : 0 
-      })
-
-      // Calcular estadísticas por bodega
-      const bodegasMap = new Map()
-      registrosOrdenados.forEach(reg => {
-        if (!bodegasMap.has(reg.bodega)) {
-          bodegasMap.set(reg.bodega, {
-            bodega: reg.bodega,
-            totalSacos: 0,
-            totalDanados: 0,
-            totalTM: 0,
-            viajes: 0,
-            registros: []
-          })
-        }
-        const bodegaStat = bodegasMap.get(reg.bodega)
-        bodegaStat.totalSacos += reg.cantidad_paquetes || 0
-        bodegaStat.totalDanados += reg.paquetes_danados || 0
-        bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
-        bodegaStat.viajes += 1
-        bodegaStat.registros.push(reg)
-      })
-
-      const statsArray = Array.from(bodegasMap.values())
+      // Aplicar filtros iniciales
+      aplicarFiltros(registrosOrdenados)
       
-      // Calcular eficiencia para cada bodega
-      statsArray.forEach(b => {
-        b.eficiencia = b.totalSacos > 0 
-          ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100)
-          : 0
-      })
-
-      setStatsPorBodega(statsArray)
-
     } catch (err) {
       console.error(err)
       toast.error('Error al cargar registros')
     } finally {
       setLoading(false)
     }
+  }
+
+  const aplicarFiltros = (data = registros) => {
+    let filtrados = [...data]
+    
+    // Filtrar por rango de fechas
+    if (filtroFechaInicio && filtroFechaFin) {
+      filtrados = filtrados.filter(r => {
+        const fechaReg = dayjs(r.fecha)
+        return fechaReg.isAfter(dayjs(filtroFechaInicio).subtract(1, 'day')) && 
+               fechaReg.isBefore(dayjs(filtroFechaFin).add(1, 'day'))
+      })
+    }
+    
+    // Filtrar por placa
+    if (searchPlaca) {
+      filtrados = filtrados.filter(r => 
+        r.placa_camion.toLowerCase().includes(searchPlaca.toLowerCase())
+      )
+    }
+    
+    setRegistrosFiltrados(filtrados)
+    
+    // Calcular estadísticas con los datos filtrados
+    const tv = filtrados?.length || 0
+    const ts = filtrados?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
+    const tt = filtrados?.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) || 0
+    setStats({ 
+      totalViajes: tv, 
+      totalSacos: ts, 
+      totalTM: tt, 
+      promedioViaje: tv > 0 ? tt / tv : 0 
+    })
+
+    // Calcular estadísticas por bodega con datos filtrados
+    const bodegasMap = new Map()
+    filtrados.forEach(reg => {
+      if (!bodegasMap.has(reg.bodega)) {
+        bodegasMap.set(reg.bodega, {
+          bodega: reg.bodega,
+          totalSacos: 0,
+          totalDanados: 0,
+          totalTM: 0,
+          viajes: 0,
+          registros: []
+        })
+      }
+      const bodegaStat = bodegasMap.get(reg.bodega)
+      bodegaStat.totalSacos += reg.cantidad_paquetes || 0
+      bodegaStat.totalDanados += reg.paquetes_danados || 0
+      bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
+      bodegaStat.viajes += 1
+      bodegaStat.registros.push(reg)
+    })
+
+    const statsArray = Array.from(bodegasMap.values())
+    
+    statsArray.forEach(b => {
+      b.eficiencia = b.totalSacos > 0 
+        ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100)
+        : 0
+    })
+
+    setStatsPorBodega(statsArray)
   }
 
   const handleEliminar = async (id) => {
@@ -1725,7 +1973,7 @@ export default function RegistroSacosPage() {
 
   // Calcular duración promedio general EN MINUTOS
   const calcularDuracionPromedio = () => {
-    const registrosConDuracion = registros.filter(r => r.duracion && r.duracion !== '—')
+    const registrosConDuracion = registrosFiltrados.filter(r => r.duracion && r.duracion !== '—')
     if (registrosConDuracion.length === 0) return 0
     
     const totalMinutos = registrosConDuracion.reduce((sum, r) => {
@@ -1738,7 +1986,7 @@ export default function RegistroSacosPage() {
 
   // Calcular duración promedio por bodega EN MINUTOS
   const calcularDuracionPorBodega = (bodega) => {
-    const registrosBodega = registros.filter(r => r.bodega === bodega && r.duracion && r.duracion !== '—')
+    const registrosBodega = registrosFiltrados.filter(r => r.bodega === bodega && r.duracion && r.duracion !== '—')
     if (registrosBodega.length === 0) return 0
     
     const totalMinutos = registrosBodega.reduce((sum, r) => {
@@ -1756,18 +2004,12 @@ export default function RegistroSacosPage() {
     totalTM: stats.totalTM,
     viajes: stats.totalViajes,
     eficiencia: stats.totalSacos > 0 
-      ? Math.round(((stats.totalSacos - registros.reduce((s, r) => s + r.paquetes_danados, 0)) / stats.totalSacos) * 100)
+      ? Math.round(((stats.totalSacos - registrosFiltrados.reduce((s, r) => s + r.paquetes_danados, 0)) / stats.totalSacos) * 100)
       : 0
   }
 
   const duracionPromedioGeneral = calcularDuracionPromedio()
-  const registrosConDuracion = registros.filter(r => r.duracion && r.duracion !== '—').length
-
-  const registrosFiltrados = registros.filter(r => {
-    if (filtroFecha && r.fecha !== filtroFecha) return false
-    if (searchPlaca && !r.placa_camion.toLowerCase().includes(searchPlaca.toLowerCase())) return false
-    return true
-  })
+  const registrosConDuracion = registrosFiltrados.filter(r => r.duracion && r.duracion !== '—').length
 
   if (loading) return (
     <div className={`min-h-screen ${bg} flex items-center justify-center`}>
@@ -1803,9 +2045,9 @@ export default function RegistroSacosPage() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* NUEVO BOTÓN DE EXPORTAR EXCEL */}
+              {/* BOTÓN DE EXPORTAR EXCEL */}
               <button
-                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFecha)}
+                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFechaInicio, filtroFechaFin)}
                 className="bg-green-500 hover:bg-green-600 p-2 rounded-xl transition-colors relative group"
                 title="Exportar a Excel"
               >
@@ -1847,6 +2089,24 @@ export default function RegistroSacosPage() {
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
 
+        {/* FILTROS AVANZADOS */}
+        <FiltrosAvanzados 
+          filtroFechaInicio={filtroFechaInicio}
+          setFiltroFechaInicio={setFiltroFechaInicio}
+          filtroFechaFin={filtroFechaFin}
+          setFiltroFechaFin={setFiltroFechaFin}
+          searchPlaca={searchPlaca}
+          setSearchPlaca={setSearchPlaca}
+          mostrarStatsCamiones={mostrarStatsCamiones}
+          setMostrarStatsCamiones={setMostrarStatsCamiones}
+          mostrarTablaGeneral={mostrarTablaGeneral}
+          setMostrarTablaGeneral={setMostrarTablaGeneral}
+          mostrarResumen={mostrarResumen}
+          setMostrarResumen={setMostrarResumen}
+          theme={theme}
+          onAplicarFiltro={() => aplicarFiltros()}
+        />
+
         {/* Pestañas de navegación */}
         <div className={`${card} border ${border} rounded-xl p-1 flex`}>
           <button
@@ -1876,53 +2136,55 @@ export default function RegistroSacosPage() {
         {/* Contenido según la pestaña activa */}
         {vistaActiva === 'bodegas' ? (
           <>
-            {/* Cards de Resumen Unificadas - General + Bodegas */}
-            <div className="space-y-3">
-              <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
-                <Layers className="w-5 h-5 text-green-500" />
-                Resumen de Operaciones por Bodega
-              </h2>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Tarjeta General - Siempre visible */}
-                <TarjetaBodegaUnificada
-                  bodega={statsGenerales}
-                  duracionPromedio={duracionPromedioGeneral}
-                  viajesConDuracion={registrosConDuracion}
-                  esGeneral={true}
-                  text={text}
-                  sub={sub}
-                  card={card}
-                  border={border}
-                  dk={dk}
-                />
+            {/* Cards de Resumen Unificadas - General + Bodegas (ocultable) */}
+            {mostrarResumen && (
+              <div className="space-y-3">
+                <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
+                  <Layers className="w-5 h-5 text-green-500" />
+                  Resumen de Operaciones por Bodega
+                </h2>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Tarjeta General - Siempre visible si el resumen está activo */}
+                  <TarjetaBodegaUnificada
+                    bodega={statsGenerales}
+                    duracionPromedio={duracionPromedioGeneral}
+                    viajesConDuracion={registrosConDuracion}
+                    esGeneral={true}
+                    text={text}
+                    sub={sub}
+                    card={card}
+                    border={border}
+                    dk={dk}
+                  />
 
-                {/* Tarjetas de bodegas */}
-                {statsPorBodega.map((bodega, index) => {
-                  const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
-                  const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
+                  {/* Tarjetas de bodegas */}
+                  {statsPorBodega.map((bodega, index) => {
+                    const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
+                    const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
 
-                  return (
-                    <TarjetaBodegaUnificada
-                      key={index}
-                      bodega={bodega}
-                      duracionPromedio={duracionPromedio}
-                      viajesConDuracion={viajesConDuracion}
-                      esGeneral={false}
-                      text={text}
-                      sub={sub}
-                      card={card}
-                      border={border}
-                      dk={dk}
-                      onClick={() => setBodegaSeleccionada(
-                        bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
-                      )}
-                      seleccionada={bodegaSeleccionada === bodega.bodega}
-                    />
-                  )
-                })}
+                    return (
+                      <TarjetaBodegaUnificada
+                        key={index}
+                        bodega={bodega}
+                        duracionPromedio={duracionPromedio}
+                        viajesConDuracion={viajesConDuracion}
+                        esGeneral={false}
+                        text={text}
+                        sub={sub}
+                        card={card}
+                        border={border}
+                        dk={dk}
+                        onClick={() => setBodegaSeleccionada(
+                          bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
+                        )}
+                        seleccionada={bodegaSeleccionada === bodega.bodega}
+                      />
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Tabla de viajes de la bodega seleccionada */}
             {bodegaSeleccionada && (
@@ -1940,11 +2202,13 @@ export default function RegistroSacosPage() {
             )}
           </>
         ) : (
-          // Vista de Camiones
-          <CamionesStats registros={registros} theme={theme} />
+          // Vista de Camiones (ocultable)
+          mostrarStatsCamiones && (
+            <CamionesStats registros={registrosFiltrados} theme={theme} />
+          )
         )}
 
-        {/* Acciones + Filtros */}
+        {/* Acciones + Filtros rápidos */}
         <div className={`${card} border ${border} rounded-2xl p-3 sm:p-4`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <button
@@ -1958,7 +2222,7 @@ export default function RegistroSacosPage() {
             <div className="flex gap-2">
               {/* BOTÓN DE EXPORTAR ADICIONAL (OPCIONAL) */}
               <button
-                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFecha)}
+                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFechaInicio, filtroFechaFin)}
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 transform hover:scale-105 text-sm sm:text-base shadow-lg"
                 title="Exportar todos los datos a Excel"
               >
@@ -1968,209 +2232,199 @@ export default function RegistroSacosPage() {
                 <span className="hidden sm:inline">Exportar Excel</span>
                 <span className="sm:hidden">Excel</span>
               </button>
-              
-              <input 
-                type="date" 
-                value={filtroFecha} 
-                onChange={e => setFiltroFecha(e.target.value)}
-                className={`${inputBg} border ${border} rounded-xl px-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40 flex-1 sm:flex-none`} 
-                placeholder="Todas las fechas"
-              />
-              <div className="relative flex-1 sm:flex-none sm:w-44">
-                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${sub}`} />
-                <input 
-                  type="text" 
-                  value={searchPlaca} 
-                  onChange={e => setSearchPlaca(e.target.value)}
-                  placeholder="Buscar placa..."
-                  className={`w-full ${inputBg} border ${border} rounded-xl pl-9 pr-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`} 
-                />
-              </div>
             </div>
           </div>
-          {!filtroFecha && (
+          {filtroFechaInicio && filtroFechaFin ? (
+            <p className={`text-xs ${sub} mt-2 text-center sm:text-left`}>
+              📅 Mostrando registros del {dayjs(filtroFechaInicio).format('DD/MM/YYYY')} al {dayjs(filtroFechaFin).format('DD/MM/YYYY')}
+            </p>
+          ) : (
             <p className={`text-xs ${sub} mt-2 text-center sm:text-left`}>
               📅 Mostrando todos los registros sin filtro de fecha
             </p>
           )}
         </div>
 
-        {/* Tabla general con scroll */}
-        <div className={`${card} border ${border} rounded-2xl overflow-hidden`}>
-          <div className="max-h-[600px] overflow-y-auto">
-            <div className="hidden sm:block">
-              <table className="w-full">
-                <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
-                  <tr>
-                    {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
-                      <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
-                  {registrosFiltrados.length === 0 ? (
+        {/* Tabla general con scroll (ocultable) */}
+        {mostrarTablaGeneral && (
+          <div className={`${card} border ${border} rounded-2xl overflow-hidden`}>
+            <div className="max-h-[600px] overflow-y-auto">
+              <div className="hidden sm:block">
+                <table className="w-full">
+                  <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
                     <tr>
-                      <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
-                        <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                        <p>No hay registros para mostrar</p>
-                      </td>
+                      {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
+                        <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
+                      ))}
                     </tr>
-                  ) : registrosFiltrados.map(reg => {
-                    const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-                      ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-                      : null
-                    return (
-                      <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
-                        <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
-                        <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
-                        <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
-                        <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
-                        <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
-                        <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-green-400">
-                          {reg.peso_total_calculado_tm?.toFixed(3)}
-                          {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
-                        </td>
-                        <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
-                              className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
-                              <Edit2 className="w-4 h-4 text-blue-400" />
-                            </button>
-                            <button onClick={() => handleEliminar(reg.id)}
-                              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
+                  </thead>
+                  <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
+                    {registrosFiltrados.length === 0 ? (
+                      <tr>
+                        <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
+                          <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                          <p>No hay registros para mostrar</p>
                         </td>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                    ) : registrosFiltrados.map(reg => {
+                      const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                        ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                        : null
+                      return (
+                        <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
+                          <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
+                          <td className={`px-4 py-3 ${dk ? 'text-slate-300' : 'text-gray-700'}`}>{reg.bodega}</td>
+                          <td className={`px-4 py-3 text-sm ${sub}`}>{dayjs(reg.fecha).format('DD/MM/YY')}</td>
+                          <td className="px-4 py-3 font-mono text-blue-400 text-sm">{reg.placa_camion}</td>
+                          <td className={`px-4 py-3 text-sm ${sub}`}>{reg.peso_ingenio_kg?.toLocaleString()} kg</td>
+                          <td className={`px-4 py-3 font-bold ${text}`}>{reg.cantidad_paquetes}</td>
+                          <td className="px-4 py-3 text-sm">
+                            {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-green-400">
+                            {reg.peso_total_calculado_tm?.toFixed(3)}
+                            {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
+                          </td>
+                          <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
+                                className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar">
+                                <Edit2 className="w-4 h-4 text-blue-400" />
+                              </button>
+                              <button onClick={() => handleEliminar(reg.id)}
+                                className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors" title="Eliminar">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Vista móvil con scroll */}
+              <div className="sm:hidden max-h-[500px] overflow-y-auto">
+                {registrosFiltrados.length === 0 ? (
+                  <div className={`text-center py-12 ${sub}`}>
+                    <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                    <p className="text-sm">No hay registros para mostrar</p>
+                  </div>
+                ) : (
+                  <div className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
+                    {registrosFiltrados.map(reg => {
+                      const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
+                        ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
+                        : null
+                      return (
+                        <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-black ${text}`}>#{reg.viaje_numero}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'}`}>
+                                {reg.bodega}
+                              </span>
+                              <span className={`text-xs ${sub}`}>{dayjs(reg.fecha).format('DD/MM')}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
+                                className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors">
+                                <Edit2 className="w-3.5 h-3.5 text-blue-400" />
+                              </button>
+                              <button onClick={() => handleEliminar(reg.id)}
+                                className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors">
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-2">
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Placa</p>
+                              <p className="text-xs font-mono text-blue-400 font-bold">{reg.placa_camion}</p>
+                            </div>
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Ingenio</p>
+                              <p className={`text-xs font-medium ${text}`}>{(reg.peso_ingenio_kg/1000).toFixed(1)}t</p>
+                            </div>
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Sacos</p>
+                              <p className={`text-xs font-bold ${text}`}>
+                                {reg.cantidad_paquetes}
+                                {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
+                              </p>
+                            </div>
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Total TM</p>
+                              <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
+                                {reg.peso_total_calculado_tm?.toFixed(3)}
+                                {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <Clock className={`w-3 h-3 ${sub}`} />
+                            <span className={`text-[11px] ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</span>
+                            {reg.duracion && reg.duracion !== '—' && (
+                              <span className={`text-[11px] ${dk ? 'text-slate-500' : 'text-gray-400'}`}>({reg.duracion})</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-
-            {/* Vista móvil con scroll */}
-            <div className="sm:hidden max-h-[500px] overflow-y-auto">
-              {registrosFiltrados.length === 0 ? (
-                <div className={`text-center py-12 ${sub}`}>
-                  <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">No hay registros para mostrar</p>
-                </div>
-              ) : (
-                <div className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
-                  {registrosFiltrados.map(reg => {
-                    const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
-                      ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
-                      : null
-                    return (
-                      <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`font-black ${text}`}>#{reg.viaje_numero}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'}`}>
-                              {reg.bodega}
-                            </span>
-                            <span className={`text-xs ${sub}`}>{dayjs(reg.fecha).format('DD/MM')}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => { setRegistroEditando(reg); setShowModal(true) }}
-                              className="p-1.5 hover:bg-blue-500/20 rounded-lg transition-colors">
-                              <Edit2 className="w-3.5 h-3.5 text-blue-400" />
-                            </button>
-                            <button onClick={() => handleEliminar(reg.id)}
-                              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors">
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-2">
-                          <div>
-                            <p className={`text-[10px] ${sub}`}>Placa</p>
-                            <p className="text-xs font-mono text-blue-400 font-bold">{reg.placa_camion}</p>
-                          </div>
-                          <div>
-                            <p className={`text-[10px] ${sub}`}>Ingenio</p>
-                            <p className={`text-xs font-medium ${text}`}>{(reg.peso_ingenio_kg/1000).toFixed(1)}t</p>
-                          </div>
-                          <div>
-                            <p className={`text-[10px] ${sub}`}>Sacos</p>
-                            <p className={`text-xs font-bold ${text}`}>
-                              {reg.cantidad_paquetes}
-                              {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
-                            </p>
-                          </div>
-                          <div>
-                            <p className={`text-[10px] ${sub}`}>Total TM</p>
-                            <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
-                              {reg.peso_total_calculado_tm?.toFixed(3)}
-                              {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <Clock className={`w-3 h-3 ${sub}`} />
-                          <span className={`text-[11px] ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</span>
-                          {reg.duracion && reg.duracion !== '—' && (
-                            <span className={`text-[11px] ${dk ? 'text-slate-500' : 'text-gray-400'}`}>({reg.duracion})</span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+            
+            {/* Indicador de scroll y cantidad de registros */}
+            <div className={`px-4 py-2 border-t ${border} flex items-center justify-between text-xs ${sub}`}>
+              <span>Mostrando {registrosFiltrados.length} de {registros.length} registros</span>
+              {registrosFiltrados.length > 10 && (
+                <span className="flex items-center gap-1">
+                  <svg className="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7-7-7m14-6l-7 7-7-7" />
+                  </svg>
+                  Desplázate para ver más
+                </span>
               )}
             </div>
           </div>
-          
-          {/* Indicador de scroll y cantidad de registros */}
-          <div className={`px-4 py-2 border-t ${border} flex items-center justify-between text-xs ${sub}`}>
-            <span>Mostrando {registrosFiltrados.length} de {registros.length} registros</span>
-            {registrosFiltrados.length > 10 && (
-              <span className="flex items-center gap-1">
-                <svg className="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7-7-7m14-6l-7 7-7-7" />
-                </svg>
-                Desplázate para ver más
-              </span>
-            )}
-          </div>
-        </div>
+        )}
 
-        {/* Resumen del día (si hay filtro de fecha) o total general */}
-        <div className={`${card} border ${border} rounded-2xl p-4 sm:p-5 bg-gradient-to-br ${dk ? 'from-slate-900 to-slate-800' : 'from-white to-gray-50'}`}>
-          <h3 className={`font-bold ${text} mb-3 flex items-center gap-2 text-sm sm:text-base`}>
-            <BarChart3 className="w-4 h-4 text-green-500" />
-            {filtroFecha ? `Resumen del ${dayjs(filtroFecha).format('DD/MM/YYYY')}` : 'Resumen General'}
-          </h3>
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            {[
-              { label: filtroFecha ? 'Viajes hoy' : 'Total viajes',    
-                value: registrosFiltrados.length,                                                                    
-                color: text 
-              },
-              { label: filtroFecha ? 'Sacos hoy' : 'Total sacos',     
-                value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               
-                color: text 
-              },
-              { label: filtroFecha ? 'Toneladas hoy' : 'Total TM', 
-                value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  
-                color: 'text-green-500' 
-              },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="text-center p-2 rounded-lg bg-white/5">
-                <p className={`text-xs ${sub}`}>{label}</p>
-                <p className={`text-lg sm:text-xl font-bold ${color}`}>{value}</p>
-              </div>
-            ))}
+        {/* Resumen del día (si hay filtro de fecha) o total general (ocultable) */}
+        {mostrarResumen && (
+          <div className={`${card} border ${border} rounded-2xl p-4 sm:p-5 bg-gradient-to-br ${dk ? 'from-slate-900 to-slate-800' : 'from-white to-gray-50'}`}>
+            <h3 className={`font-bold ${text} mb-3 flex items-center gap-2 text-sm sm:text-base`}>
+              <BarChart3 className="w-4 h-4 text-green-500" />
+              {filtroFechaInicio && filtroFechaFin ? `Resumen del período` : 'Resumen General'}
+            </h3>
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              {[
+                { label: filtroFechaInicio && filtroFechaFin ? 'Viajes en período' : 'Total viajes',    
+                  value: registrosFiltrados.length,                                                                    
+                  color: text 
+                },
+                { label: filtroFechaInicio && filtroFechaFin ? 'Sacos en período' : 'Total sacos',     
+                  value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               
+                  color: text 
+                },
+                { label: filtroFechaInicio && filtroFechaFin ? 'Toneladas en período' : 'Total TM', 
+                  value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  
+                  color: 'text-green-500' 
+                },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="text-center p-2 rounded-lg bg-white/5">
+                  <p className={`text-xs ${sub}`}>{label}</p>
+                  <p className={`text-lg sm:text-xl font-bold ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modal */}
