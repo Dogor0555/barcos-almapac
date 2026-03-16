@@ -9,7 +9,8 @@ import {
   Truck, Weight, AlertCircle, CheckCircle, X,
   Edit2, Trash2, RefreshCw, BarChart3,
   Sun, Moon, Search, Grid, Layers, ChevronRight,
-  Timer, TrendingUp, Award, Zap, Star, Hash, Calendar
+  Timer, TrendingUp, Award, Zap, Star, Hash, Calendar,
+  TruckIcon, Route, MapPin
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -931,6 +932,258 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
   )
 }
 
+// ─── NUEVO COMPONENTE: ESTADÍSTICAS DE CAMIONES ───────────────────────────
+const CamionesStats = ({ registros, theme }) => {
+  const dk = theme === 'dark'
+  const card = dk ? 'bg-slate-900' : 'bg-white'
+  const border = dk ? 'border-white/10' : 'border-gray-200'
+  const text = dk ? 'text-white' : 'text-gray-900'
+  const sub = dk ? 'text-slate-400' : 'text-gray-600'
+
+  const [camionSeleccionado, setCamionSeleccionado] = useState(null)
+  const [filtroPlaca, setFiltroPlaca] = useState('')
+
+  // Agrupar viajes por placa de camión (y considerar remolque)
+  const viajesPorCamion = registros.reduce((acc, viaje) => {
+    const placaCamion = viaje.placa_camion
+    const placaRemolque = viaje.placa_remolque || 'Sin remolque'
+    
+    if (!acc[placaCamion]) {
+      acc[placaCamion] = {
+        placaCamion,
+        viajes: [],
+        totalSacos: 0,
+        totalTM: 0,
+        viajesCount: 0,
+        primeraVez: viaje.fecha,
+        ultimaVez: viaje.fecha,
+        remolques: new Set()
+      }
+    }
+    
+    const camion = acc[placaCamion]
+    camion.viajes.push(viaje)
+    camion.totalSacos += viaje.cantidad_paquetes || 0
+    camion.totalTM += viaje.peso_total_calculado_tm || 0
+    camion.viajesCount += 1
+    camion.remolques.add(placaRemolque)
+    
+    // Actualizar fechas
+    if (viaje.fecha) {
+      if (!camion.primeraVez || viaje.fecha < camion.primeraVez) {
+        camion.primeraVez = viaje.fecha
+      }
+      if (!camion.ultimaVez || viaje.fecha > camion.ultimaVez) {
+        camion.ultimaVez = viaje.fecha
+      }
+    }
+    
+    return acc
+  }, {})
+
+  // Convertir a array y ordenar por cantidad de viajes
+  const camionesArray = Object.values(viajesPorCamion)
+    .map(c => ({
+      ...c,
+      remolques: Array.from(c.remolques),
+      promedioTMViaje: c.viajesCount > 0 ? (c.totalTM / c.viajesCount).toFixed(2) : 0
+    }))
+    .sort((a, b) => b.viajesCount - a.viajesCount)
+
+  // Filtrar camiones si hay búsqueda
+  const camionesFiltrados = filtroPlaca
+    ? camionesArray.filter(c => 
+        c.placaCamion.toLowerCase().includes(filtroPlaca.toLowerCase())
+      )
+    : camionesArray
+
+  // Calcular totales
+  const totalCamiones = camionesArray.length
+  const totalViajesCamiones = camionesArray.reduce((sum, c) => sum + c.viajesCount, 0)
+  const promedioViajesPorCamion = totalCamiones > 0 
+    ? (totalViajesCamiones / totalCamiones).toFixed(1) 
+    : 0
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
+          <TruckIcon className="w-5 h-5 text-green-500" />
+          Estadísticas de Camiones
+        </h2>
+        
+        {/* Filtro de búsqueda */}
+        <div className="relative w-48">
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${sub}`} />
+          <input 
+            type="text" 
+            value={filtroPlaca}
+            onChange={(e) => setFiltroPlaca(e.target.value)}
+            placeholder="Buscar placa..."
+            className={`w-full ${dk ? 'bg-slate-800' : 'bg-gray-100'} border ${border} rounded-xl pl-9 pr-3 py-2 ${text} text-sm outline-none focus:ring-2 focus:ring-green-500/40`}
+          />
+        </div>
+      </div>
+
+      {/* Resumen rápido de camiones */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className={`${card} border ${border} rounded-xl p-3`}>
+          <p className={`text-xs ${sub}`}>Camiones activos</p>
+          <p className={`text-xl font-bold ${text}`}>{totalCamiones}</p>
+        </div>
+        <div className={`${card} border ${border} rounded-xl p-3`}>
+          <p className={`text-xs ${sub}`}>Total viajes</p>
+          <p className={`text-xl font-bold ${text}`}>{totalViajesCamiones}</p>
+        </div>
+        <div className={`${card} border ${border} rounded-xl p-3`}>
+          <p className={`text-xs ${sub}`}>Prom. viajes/camión</p>
+          <p className={`text-xl font-bold ${text}`}>{promedioViajesPorCamion}</p>
+        </div>
+      </div>
+
+      {/* Lista de camiones */}
+      <div className={`${card} border ${border} rounded-xl overflow-hidden`}>
+        <div className="max-h-[400px] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Placa Camión</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Remolques</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Viajes</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Total Sacos</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Total TM</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">TM/Viaje</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Primer Viaje</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Último Viaje</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400"></th>
+              </tr>
+            </thead>
+            <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-200'}`}>
+              {camionesFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className={`px-4 py-8 text-center ${sub}`}>
+                    <Truck className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                    <p>No hay camiones registrados</p>
+                  </td>
+                </tr>
+              ) : camionesFiltrados.map(camion => (
+                <tr 
+                  key={camion.placaCamion} 
+                  className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors cursor-pointer ${
+                    camionSeleccionado?.placaCamion === camion.placaCamion ? (dk ? 'bg-slate-800/50' : 'bg-gray-100') : ''
+                  }`}
+                  onClick={() => setCamionSeleccionado(
+                    camionSeleccionado?.placaCamion === camion.placaCamion ? null : camion
+                  )}
+                >
+                  <td className="px-4 py-3 font-mono text-blue-400 font-bold">{camion.placaCamion}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {camion.remolques.slice(0, 2).map((r, i) => (
+                        <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'}`}>
+                          {r}
+                        </span>
+                      ))}
+                      {camion.remolques.length > 2 && (
+                        <span className="text-xs text-slate-400">+{camion.remolques.length - 2}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-bold">{camion.viajesCount}</td>
+                  <td className="px-4 py-3">{camion.totalSacos.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-green-500 font-bold">{camion.totalTM.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-400">{camion.promedioTMViaje}</td>
+                  <td className="px-4 py-3 text-xs text-slate-400">
+                    {camion.primeraVez ? dayjs(camion.primeraVez).format('DD/MM/YY') : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-400">
+                    {camion.ultimaVez ? dayjs(camion.ultimaVez).format('DD/MM/YY') : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ChevronRight className={`w-4 h-4 ${sub} transition-transform ${
+                      camionSeleccionado?.placaCamion === camion.placaCamion ? 'rotate-90' : ''
+                    }`} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Detalle de viajes del camión seleccionado */}
+      {camionSeleccionado && (
+        <div className={`${card} border ${border} rounded-xl overflow-hidden animate-slideDown`}>
+          <div className={`px-4 py-3 ${dk ? 'bg-gradient-to-r from-slate-800 to-slate-700' : 'bg-gradient-to-r from-gray-100 to-gray-50'} border-b ${border} flex items-center justify-between`}>
+            <div className="flex items-center gap-2">
+              <Route className="w-4 h-4 text-green-500" />
+              <h3 className={`font-bold ${text}`}>
+                Viajes de {camionSeleccionado.placaCamion}
+              </h3>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'} ${sub}`}>
+                {camionSeleccionado.viajes.length}
+              </span>
+            </div>
+            <button 
+              onClick={() => setCamionSeleccionado(null)}
+              className="p-1 hover:bg-red-500/20 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4 text-red-400" />
+            </button>
+          </div>
+          
+          <div className="max-h-[300px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className={dk ? 'bg-slate-700/50' : 'bg-gray-200/50'}>
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400"># Viaje</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Bodega</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Remolque</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Sacos</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">TM</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Hora</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-200'}`}>
+                {camionSeleccionado.viajes
+                  .sort((a, b) => b.viaje_numero - a.viaje_numero)
+                  .map(viaje => (
+                    <tr key={viaje.id} className={dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'}>
+                      <td className="px-4 py-2 font-medium">#{viaje.viaje_numero}</td>
+                      <td className="px-4 py-2 text-xs text-slate-400">{dayjs(viaje.fecha).format('DD/MM/YY')}</td>
+                      <td className="px-4 py-2 text-xs">{viaje.bodega}</td>
+                      <td className="px-4 py-2 text-xs font-mono text-blue-400">{viaje.placa_remolque || '—'}</td>
+                      <td className="px-4 py-2 text-xs">{viaje.cantidad_paquetes}</td>
+                      <td className="px-4 py-2 text-xs text-green-500">{viaje.peso_total_calculado_tm?.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-xs text-slate-400">{viaje.hora_inicio}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Resumen del camión */}
+          <div className={`px-4 py-3 border-t ${border} grid grid-cols-3 gap-3 text-xs`}>
+            <div>
+              <p className={`${sub}`}>Total viajes</p>
+              <p className={`font-bold ${text}`}>{camionSeleccionado.viajesCount}</p>
+            </div>
+            <div>
+              <p className={`${sub}`}>Total TM</p>
+              <p className="font-bold text-green-500">{camionSeleccionado.totalTM.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className={`${sub}`}>Remolques</p>
+              <p className={`font-bold ${text}`}>{camionSeleccionado.remolques.length}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── COMPONENTE DE TARJETA DE BODEGA UNIFICADA ────────────────────────────
 const TarjetaBodegaUnificada = ({ 
   bodega, 
@@ -1186,6 +1439,7 @@ export default function RegistroSacosPage() {
   const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
   const [bodegaSeleccionada, setBodegaSeleccionada] = useState(null)
+  const [vistaActiva, setVistaActiva] = useState('bodegas') // 'bodegas' o 'camiones'
 
   const bg      = dk ? 'bg-[#0f172a]'   : 'bg-gray-50'
   const card    = dk ? 'bg-slate-900'   : 'bg-white'
@@ -1421,67 +1675,101 @@ export default function RegistroSacosPage() {
       {/* ─── BODY ─── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5 pb-10">
 
-        {/* Cards de Resumen Unificadas - General + Bodegas */}
-        <div className="space-y-3">
-          <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
-            <Layers className="w-5 h-5 text-green-500" />
-            Resumen de Operaciones
-          </h2>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Tarjeta General - Siempre visible */}
-            <TarjetaBodegaUnificada
-              bodega={statsGenerales}
-              duracionPromedio={duracionPromedioGeneral}
-              viajesConDuracion={registrosConDuracion}
-              esGeneral={true}
-              text={text}
-              sub={sub}
-              card={card}
-              border={border}
-              dk={dk}
-            />
+        {/* Pestañas de navegación */}
+        <div className={`${card} border ${border} rounded-xl p-1 flex`}>
+          <button
+            onClick={() => setVistaActiva('bodegas')}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+              vistaActiva === 'bodegas'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                : `${sub} hover:${text}`
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            Bodegas
+          </button>
+          <button
+            onClick={() => setVistaActiva('camiones')}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+              vistaActiva === 'camiones'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                : `${sub} hover:${text}`
+            }`}
+          >
+            <Truck className="w-4 h-4" />
+            Camiones
+          </button>
+        </div>
 
-            {/* Tarjetas de bodegas */}
-            {statsPorBodega.map((bodega, index) => {
-              const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
-              const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
-
-              return (
+        {/* Contenido según la pestaña activa */}
+        {vistaActiva === 'bodegas' ? (
+          <>
+            {/* Cards de Resumen Unificadas - General + Bodegas */}
+            <div className="space-y-3">
+              <h2 className={`font-bold ${text} flex items-center gap-2 text-base sm:text-lg`}>
+                <Layers className="w-5 h-5 text-green-500" />
+                Resumen de Operaciones por Bodega
+              </h2>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Tarjeta General - Siempre visible */}
                 <TarjetaBodegaUnificada
-                  key={index}
-                  bodega={bodega}
-                  duracionPromedio={duracionPromedio}
-                  viajesConDuracion={viajesConDuracion}
-                  esGeneral={false}
+                  bodega={statsGenerales}
+                  duracionPromedio={duracionPromedioGeneral}
+                  viajesConDuracion={registrosConDuracion}
+                  esGeneral={true}
                   text={text}
                   sub={sub}
                   card={card}
                   border={border}
                   dk={dk}
-                  onClick={() => setBodegaSeleccionada(
-                    bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
-                  )}
-                  seleccionada={bodegaSeleccionada === bodega.bodega}
                 />
-              )
-            })}
-          </div>
-        </div>
 
-        {/* Tabla de viajes de la bodega seleccionada */}
-        {bodegaSeleccionada && (
-          <TablaViajesBodega
-            bodega={bodegaSeleccionada}
-            registros={statsPorBodega.find(b => b.bodega === bodegaSeleccionada)?.registros || []}
-            onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
-            onDelete={handleEliminar}
-            theme={theme}
-            sub={sub}
-            text={text}
-            dk={dk}
-            onClose={() => setBodegaSeleccionada(null)}
-          />
+                {/* Tarjetas de bodegas */}
+                {statsPorBodega.map((bodega, index) => {
+                  const duracionPromedio = calcularDuracionPorBodega(bodega.bodega)
+                  const viajesConDuracion = bodega.registros.filter(r => r.duracion && r.duracion !== '—').length
+
+                  return (
+                    <TarjetaBodegaUnificada
+                      key={index}
+                      bodega={bodega}
+                      duracionPromedio={duracionPromedio}
+                      viajesConDuracion={viajesConDuracion}
+                      esGeneral={false}
+                      text={text}
+                      sub={sub}
+                      card={card}
+                      border={border}
+                      dk={dk}
+                      onClick={() => setBodegaSeleccionada(
+                        bodegaSeleccionada === bodega.bodega ? null : bodega.bodega
+                      )}
+                      seleccionada={bodegaSeleccionada === bodega.bodega}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Tabla de viajes de la bodega seleccionada */}
+            {bodegaSeleccionada && (
+              <TablaViajesBodega
+                bodega={bodegaSeleccionada}
+                registros={statsPorBodega.find(b => b.bodega === bodegaSeleccionada)?.registros || []}
+                onEdit={(reg) => { setRegistroEditando(reg); setShowModal(true) }}
+                onDelete={handleEliminar}
+                theme={theme}
+                sub={sub}
+                text={text}
+                dk={dk}
+                onClose={() => setBodegaSeleccionada(null)}
+              />
+            )}
+          </>
+        ) : (
+          // Vista de Camiones
+          <CamionesStats registros={registros} theme={theme} />
         )}
 
         {/* Acciones + Filtros */}
