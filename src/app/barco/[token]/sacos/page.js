@@ -263,12 +263,185 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     wsHora['!cols'] = [{ wch: 25 }, { wch: 20 }]
     
     // ===================================================
+    // HOJA 5: ESTADÍSTICAS DE CAMIONES (NUEVA)
+    // ===================================================
+    
+    // Agrupar viajes por placa de camión
+    const viajesPorCamion = {}
+    registros.forEach(viaje => {
+      const placaCamion = viaje.placa_camion
+      const placaRemolque = viaje.placa_remolque || 'Sin remolque'
+      
+      if (!viajesPorCamion[placaCamion]) {
+        viajesPorCamion[placaCamion] = {
+          placaCamion,
+          viajes: [],
+          totalSacos: 0,
+          totalTM: 0,
+          viajesCount: 0,
+          primeraVez: viaje.fecha,
+          ultimaVez: viaje.fecha,
+          remolques: new Set(),
+          bodegas: new Set()
+        }
+      }
+      
+      const camion = viajesPorCamion[placaCamion]
+      camion.viajes.push(viaje)
+      camion.totalSacos += viaje.cantidad_paquetes || 0
+      camion.totalTM += viaje.peso_total_calculado_tm || 0
+      camion.viajesCount += 1
+      camion.remolques.add(placaRemolque)
+      camion.bodegas.add(viaje.bodega)
+      
+      // Actualizar fechas
+      if (viaje.fecha) {
+        if (!camion.primeraVez || viaje.fecha < camion.primeraVez) {
+          camion.primeraVez = viaje.fecha
+        }
+        if (!camion.ultimaVez || viaje.fecha > camion.ultimaVez) {
+          camion.ultimaVez = viaje.fecha
+        }
+      }
+    })
+    
+    // Convertir a array y ordenar
+    const camionesArray = Object.values(viajesPorCamion)
+      .map(c => ({
+        ...c,
+        remolques: Array.from(c.remolques).join(', '),
+        bodegas: Array.from(c.bodegas).join(', '),
+        promedioTMViaje: c.viajesCount > 0 ? (c.totalTM / c.viajesCount).toFixed(2) : 0,
+        primeraVezFormatted: c.primeraVez ? dayjs(c.primeraVez).format('DD/MM/YYYY') : '—',
+        ultimaVezFormatted: c.ultimaVez ? dayjs(c.ultimaVez).format('DD/MM/YYYY') : '—'
+      }))
+      .sort((a, b) => b.viajesCount - a.viajesCount)
+    
+    // Calcular totales de camiones
+    const totalCamiones = camionesArray.length
+    const totalViajesCamiones = camionesArray.reduce((sum, c) => sum + c.viajesCount, 0)
+    const totalTMCamiones = camionesArray.reduce((sum, c) => sum + c.totalTM, 0)
+    const promedioViajesPorCamion = totalCamiones > 0 ? (totalViajesCamiones / totalCamiones).toFixed(1) : 0
+    
+    // Crear hoja de camiones
+    const camionesData = [
+      ['🚚 ESTADÍSTICAS DE CAMIONES'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [],
+      ['📊 RESUMEN DE CAMIONES'],
+      ['Total Camiones', 'Total Viajes', 'Total TM', 'Prom. Viajes/Camión'],
+      [totalCamiones, totalViajesCamiones, totalTMCamiones.toFixed(3), promedioViajesPorCamion],
+      [],
+      ['📋 DETALLE POR CAMIÓN'],
+      ['Placa Camión', 'Viajes', 'Total Sacos', 'Total TM', 'TM/Viaje', 'Remolques', 'Bodegas', 'Primer Viaje', 'Último Viaje']
+    ]
+    
+    // Agregar datos de cada camión
+    camionesArray.forEach(camion => {
+      camionesData.push([
+        camion.placaCamion,
+        camion.viajesCount,
+        camion.totalSacos.toLocaleString(),
+        camion.totalTM.toFixed(3),
+        camion.promedioTMViaje,
+        camion.remolques,
+        camion.bodegas,
+        camion.primeraVezFormatted,
+        camion.ultimaVezFormatted
+      ])
+    })
+    
+    // Agregar camiones con mayor rendimiento
+    if (camionesArray.length > 0) {
+      const topCamiones = [...camionesArray].sort((a, b) => b.totalTM - a.totalTM).slice(0, 5)
+      
+      camionesData.push(
+        [],
+        ['🏆 TOP 5 CAMIONES POR TONELAJE'],
+        ['Placa Camión', 'Total TM', 'Viajes', 'Prom. TM/Viaje']
+      )
+      
+      topCamiones.forEach((camion, index) => {
+        camionesData.push([
+          `${index + 1}. ${camion.placaCamion}`,
+          camion.totalTM.toFixed(3),
+          camion.viajesCount,
+          camion.promedioTMViaje
+        ])
+      })
+    }
+    
+    const wsCamiones = XLSX.utils.aoa_to_sheet(camionesData)
+    wsCamiones['!cols'] = [
+      { wch: 20 }, // Placa Camión
+      { wch: 10 }, // Viajes
+      { wch: 15 }, // Total Sacos
+      { wch: 15 }, // Total TM
+      { wch: 12 }, // TM/Viaje
+      { wch: 30 }, // Remolques
+      { wch: 25 }, // Bodegas
+      { wch: 15 }, // Primer Viaje
+      { wch: 15 }  // Último Viaje
+    ]
+    
+    // ===================================================
+    // HOJA 6: VIAJES POR CAMIÓN (DETALLE)
+    // ===================================================
+    const viajesCamionData = [
+      ['📋 VIAJES POR CAMIÓN (DETALLE)'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [],
+      ['Placa Camión', '# Viaje', 'Fecha', 'Bodega', 'Remolque', 'Sacos', 'TM', 'Hora Inicio', 'Hora Fin', 'Duración']
+    ]
+    
+    // Ordenar camiones por placa y luego viajes por número
+    Object.keys(viajesPorCamion)
+      .sort()
+      .forEach(placa => {
+        const camion = viajesPorCamion[placa]
+        camion.viajes
+          .sort((a, b) => a.viaje_numero - b.viaje_numero)
+          .forEach(viaje => {
+            viajesCamionData.push([
+              placa,
+              viaje.viaje_numero,
+              viaje.fecha ? dayjs(viaje.fecha).format('DD/MM/YYYY') : '',
+              viaje.bodega,
+              viaje.placa_remolque || '—',
+              viaje.cantidad_paquetes || 0,
+              viaje.peso_total_calculado_tm?.toFixed(3) || '0.000',
+              viaje.hora_inicio || '',
+              viaje.hora_fin || '',
+              viaje.duracion || '—'
+            ])
+          })
+      })
+    
+    const wsViajesCamion = XLSX.utils.aoa_to_sheet(viajesCamionData)
+    wsViajesCamion['!cols'] = [
+      { wch: 20 }, // Placa Camión
+      { wch: 8 },  // # Viaje
+      { wch: 12 }, // Fecha
+      { wch: 15 }, // Bodega
+      { wch: 15 }, // Remolque
+      { wch: 8 },  // Sacos
+      { wch: 10 }, // TM
+      { wch: 10 }, // Hora Inicio
+      { wch: 10 }, // Hora Fin
+      { wch: 10 }  // Duración
+    ]
+    
+    // ===================================================
     // AGREGAR HOJAS AL LIBRO
     // ===================================================
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
     XLSX.utils.book_append_sheet(wb, wsViajes, 'Todos los Viajes')
     XLSX.utils.book_append_sheet(wb, wsRendimiento, 'Rendimiento')
     XLSX.utils.book_append_sheet(wb, wsHora, 'Viajes por Hora')
+    XLSX.utils.book_append_sheet(wb, wsCamiones, 'Estadísticas Camiones')
+    XLSX.utils.book_append_sheet(wb, wsViajesCamion, 'Viajes por Camión')
     
     // ===================================================
     // GENERAR ARCHIVO
@@ -283,7 +456,6 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) =>
     toast.error('❌ Error al exportar a Excel')
   }
 }
-
 // ─── InputField ─────────
 const InputField = ({ label, lblClass, children, className = '' }) => (
   <div className={className}>
