@@ -13,7 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCw, Calendar } from 'lucide-react';
+import { RefreshCw, Calendar, Clock, TrendingUp } from 'lucide-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -756,9 +756,9 @@ function KpiCard({ label, value, sub, icon, accent, animate }) {
 }
 
 // ============================================================================
-// BARRA DE PROGRESO PROFESIONAL MEJORADA
+// BARRA DE PROGRESO PROFESIONAL MEJORADA con estimación de finalización
 // ============================================================================
-function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
+function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio = 0, bodegaSeleccionada = 'todas' }) {
   const pct = Math.min(100, Math.max(0, porcentaje));
   
   // Sistema de colores semáforo
@@ -772,6 +772,37 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
 
   const color = getColorByProgress(pct);
   
+  // Calcular estimación de finalización
+  const calcularEstimacion = () => {
+    if (pct >= 100 || faltante <= 0 || flujoPromedio <= 0) return null;
+    
+    const horasRestantes = faltante / flujoPromedio;
+    const fechaEstimada = dayjs().add(horasRestantes, 'hour');
+    
+    // Formato legible
+    const diffHoras = horasRestantes;
+    const diffDias = Math.floor(diffHoras / 24);
+    const diffHorasRest = Math.floor(diffHoras % 24);
+    const diffMinutos = Math.floor((diffHoras - Math.floor(diffHoras)) * 60);
+    
+    let tiempoTexto = '';
+    if (diffDias > 0) {
+      tiempoTexto = `${diffDias}d ${diffHorasRest}h`;
+    } else if (diffHorasRest > 0) {
+      tiempoTexto = `${diffHorasRest}h ${diffMinutos}m`;
+    } else {
+      tiempoTexto = `${diffMinutos}m`;
+    }
+    
+    return {
+      fecha: fechaEstimada.format('DD/MM/YYYY HH:mm'),
+      tiempoRestante: tiempoTexto,
+      horas: horasRestantes
+    };
+  };
+
+  const estimacion = calcularEstimacion();
+
   // Escalas de referencia
   const milestones = [
     { value: 0, label: 'Inicio' },
@@ -784,14 +815,10 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
   // Texto de estado
   const getStatusText = () => {
     if (pct >= 100) return '¡COMPLETADO!';
+    if (bodegaSeleccionada !== 'todas') {
+      return `Bodega ${bodegaSeleccionada} · En operación`;
+    }
     return 'Operación en curso';
-  };
-
-  // Cálculo de tiempo estimado (ejemplo)
-  const getEstimatedTime = () => {
-    if (pct >= 100 || faltante <= 0) return null;
-    const faltanteTM = Number(faltante).toFixed(1);
-    return `${faltanteTM} TM restantes`;
   };
 
   return (
@@ -840,16 +867,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
               gap: 8
             }}>
               {getStatusText()}
-              <span style={{
-                fontSize: 12,
-                background: '#f1f5f9',
-                padding: '4px 8px',
-                borderRadius: 20,
-                color: '#475569',
-                fontWeight: 600
-              }}>
-                {getEstimatedTime() || '✓ Completado'}
-              </span>
             </div>
           </div>
         </div>
@@ -1008,16 +1025,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
               }}>
                 {m.label}
               </span>
-              {m.value === 50 && (
-                <span style={{
-                  position: 'absolute',
-                  top: -25,
-                  fontSize: 9,
-                  color: '#94a3b8',
-                  whiteSpace: 'nowrap'
-                }}>
-                </span>
-              )}
             </div>
           ))}
         </div>
@@ -1026,7 +1033,7 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
       {/* Tarjetas de métricas detalladas */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(4, 1fr)',
         gap: 12,
         marginTop: 24,
         padding: 16,
@@ -1120,9 +1127,92 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
             {faltante > 0 ? `${fmtTM(faltante, 2)} TM` : '✓ COMPLETADO'}
           </div>
         </div>
+
+        {/* Estimación de finalización - NUEVA TARJETA */}
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 6
+          }}>
+            <Clock size={14} color="#8b5cf6" />
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              color: '#64748b'
+            }}>
+              Finalización estimada
+            </span>
+          </div>
+          {estimacion ? (
+            <>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: '#8b5cf6',
+                fontFamily: "'DM Mono', monospace",
+                lineHeight: 1.2
+              }}>
+                {estimacion.fecha}
+              </div>
+              <div style={{
+                fontSize: 11,
+                color: '#94a3b8',
+                marginTop: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}>
+                <TrendingUp size={10} />
+                <span>En {estimacion.tiempoRestante} · {fmtTM(flujoPromedio, 2)} TM/h</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: faltante <= 0 ? '#10b981' : '#94a3b8',
+                fontFamily: "'DM Mono', monospace"
+              }}>
+                {faltante <= 0 ? 'Completado' : flujoPromedio <= 0 ? 'Sin datos' : '—'}
+              </div>
+              {faltante > 0 && flujoPromedio <= 0 && (
+                <div style={{
+                  fontSize: 10,
+                  color: '#94a3b8',
+                  marginTop: 2
+                }}>
+                  Necesitas al menos 2 registros
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      
+      {/* Flujo base usado para la estimación */}
+      {bodegaSeleccionada !== 'todas' && (
+        <div style={{
+          marginTop: 12,
+          padding: '8px 16px',
+          background: '#ede9fe',
+          borderRadius: 20,
+          fontSize: 11,
+          color: '#6d28d9',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6
+        }}>
+          <TrendingUp size={12} />
+          <span>
+            Estimación basada en flujo de <strong>Bodega {bodegaSeleccionada}</strong>: {fmtTM(flujoPromedio, 2)} TM/h
+          </span>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes shimmer {
@@ -1130,6 +1220,290 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante }) {
           100% { transform: translateX(100%); }
         }
       `}</style>
+    </div>
+  );
+}
+
+// ============================================================================
+// FLUJO GENERAL GLOBAL - Componente corregido
+// ============================================================================
+function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltrados, datosPorBodegaCompleto }) {
+  // Calcular el flujo basado en el último flujo de todas las bodegas
+  const flujoGlobalBasadoEnBodegas = useMemo(() => {
+    if (datosPorBodegaCompleto.length === 0) return 0;
+    
+    // Tomar el flujo de la última hora de cada bodega y sumarlos
+    // Esto representa el flujo total del barco en la última hora completa con datos
+    const sumaFlujoUltimaHora = datosPorBodegaCompleto.reduce((sum, b) => sum + (b.flujoUltimaHora || 0), 0);
+    
+    // Si no hay datos de última hora, usar el flujo promedio general
+    return sumaFlujoUltimaHora > 0 ? sumaFlujoUltimaHora : flujoPromedioGeneral;
+  }, [datosPorBodegaCompleto, flujoPromedioGeneral]);
+
+  // Calcular el flujo de las últimas 3 horas para mostrar tendencia - CORREGIDO: flujoUltimasHoras
+  const flujoUltimasHoras = useMemo(() => {
+    if (registrosFiltrados.length === 0) return [];
+    
+    const ordenados = [...registrosFiltrados].sort(
+      (a, b) => dayjs(b.fecha_hora).unix() - dayjs(a.fecha_hora).unix()
+    );
+    
+    const ahora = dayjs();
+    const ultimas3Horas = [];
+    
+    for (let i = 0; i < 3; i++) {
+      const horaInicio = ahora.subtract(i + 1, 'hour');
+      const horaFin = ahora.subtract(i, 'hour');
+      
+      const registrosHora = ordenados.filter(r => {
+        const fechaHora = dayjs(r.fecha_hora);
+        return fechaHora.isAfter(horaInicio) && fechaHora.isBefore(horaFin);
+      });
+      
+      const totalTM = registrosHora.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+      
+      ultimas3Horas.push({
+        hora: horaInicio.format('HH:00'),
+        tm: totalTM
+      });
+    }
+    
+    return ultimas3Horas.reverse();
+  }, [registrosFiltrados]);
+
+  // Calcular tendencia - CORREGIDO: usar flujoUltimasHoras
+  const tendencia = useMemo(() => {
+    if (flujoUltimasHoras.length < 2) return null;
+    
+    const ultimo = flujoUltimasHoras[flujoUltimasHoras.length - 1].tm;
+    const anterior = flujoUltimasHoras[flujoUltimasHoras.length - 2].tm;
+    
+    if (anterior === 0) return { direccion: 'stable', porcentaje: 0 };
+    
+    const cambio = ((ultimo - anterior) / anterior) * 100;
+    
+    return {
+      direccion: cambio > 5 ? 'up' : cambio < -5 ? 'down' : 'stable',
+      porcentaje: Math.abs(cambio).toFixed(1)
+    };
+  }, [flujoUltimasHoras]);
+
+  // Obtener las bodegas con mayor flujo en la última hora
+  const topBodegasFlujo = useMemo(() => {
+    return [...datosPorBodegaCompleto]
+      .filter(b => b.flujoUltimaHora > 0)
+      .sort((a, b) => b.flujoUltimaHora - a.flujoUltimaHora)
+      .slice(0, 3);
+  }, [datosPorBodegaCompleto]);
+
+  return (
+    <div style={{
+      background: 'linear-gradient(145deg, #0b1a2e 0%, #0f172a 100%)',
+      borderRadius: 24,
+      padding: 24,
+      marginBottom: 20,
+      border: '1px solid rgba(59,130,246,0.3)',
+      color: 'white'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            background: 'rgba(16,185,129,0.2)',
+            width: 48,
+            height: 48,
+            borderRadius: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid rgba(16,185,129,0.3)'
+          }}>
+            <TrendingUp size={24} color="#10b981" />
+          </div>
+          <div>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.5)',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              marginBottom: 4
+            }}>
+              FLUJO GLOBAL DE DESCARGA
+            </div>
+            <div style={{
+              fontSize: 28,
+              fontWeight: 900,
+              color: 'white',
+              fontFamily: "'DM Mono', monospace",
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8
+            }}>
+              {fmtTM(flujoGlobalBasadoEnBodegas, 2)} TM/h
+              <span style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'rgba(255,255,255,0.5)',
+                fontFamily: "'Sora', sans-serif"
+              }}>
+                (basado en última hora por bodega)
+              </span>
+            </div>
+          </div>
+        </div>
+
+       
+      </div>
+
+      {/* Grid de métricas */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 16,
+        marginBottom: 20
+      }}>
+        <div style={{
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          padding: 16,
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>FLUJO PROMEDIO</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6', fontFamily: "'DM Mono', monospace" }}>
+            {fmtTM(flujoPromedioGeneral, 2)} TM/h
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Desde inicio</div>
+        </div>
+
+        <div style={{
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          padding: 16,
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>ÚLTIMA HORA</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981', fontFamily: "'DM Mono', monospace" }}>
+            {fmtTM(flujoUltimaHora, 2)} TM/h
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Últimos 60 min</div>
+        </div>
+
+        <div style={{
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          padding: 16,
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>GLOBAL BODEGAS</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: "'DM Mono', monospace" }}>
+            {fmtTM(flujoGlobalBasadoEnBodegas, 2)} TM/h
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Suma última hora x bodega</div>
+        </div>
+
+        <div style={{
+          background: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          padding: 16,
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>BODEGAS ACTIVAS</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#8b5cf6', fontFamily: "'DM Mono', monospace" }}>
+            {datosPorBodegaCompleto.filter(b => b.flujoUltimaHora > 0).length}
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Con flujo en última hora</div>
+        </div>
+      </div>
+
+      {/* Top bodegas por flujo */}
+      {topBodegasFlujo.length > 0 && (
+        <div style={{
+          background: 'rgba(0,0,0,0.2)',
+          borderRadius: 16,
+          padding: 16
+        }}>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'rgba(255,255,255,0.5)',
+            marginBottom: 12,
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+          }}>
+            Flujos en última hora por bodega
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {topBodegasFlujo.map((b, i) => (
+              <div key={b.bodega} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  background: i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : '#b45309',
+                  color: '#0f172a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  fontWeight: 900
+                }}>
+                  {i + 1}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{b.bodega}</span>
+                <span style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: '#10b981',
+                  fontFamily: "'DM Mono', monospace"
+                }}>
+                  {fmtTM(b.flujoUltimaHora, 2)} TM/h
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gráfico de tendencia de últimas 3 horas - CORREGIDO: usar flujoUltimasHoras */}
+      {flujoUltimasHoras.length > 1 && (
+        <div style={{
+          marginTop: 20,
+          height: 60,
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 4
+        }}>
+          {flujoUltimasHoras.map((h, i) => {
+            const max = Math.max(...flujoUltimasHoras.map(h => h.tm));
+            const height = max > 0 ? (h.tm / max) * 60 : 0;
+            return (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                  width: '100%',
+                  height: Math.max(4, height),
+                  background: i === flujoUltimasHoras.length - 1 ? '#10b981' : '#3b82f6',
+                  borderRadius: '4px 4px 0 0',
+                  transition: 'height 0.3s'
+                }} />
+                <div style={{
+                  fontSize: 9,
+                  color: 'rgba(255,255,255,0.5)',
+                  marginTop: 4
+                }}>
+                  {h.hora}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1837,12 +2211,32 @@ export default function DashboardSacosCompartido({ barco }) {
               sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / statsGenerales.totalSacos) * 100).toFixed(1) : 0}% del total`} />
           </div>
 
+          {/* FLUJO GLOBAL DE DESCARGA - NUEVO COMPONENTE */}
+          <FlujoGlobalCard 
+            flujoPromedioGeneral={flujoPromedioGeneral}
+            flujoUltimaHora={flujoUltimaHora}
+            registrosFiltrados={registrosFiltrados}
+            datosPorBodegaCompleto={datosPorBodegaCompleto}
+          />
+
           {/* ── PROGRESO GENERAL REDISEÑADO ── */}
           <div className="alm-progress-container">
             <div className="alm-progress-header">
               <div className="alm-progress-title">
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block', animation: 'pulse-dot 2s infinite' }} />
                 Progreso general de la operación
+                {filtroBodegaGlobal !== 'todas' && (
+                  <span style={{
+                    background: '#3b82f6',
+                    color: 'white',
+                    padding: '2px 10px',
+                    borderRadius: 999,
+                    fontSize: 10,
+                    marginLeft: 8
+                  }}>
+                    Bodega {filtroBodegaGlobal}
+                  </span>
+                )}
               </div>
             </div>
             <ProgressBarFormal
@@ -1850,6 +2244,11 @@ export default function DashboardSacosCompartido({ barco }) {
               actual={statsGenerales.totalTM}
               meta={totalMetas}
               faltante={Math.max(0, totalMetas - statsGenerales.totalTM)}
+              flujoPromedio={filtroBodegaGlobal !== 'todas' 
+                ? datosPorBodegaCompleto.find(b => b.bodega === filtroBodegaGlobal)?.flujoHora || flujoPromedioGeneral
+                : flujoPromedioGeneral
+              }
+              bodegaSeleccionada={filtroBodegaGlobal}
             />
           </div>
 
