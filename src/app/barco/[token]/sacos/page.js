@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import * as XLSX from 'xlsx'
 dayjs.locale('es')
 
 const useTheme = () => {
@@ -29,6 +30,257 @@ const useTheme = () => {
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
   }
   return { theme, toggleTheme: toggle }
+}
+
+// ─── FUNCIONES PARA EXPORTAR A EXCEL ─────────────────────────────────────
+const formatearDuracionToMinutos = (duracion) => {
+  if (!duracion || duracion === '—') return 0
+  const [h, m] = duracion.split(':').map(Number)
+  return (h * 60) + (m || 0)
+}
+
+const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFecha) => {
+  try {
+    // Crear un nuevo libro de trabajo
+    const wb = XLSX.utils.book_new()
+    
+    // ===================================================
+    // HOJA 1: RESUMEN GENERAL
+    // ===================================================
+    const resumenData = [
+      ['🚢 INFORME DE REGISTRO DE SACOS'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [],
+      ['📊 ESTADÍSTICAS GENERALES'],
+      ['Métrica', 'Valor'],
+      ['Total Viajes', stats.totalViajes],
+      ['Total Sacos', stats.totalSacos],
+      ['Total Toneladas (TM)', stats.totalTM.toFixed(3)],
+      ['Promedio por Viaje (TM)', stats.promedioViaje.toFixed(3)],
+      [],
+      ['📦 RESUMEN POR BODEGA'],
+      ['Bodega', 'Viajes', 'Sacos', 'Dañados', '% Dañados', 'Toneladas (TM)', 'Eficiencia']
+    ]
+    
+    // Agregar datos por bodega
+    statsPorBodega.forEach(b => {
+      const porcentajeDanados = b.totalSacos > 0 
+        ? ((b.totalDanados / b.totalSacos) * 100).toFixed(1) + '%'
+        : '0%'
+      const eficiencia = b.totalSacos > 0
+        ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100) + '%'
+        : '100%'
+      
+      resumenData.push([
+        b.bodega,
+        b.viajes,
+        b.totalSacos.toLocaleString(),
+        b.totalDanados,
+        porcentajeDanados,
+        b.totalTM.toFixed(3),
+        eficiencia
+      ])
+    })
+    
+    // Crear hoja de resumen
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+    
+    // Aplicar estilos a la hoja de resumen
+    wsResumen['!cols'] = [
+      { wch: 25 }, // Bodega
+      { wch: 10 }, // Viajes
+      { wch: 15 }, // Sacos
+      { wch: 10 }, // Dañados
+      { wch: 12 }, // % Dañados
+      { wch: 18 }, // Toneladas
+      { wch: 12 }  // Eficiencia
+    ]
+    
+    // ===================================================
+    // HOJA 2: TODOS LOS VIAJES (DETALLADO)
+    // ===================================================
+    const viajesData = [
+      ['🚢 REGISTRO DETALLADO DE VIAJES'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [filtroFecha ? `Filtrado por fecha: ${dayjs(filtroFecha).format('DD/MM/YYYY')}` : 'Mostrando todos los registros'],
+      [],
+      ['# Viaje', 'Fecha', 'Bodega', 'Placa Camión', 'Placa Remolque', 'Nota Remisión', 
+       'Hora Inicio', 'Hora Fin', 'Duración', 'Peso Ing. (kg)', 'Peso Saco (kg)', 
+       'Cant. Sacos', 'Sacos Dañados', 'Peso Calc. (kg)', 'Toneladas (TM)', 
+       'Diferencia %', 'Observaciones']
+    ]
+    
+    // Agregar datos de viajes
+    registros.forEach(reg => {
+      const pesoCalculado = (reg.peso_saco_kg || 0) * (reg.cantidad_paquetes || 0)
+      const diferencia = reg.peso_ingenio_kg && pesoCalculado
+        ? ((Math.abs(pesoCalculado - reg.peso_ingenio_kg) / reg.peso_ingenio_kg) * 100).toFixed(2) + '%'
+        : 'N/A'
+      
+      viajesData.push([
+        reg.viaje_numero || '',
+        reg.fecha ? dayjs(reg.fecha).format('DD/MM/YYYY') : '',
+        reg.bodega || '',
+        reg.placa_camion || '',
+        reg.placa_remolque || '',
+        reg.nota_remision || '',
+        reg.hora_inicio || '',
+        reg.hora_fin || '',
+        reg.duracion || '—',
+        reg.peso_ingenio_kg || '',
+        reg.peso_saco_kg || '',
+        reg.cantidad_paquetes || 0,
+        reg.paquetes_danados || 0,
+        pesoCalculado,
+        reg.peso_total_calculado_tm?.toFixed(3) || (pesoCalculado / 1000).toFixed(3),
+        diferencia,
+        reg.observaciones || ''
+      ])
+    })
+    
+    // Crear hoja de viajes
+    const wsViajes = XLSX.utils.aoa_to_sheet(viajesData)
+    
+    // Ajustar ancho de columnas para viajes
+    wsViajes['!cols'] = [
+      { wch: 8 },  // # Viaje
+      { wch: 12 }, // Fecha
+      { wch: 15 }, // Bodega
+      { wch: 15 }, // Placa Camión
+      { wch: 15 }, // Placa Remolque
+      { wch: 15 }, // Nota Remisión
+      { wch: 10 }, // Hora Inicio
+      { wch: 10 }, // Hora Fin
+      { wch: 10 }, // Duración
+      { wch: 15 }, // Peso Ing.
+      { wch: 15 }, // Peso Saco
+      { wch: 12 }, // Cant. Sacos
+      { wch: 12 }, // Sacos Dañados
+      { wch: 15 }, // Peso Calc.
+      { wch: 15 }, // Toneladas
+      { wch: 12 }, // Diferencia %
+      { wch: 30 }  // Observaciones
+    ]
+    
+    // ===================================================
+    // HOJA 3: ANÁLISIS DE RENDIMIENTO
+    // ===================================================
+    const rendimientoData = [
+      ['📈 ANÁLISIS DE RENDIMIENTO POR BODEGA'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [],
+      ['Bodega', 'Viajes', 'Total Sacos', 'Total TM', 'Sacos/Viaje', 'TM/Viaje', 'Duración Promedio', 'Eficiencia']
+    ]
+    
+    // Calcular duración promedio por bodega
+    statsPorBodega.forEach(b => {
+      const registrosBodega = registros.filter(r => r.bodega === b.bodega && r.duracion && r.duracion !== '—')
+      let duracionPromedio = '—'
+      
+      if (registrosBodega.length > 0) {
+        const totalMinutos = registrosBodega.reduce((sum, r) => {
+          const [h, m] = r.duracion.split(':').map(Number)
+          return sum + (h * 60 + (m || 0))
+        }, 0)
+        const promedioMin = totalMinutos / registrosBodega.length
+        const h = Math.floor(promedioMin / 60)
+        const m = Math.round(promedioMin % 60)
+        duracionPromedio = m > 0 ? `${h}h ${m}m` : `${h}h`
+      }
+      
+      const sacosPorViaje = b.viajes > 0 ? Math.round(b.totalSacos / b.viajes) : 0
+      const tmPorViaje = b.viajes > 0 ? (b.totalTM / b.viajes).toFixed(2) : 0
+      const eficiencia = b.totalSacos > 0
+        ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100) + '%'
+        : '100%'
+      
+      rendimientoData.push([
+        b.bodega,
+        b.viajes,
+        b.totalSacos.toLocaleString(),
+        b.totalTM.toFixed(3),
+        sacosPorViaje,
+        tmPorViaje,
+        duracionPromedio,
+        eficiencia
+      ])
+    })
+    
+    // Agregar totales
+    const totalSacosPorViaje = stats.totalViajes > 0 ? Math.round(stats.totalSacos / stats.totalViajes) : 0
+    rendimientoData.push(
+      [],
+      ['TOTALES GENERALES', stats.totalViajes, stats.totalSacos.toLocaleString(), stats.totalTM.toFixed(3), totalSacosPorViaje, stats.promedioViaje.toFixed(2), '—', '—']
+    )
+    
+    const wsRendimiento = XLSX.utils.aoa_to_sheet(rendimientoData)
+    wsRendimiento['!cols'] = [
+      { wch: 20 }, // Bodega
+      { wch: 10 }, // Viajes
+      { wch: 15 }, // Total Sacos
+      { wch: 15 }, // Total TM
+      { wch: 15 }, // Sacos/Viaje
+      { wch: 15 }, // TM/Viaje
+      { wch: 20 }, // Duración Promedio
+      { wch: 12 }  // Eficiencia
+    ]
+    
+    // ===================================================
+    // HOJA 4: VIAJES POR HORA (ANÁLISIS TEMPORAL)
+    // ===================================================
+    // Agrupar viajes por hora de finalización
+    const viajesPorHora = {}
+    registros.forEach(reg => {
+      if (reg.hora_flujo !== undefined && reg.hora_flujo !== null) {
+        const hora = reg.hora_flujo
+        viajesPorHora[hora] = (viajesPorHora[hora] || 0) + 1
+      }
+    })
+    
+    const horaData = [
+      ['⏰ DISTRIBUCIÓN DE VIAJES POR HORA'],
+      [barco?.nombre || 'Barco sin nombre'],
+      [],
+      ['Hora', 'Cantidad de Viajes']
+    ]
+    
+    // Ordenar por hora
+    Object.keys(viajesPorHora)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .forEach(hora => {
+        horaData.push([`${hora}:00 - ${hora}:59`, viajesPorHora[hora]])
+      })
+    
+    if (Object.keys(viajesPorHora).length === 0) {
+      horaData.push(['No hay datos de hora disponibles', ''])
+    }
+    
+    const wsHora = XLSX.utils.aoa_to_sheet(horaData)
+    wsHora['!cols'] = [{ wch: 25 }, { wch: 20 }]
+    
+    // ===================================================
+    // AGREGAR HOJAS AL LIBRO
+    // ===================================================
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
+    XLSX.utils.book_append_sheet(wb, wsViajes, 'Todos los Viajes')
+    XLSX.utils.book_append_sheet(wb, wsRendimiento, 'Rendimiento')
+    XLSX.utils.book_append_sheet(wb, wsHora, 'Viajes por Hora')
+    
+    // ===================================================
+    // GENERAR ARCHIVO
+    // ===================================================
+    const nombreArchivo = `Registro_Sacos_${barco?.nombre?.replace(/\s+/g, '_') || 'Barco'}_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
+    XLSX.writeFile(wb, nombreArchivo)
+    
+    toast.success(`✅ Excel exportado correctamente: ${nombreArchivo}`)
+    
+  } catch (error) {
+    console.error('Error exportando a Excel:', error)
+    toast.error('❌ Error al exportar a Excel')
+  }
 }
 
 // ─── InputField ─────────
@@ -1125,6 +1377,20 @@ export default function RegistroSacosPage() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* NUEVO BOTÓN DE EXPORTAR EXCEL */}
+              <button
+                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFecha)}
+                className="bg-green-500 hover:bg-green-600 p-2 rounded-xl transition-colors relative group"
+                title="Exportar a Excel"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2M18 20H6V4H13V9H18V20M15.6 12.1L13.7 14L15.6 15.9L14.2 17.3L12.3 15.4L10.4 17.3L9 15.9L10.9 14L9 12.1L10.4 10.7L12.3 12.6L14.2 10.7L15.6 12.1Z" />
+                </svg>
+                <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  Exportar a Excel
+                </span>
+              </button>
+              
               <button onClick={toggleTheme}
                 className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors">
                 {dk ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
@@ -1230,6 +1496,19 @@ export default function RegistroSacosPage() {
             </button>
 
             <div className="flex gap-2">
+              {/* BOTÓN DE EXPORTAR ADICIONAL (OPCIONAL) */}
+              <button
+                onClick={() => exportarAExcel(barco, registros, stats, statsPorBodega, filtroFecha)}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 transform hover:scale-105 text-sm sm:text-base shadow-lg"
+                title="Exportar todos los datos a Excel"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2M18 20H6V4H13V9H18V20M15.6 12.1L13.7 14L15.6 15.9L14.2 17.3L12.3 15.4L10.4 17.3L9 15.9L10.9 14L9 12.1L10.4 10.7L12.3 12.6L14.2 10.7L15.6 12.1Z" />
+                </svg>
+                <span className="hidden sm:inline">Exportar Excel</span>
+                <span className="sm:hidden">Excel</span>
+              </button>
+              
               <input 
                 type="date" 
                 value={filtroFecha} 
