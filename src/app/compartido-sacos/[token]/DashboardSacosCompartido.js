@@ -1502,18 +1502,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Últimos 60 min</div>
         </div>
 
-        <div style={{
-          background: 'rgba(255,255,255,0.05)',
-          borderRadius: 16,
-          padding: 16,
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>GLOBAL BODEGAS</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: "'DM Mono', monospace" }}>
-            {fmtTM(flujoGlobalBasadoEnBodegas, 2)} TM/h
-          </div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Suma última hora x bodega</div>
-        </div>
+      
 
         <div style={{
           background: 'rgba(255,255,255,0.05)',

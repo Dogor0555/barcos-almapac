@@ -99,14 +99,23 @@ export default function BarcoPesadorPage() {
   }
 
   // Para MOSTRAR: Convertir UTC de BD a hora de El Salvador
-  const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm') => {
+  const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm:ss') => {
     if (!utcDate) return '—'
     return dayjs.utc(utcDate).tz(TIMEZONE_EL_SALVADOR).format(format)
   }
 
   // Obtener hora actual en El Salvador para inputs
   const getCurrentSVTimeForInput = () => {
-    return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm')
+    return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm:ss')
+  }
+
+  // ✅ Función mejorada para obtener hora actual en formato 24h HH:MM:SS
+  const getHoraActual24h = () => {
+    const ahora = new Date()
+    const horas = ahora.getHours().toString().padStart(2, '0')
+    const minutos = ahora.getMinutes().toString().padStart(2, '0')
+    const segundos = ahora.getSeconds().toString().padStart(2, '0')
+    return `${horas}:${minutos}:${segundos}`
   }
 
   // Función para calcular flujo entre lecturas consecutivas del mismo destino
@@ -143,14 +152,6 @@ export default function BarcoPesadorPage() {
     
     const maxViaje = Math.max(...viajesProducto.map(v => v.viaje_numero))
     return maxViaje + 1
-  }
-
-  // ✅ Función mejorada para obtener hora actual en formato 24h HH:MM
-  const getHoraActual24h = () => {
-    const ahora = new Date()
-    const horas = ahora.getHours().toString().padStart(2, '0')
-    const minutos = ahora.getMinutes().toString().padStart(2, '0')
-    return `${horas}:${minutos}`
   }
 
   // Función para formatear fecha local sin problemas de zona horaria
@@ -748,7 +749,7 @@ export default function BarcoPesadorPage() {
     setEditandoLectura(lectura)
     // CONVERTIR de UTC a hora El Salvador para editar
     setLecturaActual({
-      fecha_hora: formatUTCToSV(lectura.fecha_hora, 'YYYY-MM-DDTHH:mm'),
+      fecha_hora: formatUTCToSV(lectura.fecha_hora, 'YYYY-MM-DDTHH:mm:ss'),
       acumulado_tm: lectura.acumulado_tm || '',
       destino_id: lectura.destino_id || ''
     })
@@ -757,7 +758,7 @@ export default function BarcoPesadorPage() {
   const handleEditarBitacora = (registro) => {
     setEditandoBitacora(registro)
     setBitacoraActual({
-      fecha_hora: registro.fecha_hora?.slice(0, 16) || '',
+      fecha_hora: registro.fecha_hora?.slice(0, 19) || '',
       comentarios: registro.comentarios || ''
     })
   }
@@ -1399,7 +1400,8 @@ export default function BarcoPesadorPage() {
                           day: '2-digit',
                           month: '2-digit',
                           hour: '2-digit',
-                          minute: '2-digit'
+                          minute: '2-digit',
+                          second: '2-digit'
                         })}
                       </p>
                       {barco.operacion_iniciada_por && (
@@ -1462,7 +1464,8 @@ export default function BarcoPesadorPage() {
                           day: '2-digit',
                           month: '2-digit',
                           hour: '2-digit',
-                          minute: '2-digit'
+                          minute: '2-digit',
+                          second: '2-digit'
                         })}
                       </p>
                       {barco.operacion_motivo_finalizacion && (
@@ -1502,7 +1505,8 @@ export default function BarcoPesadorPage() {
                       day: '2-digit',
                       month: '2-digit',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      second: '2-digit'
                     })}
                   </p>
                 </div>
@@ -1522,7 +1526,8 @@ export default function BarcoPesadorPage() {
                       day: '2-digit',
                       month: '2-digit',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      second: '2-digit'
                     })}
                   </p>
                 </div>
@@ -1542,7 +1547,8 @@ export default function BarcoPesadorPage() {
                       day: '2-digit',
                       month: '2-digit',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      second: '2-digit'
                     })}
                   </p>
                 </div>
@@ -1561,8 +1567,6 @@ export default function BarcoPesadorPage() {
             </div>
           )}
         </div>
-
-        
 
         {/* PESTAÑAS DE PRODUCTOS */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
@@ -2274,7 +2278,7 @@ export default function BarcoPesadorPage() {
                         onChange={(e) => {
                           const value = e.target.value
                           if (detectarFormatoAmPm(value)) {
-                            toast.warning('Usa formato 24h (ej: 14:30 en lugar de 2:30 PM)')
+                            toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
                             const corregida = validateHora24h(value)
                             setNuevoViaje(prev => ({ ...prev, hora_salida_updp: corregida }))
                           } else {
@@ -2308,7 +2312,7 @@ export default function BarcoPesadorPage() {
                         onChange={(e) => {
                           const value = e.target.value
                           if (detectarFormatoAmPm(value)) {
-                            toast.warning('Usa formato 24h (ej: 14:30 en lugar de 2:30 PM)')
+                            toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
                             const corregida = validateHora24h(value)
                             setNuevoViaje(prev => ({ ...prev, hora_entrada_almapac: corregida }))
                           } else {
@@ -2633,7 +2637,7 @@ export default function BarcoPesadorPage() {
                             onChange={(e) => {
                               const value = e.target.value
                               if (detectarFormatoAmPm(value)) {
-                                toast.warning('Usa formato 24h (ej: 14:30 en lugar de 2:30 PM)')
+                                toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
                                 const corregida = validateHora24h(value)
                                 setCompletarViaje(prev => ({ ...prev, hora_salida_almapac: corregida }))
                               } else {
@@ -2789,7 +2793,6 @@ export default function BarcoPesadorPage() {
                                       onClick={() => handleEliminarViaje(viaje.id)}
                                       className="p-1 hover:bg-red-500/20 rounded transition-colors"
                                       title="Eliminar"
-                                    
                                     >
                                       <Trash2 className="w-4 h-4 text-red-400" />
                                     </button>
@@ -3111,7 +3114,7 @@ export default function BarcoPesadorPage() {
                       value={bitacoraActual.fecha_hora ? bitacoraActual.fecha_hora.split('T')[0] : ''}
                       onChange={(e) => {
                         const fecha = e.target.value
-                        const horaActual = bitacoraActual.fecha_hora?.split('T')[1] || '00:00'
+                        const horaActual = bitacoraActual.fecha_hora?.split('T')[1] || '00:00:00'
                         setBitacoraActual(prev => ({ 
                           ...prev, 
                           fecha_hora: `${fecha}T${horaActual}`
