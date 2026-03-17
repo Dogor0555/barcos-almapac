@@ -226,7 +226,7 @@ function DateRangeSelector({ fechaInicio, fechaFin, onChange, onClose }) {
 }
 
 // ============================================================================
-// COMPONENTE DE ATRASOS MEJORADO
+// COMPONENTE DE ATRASOS MEJORADO CON FILTRO POR TIPO
 // ============================================================================
 function AtrasosBarco({ barcoId }) {
   const [atrasos, setAtrasos] = useState([]);
@@ -234,6 +234,7 @@ function AtrasosBarco({ barcoId }) {
   const [loading, setLoading] = useState(true);
   const [expandido, setExpandido] = useState(true);
   const [filtroBodega, setFiltroBodega] = useState('todas');
+  const [filtroTipo, setFiltroTipo] = useState('todos'); // NUEVO FILTRO
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [rangoPersonalizado, setRangoPersonalizado] = useState({
     activo: false,
@@ -326,28 +327,70 @@ function AtrasosBarco({ barcoId }) {
     return `${horas}h ${minutos}m`;
   };
 
+  // Filtrar atrasos por bodega Y por tipo
   const atrasosFiltrados = useMemo(() => {
     let filtrados = atrasos;
+    
+    // Filtro por bodega
     if (filtroBodega === 'generales') {
       filtrados = atrasos.filter(a => a.es_general);
     } else if (filtroBodega !== 'todas') {
       filtrados = atrasos.filter(a => a.bodega_nombre === filtroBodega);
     }
+    
+    // NUEVO: Filtro por tipo
+    if (filtroTipo !== 'todos') {
+      if (filtroTipo === 'imputables') {
+        // Filtrar solo tipos imputables
+        const tiposImputables = tiposParo.filter(t => t.es_imputable_almapac).map(t => t.id);
+        filtrados = filtrados.filter(a => tiposImputables.includes(a.tipo_paro_id));
+      } else if (filtroTipo === 'no-imputables') {
+        // Filtrar solo tipos no imputables
+        const tiposNoImputables = tiposParo.filter(t => !t.es_imputable_almapac).map(t => t.id);
+        filtrados = filtrados.filter(a => tiposNoImputables.includes(a.tipo_paro_id));
+      } else {
+        // Filtrar por ID de tipo específico
+        filtrados = filtrados.filter(a => a.tipo_paro_id === parseInt(filtroTipo));
+      }
+    }
+    
     return filtrados;
-  }, [atrasos, filtroBodega]);
+  }, [atrasos, filtroBodega, filtroTipo, tiposParo]);
 
   const statsFiltrados = useMemo(() => {
-    if (filtroBodega === 'todas') return stats;
+    if (filtroBodega === 'todas' && filtroTipo === 'todos') return stats;
+    
     const totalMinutos = calcularMinutosReales(atrasosFiltrados);
     const { imputables, noImputables } = calcularMinutosRealesPorImputabilidad(atrasosFiltrados, tiposParo);
+    
     return { ...stats, totalMinutos, imputables, noImputables };
-  }, [atrasosFiltrados, filtroBodega, tiposParo, stats]);
+  }, [atrasosFiltrados, filtroBodega, filtroTipo, tiposParo, stats]);
 
   const bodegasUnicas = useMemo(() => {
     const s = new Set();
     atrasos.forEach(a => { if (a.bodega_nombre) s.add(a.bodega_nombre); });
     return ['todas', 'generales', ...Array.from(s).sort()];
   }, [atrasos]);
+
+  // NUEVO: Opciones para filtro de tipos
+  const tiposOpciones = useMemo(() => {
+    const opciones = [
+      { value: 'todos', label: '📋 Todos los tipos' },
+      { value: 'imputables', label: '🔴 Solo imputables ALMAPAC' },
+      { value: 'no-imputables', label: '🟡 Solo no imputables' }
+    ];
+    
+    // Agregar tipos específicos ordenados
+    const tiposOrdenados = [...tiposParo]
+      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .map(t => ({
+        value: t.id.toString(),
+        label: t.nombre,
+        color: getTipoColor(t.nombre)
+      }));
+    
+    return [...opciones, ...tiposOrdenados];
+  }, [tiposParo]);
 
   const s = statsFiltrados;
   const pctImputable = s.totalMinutos > 0 ? (s.imputables / s.totalMinutos * 100).toFixed(1) : '0.0';
@@ -404,6 +447,7 @@ function AtrasosBarco({ barcoId }) {
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            {/* Selector de período */}
             <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 }}>
               {[
                 { key: 'hoy',    label: 'Hoy'     },
@@ -453,6 +497,7 @@ function AtrasosBarco({ barcoId }) {
               </div>
             </div>
 
+            {/* Filtro por bodega */}
             <select
               value={filtroBodega}
               onClick={e => e.stopPropagation()}
@@ -472,6 +517,32 @@ function AtrasosBarco({ barcoId }) {
                 <option key={b} value={b}>
                   {b === 'todas' ? '📋 Todas las bodegas' :
                    b === 'generales' ? '⚡ Solo generales' : `📦 ${b}`}
+                </option>
+              ))}
+            </select>
+
+            {/* NUEVO: Filtro por tipo */}
+            <select
+              value={filtroTipo}
+              onClick={e => e.stopPropagation()}
+              onChange={e => setFiltroTipo(e.target.value)}
+              style={{
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                padding: '6px 12px',
+                fontSize: 13,
+                color: '#0f172a',
+                cursor: 'pointer',
+                fontFamily: "'Sora', sans-serif",
+                minWidth: 180
+              }}
+            >
+              {tiposOpciones.map(op => (
+                <option key={op.value} value={op.value}>
+                  {op.value === 'todos' || op.value === 'imputables' || op.value === 'no-imputables' 
+                    ? op.label 
+                    : `🔸 ${op.label}`}
                 </option>
               ))}
             </select>
@@ -510,6 +581,42 @@ function AtrasosBarco({ barcoId }) {
               <RefreshCw size={13} /> Actualizar
             </button>
           </div>
+
+          {/* Indicador de filtros activos */}
+          {(filtroBodega !== 'todas' || filtroTipo !== 'todos' || rangoPersonalizado.activo) && (
+            <div style={{
+              marginBottom: 16,
+              padding: '8px 12px',
+              background: '#f1f5f9',
+              borderRadius: 8,
+              fontSize: 11,
+              color: '#475569',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap'
+            }}>
+              <span>🔍 Filtros activos:</span>
+              {filtroBodega !== 'todas' && (
+                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
+                  Bodega: {filtroBodega === 'generales' ? 'Generales' : filtroBodega}
+                </span>
+              )}
+              {filtroTipo !== 'todos' && (
+                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
+                  Tipo: {tiposOpciones.find(o => o.value === filtroTipo)?.label || filtroTipo}
+                </span>
+              )}
+              {rangoPersonalizado.activo && (
+                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
+                  Rango personalizado
+                </span>
+              )}
+              <span style={{ marginLeft: 'auto', fontWeight: 600 }}>
+                {atrasosFiltrados.length} registros mostrados
+              </span>
+            </div>
+          )}
 
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
@@ -597,7 +704,7 @@ function AtrasosBarco({ barcoId }) {
                 }) : (
                   <tr>
                     <td colSpan={8} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                      No hay registros de atrasos para este período
+                      No hay registros de atrasos para este período y filtros seleccionados
                     </td>
                   </tr>
                 )}

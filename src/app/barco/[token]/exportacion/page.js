@@ -11,13 +11,14 @@ import {
   TrendingUp, LineChart, BookOpen, X, Download, Layers,
   Anchor, Play, StopCircle, Lock, Unlock, Coffee, CloudRain,
   Wrench, Truck, Zap, AlertTriangle, BarChart3, Flag,
-  History, Filter, ChevronDown, ChevronRight, Info, Box
+  History, Filter, ChevronDown, ChevronRight, Info, Box, FileSpreadsheet
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
+import * as XLSX from 'xlsx'
 
 // Extender dayjs con plugins de zona horaria
 dayjs.extend(utc)
@@ -98,6 +99,270 @@ const getTiposParoConfig = () => ({
   'MOVIMIENTO DEL APILADOR': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', grupo: 'UPDP' },
   'CAMBIO DE BODEGA EN EL BARCO': { icono: <Layers className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'UPDP' },
 })
+
+// =====================================================
+// FUNCIÓN PARA EXPORTAR A EXCEL
+// =====================================================
+const exportToExcel = (barco, exportaciones, productos, registrosDemoras, tiposParo) => {
+  try {
+    toast.loading('Preparando archivo Excel...', { id: 'excel' })
+
+    // Crear libro de Excel
+    const wb = XLSX.utils.book_new()
+    
+    // Hoja 1: Resumen General
+    const resumenData = []
+    
+    // Información del barco
+    resumenData.push(['INFORME DE EXPORTACIÓN - BARCO', barco.nombre])
+    resumenData.push(['Código', barco.codigo_barco || '—'])
+    resumenData.push(['Estado', barco.estado])
+    resumenData.push(['Fecha del reporte', formatUTCToSV(new Date(), 'DD/MM/YYYY HH:mm')])
+    resumenData.push([])
+    
+    // Inicio y fin de carga
+    resumenData.push(['INICIO DE CARGA', barco.operacion_iniciada_at ? formatUTCToSV(barco.operacion_iniciada_at, 'DD/MM/YY HH:mm') : 'PENDIENTE'])
+    resumenData.push(['FIN DE CARGA', barco.operacion_finalizada_at ? formatUTCToSV(barco.operacion_finalizada_at, 'DD/MM/YY HH:mm') : 'EN CURSO'])
+    resumenData.push([])
+    
+    // Totales por producto
+    resumenData.push(['RESUMEN POR PRODUCTO'])
+    resumenData.push(['Producto', 'Total Cargado (TM)', 'Meta (TM)', '% Cumplimiento', 'Flujo Promedio (TM/h)'])
+    
+    productos.forEach(producto => {
+      const exportacionesProd = exportaciones.filter(e => e.producto_id === producto.id)
+      if (exportacionesProd.length === 0) return
+      
+      const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+      const totalGeneral = Number(ordenadas[ordenadas.length - 1]?.acumulado_tm) || 0
+      const meta = barco.metas_json?.limites?.[producto.codigo] || 0
+      const cumplimiento = meta > 0 ? ((totalGeneral / meta) * 100).toFixed(1) : 'N/A'
+      
+      // Calcular flujo promedio
+      let flujoPromedio = 0
+      if (ordenadas.length >= 2) {
+        const primera = ordenadas[0]
+        const ultima = ordenadas[ordenadas.length - 1]
+        const horas = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+        if (horas > 0) {
+          flujoPromedio = (totalGeneral - (Number(ordenadas[0]?.acumulado_tm) || 0)) / horas
+        }
+      }
+      
+      resumenData.push([
+        `${producto.nombre} (${producto.codigo})`,
+        totalGeneral.toFixed(3),
+        meta.toFixed(3),
+        cumplimiento + (cumplimiento !== 'N/A' ? '%' : ''),
+        flujoPromedio.toFixed(3)
+      ])
+    })
+    
+    resumenData.push([])
+    
+    // Totales de demoras
+    const totalDemoras = registrosDemoras.length
+    const totalMinutosDemoras = registrosDemoras.reduce((sum, r) => sum + (r.duracion_minutos || 0), 0)
+    resumenData.push(['RESUMEN DE DEMORAS'])
+    resumenData.push(['Total Demoras', totalDemoras])
+    resumenData.push(['Tiempo Total en Demoras', `${Math.floor(totalMinutosDemoras / 60)}h ${totalMinutosDemoras % 60}m`])
+    resumenData.push(['En Curso', registrosDemoras.filter(r => !r.hora_fin).length])
+    
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
+    
+    // Hoja 2: Registros de Carga por Producto
+    productos.forEach(producto => {
+      const exportacionesProd = exportaciones
+        .filter(e => e.producto_id === producto.id)
+        .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+      
+      if (exportacionesProd.length === 0) return
+      
+      const cargaData = []
+      cargaData.push(['REGISTROS DE CARGA -', producto.nombre])
+      cargaData.push([])
+      cargaData.push(['#', 'Fecha', 'Hora', 'Turno', 'Acumulado (TM)', 'Bodega', 'Flujo (TM/h)', 'Delta (TM)', 'Observaciones'])
+      
+      exportacionesProd.forEach((exp, index) => {
+        const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YYYY')
+        const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+        const horaNum = parseInt(horaSV.split(':')[0])
+        
+        // Determinar turno (6-18 o 18-6)
+        let turno = '—'
+        if (horaNum >= 6 && horaNum < 18) {
+          turno = '6:00 - 18:00'
+        } else {
+          turno = '18:00 - 6:00'
+        }
+        
+        const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+        
+        // Calcular flujo y delta
+        let flujo = 0
+        let delta = 0
+        if (index > 0) {
+          const anterior = exportacionesProd[index - 1]
+          const tiempoHoras = (new Date(exp.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
+          delta = Number(exp.acumulado_tm) - Number(anterior.acumulado_tm)
+          if (tiempoHoras > 0 && delta > 0) {
+            flujo = delta / tiempoHoras
+          }
+        }
+        
+        cargaData.push([
+          index + 1,
+          fechaSV,
+          horaSV,
+          turno,
+          (exp.acumulado_tm || 0).toFixed(3),
+          bodega ? `${bodega.nombre} (${bodega.codigo})` : '—',
+          flujo > 0 ? flujo.toFixed(3) : '—',
+          delta > 0 ? delta.toFixed(3) : '—',
+          exp.observaciones || ''
+        ])
+      })
+      
+      // Agregar totales
+      cargaData.push([])
+      const totalGeneral = exportacionesProd.length > 0 ? exportacionesProd[exportacionesProd.length - 1].acumulado_tm : 0
+      const primeraLectura = exportacionesProd[0]
+      const ultimaLectura = exportacionesProd[exportacionesProd.length - 1]
+      const horasTranscurridas = (new Date(ultimaLectura.fecha_hora) - new Date(primeraLectura.fecha_hora)) / (1000 * 60 * 60)
+      const flujoPromedio = horasTranscurridas > 0 ? totalGeneral / horasTranscurridas : 0
+      
+      cargaData.push(['TOTAL GENERAL', '', '', '', totalGeneral.toFixed(3)])
+      cargaData.push(['FLUJO PROMEDIO', '', '', '', '', '', flujoPromedio.toFixed(3)])
+      
+      // Meta y faltante
+      const meta = barco.metas_json?.limites?.[producto.codigo]
+      if (meta) {
+        const falta = Math.max(0, meta - totalGeneral)
+        cargaData.push(['META', '', '', '', meta.toFixed(3)])
+        cargaData.push(['FALTA POR CARGAR', '', '', '', falta.toFixed(3)])
+      }
+      
+      const wsCarga = XLSX.utils.aoa_to_sheet(cargaData)
+      XLSX.utils.book_append_sheet(wb, wsCarga, `Carga ${producto.codigo}`)
+    })
+    
+    // Hoja 3: Demoras
+    if (registrosDemoras.length > 0) {
+      const demorasData = []
+      demorasData.push(['REGISTRO DE DEMORAS'])
+      demorasData.push([])
+      demorasData.push(['Fecha', 'Hora Inicio', 'Hora Fin', 'Turno', 'Tipo', 'Grupo', 'Duración', 'Observaciones'])
+      
+      registrosDemoras.forEach(reg => {
+        const tipo = tiposParo.find(t => t.id === reg.tipo_paro_id)
+        const config = getTiposParoConfig()[tipo?.nombre || '']
+        
+        const horaInicioNum = parseInt(reg.hora_inicio?.split(':')[0] || '0')
+        let turno = '—'
+        if (horaInicioNum >= 6 && horaInicioNum < 18) {
+          turno = '6:00 - 18:00'
+        } else {
+          turno = '18:00 - 6:00'
+        }
+        
+        let duracion = reg.duracion_minutos 
+          ? `${Math.floor(reg.duracion_minutos / 60)}h ${reg.duracion_minutos % 60}m`
+          : 'En curso'
+        
+        demorasData.push([
+          reg.fecha,
+          reg.hora_inicio?.slice(0, 5) || '—',
+          reg.hora_fin?.slice(0, 5) || '—',
+          turno,
+          tipo?.nombre || '—',
+          config?.grupo || '—',
+          duracion,
+          reg.observaciones || ''
+        ])
+      })
+      
+      const wsDemoras = XLSX.utils.aoa_to_sheet(demorasData)
+      XLSX.utils.book_append_sheet(wb, wsDemoras, 'Demoras')
+    }
+    
+    // Hoja 4: Resumen por Turno
+    const turnosData = []
+    turnosData.push(['RESUMEN POR TURNO'])
+    turnosData.push([])
+    turnosData.push(['Producto', 'Turno', 'Total Cargado (TM)', 'N° Lecturas', 'Flujo Promedio (TM/h)'])
+    
+    productos.forEach(producto => {
+      const exportacionesProd = exportaciones
+        .filter(e => e.producto_id === producto.id)
+        .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+      
+      if (exportacionesProd.length === 0) return
+      
+      // Separar por turno
+      const turnoDia = exportacionesProd.filter(e => {
+        const hora = parseInt(formatUTCToSV(e.fecha_hora, 'HH'))
+        return hora >= 6 && hora < 18
+      })
+      
+      const turnoNoche = exportacionesProd.filter(e => {
+        const hora = parseInt(formatUTCToSV(e.fecha_hora, 'HH'))
+        return hora < 6 || hora >= 18
+      })
+      
+      const calcularResumenTurno = (registros, nombreTurno) => {
+        if (registros.length === 0) return null
+        
+        const ordenados = registros.sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+        const total = Number(ordenados[ordenados.length - 1].acumulado_tm) - Number(ordenados[0].acumulado_tm)
+        const horas = (new Date(ordenados[ordenados.length - 1].fecha_hora) - new Date(ordenados[0].fecha_hora)) / (1000 * 60 * 60)
+        const flujo = horas > 0 ? total / horas : 0
+        
+        return {
+          turno: nombreTurno,
+          total: Math.max(0, total),
+          lecturas: registros.length,
+          flujo
+        }
+      }
+      
+      const resumenDia = calcularResumenTurno(turnoDia, '6:00 - 18:00')
+      const resumenNoche = calcularResumenTurno(turnoNoche, '18:00 - 6:00')
+      
+      if (resumenDia) {
+        turnosData.push([
+          `${producto.nombre} (${producto.codigo})`,
+          resumenDia.turno,
+          resumenDia.total.toFixed(3),
+          resumenDia.lecturas,
+          resumenDia.flujo.toFixed(3)
+        ])
+      }
+      
+      if (resumenNoche) {
+        turnosData.push([
+          `${producto.nombre} (${producto.codigo})`,
+          resumenNoche.turno,
+          resumenNoche.total.toFixed(3),
+          resumenNoche.lecturas,
+          resumenNoche.flujo.toFixed(3)
+        ])
+      }
+    })
+    
+    const wsTurnos = XLSX.utils.aoa_to_sheet(turnosData)
+    XLSX.utils.book_append_sheet(wb, wsTurnos, 'Resumen por Turno')
+    
+    // Descargar archivo
+    const fileName = `Exportacion_${barco.nombre}_${dayjs().format('YYYY-MM-DD_HHmm')}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    
+    toast.success('Excel descargado correctamente', { id: 'excel' })
+  } catch (error) {
+    console.error('Error exportando a Excel:', error)
+    toast.error('Error al generar Excel', { id: 'excel' })
+  }
+}
 
 // =====================================================
 // MODAL REGISTRAR / EDITAR ATRASO (DEMORA)
@@ -1371,6 +1636,13 @@ export default function ExportacionPage() {
             </div>
             <div className="flex gap-2">
               <button
+                onClick={() => exportToExcel(barco, exportaciones, productos, registrosDemoras, tiposParo)}
+                className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Descargar Excel
+              </button>
+              <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
               >
@@ -1938,6 +2210,7 @@ export default function ExportacionPage() {
                 <thead className="bg-slate-800">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Flujo (TM/h)</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
@@ -1974,11 +2247,33 @@ export default function ExportacionPage() {
                     const cambioBodega = lecturaAnterior && lecturaAnterior.bodega_id !== exp.bodega_id
                     
                     // Mostrar la fecha convertida a El Salvador
-                    const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY HH:mm')
+                    const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+                    const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+                    const horaNum = parseInt(horaSV.split(':')[0])
+                    
+                    // Determinar turno
+                    let turno = '—'
+                    if (horaNum >= 6 && horaNum < 18) {
+                      turno = '6:00 - 18:00'
+                    } else {
+                      turno = '18:00 - 6:00'
+                    }
                     
                     return (
                       <tr key={exp.id} className="hover:bg-white/5">
-                        <td className="px-4 py-3">{fechaSV}</td>
+                        <td className="px-4 py-3">
+                          <div>{fechaSV}</div>
+                          <div className="text-xs text-slate-500">{horaSV}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            turno === '6:00 - 18:00' 
+                              ? 'bg-yellow-500/20 text-yellow-400' 
+                              : 'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {turno}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
                         <td className="px-4 py-3">
                           {flujo > 0 ? (
@@ -2035,7 +2330,7 @@ export default function ExportacionPage() {
                 </tbody>
                 <tfoot className="bg-slate-900">
                   <tr>
-                    <td className="px-4 py-3 font-bold text-white">TOTAL GENERAL (Último acumulado)</td>
+                    <td className="px-4 py-3 font-bold text-white" colSpan={2}>TOTAL GENERAL (Último acumulado)</td>
                     <td className="px-4 py-3 font-bold text-blue-400">
                       {totalGeneral.toFixed(3)} TM
                     </td>
@@ -2047,7 +2342,7 @@ export default function ExportacionPage() {
                   {/* NUEVO: Fila con lo que falta por cargar */}
                   {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
                     <tr className="bg-orange-500/5">
-                      <td className="px-4 py-3 font-bold text-orange-400">FALTA POR CARGAR</td>
+                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
                       <td className="px-4 py-3 font-bold text-orange-400">
                         {faltaPorCargar.toFixed(3)} TM
                       </td>
@@ -2131,33 +2426,59 @@ export default function ExportacionPage() {
                 <thead className="bg-slate-800">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Comentarios</th>
                     <th className="px-4 py-2 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {bitacoraFiltrada.map(reg => (
-                    <tr key={reg.id} className="hover:bg-white/5">
-                      <td className="px-4 py-2">{formatUTCToSV(reg.fecha_hora)}</td>
-                      <td className="px-4 py-2 text-slate-400">{reg.comentarios || '—'}</td>
-                      <td className="px-4 py-2">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditarBitacora(reg)}
-                            className="p-1 hover:bg-blue-500/20 rounded"
-                          >
-                            <Edit2 className="w-4 h-4 text-blue-400" />
-                          </button>
-                          <button
-                            onClick={() => handleEliminarBitacora(reg.id)}
-                            className="p-1 hover:bg-red-500/20 rounded"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {bitacoraFiltrada.map(reg => {
+                    const fechaSV = formatUTCToSV(reg.fecha_hora, 'DD/MM/YY')
+                    const horaSV = formatUTCToSV(reg.fecha_hora, 'HH:mm')
+                    const horaNum = parseInt(horaSV.split(':')[0])
+                    
+                    let turno = '—'
+                    if (horaNum >= 6 && horaNum < 18) {
+                      turno = '6:00 - 18:00'
+                    } else {
+                      turno = '18:00 - 6:00'
+                    }
+                    
+                    return (
+                      <tr key={reg.id} className="hover:bg-white/5">
+                        <td className="px-4 py-2">
+                          <div>{fechaSV}</div>
+                          <div className="text-xs text-slate-500">{horaSV}</div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            turno === '6:00 - 18:00' 
+                              ? 'bg-yellow-500/20 text-yellow-400' 
+                              : 'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {turno}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-slate-400">{reg.comentarios || '—'}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditarBitacora(reg)}
+                              className="p-1 hover:bg-blue-500/20 rounded"
+                            >
+                              <Edit2 className="w-4 h-4 text-blue-400" />
+                            </button>
+                            <button
+                              onClick={() => handleEliminarBitacora(reg.id)}
+                              className="p-1 hover:bg-red-500/20 rounded"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
