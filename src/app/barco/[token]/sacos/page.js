@@ -59,6 +59,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
     const statsFiltrados = {
       totalViajes: registrosFiltrados.length,
       totalSacos: registrosFiltrados.reduce((s, r) => s + r.cantidad_paquetes, 0),
+      totalSacosDanados: registrosFiltrados.reduce((s, r) => s + (r.paquetes_danados || 0), 0),
+      totalSacosBuenos: registrosFiltrados.reduce((s, r) => s + (r.cantidad_paquetes - (r.paquetes_danados || 0)), 0),
       totalTM: registrosFiltrados.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0),
       promedioViaje: registrosFiltrados.length > 0 
         ? registrosFiltrados.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) / registrosFiltrados.length 
@@ -77,11 +79,14 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       ['Métrica', 'Valor'],
       ['Total Viajes', statsFiltrados.totalViajes],
       ['Total Sacos', statsFiltrados.totalSacos],
+      ['Sacos Dañados', statsFiltrados.totalSacosDanados],
+      ['Sacos Buenos', statsFiltrados.totalSacosBuenos],
+      ['% Dañados', statsFiltrados.totalSacos > 0 ? ((statsFiltrados.totalSacosDanados / statsFiltrados.totalSacos) * 100).toFixed(2) + '%' : '0%'],
       ['Total Toneladas (TM)', statsFiltrados.totalTM.toFixed(3)],
       ['Promedio por Viaje (TM)', statsFiltrados.promedioViaje.toFixed(3)],
       [],
       ['📦 RESUMEN POR BODEGA'],
-      ['Bodega', 'Viajes', 'Sacos', 'Dañados', '% Dañados', 'Toneladas (TM)', 'Eficiencia']
+      ['Bodega', 'Viajes', 'Sacos', 'Dañados', 'Buenos', '% Dañados', 'Toneladas (TM)', 'Eficiencia']
     ]
     
     // Calcular stats por bodega con datos filtrados
@@ -92,6 +97,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
           bodega: reg.bodega,
           totalSacos: 0,
           totalDanados: 0,
+          totalBuenos: 0,
           totalTM: 0,
           viajes: 0,
           registros: []
@@ -100,6 +106,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       const bodegaStat = bodegasMap.get(reg.bodega)
       bodegaStat.totalSacos += reg.cantidad_paquetes || 0
       bodegaStat.totalDanados += reg.paquetes_danados || 0
+      bodegaStat.totalBuenos += (reg.cantidad_paquetes - (reg.paquetes_danados || 0))
       bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
       bodegaStat.viajes += 1
     })
@@ -120,6 +127,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
         b.viajes,
         b.totalSacos.toLocaleString(),
         b.totalDanados,
+        b.totalBuenos.toLocaleString(),
         porcentajeDanados,
         b.totalTM.toFixed(3),
         eficiencia
@@ -135,6 +143,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       { wch: 10 }, // Viajes
       { wch: 15 }, // Sacos
       { wch: 10 }, // Dañados
+      { wch: 15 }, // Buenos
       { wch: 12 }, // % Dañados
       { wch: 18 }, // Toneladas
       { wch: 12 }  // Eficiencia
@@ -151,7 +160,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       [],
       ['# Viaje', 'Fecha', 'Bodega', 'Placa Camión', 'Placa Remolque', 'Nota Remisión', 
        'Hora Inicio', 'Hora Fin', 'Duración', 'Peso Ing. (kg)', 'Peso Saco (kg)', 
-       'Cant. Sacos', 'Sacos Dañados', 'Peso Calc. (kg)', 'Toneladas (TM)', 
+       'Cant. Sacos', 'Sacos Dañados', 'Sacos Buenos', 'Peso Calc. (kg)', 'Toneladas (TM)', 
        'Diferencia %', 'Observaciones']
     ]
     
@@ -176,6 +185,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
         reg.peso_saco_kg || '',
         reg.cantidad_paquetes || 0,
         reg.paquetes_danados || 0,
+        (reg.cantidad_paquetes - (reg.paquetes_danados || 0)),
         pesoCalculado,
         reg.peso_total_calculado_tm?.toFixed(3) || (pesoCalculado / 1000).toFixed(3),
         diferencia,
@@ -201,6 +211,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       { wch: 15 }, // Peso Saco
       { wch: 12 }, // Cant. Sacos
       { wch: 12 }, // Sacos Dañados
+      { wch: 12 }, // Sacos Buenos
       { wch: 15 }, // Peso Calc.
       { wch: 15 }, // Toneladas
       { wch: 12 }, // Diferencia %
@@ -215,7 +226,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       [barco?.nombre || 'Barco sin nombre'],
       [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
       [],
-      ['Bodega', 'Viajes', 'Total Sacos', 'Total TM', 'Sacos/Viaje', 'TM/Viaje', 'Duración Promedio', 'Eficiencia']
+      ['Bodega', 'Viajes', 'Total Sacos', 'Sacos Buenos', 'Sacos Dañados', '% Dañados', 'Total TM', 'Sacos/Viaje', 'TM/Viaje', 'Duración Promedio', 'Eficiencia']
     ]
     
     // Calcular duración promedio por bodega
@@ -239,11 +250,17 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       const eficiencia = b.totalSacos > 0
         ? Math.round(((b.totalSacos - b.totalDanados) / b.totalSacos) * 100) + '%'
         : '100%'
+      const porcentajeDanados = b.totalSacos > 0 
+        ? ((b.totalDanados / b.totalSacos) * 100).toFixed(1) + '%'
+        : '0%'
       
       rendimientoData.push([
         b.bodega,
         b.viajes,
         b.totalSacos.toLocaleString(),
+        b.totalBuenos.toLocaleString(),
+        b.totalDanados,
+        porcentajeDanados,
         b.totalTM.toFixed(3),
         sacosPorViaje,
         tmPorViaje,
@@ -256,7 +273,9 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
     const totalSacosPorViaje = statsFiltrados.totalViajes > 0 ? Math.round(statsFiltrados.totalSacos / statsFiltrados.totalViajes) : 0
     rendimientoData.push(
       [],
-      ['TOTALES GENERALES', statsFiltrados.totalViajes, statsFiltrados.totalSacos.toLocaleString(), statsFiltrados.totalTM.toFixed(3), totalSacosPorViaje, statsFiltrados.promedioViaje.toFixed(2), '—', '—']
+      ['TOTALES GENERALES', statsFiltrados.totalViajes, statsFiltrados.totalSacos.toLocaleString(), statsFiltrados.totalSacosBuenos.toLocaleString(), statsFiltrados.totalSacosDanados, 
+       statsFiltrados.totalSacos > 0 ? ((statsFiltrados.totalSacosDanados / statsFiltrados.totalSacos) * 100).toFixed(1) + '%' : '0%',
+       statsFiltrados.totalTM.toFixed(3), totalSacosPorViaje, statsFiltrados.promedioViaje.toFixed(2), '—', '—']
     )
     
     const wsRendimiento = XLSX.utils.aoa_to_sheet(rendimientoData)
@@ -264,6 +283,9 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       { wch: 20 }, // Bodega
       { wch: 10 }, // Viajes
       { wch: 15 }, // Total Sacos
+      { wch: 15 }, // Sacos Buenos
+      { wch: 10 }, // Sacos Dañados
+      { wch: 12 }, // % Dañados
       { wch: 15 }, // Total TM
       { wch: 15 }, // Sacos/Viaje
       { wch: 15 }, // TM/Viaje
@@ -319,6 +341,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
           placaCamion,
           viajes: [],
           totalSacos: 0,
+          totalSacosDanados: 0,
+          totalSacosBuenos: 0,
           totalTM: 0,
           viajesCount: 0,
           primeraVez: viaje.fecha,
@@ -331,6 +355,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       const camion = viajesPorCamion[placaCamion]
       camion.viajes.push(viaje)
       camion.totalSacos += viaje.cantidad_paquetes || 0
+      camion.totalSacosDanados += viaje.paquetes_danados || 0
+      camion.totalSacosBuenos += (viaje.cantidad_paquetes - (viaje.paquetes_danados || 0))
       camion.totalTM += viaje.peso_total_calculado_tm || 0
       camion.viajesCount += 1
       camion.remolques.add(placaRemolque)
@@ -355,7 +381,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
         bodegas: Array.from(c.bodegas).join(', '),
         promedioTMViaje: c.viajesCount > 0 ? (c.totalTM / c.viajesCount).toFixed(2) : 0,
         primeraVezFormatted: c.primeraVez ? dayjs(c.primeraVez).format('DD/MM/YYYY') : '—',
-        ultimaVezFormatted: c.ultimaVez ? dayjs(c.ultimaVez).format('DD/MM/YYYY') : '—'
+        ultimaVezFormatted: c.ultimaVez ? dayjs(c.ultimaVez).format('DD/MM/YYYY') : '—',
+        porcentajeDanados: c.totalSacos > 0 ? ((c.totalSacosDanados / c.totalSacos) * 100).toFixed(1) + '%' : '0%'
       }))
       .sort((a, b) => b.viajesCount - a.viajesCount)
     
@@ -376,7 +403,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       [totalCamiones, totalViajesCamiones, totalTMCamiones.toFixed(3), promedioViajesPorCamion],
       [],
       ['📋 DETALLE POR CAMIÓN'],
-      ['Placa Camión', 'Viajes', 'Total Sacos', 'Total TM', 'TM/Viaje', 'Remolques', 'Bodegas', 'Primer Viaje', 'Último Viaje']
+      ['Placa Camión', 'Viajes', 'Total Sacos', 'Sacos Buenos', 'Sacos Dañados', '% Dañados', 'Total TM', 'TM/Viaje', 'Remolques', 'Bodegas', 'Primer Viaje', 'Último Viaje']
     ]
     
     // Agregar datos de cada camión
@@ -385,6 +412,9 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
         camion.placaCamion,
         camion.viajesCount,
         camion.totalSacos.toLocaleString(),
+        camion.totalSacosBuenos.toLocaleString(),
+        camion.totalSacosDanados,
+        camion.porcentajeDanados,
         camion.totalTM.toFixed(3),
         camion.promedioTMViaje,
         camion.remolques,
@@ -419,6 +449,9 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       { wch: 20 }, // Placa Camión
       { wch: 10 }, // Viajes
       { wch: 15 }, // Total Sacos
+      { wch: 15 }, // Sacos Buenos
+      { wch: 12 }, // Sacos Dañados
+      { wch: 12 }, // % Dañados
       { wch: 15 }, // Total TM
       { wch: 12 }, // TM/Viaje
       { wch: 30 }, // Remolques
@@ -435,7 +468,7 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       [barco?.nombre || 'Barco sin nombre'],
       [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
       [],
-      ['Placa Camión', '# Viaje', 'Fecha', 'Bodega', 'Remolque', 'Sacos', 'TM', 'Hora Inicio', 'Hora Fin', 'Duración']
+      ['Placa Camión', '# Viaje', 'Fecha', 'Bodega', 'Remolque', 'Sacos', 'Dañados', 'Buenos', 'TM', 'Hora Inicio', 'Hora Fin', 'Duración']
     ]
     
     // Ordenar camiones por placa y luego viajes por número
@@ -453,6 +486,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
               viaje.bodega,
               viaje.placa_remolque || '—',
               viaje.cantidad_paquetes || 0,
+              viaje.paquetes_danados || 0,
+              (viaje.cantidad_paquetes - (viaje.paquetes_danados || 0)),
               viaje.peso_total_calculado_tm?.toFixed(3) || '0.000',
               viaje.hora_inicio || '',
               viaje.hora_fin || '',
@@ -469,6 +504,8 @@ const exportarAExcel = (barco, registros, stats, statsPorBodega, filtroFechaInic
       { wch: 15 }, // Bodega
       { wch: 15 }, // Remolque
       { wch: 8 },  // Sacos
+      { wch: 8 },  // Dañados
+      { wch: 8 },  // Buenos
       { wch: 10 }, // TM
       { wch: 10 }, // Hora Inicio
       { wch: 10 }, // Hora Fin
@@ -732,6 +769,13 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         toast.error('Peso del saco inválido'); 
         setLoading(false); 
         return 
+      }
+
+      // Validar que los sacos dañados no sean mayores que el total
+      if (parseInt(formData.paquetes_danados) > parseInt(formData.cantidad_paquetes)) {
+        toast.error('Los sacos dañados no pueden ser mayores que el total de sacos'); 
+        setLoading(false); 
+        return
       }
 
       // Validar coherencia de fechas (solo advertencia, no bloquea)
@@ -1024,6 +1068,18 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
                 />
               </InputField>
             </div>
+
+            {/* Indicador de sacos buenos */}
+            {formData.cantidad_paquetes && (
+              <div className="mt-2 p-2 bg-green-500/10 rounded-lg">
+                <div className="flex items-center justify-between text-xs">
+                  <span className={lblM}>Sacos Buenos:</span>
+                  <span className="font-bold text-green-500">
+                    {parseInt(formData.cantidad_paquetes) - (parseInt(formData.paquetes_danados) || 0)} de {formData.cantidad_paquetes}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Cálculos colapsables */}
             {formData.cantidad_paquetes && formData.peso_saco_kg && (
@@ -1339,20 +1395,26 @@ const CamionesStats = ({ registros, theme }) => {
         placaCamion,
         viajes: [],
         totalSacos: 0,
+        totalSacosDanados: 0,
+        totalSacosBuenos: 0,
         totalTM: 0,
         viajesCount: 0,
         primeraVez: viaje.fecha,
         ultimaVez: viaje.fecha,
-        remolques: new Set()
+        remolques: new Set(),
+        bodegas: new Set()
       }
     }
     
     const camion = acc[placaCamion]
     camion.viajes.push(viaje)
     camion.totalSacos += viaje.cantidad_paquetes || 0
+    camion.totalSacosDanados += viaje.paquetes_danados || 0
+    camion.totalSacosBuenos += (viaje.cantidad_paquetes - (viaje.paquetes_danados || 0))
     camion.totalTM += viaje.peso_total_calculado_tm || 0
     camion.viajesCount += 1
     camion.remolques.add(placaRemolque)
+    camion.bodegas.add(viaje.bodega)
     
     // Actualizar fechas
     if (viaje.fecha) {
@@ -1372,7 +1434,8 @@ const CamionesStats = ({ registros, theme }) => {
     .map(c => ({
       ...c,
       remolques: Array.from(c.remolques),
-      promedioTMViaje: c.viajesCount > 0 ? (c.totalTM / c.viajesCount).toFixed(2) : 0
+      promedioTMViaje: c.viajesCount > 0 ? (c.totalTM / c.viajesCount).toFixed(2) : 0,
+      porcentajeDanados: c.totalSacos > 0 ? ((c.totalSacosDanados / c.totalSacos) * 100).toFixed(1) : 0
     }))
     .sort((a, b) => b.viajesCount - a.viajesCount)
 
@@ -1386,6 +1449,10 @@ const CamionesStats = ({ registros, theme }) => {
   // Calcular totales
   const totalCamiones = camionesArray.length
   const totalViajesCamiones = camionesArray.reduce((sum, c) => sum + c.viajesCount, 0)
+  const totalSacosCamiones = camionesArray.reduce((sum, c) => sum + c.totalSacos, 0)
+  const totalSacosDanadosCamiones = camionesArray.reduce((sum, c) => sum + c.totalSacosDanados, 0)
+  const totalSacosBuenosCamiones = camionesArray.reduce((sum, c) => sum + c.totalSacosBuenos, 0)
+  const totalTMCamiones = camionesArray.reduce((sum, c) => sum + c.totalTM, 0)
   const promedioViajesPorCamion = totalCamiones > 0 
     ? (totalViajesCamiones / totalCamiones).toFixed(1) 
     : 0
@@ -1412,7 +1479,7 @@ const CamionesStats = ({ registros, theme }) => {
       </div>
 
       {/* Resumen rápido de camiones */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className={`${card} border ${border} rounded-xl p-3`}>
           <p className={`text-xs ${sub}`}>Camiones activos</p>
           <p className={`text-xl font-bold ${text}`}>{totalCamiones}</p>
@@ -1422,8 +1489,12 @@ const CamionesStats = ({ registros, theme }) => {
           <p className={`text-xl font-bold ${text}`}>{totalViajesCamiones}</p>
         </div>
         <div className={`${card} border ${border} rounded-xl p-3`}>
-          <p className={`text-xs ${sub}`}>Prom. viajes/camión</p>
-          <p className={`text-xl font-bold ${text}`}>{promedioViajesPorCamion}</p>
+          <p className={`text-xs ${sub}`}>Total sacos</p>
+          <p className={`text-xl font-bold ${text}`}>{totalSacosCamiones.toLocaleString()}</p>
+        </div>
+        <div className={`${card} border ${border} rounded-xl p-3`}>
+          <p className={`text-xs ${sub}`}>Total TM</p>
+          <p className="text-xl font-bold text-green-500">{totalTMCamiones.toFixed(1)}</p>
         </div>
       </div>
 
@@ -1434,13 +1505,13 @@ const CamionesStats = ({ registros, theme }) => {
             <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Placa Camión</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Remolques</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Viajes</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Total Sacos</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Sacos Buenos</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Sacos Dañados</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">% Dañados</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Total TM</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">TM/Viaje</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Primer Viaje</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Último Viaje</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-400"></th>
               </tr>
             </thead>
@@ -1463,28 +1534,13 @@ const CamionesStats = ({ registros, theme }) => {
                   )}
                 >
                   <td className="px-4 py-3 font-mono text-blue-400 font-bold">{camion.placaCamion}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {camion.remolques.slice(0, 2).map((r, i) => (
-                        <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${dk ? 'bg-slate-700' : 'bg-gray-200'}`}>
-                          {r}
-                        </span>
-                      ))}
-                      {camion.remolques.length > 2 && (
-                        <span className="text-xs text-slate-400">+{camion.remolques.length - 2}</span>
-                      )}
-                    </div>
-                  </td>
                   <td className="px-4 py-3 font-bold">{camion.viajesCount}</td>
                   <td className="px-4 py-3">{camion.totalSacos.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-green-500 font-bold">{camion.totalSacosBuenos.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-red-400">{camion.totalSacosDanados}</td>
+                  <td className="px-4 py-3 text-xs text-slate-400">{camion.porcentajeDanados}%</td>
                   <td className="px-4 py-3 text-green-500 font-bold">{camion.totalTM.toFixed(2)}</td>
                   <td className="px-4 py-3 text-xs text-slate-400">{camion.promedioTMViaje}</td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
-                    {camion.primeraVez ? dayjs(camion.primeraVez).format('DD/MM/YY') : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
-                    {camion.ultimaVez ? dayjs(camion.ultimaVez).format('DD/MM/YY') : '—'}
-                  </td>
                   <td className="px-4 py-3">
                     <ChevronRight className={`w-4 h-4 ${sub} transition-transform ${
                       camionSeleccionado?.placaCamion === camion.placaCamion ? 'rotate-90' : ''
@@ -1525,10 +1581,10 @@ const CamionesStats = ({ registros, theme }) => {
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-400"># Viaje</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Bodega</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Remolque</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Sacos</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Dañados</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Buenos</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">TM</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Hora</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-200'}`}>
@@ -1539,10 +1595,10 @@ const CamionesStats = ({ registros, theme }) => {
                       <td className="px-4 py-2 font-medium">#{viaje.viaje_numero}</td>
                       <td className="px-4 py-2 text-xs text-slate-400">{dayjs(viaje.fecha).format('DD/MM/YY')}</td>
                       <td className="px-4 py-2 text-xs">{viaje.bodega}</td>
-                      <td className="px-4 py-2 text-xs font-mono text-blue-400">{viaje.placa_remolque || '—'}</td>
                       <td className="px-4 py-2 text-xs">{viaje.cantidad_paquetes}</td>
+                      <td className="px-4 py-2 text-xs text-red-400">{viaje.paquetes_danados || 0}</td>
+                      <td className="px-4 py-2 text-xs text-green-500">{(viaje.cantidad_paquetes - (viaje.paquetes_danados || 0))}</td>
                       <td className="px-4 py-2 text-xs text-green-500">{viaje.peso_total_calculado_tm?.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-xs text-slate-400">{viaje.hora_inicio}</td>
                     </tr>
                   ))}
               </tbody>
@@ -1550,18 +1606,22 @@ const CamionesStats = ({ registros, theme }) => {
           </div>
           
           {/* Resumen del camión */}
-          <div className={`px-4 py-3 border-t ${border} grid grid-cols-3 gap-3 text-xs`}>
+          <div className={`px-4 py-3 border-t ${border} grid grid-cols-4 gap-3 text-xs`}>
             <div>
               <p className={`${sub}`}>Total viajes</p>
               <p className={`font-bold ${text}`}>{camionSeleccionado.viajesCount}</p>
             </div>
             <div>
-              <p className={`${sub}`}>Total TM</p>
-              <p className="font-bold text-green-500">{camionSeleccionado.totalTM.toFixed(2)}</p>
+              <p className={`${sub}`}>Sacos totales</p>
+              <p className={`font-bold ${text}`}>{camionSeleccionado.totalSacos}</p>
             </div>
             <div>
-              <p className={`${sub}`}>Remolques</p>
-              <p className={`font-bold ${text}`}>{camionSeleccionado.remolques.length}</p>
+              <p className={`${sub}`}>Sacos dañados</p>
+              <p className="font-bold text-red-400">{camionSeleccionado.totalSacosDanados}</p>
+            </div>
+            <div>
+              <p className={`${sub}`}>Total TM</p>
+              <p className="font-bold text-green-500">{camionSeleccionado.totalTM.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -1615,18 +1675,22 @@ const TarjetaBodegaUnificada = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-4 gap-2 mb-3">
           <div className="text-center p-2 rounded-lg bg-white/5">
             <p className={`text-xs ${sub}`}>Sacos</p>
             <p className={`font-bold text-lg ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
           </div>
           <div className="text-center p-2 rounded-lg bg-white/5">
-            <p className={`text-xs ${sub}`}>TM</p>
-            <p className="font-bold text-lg text-green-500">{bodega.totalTM.toFixed(1)}</p>
+            <p className={`text-xs ${sub}`}>Buenos</p>
+            <p className="font-bold text-lg text-green-500">{(bodega.totalSacos - (bodega.totalDanados || 0)).toLocaleString()}</p>
           </div>
           <div className="text-center p-2 rounded-lg bg-white/5">
-            <p className={`text-xs ${sub}`}>Viajes</p>
-            <p className={`font-bold text-lg ${text}`}>{bodega.viajes}</p>
+            <p className={`text-xs ${sub}`}>Dañados</p>
+            <p className="font-bold text-lg text-red-400">{(bodega.totalDanados || 0)}</p>
+          </div>
+          <div className="text-center p-2 rounded-lg bg-white/5">
+            <p className={`text-xs ${sub}`}>TM</p>
+            <p className="font-bold text-lg text-green-500">{bodega.totalTM.toFixed(1)}</p>
           </div>
         </div>
 
@@ -1650,6 +1714,7 @@ const TarjetaBodegaUnificada = ({
   }
 
   // Card para bodegas específicas
+  const sacosBuenos = bodega.totalSacos - bodega.totalDanados
   const porcentajeDanados = bodega.totalSacos > 0 
     ? ((bodega.totalDanados / bodega.totalSacos) * 100).toFixed(1)
     : 0
@@ -1680,10 +1745,14 @@ const TarjetaBodegaUnificada = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-4 gap-2 mb-3">
         <div className="text-center p-2 rounded-lg bg-white/5">
           <p className={`text-xs ${sub}`}>Sacos</p>
           <p className={`font-bold text-lg ${text}`}>{bodega.totalSacos.toLocaleString()}</p>
+        </div>
+        <div className="text-center p-2 rounded-lg bg-white/5">
+          <p className={`text-xs ${sub}`}>Buenos</p>
+          <p className="font-bold text-lg text-green-500">{sacosBuenos.toLocaleString()}</p>
         </div>
         <div className="text-center p-2 rounded-lg bg-white/5">
           <p className={`text-xs ${sub}`}>Dañados</p>
@@ -1754,6 +1823,7 @@ const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, te
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Placa</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Sacos</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Dañados</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Buenos</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">TM</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-slate-400"></th>
@@ -1766,6 +1836,7 @@ const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, te
                 const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
                   ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
                   : null
+                const sacosBuenos = reg.cantidad_paquetes - (reg.paquetes_danados || 0)
                 
                 return (
                   <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-100'} transition-colors`}>
@@ -1779,6 +1850,7 @@ const TablaViajesBodega = ({ bodega, registros, onEdit, onDelete, theme, sub, te
                         <span className="text-slate-500">-</span>
                       }
                     </td>
+                    <td className="px-3 py-2 font-medium text-green-400">{sacosBuenos}</td>
                     <td className="px-3 py-2 font-medium text-green-400 text-xs">
                       {reg.peso_total_calculado_tm?.toFixed(2)}
                       {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
@@ -1832,7 +1904,7 @@ export default function RegistroSacosPage() {
   const [mostrarTablaGeneral, setMostrarTablaGeneral] = useState(true)
   const [mostrarResumen, setMostrarResumen] = useState(true)
   
-  const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalTM:0, promedioViaje:0 })
+  const [stats, setStats]             = useState({ totalViajes:0, totalSacos:0, totalSacosDanados:0, totalSacosBuenos:0, totalTM:0, promedioViaje:0 })
   const [statsPorBodega, setStatsPorBodega] = useState([])
   const [bodegaSeleccionada, setBodegaSeleccionada] = useState(null)
   const [vistaActiva, setVistaActiva] = useState('bodegas') // 'bodegas' o 'camiones'
@@ -1911,10 +1983,15 @@ export default function RegistroSacosPage() {
     // Calcular estadísticas con los datos filtrados
     const tv = filtrados?.length || 0
     const ts = filtrados?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
+    const tsd = filtrados?.reduce((s, r) => s + (r.paquetes_danados || 0), 0) || 0
+    const tsb = ts - tsd
     const tt = filtrados?.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) || 0
+    
     setStats({ 
       totalViajes: tv, 
       totalSacos: ts, 
+      totalSacosDanados: tsd,
+      totalSacosBuenos: tsb,
       totalTM: tt, 
       promedioViaje: tv > 0 ? tt / tv : 0 
     })
@@ -1927,6 +2004,7 @@ export default function RegistroSacosPage() {
           bodega: reg.bodega,
           totalSacos: 0,
           totalDanados: 0,
+          totalBuenos: 0,
           totalTM: 0,
           viajes: 0,
           registros: []
@@ -1935,6 +2013,7 @@ export default function RegistroSacosPage() {
       const bodegaStat = bodegasMap.get(reg.bodega)
       bodegaStat.totalSacos += reg.cantidad_paquetes || 0
       bodegaStat.totalDanados += reg.paquetes_danados || 0
+      bodegaStat.totalBuenos += (reg.cantidad_paquetes - (reg.paquetes_danados || 0))
       bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
       bodegaStat.viajes += 1
       bodegaStat.registros.push(reg)
@@ -2001,10 +2080,12 @@ export default function RegistroSacosPage() {
   const statsGenerales = {
     bodega: 'General',
     totalSacos: stats.totalSacos,
+    totalDanados: stats.totalSacosDanados,
+    totalBuenos: stats.totalSacosBuenos,
     totalTM: stats.totalTM,
     viajes: stats.totalViajes,
     eficiencia: stats.totalSacos > 0 
-      ? Math.round(((stats.totalSacos - registrosFiltrados.reduce((s, r) => s + r.paquetes_danados, 0)) / stats.totalSacos) * 100)
+      ? Math.round(((stats.totalSacos - stats.totalSacosDanados) / stats.totalSacos) * 100)
       : 0
   }
 
@@ -2070,16 +2151,17 @@ export default function RegistroSacosPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
             {[
               { label: 'Total Viajes', value: stats.totalViajes },
               { label: 'Total Sacos',  value: stats.totalSacos.toLocaleString() },
+              { label: 'Sacos Buenos', value: stats.totalSacosBuenos.toLocaleString(), color: 'text-green-300' },
+              { label: 'Sacos Dañados', value: stats.totalSacosDanados, color: 'text-yellow-300' },
               { label: 'Total TM',     value: stats.totalTM.toFixed(3) },
-              { label: 'Prom. / Viaje',value: `${stats.promedioViaje.toFixed(3)} TM` },
-            ].map(({ label, value }) => (
+            ].map(({ label, value, color }) => (
               <div key={label} className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-3 sm:py-4">
                 <p className="text-green-200 text-[10px] sm:text-xs">{label}</p>
-                <p className="text-white font-bold text-lg sm:text-2xl leading-tight">{value}</p>
+                <p className={`text-white font-bold text-lg sm:text-2xl leading-tight ${color || ''}`}>{value}</p>
               </div>
             ))}
           </div>
@@ -2253,7 +2335,7 @@ export default function RegistroSacosPage() {
                 <table className="w-full">
                   <thead className={`${dk ? 'bg-slate-800' : 'bg-gray-100'} sticky top-0 z-10`}>
                     <tr>
-                      {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Total TM','Duración',''].map(h => (
+                      {['# Viaje','Bodega','Fecha','Placa','Peso Ing.','Sacos','Dañados','Buenos','Total TM','Duración',''].map(h => (
                         <th key={h} className={`px-4 py-3 text-left text-xs font-bold ${sub} uppercase tracking-wide`}>{h}</th>
                       ))}
                     </tr>
@@ -2261,7 +2343,7 @@ export default function RegistroSacosPage() {
                   <tbody className={`divide-y ${dk ? 'divide-white/5' : 'divide-gray-100'}`}>
                     {registrosFiltrados.length === 0 ? (
                       <tr>
-                        <td colSpan="10" className={`px-4 py-12 text-center ${sub}`}>
+                        <td colSpan="11" className={`px-4 py-12 text-center ${sub}`}>
                           <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
                           <p>No hay registros para mostrar</p>
                         </td>
@@ -2270,6 +2352,7 @@ export default function RegistroSacosPage() {
                       const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
                         ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
                         : null
+                      const sacosBuenos = reg.cantidad_paquetes - (reg.paquetes_danados || 0)
                       return (
                         <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
                           <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
@@ -2281,6 +2364,7 @@ export default function RegistroSacosPage() {
                           <td className="px-4 py-3 text-sm">
                             {reg.paquetes_danados > 0 ? <span className="text-red-400">{reg.paquetes_danados}</span> : <span className={sub}>—</span>}
                           </td>
+                          <td className="px-4 py-3 font-bold text-green-500">{sacosBuenos}</td>
                           <td className="px-4 py-3 font-bold text-green-400">
                             {reg.peso_total_calculado_tm?.toFixed(3)}
                             {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
@@ -2318,6 +2402,7 @@ export default function RegistroSacosPage() {
                       const pctDif = reg.peso_ingenio_kg && reg.cantidad_paquetes
                         ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
                         : null
+                      const sacosBuenos = reg.cantidad_paquetes - (reg.paquetes_danados || 0)
                       return (
                         <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
                           <div className="flex items-center justify-between mb-2">
@@ -2353,8 +2438,20 @@ export default function RegistroSacosPage() {
                               <p className={`text-[10px] ${sub}`}>Sacos</p>
                               <p className={`text-xs font-bold ${text}`}>
                                 {reg.cantidad_paquetes}
-                                {reg.paquetes_danados > 0 && <span className="text-red-400 ml-1">(-{reg.paquetes_danados})</span>}
                               </p>
+                            </div>
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Dañados</p>
+                              <p className={`text-xs font-bold ${reg.paquetes_danados > 0 ? 'text-red-400' : text}`}>
+                                {reg.paquetes_danados || 0}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-2 mt-1">
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Buenos</p>
+                              <p className="text-xs font-bold text-green-500">{sacosBuenos}</p>
                             </div>
                             <div>
                               <p className={`text-[10px] ${sub}`}>Total TM</p>
@@ -2363,14 +2460,10 @@ export default function RegistroSacosPage() {
                                 {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
                               </p>
                             </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <Clock className={`w-3 h-3 ${sub}`} />
-                            <span className={`text-[11px] ${sub}`}>{reg.hora_inicio} – {reg.hora_fin}</span>
-                            {reg.duracion && reg.duracion !== '—' && (
-                              <span className={`text-[11px] ${dk ? 'text-slate-500' : 'text-gray-400'}`}>({reg.duracion})</span>
-                            )}
+                            <div>
+                              <p className={`text-[10px] ${sub}`}>Duración</p>
+                              <p className="text-xs font-medium text-slate-400">{reg.duracion}</p>
+                            </div>
                           </div>
                         </div>
                       )
@@ -2402,7 +2495,7 @@ export default function RegistroSacosPage() {
               <BarChart3 className="w-4 h-4 text-green-500" />
               {filtroFechaInicio && filtroFechaFin ? `Resumen del período` : 'Resumen General'}
             </h3>
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-4 gap-3 sm:gap-4">
               {[
                 { label: filtroFechaInicio && filtroFechaFin ? 'Viajes en período' : 'Total viajes',    
                   value: registrosFiltrados.length,                                                                    
@@ -2411,6 +2504,10 @@ export default function RegistroSacosPage() {
                 { label: filtroFechaInicio && filtroFechaFin ? 'Sacos en período' : 'Total sacos',     
                   value: registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0).toLocaleString(),               
                   color: text 
+                },
+                { label: filtroFechaInicio && filtroFechaFin ? 'Sacos buenos' : 'Total sacos buenos',     
+                  value: (registrosFiltrados.reduce((s,r) => s + r.cantidad_paquetes, 0) - registrosFiltrados.reduce((s,r) => s + (r.paquetes_danados||0), 0)).toLocaleString(),               
+                  color: 'text-green-500' 
                 },
                 { label: filtroFechaInicio && filtroFechaFin ? 'Toneladas en período' : 'Total TM', 
                   value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  

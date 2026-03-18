@@ -1489,18 +1489,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Desde inicio</div>
         </div>
 
-        <div style={{
-          background: 'rgba(255,255,255,0.05)',
-          borderRadius: 16,
-          padding: 16,
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>ÚLTIMA HORA</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981', fontFamily: "'DM Mono', monospace" }}>
-            {fmtTM(flujoUltimaHora, 2)} TM/h
-          </div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Últimos 60 min</div>
-        </div>
+        
 
       
 
@@ -1538,20 +1527,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {topBodegasFlujo.map((b, i) => (
               <div key={b.bodega} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 8,
-                  background: i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : '#b45309',
-                  color: '#0f172a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 12,
-                  fontWeight: 900
-                }}>
-                  
-                </div>
+               
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{b.bodega}</span>
                 <span style={{
                   fontSize: 15,
