@@ -847,11 +847,8 @@ const RegistroSacosModal = ({ barco, bodegas, registro, onClose, onSuccess, them
         duracion: calcularDuracion(),
         hora_flujo: formData.hora_fin ? parseInt(formData.hora_fin.split(':')[0]) : null,
         created_by: user.id
+        // ❌ NO incluimos peso_total_calculado_tm porque es una columna generada
       }
-
-      // Calcular peso_total_calculado_tm basado en sacos buenos
-      const sacosBuenos = datos.cantidad_paquetes - (datos.paquetes_danados || 0)
-      datos.peso_total_calculado_tm = (datos.peso_saco_kg * sacosBuenos) / 1000
 
       // Intentar guardar
       let error
