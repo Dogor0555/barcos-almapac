@@ -14,7 +14,8 @@ import {
   Clock, AlertCircle, Play, CheckSquare, XCircle,
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
-  Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox  
+  Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox,
+  Download // 👈 NUEVO: Icono para exportar
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -22,6 +23,7 @@ import { verificarNumeroViaje, getSiguienteNumeroViaje } from '../../utils/viaje
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
+import * as XLSX from 'xlsx' // 👈 NUEVO: Librería para Excel
 
 // Extender dayjs con plugins de zona horaria
 dayjs.extend(utc)
@@ -227,6 +229,227 @@ export default function BarcoPesadorPage() {
     setNuevoViaje(prev => ({ ...prev, viaje_numero: conflicto.sugerido }))
     setConflicto(null)
     toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
+  }
+
+  // 👇 NUEVA FUNCIÓN: Exportar todos los registros a Excel
+  const exportarTodoAExcel = () => {
+    try {
+      // Crear un nuevo libro de Excel
+      const wb = XLSX.utils.book_new()
+      
+      // --- HOJA 1: RESUMEN GENERAL ---
+      const resumenData = []
+      
+      // Encabezados del resumen
+      resumenData.push(['RESUMEN DE OPERACIONES'])
+      resumenData.push(['Barco:', barco.nombre])
+      resumenData.push(['Código:', barco.codigo_barco || 'N/A'])
+      resumenData.push(['Fecha de exportación:', new Date().toLocaleString('es-ES')])
+      resumenData.push(['Estado:', barco.estado?.toUpperCase()])
+      resumenData.push([]) // Fila vacía
+      
+      // Tiempos importantes
+      resumenData.push(['TIEMPOS DE OPERACIÓN'])
+      resumenData.push(['Arribo:', barco.tiempo_arribo ? new Date(barco.tiempo_arribo).toLocaleString('es-ES') : 'N/A'])
+      resumenData.push(['Ataque:', barco.tiempo_ataque ? new Date(barco.tiempo_ataque).toLocaleString('es-ES') : 'N/A'])
+      resumenData.push(['Recibido:', barco.tiempo_recibido ? new Date(barco.tiempo_recibido).toLocaleString('es-ES') : 'N/A'])
+      resumenData.push(['Inicio descarga:', barco.operacion_iniciada_at ? new Date(barco.operacion_iniciada_at).toLocaleString('es-ES') : 'N/A'])
+      resumenData.push(['Fin descarga:', barco.operacion_finalizada_at ? new Date(barco.operacion_finalizada_at).toLocaleString('es-ES') : 'N/A'])
+      resumenData.push([])
+      
+      // Resumen por producto
+      resumenData.push(['RESUMEN POR PRODUCTO'])
+      resumenData.push(['Producto', 'Tipo', 'Meta (TM)', 'Total (TM)', 'Viajes', 'Lecturas Banda', 'Registros Bitácora', '% Completado'])
+      
+      Object.values(resumenProductos).forEach(prod => {
+        resumenData.push([
+          `${prod.nombre} (${prod.codigo})`,
+          prod.tipo?.toUpperCase() || 'MIXTO',
+          prod.metaTM?.toFixed(3) || '0.000',
+          prod.totalTM?.toFixed(3) || '0.000',
+          prod.viajes || 0,
+          prod.lecturas || 0,
+          prod.bitacora || 0,
+          prod.porcentaje?.toFixed(1) + '%' || '0%'
+        ])
+      })
+      
+      resumenData.push([])
+      
+      // Resumen por destino (si hay producto activo)
+      if (productoActivo && resumenPorDestino.length > 0) {
+        resumenData.push([`RESUMEN POR DESTINO - ${productoActivo.nombre}`])
+        resumenData.push(['Destino', 'Límite (TM)', 'Total Viajes (TM)', 'Total Banda (TM)', 'Total (TM)', '% Límite'])
+        
+        resumenPorDestino.forEach(dest => {
+          resumenData.push([
+            dest.nombre,
+            dest.limite_tm?.toFixed(3) || '0.000',
+            dest.viajes_tm?.toFixed(3) || '0.000',
+            dest.banda_tm?.toFixed(3) || '0.000',
+            dest.total_tm?.toFixed(3) || '0.000',
+            dest.porcentaje?.toFixed(1) + '%' || '0%'
+          ])
+        })
+        
+        resumenData.push([])
+      }
+      
+      const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+      XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
+      
+      // --- HOJA 2: VIAJES COMPLETOS ---
+      const viajesData = []
+      viajesData.push(['VIAJES COMPLETOS'])
+      viajesData.push(['Barco:', barco.nombre])
+      viajesData.push([])
+      viajesData.push([
+        '# Viaje',
+        'Fecha',
+        'Producto',
+        'Placa',
+        'Hora Salida UPDP',
+        'Hora Entrada Almapac',
+        'Hora Salida Almapac',
+        'Peso Neto UPDP (TM)',
+        'Peso Bruto UPDP (TM)',
+        'Peso Bruto Almapac (TM)',
+        'Destino',
+        'Peso Destino (TM)',
+        'Observaciones',
+        'Observaciones Destino'
+      ])
+      
+      viajes
+        .filter(v => v.estado === 'completo')
+        .sort((a, b) => a.viaje_numero - b.viaje_numero)
+        .forEach(v => {
+          viajesData.push([
+            v.viaje_numero,
+            formatFecha(v.fecha),
+            v.producto?.nombre || 'N/A',
+            v.placa,
+            formatHora(v.hora_salida_updp),
+            formatHora(v.hora_entrada_almapac),
+            formatHora(v.hora_salida_almapac) || '—',
+            v.peso_neto_updp_tm?.toFixed(3) || '0.000',
+            v.peso_bruto_updp_tm?.toFixed(3) || '0.000',
+            v.peso_bruto_almapac_tm?.toFixed(3) || '0.000',
+            v.destino?.nombre || '—',
+            v.peso_destino_tm?.toFixed(3) || '0.000',
+            v.observaciones || '',
+            v.observaciones_destino || ''
+          ])
+        })
+      
+      const wsViajes = XLSX.utils.aoa_to_sheet(viajesData)
+      XLSX.utils.book_append_sheet(wb, wsViajes, 'Viajes Completos')
+      
+      // --- HOJA 3: VIAJES INCOMPLETOS ---
+      const incompletosData = []
+      incompletosData.push(['VIAJES INCOMPLETOS / PENDIENTES'])
+      incompletosData.push(['Barco:', barco.nombre])
+      incompletosData.push([])
+      incompletosData.push([
+        '# Viaje',
+        'Fecha',
+        'Producto',
+        'Placa',
+        'Hora Salida UPDP',
+        'Hora Entrada Almapac',
+        'Peso Neto UPDP (TM)',
+        'Peso Bruto UPDP (TM)',
+        'Peso Bruto Almapac (TM)',
+        'Destino (pre-asignado)',
+        'Observaciones'
+      ])
+      
+      viajes
+        .filter(v => v.estado === 'incompleto')
+        .sort((a, b) => a.viaje_numero - b.viaje_numero)
+        .forEach(v => {
+          incompletosData.push([
+            v.viaje_numero,
+            formatFecha(v.fecha),
+            v.producto?.nombre || 'N/A',
+            v.placa,
+            formatHora(v.hora_salida_updp),
+            formatHora(v.hora_entrada_almapac),
+            v.peso_neto_updp_tm?.toFixed(3) || '0.000',
+            v.peso_bruto_updp_tm?.toFixed(3) || '0.000',
+            v.peso_bruto_almapac_tm?.toFixed(3) || '0.000',
+            v.destino?.nombre || '—',
+            v.observaciones || ''
+          ])
+        })
+      
+      const wsIncompletos = XLSX.utils.aoa_to_sheet(incompletosData)
+      XLSX.utils.book_append_sheet(wb, wsIncompletos, 'Viajes Pendientes')
+      
+      // --- HOJA 4: LECTURAS DE BANDA ---
+      const bandaData = []
+      bandaData.push(['LECTURAS DE BANDA'])
+      bandaData.push(['Barco:', barco.nombre])
+      bandaData.push([])
+      bandaData.push([
+        'Fecha/Hora (El Salvador)',
+        'Producto',
+        'Acumulado (TM)',
+        'Acumulado (KG)',
+        'Destino'
+      ])
+      
+      lecturasBanda
+        .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
+        .forEach(l => {
+          bandaData.push([
+            formatUTCToSV(l.fecha_hora, 'DD/MM/YYYY HH:mm:ss'),
+            l.producto?.nombre || 'N/A',
+            l.acumulado_tm?.toFixed(3) || '0.000',
+            l.acumulado_kg || 0,
+            l.destino?.nombre || '—'
+          ])
+        })
+      
+      const wsBanda = XLSX.utils.aoa_to_sheet(bandaData)
+      XLSX.utils.book_append_sheet(wb, wsBanda, 'Lecturas Banda')
+      
+      // --- HOJA 5: BITÁCORA ---
+      const bitacoraData = []
+      bitacoraData.push(['BITÁCORA DE OPERACIONES'])
+      bitacoraData.push(['Barco:', barco.nombre])
+      bitacoraData.push([])
+      bitacoraData.push([
+        'Fecha/Hora',
+        'Producto',
+        'Comentarios'
+      ])
+      
+      bitacora
+        .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
+        .forEach(b => {
+          bitacoraData.push([
+            formatFechaHora(b.fecha_hora),
+            b.producto?.nombre || 'N/A',
+            b.comentarios || ''
+          ])
+        })
+      
+      const wsBitacora = XLSX.utils.aoa_to_sheet(bitacoraData)
+      XLSX.utils.book_append_sheet(wb, wsBitacora, 'Bitácora')
+      
+      // Generar nombre del archivo
+      const fechaStr = new Date().toISOString().split('T')[0]
+      const nombreArchivo = `${barco.nombre.replace(/\s+/g, '_')}_${fechaStr}_completo.xlsx`
+      
+      // Exportar el archivo
+      XLSX.writeFile(wb, nombreArchivo)
+      
+      toast.success('✅ Archivo Excel generado correctamente')
+    } catch (error) {
+      console.error('Error exportando a Excel:', error)
+      toast.error('Error al generar el archivo Excel')
+    }
   }
 
   // Datos para gráfica de flujo acumulado por hora
@@ -1353,6 +1576,16 @@ export default function BarcoPesadorPage() {
                   {viajesIncompletos.length} pendientes
                 </div>
               )}
+              
+              {/* 👇 NUEVO BOTÓN DE EXPORTAR A EXCEL */}
+              <button
+                onClick={exportarTodoAExcel}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg"
+                title="Exportar todos los registros a Excel"
+              >
+                <Download className="w-4 h-4" />
+                Exportar Todo a Excel
+              </button>
               
               <button
                 onClick={cargarDatos}
