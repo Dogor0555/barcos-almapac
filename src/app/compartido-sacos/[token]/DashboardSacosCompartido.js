@@ -1550,7 +1550,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
                   fontSize: 12,
                   fontWeight: 900
                 }}>
-                  {i + 1}
+                  
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{b.bodega}</span>
                 <span style={{
