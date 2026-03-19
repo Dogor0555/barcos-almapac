@@ -455,15 +455,19 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
   })
 
   const tiposAtraso = [
-    'Falla mecánica general',
-    'Falta de unidades',
-    'Problema eléctrico',
-    'Mantenimiento programado',
-    'Problema con balanza',
-    'Falla en sistema',
-    'Espera de materiales',
-    'Personal insuficiente',
-    'Otro'
+    'Revisión de equipo frontal',
+    'Tiempo de comida para el personal',
+    'Limpieza de bodegas',
+    'Falta de Unidades',
+    'Carga de combustible',
+    'Retraso llegada a ingenio',
+    'Esperando indicaciones de ingenio',
+    'Falla en sistema de báscula',
+    'Ajuste de peso en unidad',
+    'Calibración de llantas de equipo frontal',
+    'Ubicación equipo frontal',
+    'Lluvia',
+    'Falla de equipo frontal'
   ]
 
   // Calcular duración para mostrar
