@@ -9,12 +9,13 @@ import {
   Package, Edit2, Trash2, Eye, Search, Filter,
   RefreshCw, AlertCircle, X, CheckCircle, Clock3,
   Download, ChevronDown, ChevronUp, Loader, MoreVertical,
-  ArrowLeft, BarChart3, TrendingUp
+  ArrowLeft, BarChart3, TrendingUp, FolderOpen, RotateCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import Link from 'next/link'
+import TrasladoForm from '../components/traslados/TrasladoForm'
 
 // Componente para el modal de detalle
 const DetalleTrasladoModal = ({ traslado, onClose }) => {
@@ -48,6 +49,23 @@ const DetalleTrasladoModal = ({ traslado, onClose }) => {
   const formatHora = (hora) => hora?.substring(0, 5) || '—'
   const formatFecha = (fecha) => fecha ? dayjs(fecha).format('DD/MM/YYYY') : '—'
   const totalMinutos = atrasos.reduce((sum, a) => sum + a.duracion_minutos, 0)
+
+  // Calcular duración del viaje
+  const calcularDuracionViaje = () => {
+    if (!traslado.hora_inicio_carga || !traslado.hora_fin_carga) return null
+    const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
+    const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
+    let diffMinutos = fin.diff(inicio, 'minute')
+    if (diffMinutos < 0) diffMinutos += 24 * 60
+    return {
+      horas: Math.floor(diffMinutos / 60),
+      minutos: diffMinutos % 60,
+      total: diffMinutos
+    }
+  }
+
+  const duracionViaje = calcularDuracionViaje()
+  const tiempoTotal = (duracionViaje?.total || 0) + (traslado.tiempo_cabaleo_minutos || 0)
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -124,6 +142,51 @@ const DetalleTrasladoModal = ({ traslado, onClose }) => {
             </div>
           </div>
 
+          {/* Duración del viaje */}
+          {duracionViaje && (
+            <div className="bg-slate-900 rounded-xl p-5 border border-green-500/20">
+              <h4 className="text-white font-bold mb-3 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-green-400" />
+                Duración del Viaje
+              </h4>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Tiempo de traslado:</span>
+                <span className="font-bold text-green-400 text-lg">
+                  {duracionViaje.horas}h {duracionViaje.minutos}m
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Cabaleo (si existe) */}
+          {traslado.tiene_cabaleo && (
+            <div className="bg-slate-900 rounded-xl p-5 border border-purple-500/20">
+              <h4 className="text-white font-bold mb-3 flex items-center gap-2">
+                <RotateCw className="w-4 h-4 text-purple-400" />
+                Cabaleo Registrado (Reintento de vaciado)
+              </h4>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Tiempo adicional:</span>
+                  <span className="font-bold text-purple-400">
+                    {Math.floor(traslado.tiempo_cabaleo_minutos / 60)}h {traslado.tiempo_cabaleo_minutos % 60}m
+                  </span>
+                </div>
+                {traslado.observaciones_cabaleo && (
+                  <div className="bg-purple-500/10 rounded-lg p-3">
+                    <p className="text-sm text-purple-300">{traslado.observaciones_cabaleo}</p>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-purple-500/20">
+                  <span className="text-slate-400 font-bold">Tiempo total con cabaleo:</span>
+                  <span className="font-bold text-purple-400 text-lg">
+                    {Math.floor(tiempoTotal / 60)}h {tiempoTotal % 60}m
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Atrasos */}
           <div className="bg-slate-900 rounded-xl p-5 border border-red-500/20">
             <h4 className="text-white font-bold mb-4 flex items-center gap-2">
@@ -168,6 +231,46 @@ const DetalleTrasladoModal = ({ traslado, onClose }) => {
               </div>
             )}
           </div>
+
+          {/* Resumen de tiempos totales */}
+          {(duracionViaje || traslado.tiene_cabaleo || atrasos.length > 0) && (
+            <div className="bg-slate-900 rounded-xl p-5 border border-blue-500/20">
+              <h4 className="text-white font-bold mb-3 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-400" />
+                Resumen de Tiempos
+              </h4>
+              <div className="space-y-2 text-sm">
+                {duracionViaje && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Viaje:</span>
+                    <span className="text-white font-mono">{duracionViaje.horas}h {duracionViaje.minutos}m</span>
+                  </div>
+                )}
+                {traslado.tiene_cabaleo && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Cabaleo:</span>
+                    <span className="text-purple-400 font-mono">
+                      {Math.floor(traslado.tiempo_cabaleo_minutos / 60)}h {traslado.tiempo_cabaleo_minutos % 60}m
+                    </span>
+                  </div>
+                )}
+                {atrasos.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Atrasos:</span>
+                    <span className="text-red-400 font-mono">
+                      {Math.floor(totalMinutos / 60)}h {totalMinutos % 60}m
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 border-t border-blue-500/20 font-bold">
+                  <span className="text-slate-300">Tiempo total operación:</span>
+                  <span className="text-blue-400 font-mono">
+                    {Math.floor((tiempoTotal + totalMinutos) / 60)}h {(tiempoTotal + totalMinutos) % 60}m
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-white/10 p-4 flex justify-end">
@@ -333,12 +436,14 @@ export default function TrasladosPage() {
   const router = useRouter()
   const [user, setUser] = useState(null)
   const [traslados, setTraslados] = useState([])
+  const [operativos, setOperativos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showAtrasoForm, setShowAtrasoForm] = useState(false)
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [trasladoSeleccionado, setTrasladoSeleccionado] = useState(null)
   const [filtroEstado, setFiltroEstado] = useState('todos')
+  const [filtroOperativo, setFiltroOperativo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [exportando, setExportando] = useState(null)
 
@@ -349,23 +454,34 @@ export default function TrasladosPage() {
       return
     }
     setUser(currentUser)
-    cargarTraslados()
+    cargarDatos()
   }, [])
 
-  const cargarTraslados = async () => {
+  const cargarDatos = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      
+      // Cargar traslados
+      const { data: trasladosData, error } = await supabase
         .from('traslados')
         .select('*')
         .order('fecha', { ascending: false })
         .order('hora_inicio_carga', { ascending: false })
 
       if (error) throw error
-      setTraslados(data || [])
+      setTraslados(trasladosData || [])
+
+      // Cargar operativos
+      const { data: operativosData } = await supabase
+        .from('operativos_traslados')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      setOperativos(operativosData || [])
+      
     } catch (error) {
       console.error('Error:', error)
-      toast.error('Error al cargar traslados')
+      toast.error('Error al cargar datos')
     } finally {
       setLoading(false)
     }
@@ -386,7 +502,7 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success('Traslado eliminado')
-      cargarTraslados()
+      cargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al eliminar')
@@ -405,7 +521,7 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success(`Traslado ${nuevoEstado === 'activo' ? 'reabierto' : 'completado'}`)
-      cargarTraslados()
+      cargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al cambiar estado')
@@ -421,13 +537,19 @@ export default function TrasladosPage() {
         .select('*')
         .eq('traslado_id', traslado.id)
 
+      // Obtener nombre del operativo
+      const operativo = operativos.find(o => o.id === traslado.operativo_id)
+
       const exportData = {
         metadata: {
           fecha_exportacion: new Date().toISOString(),
           exportado_por: user?.nombre,
           tipo: 'traslado'
         },
-        traslado,
+        traslado: {
+          ...traslado,
+          operativo_nombre: operativo?.nombre
+        },
         atrasos: atrasos || []
       }
 
@@ -453,6 +575,7 @@ export default function TrasladosPage() {
 
   const trasladosFiltrados = traslados.filter(t => {
     if (filtroEstado !== 'todos' && t.estado !== filtroEstado) return false
+    if (filtroOperativo !== 'todos' && t.operativo_id !== parseInt(filtroOperativo)) return false
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
       return t.correlativo_viaje?.toLowerCase().includes(term) ||
@@ -462,6 +585,12 @@ export default function TrasladosPage() {
     }
     return true
   })
+
+  // Obtener nombre del operativo por ID
+  const getOperativoNombre = (operativoId) => {
+    const op = operativos.find(o => o.id === operativoId)
+    return op ? op.nombre : '—'
+  }
 
   if (loading) {
     return (
@@ -495,6 +624,13 @@ export default function TrasladosPage() {
               </div>
             </div>
             <div className="flex gap-3">
+              <Link
+                href="/dashboard-traslados"
+                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Dashboard
+              </Link>
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-white hover:bg-amber-50 text-amber-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2"
@@ -503,7 +639,7 @@ export default function TrasladosPage() {
                 Nuevo Traslado
               </button>
               <button
-                onClick={cargarTraslados}
+                onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -536,8 +672,8 @@ export default function TrasladosPage() {
               </p>
             </div>
             <div className="bg-white/10 rounded-xl p-4">
-              <p className="text-amber-200 text-xs">Con Atrasos</p>
-              <p className="text-2xl font-black text-white">0</p>
+              <p className="text-amber-200 text-xs">Operativos</p>
+              <p className="text-2xl font-black text-white">{operativos.length}</p>
             </div>
           </div>
         </div>
@@ -548,13 +684,27 @@ export default function TrasladosPage() {
             <select
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white min-w-[150px]"
             >
               <option value="todos">Todos los estados</option>
               <option value="activo">Activos</option>
               <option value="completado">Completados</option>
               <option value="cancelado">Cancelados</option>
             </select>
+
+            <select
+              value={filtroOperativo}
+              onChange={(e) => setFiltroOperativo(e.target.value)}
+              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white min-w-[200px]"
+            >
+              <option value="todos">Todos los operativos</option>
+              {operativos.map(op => (
+                <option key={op.id} value={op.id}>
+                  {op.nombre}
+                </option>
+              ))}
+            </select>
+
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
@@ -566,6 +716,20 @@ export default function TrasladosPage() {
               />
             </div>
           </div>
+
+          {/* Resumen de filtros */}
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+            <span className="text-slate-500">Mostrando:</span>
+            <span className="bg-slate-800 px-2 py-1 rounded-full text-slate-300">
+              {trasladosFiltrados.length} de {traslados.length} traslados
+            </span>
+            {filtroOperativo !== 'todos' && (
+              <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded-full flex items-center gap-1">
+                <FolderOpen className="w-3 h-3" />
+                {getOperativoNombre(parseInt(filtroOperativo))}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Tabla */}
@@ -574,9 +738,6 @@ export default function TrasladosPage() {
             <h2 className="font-black text-white flex items-center gap-2">
               <Truck className="w-5 h-5 text-amber-400" />
               Listado de Traslados
-              <span className="text-sm font-normal text-slate-400 ml-2">
-                ({trasladosFiltrados.length} de {traslados.length})
-              </span>
             </h2>
           </div>
 
@@ -585,6 +746,7 @@ export default function TrasladosPage() {
               <thead className="bg-slate-800/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Correlativo</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Operativo</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Conductor</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Remolque</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Tipo</th>
@@ -600,6 +762,12 @@ export default function TrasladosPage() {
                 {trasladosFiltrados.map((t) => (
                   <tr key={t.id} className="hover:bg-white/5">
                     <td className="px-6 py-4 font-mono text-amber-400 font-bold">{t.correlativo_viaje}</td>
+                    <td className="px-6 py-4">
+                      <span className="bg-amber-500/10 text-amber-400 px-2 py-1 rounded-full text-xs flex items-center gap-1 w-fit">
+                        <FolderOpen className="w-3 h-3" />
+                        {getOperativoNombre(t.operativo_id)}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-white">{t.nombre_conductor}</td>
                     <td className="px-6 py-4 font-mono text-blue-400">{t.remolque}</td>
                     <td className="px-6 py-4">
@@ -688,6 +856,18 @@ export default function TrasladosPage() {
             <div className="p-12 text-center">
               <Truck className="w-12 h-12 text-slate-700 mx-auto mb-3" />
               <p className="text-slate-400">No se encontraron traslados</p>
+              {(filtroEstado !== 'todos' || filtroOperativo !== 'todos' || searchTerm) && (
+                <button
+                  onClick={() => {
+                    setFiltroEstado('todos')
+                    setFiltroOperativo('todos')
+                    setSearchTerm('')
+                  }}
+                  className="mt-2 text-sm text-amber-400 hover:text-amber-300"
+                >
+                  Limpiar filtros
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -699,7 +879,7 @@ export default function TrasladosPage() {
           onClose={() => setShowForm(false)}
           onSuccess={() => {
             setShowForm(false)
-            cargarTraslados()
+            cargarDatos()
           }}
         />
       )}
@@ -714,7 +894,7 @@ export default function TrasladosPage() {
           onSuccess={() => {
             setShowAtrasoForm(false)
             setTrasladoSeleccionado(null)
-            cargarTraslados()
+            cargarDatos()
           }}
         />
       )}
@@ -731,6 +911,3 @@ export default function TrasladosPage() {
     </div>
   )
 }
-
-// Importar TrasladoForm al final del archivo
-import TrasladoForm from '../components/traslados/TrasladoForm'

@@ -2012,7 +2012,12 @@ export default function RegistroSacosPage() {
     const ts = filtrados?.reduce((s, r) => s + r.cantidad_paquetes, 0) || 0
     const tsd = filtrados?.reduce((s, r) => s + (r.paquetes_danados || 0), 0) || 0
     const tsb = ts - tsd
-    const tt = filtrados?.reduce((s, r) => s + (r.peso_total_calculado_tm || 0), 0) || 0
+    
+    // 🟢 CORRECCIÓN: Calcular TM restando los dañados manualmente
+    const tt = filtrados?.reduce((s, r) => {
+      const sacosBuenos = r.cantidad_paquetes - (r.paquetes_danados || 0)
+      return s + ((r.peso_saco_kg * sacosBuenos) / 1000)
+    }, 0) || 0
     
     setStats({ 
       totalViajes: tv, 
@@ -2043,7 +2048,10 @@ export default function RegistroSacosPage() {
       bodegaStat.totalSacos += reg.cantidad_paquetes || 0
       bodegaStat.totalDanados += reg.paquetes_danados || 0
       bodegaStat.totalBuenos += sacosBuenos
-      bodegaStat.totalTM += reg.peso_total_calculado_tm || 0
+      
+      // 🟢 CORRECCIÓN: Calcular TM por bodega restando dañados
+      bodegaStat.totalTM += ((reg.peso_saco_kg * sacosBuenos) / 1000) || 0
+      
       bodegaStat.viajes += 1
       bodegaStat.registros.push(reg)
     })
@@ -2382,6 +2390,10 @@ export default function RegistroSacosPage() {
                         ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
                         : null
                       const sacosBuenos = reg.cantidad_paquetes - (reg.paquetes_danados || 0)
+                      
+                      // 🟢 Usar el cálculo manual para mostrar TM correcta
+                      const tmCorrecta = (reg.peso_saco_kg * sacosBuenos) / 1000
+                      
                       return (
                         <tr key={reg.id} className={`${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
                           <td className={`px-4 py-3 font-bold ${text}`}>#{reg.viaje_numero}</td>
@@ -2395,7 +2407,7 @@ export default function RegistroSacosPage() {
                           </td>
                           <td className="px-4 py-3 font-bold text-green-500">{sacosBuenos}</td>
                           <td className="px-4 py-3 font-bold text-green-400">
-                            {reg.peso_total_calculado_tm?.toFixed(3)}
+                            {tmCorrecta.toFixed(3)}
                             {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400 inline ml-1" />}
                           </td>
                           <td className={`px-4 py-3 text-xs ${sub}`}>{reg.duracion}</td>
@@ -2432,6 +2444,10 @@ export default function RegistroSacosPage() {
                         ? Math.abs((reg.peso_saco_kg * reg.cantidad_paquetes) - reg.peso_ingenio_kg) / reg.peso_ingenio_kg * 100
                         : null
                       const sacosBuenos = reg.cantidad_paquetes - (reg.paquetes_danados || 0)
+                      
+                      // 🟢 Usar el cálculo manual para mostrar TM correcta
+                      const tmCorrecta = (reg.peso_saco_kg * sacosBuenos) / 1000
+                      
                       return (
                         <div key={reg.id} className={`p-4 ${dk ? 'hover:bg-white/5' : 'hover:bg-gray-50'} transition-colors`}>
                           <div className="flex items-center justify-between mb-2">
@@ -2485,7 +2501,7 @@ export default function RegistroSacosPage() {
                             <div>
                               <p className={`text-[10px] ${sub}`}>TM (Buenos)</p>
                               <p className="text-xs font-bold text-green-400 flex items-center gap-0.5">
-                                {reg.peso_total_calculado_tm?.toFixed(3)}
+                                {tmCorrecta.toFixed(3)}
                                 {pctDif && pctDif > 5 && <AlertCircle className="w-3 h-3 text-red-400" />}
                               </p>
                             </div>
@@ -2539,7 +2555,11 @@ export default function RegistroSacosPage() {
                   color: 'text-green-500' 
                 },
                 { label: filtroFechaInicio && filtroFechaFin ? 'Toneladas (Buenos)' : 'Total TM (Buenos)', 
-                  value: `${registrosFiltrados.reduce((s,r) => s + (r.peso_total_calculado_tm||0), 0).toFixed(3)} TM`,  
+                  // 🟢 Usar el mismo cálculo que stats.totalTM
+                  value: `${registrosFiltrados.reduce((s,r) => {
+                    const sacosBuenos = r.cantidad_paquetes - (r.paquetes_danados || 0)
+                    return s + ((r.peso_saco_kg * sacosBuenos) / 1000)
+                  }, 0).toFixed(3)} TM`,  
                   color: 'text-green-500' 
                 },
               ].map(({ label, value, color }) => (

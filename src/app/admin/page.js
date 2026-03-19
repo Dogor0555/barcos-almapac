@@ -14,15 +14,16 @@ import {
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
   Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus,
-  User
+  User, FolderOpen, RotateCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
 import EditarBarcoModal from '../components/adminC/EditarBarcoModal'
 import ProductoForm from '../components/adminC/productoForm'
 import GenerarDashboardModal from './GenerarDashboardModal'
-import GenerarDashboardSacosModal from './GenerarDashboardSacosModal' // 👈 NUEVO MODAL
+import GenerarDashboardSacosModal from './GenerarDashboardSacosModal'
 import EditarMiPerfilModal from '../components/adminC/EditarMiPerfilModal'
+import OperativoForm from '../components/adminC/OperativoForm'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -51,7 +52,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
     try {
       setLoading(true)
       
-      // Cargar productos del barco
       const productosBarco = barco.metas_json?.productos || []
       
       if (productosBarco.length === 0) {
@@ -72,7 +72,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         await cargarExportaciones(barco.id, productosData[0].id)
       }
 
-      // Cargar barcos origen (desde donde se exportó)
       const barcosOrigenIds = [...new Set(exportaciones.map(e => e.destino_barco_id).filter(Boolean))]
       if (barcosOrigenIds.length > 0) {
         const { data: barcosData } = await supabase
@@ -124,7 +123,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-blue-500/20 p-3 rounded-xl">
@@ -147,7 +145,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
           </button>
         </div>
 
-        {/* Contenido */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {productos.length === 0 ? (
             <div className="bg-slate-900 rounded-2xl p-12 text-center">
@@ -157,7 +154,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Selector de producto */}
               <div className="bg-slate-900 rounded-xl p-4 border border-white/10">
                 <label className="block text-sm font-bold text-slate-400 mb-3">
                   Seleccionar Producto:
@@ -183,7 +179,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 </div>
               </div>
 
-              {/* Estadísticas rápidas */}
               {productoActual && !loading && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
@@ -211,7 +206,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 </div>
               )}
 
-              {/* Lista de exportaciones recibidas */}
               <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
                 <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -295,7 +289,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 )}
               </div>
 
-              {/* Resumen por barco origen */}
               {exportaciones.length > 0 && (
                 <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
                   <h4 className="font-bold text-white mb-3 flex items-center gap-2">
@@ -337,7 +330,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                 </div>
               )}
 
-              {/* Nota informativa */}
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-sm text-blue-400 flex items-center gap-2">
                   <Export className="w-4 h-4 flex-shrink-0" />
@@ -349,7 +341,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-white/10 p-4 flex justify-end">
           <button
             onClick={onClose}
@@ -406,7 +397,6 @@ const cargarEstadisticas = async () => {
       .select('*')
       .in('codigo', productosBarco)
 
-    // Cargar última lectura de banda POR CADA PRODUCTO
     let bandasPorProducto = {}
     if (barco.tipo_operacion !== 'exportacion' && productosData?.length > 0) {
       for (const prod of productosData) {
@@ -423,7 +413,6 @@ const cargarEstadisticas = async () => {
 
     const viajesCompletos = viajes?.filter(v => v.estado === 'completo') || []
 
-    // Resumen por producto
     const resumenProductos = (productosData || []).map(prod => {
       const viajesProd = viajesCompletos.filter(v => v.producto_id === prod.id)
       const tmViajes = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
@@ -470,7 +459,6 @@ const cargarEstadisticas = async () => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-blue-500/20 p-3 rounded-xl">
@@ -492,7 +480,6 @@ const cargarEstadisticas = async () => {
           </button>
         </div>
 
-        {/* Contenido */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -500,7 +487,6 @@ const cargarEstadisticas = async () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Información general */}
               <div className="bg-slate-900 rounded-xl p-4">
                 <h3 className="font-bold text-white mb-3">Información General</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -539,11 +525,9 @@ const cargarEstadisticas = async () => {
                 </div>
               </div>
 
-            {/* Estadísticas */}
 <div className="space-y-3">
   {barco.tipo_operacion !== 'exportacion' && (
     <>
-      {/* Total general */}
       <div className="bg-slate-900 rounded-xl p-4 border border-green-500/20">
         <div className="flex justify-between items-start mb-3">
           <div>
@@ -573,7 +557,6 @@ const cargarEstadisticas = async () => {
         </div>
       </div>
 
-      {/* Desglose por producto */}
       {stats.resumenProductos?.map(prod => (
         <div key={prod.id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
           <div className="flex items-center gap-3 mb-3">
@@ -588,7 +571,6 @@ const cargarEstadisticas = async () => {
             </div>
           </div>
 
-          {/* Según el tipo de producto, mostrar lo que aplica */}
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
             {(prod.tipo_registro === 'viajes' || prod.tipo_registro === 'mixto') && (
               <div className="bg-slate-800 rounded-lg p-2">
@@ -606,7 +588,6 @@ const cargarEstadisticas = async () => {
             )}
           </div>
 
-          {/* Meta del producto si existe */}
           {(() => {
             const meta = barco.metas_json?.limites?.[prod.codigo] || 0
             if (meta <= 0) return null
@@ -646,7 +627,6 @@ const cargarEstadisticas = async () => {
   )}
 </div>
 
-              {/* Productos */}
               <div className="bg-slate-900 rounded-xl p-4">
                 <h3 className="font-bold text-white mb-3">Productos</h3>
                 <div className="space-y-2">
@@ -676,7 +656,6 @@ const cargarEstadisticas = async () => {
                 </div>
               </div>
 
-              {/* Barcos origen (desde donde recibe producto) */}
               {barco.tipo_operacion === 'exportacion' && barco.metas_json?.barcos_origen?.length > 0 && (
                 <div className="bg-slate-900 rounded-xl p-4">
                   <h3 className="font-bold text-white mb-3 flex items-center gap-2">
@@ -693,7 +672,6 @@ const cargarEstadisticas = async () => {
                 </div>
               )}
 
-              {/* Metadatos */}
               <div className="bg-slate-900 rounded-xl p-4 text-xs text-slate-500">
                 <p>Creado: {dayjs(barco.created_at).format('DD/MM/YYYY HH:mm')}</p>
                 <p>Última actualización: {dayjs(barco.updated_at || barco.created_at).format('DD/MM/YYYY HH:mm')}</p>
@@ -702,7 +680,6 @@ const cargarEstadisticas = async () => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-white/10 p-4 flex justify-end">
           <button
             onClick={onClose}
@@ -782,7 +759,6 @@ const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-yellow-500/20 p-3 rounded-xl">
@@ -805,7 +781,6 @@ const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
           </button>
         </div>
 
-        {/* Contenido */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -821,7 +796,6 @@ const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Resumen rápido */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-900 rounded-xl p-4 border border-yellow-500/20">
                   <p className="text-xs text-slate-400">Total Viajes Pendientes</p>
@@ -843,7 +817,6 @@ const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
                 </div>
               </div>
 
-              {/* Lista de viajes por producto */}
               {Object.entries(resumenPorProducto).map(([productoId, item]) => (
                 <div key={productoId} className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
                   <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
@@ -908,7 +881,6 @@ const ViajesPaso1Modal = ({ barco, onClose, onSuccess }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-white/10 p-4 flex justify-end">
           <button
             onClick={onClose}
@@ -999,7 +971,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-purple-500/20 p-3 rounded-xl">
@@ -1022,7 +993,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
           </button>
         </div>
 
-        {/* Contenido */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {productos.length === 0 ? (
             <div className="bg-slate-900 rounded-2xl p-12 text-center">
@@ -1032,7 +1002,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Selector de producto */}
               <div className="bg-slate-900 rounded-xl p-4 border border-white/10">
                 <label className="block text-sm font-bold text-slate-400 mb-3">
                   Seleccionar Producto:
@@ -1058,7 +1027,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
                 </div>
               </div>
 
-              {/* Estadísticas rápidas */}
               {productoActual && !loading && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
@@ -1080,7 +1048,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
                 </div>
               )}
 
-              {/* Lista de bitácora */}
               <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
                 <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1145,7 +1112,6 @@ const BitacoraProductoModal = ({ barco, onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-white/10 p-4 flex justify-end">
           <button
             onClick={onClose}
@@ -1168,26 +1134,27 @@ export default function AdminPage() {
   const [barcos, setBarcos] = useState([])
   const [usuarios, setUsuarios] = useState([])
   const [productos, setProductos] = useState([])
+  const [operativos, setOperativos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showBarcoForm, setShowBarcoForm] = useState(false)
   const [showEditarBarcoModal, setShowEditarBarcoModal] = useState(false)
   const [barcoEditando, setBarcoEditando] = useState(null)
   const [showProductoForm, setShowProductoForm] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null)
+  const [showOperativoForm, setShowOperativoForm] = useState(false)
   const [exportando, setExportando] = useState(null)
   const [vista, setVista] = useState('barcos')
   const [filtroTipo, setFiltroTipo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [showEditarMiPerfil, setShowEditarMiPerfil] = useState(false)
   
-  // Estado para los modales
   const [barcoSeleccionado, setBarcoSeleccionado] = useState(null)
   const [showViajesPaso1Modal, setShowViajesPaso1Modal] = useState(false)
   const [showBitacoraModal, setShowBitacoraModal] = useState(false)
   const [showExportacionesModal, setShowExportacionesModal] = useState(false)
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [showGenerarDashboardModal, setShowGenerarDashboardModal] = useState(false)
-  const [showGenerarDashboardSacosModal, setShowGenerarDashboardSacosModal] = useState(false) // 👈 NUEVO ESTADO
+  const [showGenerarDashboardSacosModal, setShowGenerarDashboardSacosModal] = useState(false)
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -1203,7 +1170,6 @@ export default function AdminPage() {
     try {
       setLoading(true)
       
-      // Cargar barcos
       const { data: barcosData, error: barcosError } = await supabase
         .from('barcos')
         .select('*')
@@ -1211,7 +1177,6 @@ export default function AdminPage() {
 
       if (barcosError) throw barcosError
 
-      // Para cada barco, obtener el nombre del pesador si existe
       const barcosConPesador = await Promise.all((barcosData || []).map(async (barco) => {
         if (barco.pesador_id) {
           const { data: pesador } = await supabase
@@ -1224,7 +1189,6 @@ export default function AdminPage() {
         return { ...barco, pesador: null }
       }))
 
-      // Obtener conteo de viajes para cada barco
       const barcosConConteos = await Promise.all(barcosConPesador.map(async (barco) => {
         const { count: viajesCount } = await supabase
           .from('viajes')
@@ -1243,23 +1207,26 @@ export default function AdminPage() {
         }
       }))
 
-      // Cargar todos los usuarios
       const { data: usuariosData } = await supabase
         .from('usuarios')
         .select('id, nombre, username, rol, activo')
         .order('nombre')
 
-      // Cargar productos
       const { data: productosData } = await supabase
         .from('productos')
         .select('*')
         .order('codigo', { ascending: true })
 
+      const { data: operativosData } = await supabase
+        .from('operativos_traslados')
+        .select('*')
+        .order('created_at', { ascending: false })
+
       setBarcos(barcosConConteos || [])
       setUsuarios(usuariosData || [])
       setProductos(productosData || [])
+      setOperativos(operativosData || [])
       
-      console.log('Barcos cargados:', barcosConConteos)
     } catch (error) {
       console.error('Error cargando datos:', error)
       toast.error('Error al cargar datos')
@@ -1272,9 +1239,6 @@ export default function AdminPage() {
     logout()
   }
 
-  // =====================================================
-  // FUNCIONES PARA BARCOS
-  // =====================================================
   const handleVerDashboard = (barcoId) => {
     window.open(`/dashboard/${barcoId}`, '_blank')
   }
@@ -1340,7 +1304,6 @@ export default function AdminPage() {
     }
   }
 
-  // Funciones para abrir modales
   const handleVerViajesPaso1 = (barco) => {
     if (barco.tipo_operacion === 'exportacion') {
       toast.error('Esta operación no aplica para barcos de exportación')
@@ -1378,7 +1341,6 @@ export default function AdminPage() {
     setShowGenerarDashboardModal(true)
   }
 
-  // 👇 NUEVA FUNCIÓN PARA GENERAR DASHBOARD DE SACOS
   const handleGenerarDashboardSacos = (barco) => {
     if (!barco.codigo_barco) {
       toast.error('Este barco no tiene código de buque asignado')
@@ -1388,9 +1350,6 @@ export default function AdminPage() {
     setShowGenerarDashboardSacosModal(true)
   }
 
-  // =====================================================
-  // FUNCIONES PARA PRODUCTOS
-  // =====================================================
   const handleGuardarProducto = async (productoData) => {
     try {
       if (productoEditando) {
@@ -1438,9 +1397,48 @@ export default function AdminPage() {
     }
   }
 
-  // =====================================================
-  // EXPORTACIÓN DE BARCO (DESCARGAR DATOS)
-  // =====================================================
+  const handleGuardarOperativo = async (operativoData) => {
+    try {
+      const user = getCurrentUser()
+      
+      const { error } = await supabase
+        .from('operativos_traslados')
+        .insert([{
+          ...operativoData,
+          created_by: user.id,
+          estado: 'activo'
+        }])
+
+      if (error) throw error
+
+      toast.success('✅ Operativo creado correctamente')
+      setShowOperativoForm(false)
+      cargarDatos()
+    } catch (error) {
+      console.error('Error guardando operativo:', error)
+      toast.error('Error al crear operativo')
+    }
+  }
+
+  const handleEliminarOperativo = async (operativoId, operativoNombre) => {
+    if (!confirm(`¿Estás seguro de eliminar el operativo "${operativoNombre}"?`)) return
+
+    try {
+      const { error } = await supabase
+        .from('operativos_traslados')
+        .update({ estado: 'cancelado' })
+        .eq('id', operativoId)
+
+      if (error) throw error
+
+      toast.success('Operativo cancelado')
+      cargarDatos()
+    } catch (error) {
+      console.error('Error eliminando operativo:', error)
+      toast.error('Error al cancelar operativo')
+    }
+  }
+
  const handleExportarBarco = async (barco) => {
   try {
     setExportando(barco.id)
@@ -1491,7 +1489,6 @@ export default function AdminPage() {
       .order('fecha_hora', { ascending: true })
     bitacora = bitacoraData || []
 
-    // Calcular totales sumando viajes + banda
     const totalKG = viajes?.reduce((sum, v) => sum + (Number(v.peso_neto_updp_kg) || 0), 0) || 0
     const totalViajeTM = totalKG / 1000
     const ultimaBanda = lecturasBanda?.length > 0
@@ -1614,7 +1611,6 @@ export default function AdminPage() {
   }
 }
 
-  // Filtrar barcos
   const barcosFiltrados = barcos.filter(barco => {
     if (filtroTipo !== 'todos' && barco.tipo_operacion !== filtroTipo) return false
     if (searchTerm && !barco.nombre.toLowerCase().includes(searchTerm.toLowerCase())) return false
@@ -1667,6 +1663,14 @@ export default function AdminPage() {
               >
                 <Clock className="w-4 h-4" />
                 Registro de Atrasos
+              </Link>
+
+              <Link
+                href="/traslados"
+                className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                <Truck className="w-4 h-4" />
+                Traslados Azúcar
               </Link>
               
               <button
@@ -1721,6 +1725,17 @@ export default function AdminPage() {
               <Package className="w-4 h-4" />
               Productos
             </button>
+            <button
+              onClick={() => setVista('operativos')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
+                vista === 'operativos' 
+                  ? 'bg-white text-amber-800' 
+                  : 'bg-white/10 hover:bg-white/20 text-white'
+              }`}
+            >
+              <FolderOpen className="w-4 h-4" />
+              Operativos Traslados
+            </button>
             <Link
               href="/admin/usuarios"
               className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-purple-500 hover:bg-purple-600 text-white"
@@ -1741,73 +1756,70 @@ export default function AdminPage() {
             </button>
           </div>
 
-          {/* Stats rápidas */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-500/30 p-3 rounded-lg">
-                  <Ship className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Barcos Activos</p>
-                  <p className="text-2xl font-black text-white">
-                    {barcos.filter(b => b.estado === 'activo').length}
-                  </p>
-                  <p className="text-xs text-blue-300">
-                    {barcos.filter(b => b.tipo_operacion === 'importacion' && b.estado === 'activo').length} Importación · 
-                    {barcos.filter(b => b.tipo_operacion === 'exportacion' && b.estado === 'activo').length} Exportación (reciben)
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-500/30 p-3 rounded-lg">
-                  <Users className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Usuarios</p>
-                  <p className="text-2xl font-black text-white">{usuarios.length}</p>
-                  <p className="text-xs text-blue-300">
-                    {usuarios.filter(u => u.rol === 'admin').length} Admin · 
-                    {usuarios.filter(u => u.rol === 'pesador').length} Pesador · 
-                    {usuarios.filter(u => u.rol === 'electricista').length} Electricista
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="bg-purple-500/30 p-3 rounded-lg">
-                  <Package className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Productos</p>
-                  <p className="text-2xl font-black text-white">{productos.length}</p>
-                  <p className="text-xs text-blue-300">
-                    {productos.filter(p => p.tipo_registro === 'mixto').length} Mixto · 
-                    {productos.filter(p => p.tipo_registro === 'banda').length} Banda · 
-                    {productos.filter(p => p.tipo_registro === 'viajes').length} Viajes
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="bg-yellow-500/30 p-3 rounded-lg">
-                  <Activity className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Total Barcos</p>
-                  <p className="text-2xl font-black text-white">{barcos.length}</p>
-                  <p className="text-xs text-blue-300">
-                    {barcos.filter(b => b.tipo_operacion === 'importacion').length} Importación · 
-                    {barcos.filter(b => b.tipo_operacion === 'exportacion').length} Exportación (reciben)
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Stats rápidas - AHORA EN HORIZONTAL */}
+<div className="grid grid-cols-5 gap-4 mt-6">
+  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+    <div className="flex items-center gap-3">
+      <div className="bg-blue-500/30 p-3 rounded-lg">
+        <Ship className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-blue-200 text-xs">Barcos Activos</p>
+        <p className="text-2xl font-black text-white">
+          {barcos.filter(b => b.estado === 'activo').length}
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+    <div className="flex items-center gap-3">
+      <div className="bg-green-500/30 p-3 rounded-lg">
+        <Users className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-blue-200 text-xs">Usuarios</p>
+        <p className="text-2xl font-black text-white">{usuarios.length}</p>
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+    <div className="flex items-center gap-3">
+      <div className="bg-purple-500/30 p-3 rounded-lg">
+        <Package className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-blue-200 text-xs">Productos</p>
+        <p className="text-2xl font-black text-white">{productos.length}</p>
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+    <div className="flex items-center gap-3">
+      <div className="bg-amber-500/30 p-3 rounded-lg">
+        <FolderOpen className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-blue-200 text-xs">Operativos</p>
+        <p className="text-2xl font-black text-white">{operativos.length}</p>
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+    <div className="flex items-center gap-3">
+      <div className="bg-yellow-500/30 p-3 rounded-lg">
+        <Activity className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-blue-200 text-xs">Total Barcos</p>
+        <p className="text-2xl font-black text-white">{barcos.length}</p>
+      </div>
+    </div>
+  </div>
+</div>
         </div>
 
         {/* VISTA DE ESTADÍSTICAS */}
@@ -1819,7 +1831,6 @@ export default function AdminPage() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Tarjeta de importación */}
               <div className="bg-slate-900 rounded-xl p-5 border border-green-500/20">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-green-500/20 p-2 rounded-lg">
@@ -1849,7 +1860,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Tarjeta de exportación (recepción) */}
               <div className="bg-slate-900 rounded-xl p-5 border border-blue-500/20">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-blue-500/20 p-2 rounded-lg">
@@ -1879,7 +1889,27 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Tarjeta de usuarios */}
+              <div className="bg-slate-900 rounded-xl p-5 border border-amber-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-amber-500/20 p-2 rounded-lg">
+                    <Truck className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <h3 className="font-bold text-white">Traslados</h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Operativos activos:</span>
+                    <span className="font-bold text-white">
+                      {operativos.filter(o => o.estado === 'activo').length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total operativos:</span>
+                    <span className="font-bold text-white">{operativos.length}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-slate-900 rounded-xl p-5 border border-purple-500/20">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-purple-500/20 p-2 rounded-lg">
@@ -1916,8 +1946,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Accesos rápidos */}
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
               <Link
                 href="/admin/usuarios"
                 className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
@@ -1948,6 +1977,23 @@ export default function AdminPage() {
                 </div>
                 <Plus className="w-5 h-5" />
               </button>
+
+              <button
+                onClick={() => {
+                  setVista('operativos')
+                  setShowOperativoForm(true)
+                }}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <FolderOpen className="w-6 h-6" />
+                  <div>
+                    <p className="font-bold">Nuevo Operativo</p>
+                    <p className="text-xs opacity-90">Crear operativo para traslados</p>
+                  </div>
+                </div>
+                <Plus className="w-5 h-5" />
+              </button>
             </div>
           </div>
         )}
@@ -1966,7 +2012,6 @@ export default function AdminPage() {
                 </h2>
                 
                 <div className="flex flex-wrap gap-2">
-                  {/* Filtro por tipo */}
                   <select
                     value={filtroTipo}
                     onChange={(e) => setFiltroTipo(e.target.value)}
@@ -1977,7 +2022,6 @@ export default function AdminPage() {
                     <option value="exportacion">Solo exportación</option>
                   </select>
 
-                  {/* Buscador */}
                   <div className="relative">
                     <input
                       type="text"
@@ -2101,7 +2145,7 @@ export default function AdminPage() {
                             onVerDetalle={handleVerDetalle}
                             onEditarBarco={handleEditarBarco}
                             onGenerarDashboard={handleGenerarDashboard}
-  onGenerarDashboardSacos={handleGenerarDashboardSacos} // 👈 ESTA LÍNEA DEBE ESTAR
+                            onGenerarDashboardSacos={handleGenerarDashboardSacos}
                             onVerRegistroViajes={handleVerRegistroViajes}
                             onCopiarLink={handleCopiarLink}
                             onVerViajesPaso1={handleVerViajesPaso1}
@@ -2242,6 +2286,106 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* VISTA DE OPERATIVOS */}
+        {vista === 'operativos' && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+            <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
+              <h2 className="font-black text-white flex items-center gap-2">
+                <FolderOpen className="w-5 h-5 text-amber-400" />
+                Operativos de Traslados
+                <span className="text-sm font-normal text-slate-400 ml-2">
+                  ({operativos.length} total)
+                </span>
+              </h2>
+              <button
+                onClick={() => setShowOperativoForm(true)}
+                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Nuevo Operativo
+              </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-800">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Nombre</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Descripción</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha Inicio</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha Fin</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Creado</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {operativos.map((op) => (
+                    <tr key={op.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-white">{op.nombre}</p>
+                      </td>
+                      <td className="px-6 py-4 text-slate-300">
+                        {op.descripcion || '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        {dayjs(op.fecha_inicio).format('DD/MM/YYYY')}
+                      </td>
+                      <td className="px-6 py-4">
+                        {op.fecha_fin ? dayjs(op.fecha_fin).format('DD/MM/YYYY') : '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          op.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
+                          op.estado === 'finalizado' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>
+                          {op.estado}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 text-sm">
+                        {dayjs(op.created_at).format('DD/MM/YYYY')}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/traslados?operativo=${op.id}`}
+                            className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                            title="Ver traslados"
+                          >
+                            <Eye className="w-4 h-4 text-blue-400" />
+                          </Link>
+                          <button
+                            onClick={() => handleEliminarOperativo(op.id, op.nombre)}
+                            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                            title="Cancelar Operativo"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {operativos.length === 0 && (
+              <div className="p-12 text-center">
+                <FolderOpen className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-400">No hay operativos creados</p>
+                <button
+                  onClick={() => setShowOperativoForm(true)}
+                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Crear primer operativo
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Leyenda de tipos de producto */}
         <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 text-xs">
           <h3 className="font-bold text-white mb-2 flex items-center gap-2">
@@ -2321,6 +2465,13 @@ export default function AdminPage() {
         />
       )}
 
+      {showOperativoForm && (
+        <OperativoForm
+          onClose={() => setShowOperativoForm(false)}
+          onSave={handleGuardarOperativo}
+        />
+      )}
+
       {showViajesPaso1Modal && barcoSeleccionado && (
         <ViajesPaso1Modal
           barco={barcoSeleccionado}
@@ -2374,7 +2525,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* 👇 NUEVO MODAL DE DASHBOARD DE SACOS */}
       {showGenerarDashboardSacosModal && barcoSeleccionado && (
         <GenerarDashboardSacosModal
           barco={barcoSeleccionado}
@@ -2385,7 +2535,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* 👇 MODAL DE EDICIÓN DE PERFIL */}
       {showEditarMiPerfil && (
         <EditarMiPerfilModal
           onClose={() => setShowEditarMiPerfil(false)}
