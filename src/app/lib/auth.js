@@ -1,4 +1,3 @@
-// lib/auth.js
 import { supabase } from './supabase'
 import Cookies from 'js-cookie'
 import bcrypt from 'bcryptjs'
@@ -133,7 +132,20 @@ export const isChequero = () => {
   return user?.rol === 'chequero'
 }
 
+// NUEVA FUNCIÓN
+export const isChequeroTraslado = () => {
+  const user = getCurrentUser()
+  return user?.rol === 'chequerotraslado'
+}
+
+// ACTUALIZADA
 export const isPesadorOrAdmin = () => {
   const user = getCurrentUser()
-  return user && (user.rol === 'admin' || user.rol === 'pesador' || user.rol === 'electricista' || user.rol === 'chequero')
+  return user && (
+    user.rol === 'admin' || 
+    user.rol === 'pesador' || 
+    user.rol === 'electricista' || 
+    user.rol === 'chequero' ||
+    user.rol === 'chequerotraslado'
+  )
 }

@@ -234,7 +234,7 @@ function AtrasosBarco({ barcoId }) {
   const [loading, setLoading] = useState(true);
   const [expandido, setExpandido] = useState(true);
   const [filtroBodega, setFiltroBodega] = useState('todas');
-  const [filtroTipo, setFiltroTipo] = useState('todos'); // NUEVO FILTRO
+  const [filtroTipo, setFiltroTipo] = useState('todos');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [rangoPersonalizado, setRangoPersonalizado] = useState({
     activo: false,
@@ -327,29 +327,23 @@ function AtrasosBarco({ barcoId }) {
     return `${horas}h ${minutos}m`;
   };
 
-  // Filtrar atrasos por bodega Y por tipo
   const atrasosFiltrados = useMemo(() => {
     let filtrados = atrasos;
     
-    // Filtro por bodega
     if (filtroBodega === 'generales') {
       filtrados = atrasos.filter(a => a.es_general);
     } else if (filtroBodega !== 'todas') {
       filtrados = atrasos.filter(a => a.bodega_nombre === filtroBodega);
     }
     
-    // NUEVO: Filtro por tipo
     if (filtroTipo !== 'todos') {
       if (filtroTipo === 'imputables') {
-        // Filtrar solo tipos imputables
         const tiposImputables = tiposParo.filter(t => t.es_imputable_almapac).map(t => t.id);
         filtrados = filtrados.filter(a => tiposImputables.includes(a.tipo_paro_id));
       } else if (filtroTipo === 'no-imputables') {
-        // Filtrar solo tipos no imputables
         const tiposNoImputables = tiposParo.filter(t => !t.es_imputable_almapac).map(t => t.id);
         filtrados = filtrados.filter(a => tiposNoImputables.includes(a.tipo_paro_id));
       } else {
-        // Filtrar por ID de tipo específico
         filtrados = filtrados.filter(a => a.tipo_paro_id === parseInt(filtroTipo));
       }
     }
@@ -372,7 +366,6 @@ function AtrasosBarco({ barcoId }) {
     return ['todas', 'generales', ...Array.from(s).sort()];
   }, [atrasos]);
 
-  // NUEVO: Opciones para filtro de tipos
   const tiposOpciones = useMemo(() => {
     const opciones = [
       { value: 'todos', label: '📋 Todos los tipos' },
@@ -380,7 +373,6 @@ function AtrasosBarco({ barcoId }) {
       { value: 'no-imputables', label: '🟡 Solo no imputables' }
     ];
     
-    // Agregar tipos específicos ordenados
     const tiposOrdenados = [...tiposParo]
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
       .map(t => ({
@@ -447,7 +439,6 @@ function AtrasosBarco({ barcoId }) {
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            {/* Selector de período */}
             <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 }}>
               {[
                 { key: 'hoy',    label: 'Hoy'     },
@@ -497,7 +488,6 @@ function AtrasosBarco({ barcoId }) {
               </div>
             </div>
 
-            {/* Filtro por bodega */}
             <select
               value={filtroBodega}
               onClick={e => e.stopPropagation()}
@@ -521,7 +511,6 @@ function AtrasosBarco({ barcoId }) {
               ))}
             </select>
 
-            {/* NUEVO: Filtro por tipo */}
             <select
               value={filtroTipo}
               onClick={e => e.stopPropagation()}
@@ -582,7 +571,6 @@ function AtrasosBarco({ barcoId }) {
             </button>
           </div>
 
-          {/* Indicador de filtros activos */}
           {(filtroBodega !== 'todas' || filtroTipo !== 'todos' || rangoPersonalizado.activo) && (
             <div style={{
               marginBottom: 16,
@@ -618,7 +606,6 @@ function AtrasosBarco({ barcoId }) {
             </div>
           )}
 
-          {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
             {[
               { label: 'Tiempo real de paro', value: formatTiempo(s.totalMinutos),    sub: `${atrasosFiltrados.length} registros`,  accent: '#0f172a' },
@@ -642,7 +629,6 @@ function AtrasosBarco({ barcoId }) {
             ))}
           </div>
 
-          {/* Tabla de registros */}
           <div className="alm-table-scroll">
             <table className="alm-table">
               <thead>
@@ -712,7 +698,6 @@ function AtrasosBarco({ barcoId }) {
             </table>
           </div>
 
-          {/* Pie de resumen */}
           <div style={{
             display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
             gap: 12, marginTop: 16, padding: '14px 18px', background: '#f8fafc',
@@ -758,7 +743,7 @@ function parsearMetasJson(metasJson) {
 }
 
 // ============================================================================
-// HOOK para datos de sacos
+// HOOK para datos de sacos - CORREGIDO: resta los dañados del acumulado
 // ============================================================================
 function useSacosData(barcoId) {
   const [data, setData] = useState({ registros: [], loading: true, error: null, lastUpdate: null });
@@ -777,10 +762,13 @@ function useSacosData(barcoId) {
 
       const registrosEnriquecidos = (registros || []).map(r => ({
         ...r,
-        peso_total_calculado_kg: r.peso_saco_kg * r.cantidad_paquetes,
-        peso_total_calculado_tm: (r.peso_saco_kg * r.cantidad_paquetes) / 1000,
-        diferencia_kg: Math.abs((r.peso_saco_kg * r.cantidad_paquetes) - r.peso_ingenio_kg),
-        porcentaje_diferencia: r.peso_ingenio_kg > 0 ? Math.abs(((r.peso_saco_kg * r.cantidad_paquetes) - r.peso_ingenio_kg) / r.peso_ingenio_kg * 100) : 0,
+        // CORRECCIÓN: restamos los paquetes dañados del cálculo del peso total
+        // Esto asegura que el acumulado solo considere sacos buenos
+        cantidad_paquetes_buenos: Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0)),
+        peso_total_calculado_kg: r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0)),
+        peso_total_calculado_tm: (r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0))) / 1000,
+        diferencia_kg: Math.abs((r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0))) - r.peso_ingenio_kg),
+        porcentaje_diferencia: r.peso_ingenio_kg > 0 ? Math.abs(((r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0))) - r.peso_ingenio_kg) / r.peso_ingenio_kg * 100) : 0,
         fecha_hora: dayjs(`${r.fecha} ${r.hora_inicio}`).toISOString()
       }));
 
@@ -868,25 +856,22 @@ function KpiCard({ label, value, sub, icon, accent, animate }) {
 function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio = 0, bodegaSeleccionada = 'todas' }) {
   const pct = Math.min(100, Math.max(0, porcentaje));
   
-  // Sistema de colores semáforo
   const getColorByProgress = (pct) => {
-    if (pct >= 100) return '#10b981'; // Verde éxito
-    if (pct >= 80) return '#f59e0b';  // Ámbar alerta
-    if (pct >= 50) return '#3b82f6';  // Azul progreso
-    if (pct >= 25) return '#8b5cf6';  // Púrpura inicio
-    return '#64748b';                  // Gris pendiente
+    if (pct >= 100) return '#10b981';
+    if (pct >= 80) return '#f59e0b';
+    if (pct >= 50) return '#3b82f6';
+    if (pct >= 25) return '#8b5cf6';
+    return '#64748b';
   };
 
   const color = getColorByProgress(pct);
   
-  // Calcular estimación de finalización
   const calcularEstimacion = () => {
     if (pct >= 100 || faltante <= 0 || flujoPromedio <= 0) return null;
     
     const horasRestantes = faltante / flujoPromedio;
     const fechaEstimada = dayjs().add(horasRestantes, 'hour');
     
-    // Formato legible
     const diffHoras = horasRestantes;
     const diffDias = Math.floor(diffHoras / 24);
     const diffHorasRest = Math.floor(diffHoras % 24);
@@ -910,7 +895,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
 
   const estimacion = calcularEstimacion();
 
-  // Escalas de referencia
   const milestones = [
     { value: 0, label: 'Inicio' },
     { value: 25, label: '¼' },
@@ -919,7 +903,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
     { value: 100, label: 'Meta' }
   ];
 
-  // Texto de estado
   const getStatusText = () => {
     if (pct >= 100) return '¡COMPLETADO!';
     if (bodegaSeleccionada !== 'todas') {
@@ -930,7 +913,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
 
   return (
     <div style={{ width: '100%', fontFamily: "'Sora', sans-serif" }}>
-      {/* Cabecera con métricas principales */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -978,7 +960,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           </div>
         </div>
 
-        {/* Indicador de porcentaje principal */}
         <div style={{
           background: '#f8fafc',
           padding: '8px 20px',
@@ -1005,12 +986,10 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
         </div>
       </div>
 
-      {/* Barra principal con diseño moderno */}
       <div style={{
         position: 'relative',
         marginBottom: 24
       }}>
-        {/* Contenedor de la barra */}
         <div style={{
           height: 32,
           background: '#e9eef3',
@@ -1020,7 +999,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
           position: 'relative'
         }}>
-          {/* Líneas divisorias de milestones */}
           {milestones.filter(m => m.value > 0 && m.value < 100).map(m => (
             <div
               key={m.value}
@@ -1037,7 +1015,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
             />
           ))}
 
-          {/* Fill animado con gradiente */}
           <div style={{
             height: '100%',
             width: `${pct}%`,
@@ -1051,7 +1028,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
             justifyContent: 'flex-end',
             paddingRight: pct > 15 ? 12 : 0
           }}>
-            {/* Efecto de brillo móvil (shimmer) */}
             <div style={{
               position: 'absolute',
               top: 0,
@@ -1063,7 +1039,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
               borderRadius: 'inherit'
             }} />
             
-            {/* Porcentaje dentro de la barra (solo si hay espacio) */}
             {pct > 15 && (
               <span style={{
                 position: 'relative',
@@ -1080,7 +1055,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
             )}
           </div>
 
-          {/* Marcador de posición actual */}
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -1097,7 +1071,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           }} />
         </div>
 
-        {/* Marcadores de milestones */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -1137,7 +1110,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
         </div>
       </div>
 
-      {/* Tarjetas de métricas detalladas */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1148,7 +1120,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
         borderRadius: 24,
         border: '1px solid #e2e8f0'
       }}>
-        {/* Meta */}
         <div>
           <div style={{
             display: 'flex',
@@ -1177,7 +1148,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           </div>
         </div>
 
-        {/* Progreso actual */}
         <div>
           <div style={{
             display: 'flex',
@@ -1206,7 +1176,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           </div>
         </div>
 
-        {/* Pendiente */}
         <div>
           <div style={{
             display: 'flex',
@@ -1235,7 +1204,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
           </div>
         </div>
 
-        {/* Estimación de finalización - NUEVA TARJETA */}
         <div>
           <div style={{
             display: 'flex',
@@ -1301,7 +1269,6 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
         </div>
       </div>
 
-      {/* Flujo base usado para la estimación */}
       {bodegaSeleccionada !== 'todas' && (
         <div style={{
           marginTop: 12,
@@ -1335,19 +1302,14 @@ function ProgressBarFormal({ porcentaje, actual, meta, faltante, flujoPromedio =
 // FLUJO GENERAL GLOBAL - Componente corregido
 // ============================================================================
 function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltrados, datosPorBodegaCompleto }) {
-  // Calcular el flujo basado en el último flujo de todas las bodegas
   const flujoGlobalBasadoEnBodegas = useMemo(() => {
     if (datosPorBodegaCompleto.length === 0) return 0;
     
-    // Tomar el flujo de la última hora de cada bodega y sumarlos
-    // Esto representa el flujo total del barco en la última hora completa con datos
     const sumaFlujoUltimaHora = datosPorBodegaCompleto.reduce((sum, b) => sum + (b.flujoUltimaHora || 0), 0);
     
-    // Si no hay datos de última hora, usar el flujo promedio general
     return sumaFlujoUltimaHora > 0 ? sumaFlujoUltimaHora : flujoPromedioGeneral;
   }, [datosPorBodegaCompleto, flujoPromedioGeneral]);
 
-  // Calcular el flujo de las últimas 3 horas para mostrar tendencia - CORREGIDO: flujoUltimasHoras
   const flujoUltimasHoras = useMemo(() => {
     if (registrosFiltrados.length === 0) return [];
     
@@ -1378,7 +1340,6 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
     return ultimas3Horas.reverse();
   }, [registrosFiltrados]);
 
-  // Calcular tendencia - CORREGIDO: usar flujoUltimasHoras
   const tendencia = useMemo(() => {
     if (flujoUltimasHoras.length < 2) return null;
     
@@ -1395,7 +1356,6 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
     };
   }, [flujoUltimasHoras]);
 
-  // Obtener las bodegas con mayor flujo en la última hora
   const topBodegasFlujo = useMemo(() => {
     return [...datosPorBodegaCompleto]
       .filter(b => b.flujoUltimaHora > 0)
@@ -1465,11 +1425,8 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
             </div>
           </div>
         </div>
-
-       
       </div>
 
-      {/* Grid de métricas */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1489,10 +1446,6 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Desde inicio</div>
         </div>
 
-        
-
-      
-
         <div style={{
           background: 'rgba(255,255,255,0.05)',
           borderRadius: 16,
@@ -1507,44 +1460,103 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
         </div>
       </div>
 
-      {/* Top bodegas por flujo */}
-      {topBodegasFlujo.length > 0 && (
-        <div style={{
-          background: 'rgba(0,0,0,0.2)',
-          borderRadius: 16,
-          padding: 16
-        }}>
-          <div style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: 'rgba(255,255,255,0.5)',
-            marginBottom: 12,
-            textTransform: 'uppercase',
-            letterSpacing: '1px'
-          }}>
-            Flujos en última hora por bodega
-          </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {topBodegasFlujo.map((b, i) => (
-              <div key={b.bodega} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-               
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{b.bodega}</span>
-                <span style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: '#10b981',
-                  fontFamily: "'DM Mono', monospace"
-                }}>
-                  {fmtTM(b.flujoUltimaHora, 2)} TM/h
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Gráfico de tendencia de últimas 3 horas - CORREGIDO: usar flujoUltimasHoras */}
-      {flujoUltimasHoras.length > 1 && (
+
+            {/* Bodegas activas en últimas 3 horas */}
+      {(() => {
+        // Filtrar bodegas que han tenido actividad en las últimas 3 horas
+        const hace3Horas = dayjs().subtract(3, 'hour');
+        
+        const bodegasActivas = datosPorBodegaCompleto
+          .filter(b => {
+            // Verificar si hay registros en las últimas 3 horas para esta bodega
+            const registrosRecientes = registrosFiltrados.filter(r => 
+              r.bodega === b.bodega && 
+              dayjs(r.fecha_hora).isAfter(hace3Horas)
+            );
+            return registrosRecientes.length > 0;
+          })
+          .slice(0, 3); // Máximo 3 bodegas
+        
+        if (bodegasActivas.length === 0) return null;
+        
+        return (
+          <div style={{
+            background: 'rgba(0,0,0,0.2)',
+            borderRadius: 16,
+            padding: 16
+          }}>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.5)',
+              marginBottom: 12,
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#10b981',
+                display: 'inline-block',
+                animation: 'pulse-dot 2s infinite'
+              }} />
+              BODEGAS ACTIVAS (ÚLTIMAS 3 HORAS)
+            </div>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              {bodegasActivas.map((b, i) => {
+                // Calcular TM en últimas 3 horas para esta bodega
+                const registrosRecientes = registrosFiltrados.filter(r => 
+                  r.bodega === b.bodega && 
+                  dayjs(r.fecha_hora).isAfter(hace3Horas)
+                );
+                const tmUltimas3Horas = registrosRecientes.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
+                const flujoPromedio3h = tmUltimas3Horas / 3; // TM/h promedio en últimas 3 horas
+                
+                return (
+                  <div key={b.bodega} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      background: i === 0 ? '#10b981' : i === 1 ? '#3b82f6' : '#8b5cf6',
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: 'white'
+                    }}>
+                      {i + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{b.bodega}</div>
+                      <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                          Última hora: <strong style={{ color: '#10b981', fontSize: 13 }}>
+                            {fmtTM(b.flujoUltimaHora, 2)} TM/h
+                          </strong>
+                        </span>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                          Promedio 3h: <strong style={{ color: '#3b82f6', fontSize: 13 }}>
+                            {fmtTM(flujoPromedio3h, 2)} TM/h
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+            {flujoUltimasHoras.length > 1 && (
         <div style={{
           marginTop: 20,
           height: 60,
@@ -1553,6 +1565,9 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           gap: 4
         }}>
           {flujoUltimasHoras.map((h, i) => {
+            // Solo mostrar si hay actividad en esa hora
+            if (h.tm === 0) return null;
+            
             const max = Math.max(...flujoUltimasHoras.map(h => h.tm));
             const height = max > 0 ? (h.tm / max) * 60 : 0;
             return (
@@ -1562,7 +1577,8 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
                   height: Math.max(4, height),
                   background: i === flujoUltimasHoras.length - 1 ? '#10b981' : '#3b82f6',
                   borderRadius: '4px 4px 0 0',
-                  transition: 'height 0.3s'
+                  transition: 'height 0.3s',
+                  opacity: h.tm > 0 ? 1 : 0.3
                 }} />
                 <div style={{
                   fontSize: 9,
@@ -1570,6 +1586,11 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
                   marginTop: 4
                 }}>
                   {h.hora}
+                  {h.tm > 0 && (
+                    <span style={{ color: '#10b981', marginLeft: 2 }}>
+                      {fmtTM(h.tm, 1)}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -1619,7 +1640,8 @@ export default function DashboardSacosCompartido({ barco }) {
 
   const statsGenerales = useMemo(() => {
     const totalViajes  = registrosFiltrados.length;
-    const totalSacos   = registrosFiltrados.reduce((sum, r) => sum + r.cantidad_paquetes, 0);
+    // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
+    const totalSacos   = registrosFiltrados.reduce((sum, r) => sum + (r.cantidad_paquetes_buenos || 0), 0);
     const totalTM      = registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
     const totalDanados = registrosFiltrados.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
     const placasMap = {};
@@ -1628,7 +1650,8 @@ export default function DashboardSacosCompartido({ barco }) {
         placasMap[r.placa_camion] = { placa: r.placa_camion, viajes: 0, sacos: 0, tm: 0 };
       }
       placasMap[r.placa_camion].viajes++;
-      placasMap[r.placa_camion].sacos += r.cantidad_paquetes;
+      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
+      placasMap[r.placa_camion].sacos += (r.cantidad_paquetes_buenos || 0);
       placasMap[r.placa_camion].tm    += r.peso_total_calculado_tm;
     });
     return {
@@ -1650,16 +1673,14 @@ export default function DashboardSacosCompartido({ barco }) {
       (a, b) => dayjs(a.fecha_hora).unix() - dayjs(b.fecha_hora).unix()
     );
 
-    // Key única por "YYYY-MM-DD HH:00" para evitar colisiones entre días
     const mapPorHora = new Map();
 
     ordenados.forEach(reg => {
       const horaExacta = dayjs(reg.fecha_hora).startOf('hour');
-      const key = horaExacta.format('YYYY-MM-DD HH:00'); // clave única absoluta
+      const key = horaExacta.format('YYYY-MM-DD HH:00');
 
       if (!mapPorHora.has(key)) {
         mapPorHora.set(key, {
-          // Para el eje X mostramos DD/MM HH:00 para evitar confusión cuando cruza medianoche
           hora: horaExacta.format('DD/MM HH:00'),
           horaCorta: horaExacta.format('HH:00'),
           horaCompleta: key,
@@ -1673,7 +1694,8 @@ export default function DashboardSacosCompartido({ barco }) {
       const data = mapPorHora.get(key);
       data.toneladas += reg.peso_total_calculado_tm;
       data.viajes += 1;
-      data.sacos += reg.cantidad_paquetes;
+      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
+      data.sacos += (reg.cantidad_paquetes_buenos || 0);
     });
 
     const resultado = Array.from(mapPorHora.values())
@@ -1740,7 +1762,8 @@ export default function DashboardSacosCompartido({ barco }) {
         };
       }
       bodegasMap[r.bodega].viajes++;
-      bodegasMap[r.bodega].sacos += r.cantidad_paquetes;
+      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
+      bodegasMap[r.bodega].sacos += (r.cantidad_paquetes_buenos || 0);
       bodegasMap[r.bodega].tm    += r.peso_total_calculado_tm;
     });
 
@@ -1761,9 +1784,7 @@ export default function DashboardSacosCompartido({ barco }) {
           if (horas > 0) b.flujoHora = b.tm / horas;
         }
 
-        // Flujo del último bucket de hora con datos (no "últimos 60 min desde ahora")
         if (rbs.length > 0) {
-          // Encontrar el bucket de hora más reciente que tenga registros
           const ultimoRegistro = [...rbs].sort(
             (a, c) => dayjs(c.fecha_hora).unix() - dayjs(a.fecha_hora).unix()
           )[0];
@@ -1771,7 +1792,6 @@ export default function DashboardSacosCompartido({ barco }) {
           const tmEnUltimaBucket = rbs
             .filter(r => dayjs(r.fecha_hora).startOf('hour').isSame(ultimaBucket))
             .reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
-          // Ese bucket representa 1 hora, así que flujo = tmEnUltimaBucket TM/h
           b.flujoUltimaHora = tmEnUltimaBucket;
           b.ultimaBucketLabel = ultimaBucket.format('HH:00');
         } else {
@@ -1819,7 +1839,6 @@ export default function DashboardSacosCompartido({ barco }) {
       map.get(key).toneladas += reg.peso_total_calculado_tm;
     });
 
-    // Obtener todas las horas únicas (absolutas, sin duplicar)
     const horasUnicas = [...new Set(Array.from(map.values()).map(v => v.horaCompleta))]
       .sort()
       .slice(-12);
@@ -2280,7 +2299,7 @@ export default function DashboardSacosCompartido({ barco }) {
             <KpiCard label="Total Sacos"     value={fmtNumber(statsGenerales.totalSacos)}      icon="📦" accent="#3b82f6" animate />
             <KpiCard label="Total Toneladas" value={`${fmtTM(statsGenerales.totalTM, 2)} TM`} icon="⚖️" accent="#f59e0b" animate />
             <KpiCard label="Sacos Dañados"   value={fmtNumber(statsGenerales.totalDanados)}    icon="⚠️" accent="#ef4444"
-              sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / statsGenerales.totalSacos) * 100).toFixed(1) : 0}% del total`} />
+              sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / (statsGenerales.totalSacos + statsGenerales.totalDanados)) * 100).toFixed(1) : 0}% del total`} />
           </div>
 
           {/* FLUJO GLOBAL DE DESCARGA - NUEVO COMPONENTE */}
@@ -2334,17 +2353,10 @@ export default function DashboardSacosCompartido({ barco }) {
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart data={flujoPorHora}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  {/* 
-                    FIX DUPLICACIÓN: usamos "hora" como dataKey, 
-                    pero "hora" ya contiene "DD/MM HH:00" lo que hace cada valor único.
-                    Si hay muchos puntos, el formatter acorta a HH:00.
-                  */}
                   <XAxis
                     dataKey="hora"
                     tick={{ fontSize: 11 }}
                     tickFormatter={(v) => {
-                      // Si el label tiene formato DD/MM HH:00, mostramos HH:00 para ahorrar espacio
-                      // pero los datos internos siguen siendo únicos
                       const parts = v.split(' ');
                       return parts.length === 2 ? parts[1] : v;
                     }}
@@ -2652,7 +2664,7 @@ export default function DashboardSacosCompartido({ barco }) {
           </div>
 
           <div className="alm-footer">
-            🔄 auto-refresh 30s &nbsp;·&nbsp; {barco.nombre} ({barco.codigo_barco}) &nbsp;·&nbsp; Registro de Sacos
+            🔄 auto-refresh 30s &nbsp;·&nbsp; {barco.nombre} ({barco.codigo_barco}) &nbsp;·&nbsp; Registro de Sacos (Sacos Buenos = Total - Dañados)
             {filtroFecha.activo && (
               <> &nbsp;·&nbsp; Rango: {dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}</>
             )}

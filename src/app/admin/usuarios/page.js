@@ -1,4 +1,3 @@
-// app/admin/usuarios/page.js - Gestión de usuarios con soporte para chequeros
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -8,7 +7,8 @@ import { getCurrentUser, isAdmin } from '../../lib/auth'
 import { 
   Users, Plus, Edit2, Trash2, X, Check, 
   UserPlus, Shield, User as UserIcon, Loader2, AlertCircle,
-  RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft, Clock
+  RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft, Clock,
+  Truck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -31,7 +31,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
     setError('')
 
     try {
-      // Verificar que quien ejecuta la acción es admin
       if (!isAdmin()) {
         throw new Error('No tienes permisos para realizar esta acción')
       }
@@ -45,7 +44,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
       let result
 
       if (user) {
-        // Actualizar usuario existente
         result = await supabase
           .rpc('actualizar_usuario', {
             p_user_id: user.id,
@@ -62,7 +60,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
 
         toast.success('✅ Usuario actualizado correctamente')
       } else {
-        // Crear nuevo usuario
         result = await supabase
           .rpc('crear_usuario', {
             p_nombre: formData.nombre,
@@ -91,7 +88,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
-        {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-purple-800 p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -111,7 +107,6 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
           </div>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2">
@@ -168,14 +163,9 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
               <option value="admin">Administrador</option>
               <option value="pesador">Pesador</option>
               <option value="electricista">Electricista</option>
-              <option value="chequero">Chequero</option>
+              <option value="chequero">Chequero (Atrasos)</option>
+              <option value="chequerotraslado">Chequero Traslados</option>
             </select>
-            <p className="text-xs text-slate-500 mt-1">
-              {formData.rol === 'chequero' && 'Los chequeros solo pueden acceder al módulo de registro de atrasos'}
-              {formData.rol === 'pesador' && 'Los pesadores pueden registrar viajes y lecturas de banda'}
-              {formData.rol === 'electricista' && 'Los electricistas pueden registrar exportaciones por banda'}
-              {formData.rol === 'admin' && 'Los administradores tienen acceso total al sistema'}
-            </p>
           </div>
 
           {user && (
@@ -456,7 +446,7 @@ export default function UsuariosPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Total Usuarios</p>
               <p className="text-2xl font-black text-white">{usuarios.length}</p>
@@ -473,6 +463,10 @@ export default function UsuariosPage() {
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <p className="text-purple-200 text-xs">Chequeros</p>
               <p className="text-2xl font-black text-white">{usuarios.filter(u => u.rol === 'chequero').length}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <p className="text-purple-200 text-xs">Cheq. Traslados</p>
+              <p className="text-2xl font-black text-white">{usuarios.filter(u => u.rol === 'chequerotraslado').length}</p>
             </div>
           </div>
         </div>
@@ -560,13 +554,15 @@ export default function UsuariosPage() {
                             user.rol === 'admin' ? 'bg-purple-500/20 text-purple-400' :
                             user.rol === 'pesador' ? 'bg-green-500/20 text-green-400' :
                             user.rol === 'electricista' ? 'bg-blue-500/20 text-blue-400' :
-                            'bg-orange-500/20 text-orange-400'
+                            user.rol === 'chequero' ? 'bg-orange-500/20 text-orange-400' :
+                            'bg-amber-500/20 text-amber-400'
                           }`}>
                             {user.rol === 'admin' && <Shield className="w-3 h-3" />}
                             {user.rol === 'pesador' && <UserIcon className="w-3 h-3" />}
                             {user.rol === 'electricista' && <span>⚡</span>}
                             {user.rol === 'chequero' && <Clock className="w-3 h-3" />}
-                            <span className="capitalize">{user.rol}</span>
+                            {user.rol === 'chequerotraslado' && <Truck className="w-3 h-3" />}
+                            <span className="capitalize">{user.rol === 'chequerotraslado' ? 'Cheq. Traslados' : user.rol}</span>
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -578,11 +574,6 @@ export default function UsuariosPage() {
                                 ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                                 : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                             } ${(esUsuarioActual && user.activo) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            title={
-                              esUsuarioActual && user.activo
-                                ? 'No puedes desactivar tu propio usuario'
-                                : `Click para ${user.activo ? 'desactivar' : 'activar'}`
-                            }
                           >
                             {estaCargando ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
@@ -618,13 +609,7 @@ export default function UsuariosPage() {
                               onClick={() => handleEliminarClick(user)}
                               disabled={estaCargando || !user.activo || esUsuarioActual}
                               className="p-2 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-30"
-                              title={
-                                esUsuarioActual
-                                  ? 'No puedes eliminar tu propio usuario'
-                                  : !user.activo
-                                    ? 'Usuario ya inactivo'
-                                    : 'Desactivar Usuario'
-                              }
+                              title="Desactivar Usuario"
                             >
                               <Trash2 className="w-4 h-4 text-red-400" />
                             </button>
@@ -645,14 +630,14 @@ export default function UsuariosPage() {
             <Shield className="w-4 h-4 text-purple-400" />
             Roles del Sistema
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="flex items-start gap-2">
               <div className="bg-purple-500/20 p-2 rounded-lg">
                 <Shield className="w-4 h-4 text-purple-400" />
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Administrador</p>
-                <p className="text-slate-500 text-xs">Acceso total al sistema, puede gestionar usuarios y barcos</p>
+                <p className="text-slate-500 text-xs">Acceso total</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -661,7 +646,7 @@ export default function UsuariosPage() {
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Pesador</p>
-                <p className="text-slate-500 text-xs">Puede registrar viajes y lecturas de banda (importación)</p>
+                <p className="text-slate-500 text-xs">Viajes y banda</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -670,7 +655,7 @@ export default function UsuariosPage() {
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Electricista</p>
-                <p className="text-slate-500 text-xs">Puede registrar exportaciones por banda</p>
+                <p className="text-slate-500 text-xs">Exportaciones</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
@@ -679,7 +664,16 @@ export default function UsuariosPage() {
               </div>
               <div>
                 <p className="font-bold text-white text-sm">Chequero</p>
-                <p className="text-slate-500 text-xs">Registra atrasos y paros, solo acceso a /registroatrasos</p>
+                <p className="text-slate-500 text-xs">Atrasos generales</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="bg-amber-500/20 p-2 rounded-lg">
+                <Truck className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">Chequero Traslados</p>
+                <p className="text-slate-500 text-xs">Traslados de azúcar</p>
               </div>
             </div>
           </div>
@@ -708,7 +702,7 @@ export default function UsuariosPage() {
         onClose={() => setUsuarioEliminar(null)}
         onConfirm={handleEliminarConfirm}
         title="Confirmar acción"
-        message={`¿Estás seguro de desactivar al usuario "${usuarioEliminar?.nombre}"? Podrás activarlo nuevamente después.`}
+        message={`¿Estás seguro de desactivar al usuario "${usuarioEliminar?.nombre}"?`}
       />
     </div>
   )
