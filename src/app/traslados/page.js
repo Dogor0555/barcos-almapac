@@ -1217,7 +1217,7 @@ export default function TrasladosPage() {
                 <thead className="bg-slate-800/50">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operador</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Inicio</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fin</th>

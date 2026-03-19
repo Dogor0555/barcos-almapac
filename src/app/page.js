@@ -30,8 +30,8 @@ export default function LoginPage() {
         router.push('/admin')
       } else if (result.user.rol === 'chequero') {
         router.push('/chequero')
-      } else {
-        router.push('/dashboard')
+      } else if (result.user.rol === 'chequerotraslados'){
+        router.push('/traslados')
       }
     } else {
       toast.error(result.error || 'Credenciales inválidas')
