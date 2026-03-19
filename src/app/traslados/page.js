@@ -19,11 +19,13 @@ import 'dayjs/locale/es'
 import Link from 'next/link'
 import TrasladoForm from '../components/traslados/TrasladoForm'
 
-// Componente para registrar turnos
+// Componente para registrar turnos - AHORA CON 2 CHEQUEROS Y OPERADOR
 const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     operativo_id: turno?.operativo_id || '',
+    chequero1: turno?.chequero1 || '',
+    chequero2: turno?.chequero2 || '',
     operador: turno?.operador || '',
     hora_inicio: turno?.hora_inicio || '',
     hora_fin: turno?.hora_fin || '',
@@ -104,8 +106,16 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
         throw new Error('Debes seleccionar un operativo')
       }
 
+      if (!formData.chequero1.trim()) {
+        throw new Error('Debes ingresar el nombre del Chequero 1')
+      }
+
+      if (!formData.chequero2.trim()) {
+        throw new Error('Debes ingresar el nombre del Chequero 2')
+      }
+
       if (!formData.operador.trim()) {
-        throw new Error('Debes ingresar el nombre del operador')
+        throw new Error('Debes ingresar el nombre del Operador')
       }
 
       if (!formData.hora_inicio) {
@@ -191,6 +201,35 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
             </select>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-bold text-slate-400 mb-1">
+                Chequero 1 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.chequero1}
+                onChange={(e) => setFormData({...formData, chequero1: e.target.value})}
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                placeholder="Nombre del chequero 1"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-400 mb-1">
+                Chequero 2 <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.chequero2}
+                onChange={(e) => setFormData({...formData, chequero2: e.target.value})}
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                placeholder="Nombre del chequero 2"
+                required
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-slate-400 mb-1">
               Operador <span className="text-red-400">*</span>
@@ -216,6 +255,50 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
               className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
               required
             />
+          </div>
+
+          {/* Cronómetro para el turno */}
+          <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-500/30">
+            <label className="block text-sm font-bold text-blue-400 mb-2 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Temporizador de Turno
+            </label>
+            
+            <div className="text-center mb-4">
+              <div className="text-3xl font-mono font-bold text-blue-400 bg-blue-950/50 rounded-lg py-3 px-4 inline-block mx-auto">
+                {formatTiempo(tiempoTranscurrido)}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-center mb-4">
+              {!cronometroActivo ? (
+                <button
+                  type="button"
+                  onClick={iniciarCronometro}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
+                >
+                  <Play className="w-4 h-4" />
+                  Iniciar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={pausarCronometro}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
+                >
+                  <Pause className="w-4 h-4" />
+                  Pausar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={detenerCronometro}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
+              >
+                <StopCircle className="w-4 h-4" />
+                Detener
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1216,61 +1299,65 @@ export default function TrasladosPage() {
         )}
 
         {/* Tabla de Turnos */}
-        {vista === 'turnos' && (
-          <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
-            <div className="bg-slate-800 px-4 py-3 border-b border-white/10">
-              <h2 className="font-bold text-white">Turnos ({turnosFiltrados.length})</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Inicio</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fin</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Observaciones</th>
-                    {isAdmin() && <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {turnosFiltrados.map((t) => {
-                    const operativo = operativos.find(o => o.id === t.operativo_id)
-                    let duracion = null
-                    if (t.hora_inicio && t.hora_fin) {
-                      const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
-                      const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
-                      let diff = fin.diff(inicio, 'minute')
-                      if (diff < 0) diff += 24 * 60
-                      duracion = diff
-                    }
-                    
-                    return (
-                      <tr key={t.id} className="hover:bg-white/5">
-                        <td className="px-4 py-2 font-mono text-slate-300">{formatFecha(t.fecha)}</td>
-                        <td className="px-4 py-2 text-white">{t.operador}</td>
-                        <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
-                        <td className="px-4 py-2 text-green-400">{formatHora(t.hora_inicio)}</td>
-                        <td className="px-4 py-2 text-red-400">{formatHora(t.hora_fin) || '—'}</td>
-                        <td className="px-4 py-2 font-bold text-white">{duracion ? `${Math.floor(duracion / 60)}h ${duracion % 60}m` : '—'}</td>
-                        <td className="px-4 py-2 text-slate-400 max-w-xs truncate">{t.observaciones || '—'}</td>
-                        {isAdmin() && (
-                          <td className="px-4 py-2">
-                            <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+{vista === 'turnos' && (
+  <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
+    <div className="bg-slate-800 px-4 py-3 border-b border-white/10">
+      <h2 className="font-bold text-white">Turnos ({turnosFiltrados.length})</h2>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-800/50">
+          <tr>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 1</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 2</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operador</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Inicio</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fin</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
+            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Observaciones</th>
+            {isAdmin() && <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {turnosFiltrados.map((t) => {
+            const operativo = operativos.find(o => o.id === t.operativo_id)
+            let duracion = null
+            if (t.hora_inicio && t.hora_fin) {
+              const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
+              const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
+              let diff = fin.diff(inicio, 'minute')
+              if (diff < 0) diff += 24 * 60
+              duracion = diff
+            }
+            
+            return (
+              <tr key={t.id} className="hover:bg-white/5">
+                <td className="px-4 py-2 font-mono text-slate-300">{formatFecha(t.fecha)}</td>
+                <td className="px-4 py-2 text-white">{t.chequero1 || '—'}</td>
+                <td className="px-4 py-2 text-white">{t.chequero2 || '—'}</td>
+                <td className="px-4 py-2 text-white">{t.operador}</td>
+                <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
+                <td className="px-4 py-2 text-green-400">{formatHora(t.hora_inicio)}</td>
+                <td className="px-4 py-2 text-red-400">{formatHora(t.hora_fin) || '—'}</td>
+                <td className="px-4 py-2 font-bold text-white">{duracion ? `${Math.floor(duracion / 60)}h ${duracion % 60}m` : '—'}</td>
+                <td className="px-4 py-2 text-slate-400 max-w-xs truncate">{t.observaciones || '—'}</td>
+                {isAdmin() && (
+                  <td className="px-4 py-2">
+                    <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </td>
+                )}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
         {/* Mensaje si no hay datos */}
         {vista === 'traslados' && trasladosFiltrados.length === 0 && (
