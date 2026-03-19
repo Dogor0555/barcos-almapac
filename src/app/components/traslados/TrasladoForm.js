@@ -6,7 +6,7 @@ import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Truck, User, Hash, Calendar, Clock, Save, FolderOpen,
   Clock3, RotateCw, AlertCircle, Plus, Minus, Play, Pause, StopCircle,
-  Building2, PlusCircle, CreditCard
+  Building2, PlusCircle, CreditCard, Settings
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OperativoSelector from './OperativoSelector'
@@ -22,6 +22,12 @@ const TRANSPORTES_PREDEFINIDOS = [
   'Guardado'
 ]
 
+// Configuración de marchamos - puedes cambiar estos valores
+const MARCHAMOS_CONFIG = {
+  cantidadCampos: 5,        // Número de campos de marchamo
+  digitosPorCampo: [10, 10, 10, 10, 10] // Dígitos para cada campo (10 cada uno)
+}
+
 export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false)
   const [operativoId, setOperativoId] = useState(traslado?.operativo_id || null)
@@ -36,14 +42,8 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
   const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0)
   const [intervalId, setIntervalId] = useState(null)
   
-  // Estado para los 5 dígitos del marchamo (primero de 4, los demás de 2)
-  const [marchamos, setMarchamos] = useState({
-    dig1: '',
-    dig2: '',
-    dig3: '',
-    dig4: '',
-    dig5: ''
-  })
+  // Estado para los dígitos del marchamo (dinámico según configuración)
+  const [marchamos, setMarchamos] = useState({})
   
   const [formData, setFormData] = useState({
     nombre_conductor: traslado?.nombre_conductor || '',
@@ -59,6 +59,37 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
     tiempo_cabaleo_minutos: traslado?.tiempo_cabaleo_minutos || 0,
     observaciones_cabaleo: traslado?.observaciones_cabaleo || ''
   })
+
+  // Inicializar los dígitos del marchamo
+  useEffect(() => {
+    const initialMarchamos = {}
+    for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
+      initialMarchamos[`dig${i}`] = ''
+    }
+    
+    if (formData.no_marchamo) {
+      // Si el marchamo tiene formato de dígitos separados por |
+      if (formData.no_marchamo.includes('|')) {
+        const partes = formData.no_marchamo.split('|').filter(p => p.trim() !== '')
+        for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
+          if (partes[i-1]) {
+            initialMarchamos[`dig${i}`] = partes[i-1].trim()
+          }
+        }
+      }
+    }
+    
+    setMarchamos(initialMarchamos)
+  }, [])
+
+  // Actualizar el campo no_marchamo cuando cambian los dígitos
+  useEffect(() => {
+    const marchamoCompleto = Object.values(marchamos).join('|')
+    setFormData(prev => ({
+      ...prev,
+      no_marchamo: marchamoCompleto
+    }))
+  }, [marchamos])
 
   // Inicializar el selector de transporte
   useEffect(() => {
@@ -82,34 +113,6 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
       setFormData(prev => ({ ...prev, transporte: transporteSeleccionado }))
     }
   }, [transporteSeleccionado, otroTransporte])
-
-  // Inicializar los dígitos del marchamo si existe un valor
-  useEffect(() => {
-    if (formData.no_marchamo) {
-      // Si el marchamo tiene formato de dígitos separados por |
-      if (formData.no_marchamo.includes('|')) {
-        const partes = formData.no_marchamo.split('|').filter(p => p.trim() !== '')
-        if (partes.length === 5) {
-          setMarchamos({
-            dig1: partes[0].trim(),
-            dig2: partes[1].trim(),
-            dig3: partes[2].trim(),
-            dig4: partes[3].trim(),
-            dig5: partes[4].trim()
-          })
-        }
-      }
-    }
-  }, [])
-
-  // Actualizar el campo no_marchamo cuando cambian los dígitos
-  useEffect(() => {
-    const marchamoCompleto = `${marchamos.dig1}|${marchamos.dig2}|${marchamos.dig3}|${marchamos.dig4}|${marchamos.dig5}`
-    setFormData(prev => ({
-      ...prev,
-      no_marchamo: marchamoCompleto
-    }))
-  }, [marchamos])
 
   // Limpiar intervalo al desmontar
   useEffect(() => {
@@ -219,8 +222,9 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
     // Solo permitir números
     const soloNumeros = value.replace(/[^0-9]/g, '')
     
-    // El primer dígito acepta máximo 4 caracteres, los demás 2
-    const maxLength = digito === 'dig1' ? 4 : 2
+    // Obtener el índice del campo (1-based)
+    const index = parseInt(digito.replace('dig', ''))
+    const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[index - 1] || 10
     
     if (soloNumeros.length <= maxLength) {
       setMarchamos(prev => ({
@@ -229,19 +233,11 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
       }))
 
       // Auto-avanzar al siguiente campo si se alcanzó el máximo de caracteres
-      if (soloNumeros.length === maxLength) {
-        const nextDigito = {
-          dig1: 'dig2',
-          dig2: 'dig3',
-          dig3: 'dig4',
-          dig4: 'dig5'
-        }[digito]
-        
-        if (nextDigito) {
-          setTimeout(() => {
-            document.getElementById(`marchamo-${nextDigito}`)?.focus()
-          }, 10)
-        }
+      if (soloNumeros.length === maxLength && index < MARCHAMOS_CONFIG.cantidadCampos) {
+        const nextDigito = `dig${index + 1}`
+        setTimeout(() => {
+          document.getElementById(`marchamo-${nextDigito}`)?.focus()
+        }, 10)
       }
     }
   }
@@ -249,14 +245,9 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
   // Manejar tecla backspace para retroceder
   const handleMarchamoKeyDown = (e, digito) => {
     if (e.key === 'Backspace' && !e.target.value) {
-      const prevDigito = {
-        dig2: 'dig1',
-        dig3: 'dig2',
-        dig4: 'dig3',
-        dig5: 'dig4'
-      }[digito]
-      
-      if (prevDigito) {
+      const index = parseInt(digito.replace('dig', ''))
+      if (index > 1) {
+        const prevDigito = `dig${index - 1}`
         document.getElementById(`marchamo-${prevDigito}`)?.focus()
       }
     }
@@ -271,25 +262,13 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
     }
 
     // Validar que todos los dígitos del marchamo estén completos
-    if (!marchamos.dig1 || marchamos.dig1.length < 4) {
-      toast.error('El primer campo del marchamo debe tener 4 dígitos')
-      return
-    }
-    if (!marchamos.dig2 || marchamos.dig2.length < 2) {
-      toast.error('El segundo campo del marchamo debe tener 2 dígitos')
-      return
-    }
-    if (!marchamos.dig3 || marchamos.dig3.length < 2) {
-      toast.error('El tercer campo del marchamo debe tener 2 dígitos')
-      return
-    }
-    if (!marchamos.dig4 || marchamos.dig4.length < 2) {
-      toast.error('El cuarto campo del marchamo debe tener 2 dígitos')
-      return
-    }
-    if (!marchamos.dig5 || marchamos.dig5.length < 2) {
-      toast.error('El quinto campo del marchamo debe tener 2 dígitos')
-      return
+    for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
+      const digito = `dig${i}`
+      const requiredLength = MARCHAMOS_CONFIG.digitosPorCampo[i-1]
+      if (!marchamos[digito] || marchamos[digito].length < requiredLength) {
+        toast.error(`El campo ${i} del marchamo debe tener ${requiredLength} dígitos`)
+        return
+      }
     }
 
     // Validar transporte
@@ -317,6 +296,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
 
       // Validaciones
       if (!formData.nombre_conductor.trim()) throw new Error('Conductor requerido')
+      if (!formData.placa.trim()) throw new Error('Placa requerida')
       if (!formData.remolque.trim()) throw new Error('Remolque requerido')
       if (!formData.hora_inicio_carga) throw new Error('Hora inicio requerida')
       if (!formData.hora_fin_carga) throw new Error('Hora fin requerida')
@@ -364,6 +344,42 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
 
   const duracionTotal = duracionCalculada?.total || 0
   const duracionConCabaleo = duracionTotal + (formData.tiempo_cabaleo_minutos || 0)
+
+  // Generar los campos de marchamo dinámicamente
+  const renderMarchamos = () => {
+    const campos = []
+    for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
+      const digito = `dig${i}`
+      const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[i-1] || 10
+      
+      campos.push(
+        <div key={i} className="flex-1 text-center">
+          <input
+            id={`marchamo-${digito}`}
+            type="text"
+            value={marchamos[digito] || ''}
+            onChange={(e) => handleMarchamoChange(digito, e.target.value)}
+            onKeyDown={(e) => handleMarchamoKeyDown(e, digito)}
+            maxLength={maxLength}
+            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
+            placeholder={'0'.repeat(maxLength)}
+            required
+          />
+          <span className="text-[10px] text-slate-500 mt-1 block">
+            {maxLength} dígitos
+          </span>
+        </div>
+      )
+      
+      // Agregar separador | entre campos (excepto después del último)
+      if (i < MARCHAMOS_CONFIG.cantidadCampos) {
+        campos.push(
+          <span key={`sep-${i}`} className="text-2xl text-slate-600">|</span>
+        )
+      }
+    }
+    return campos
+  }
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -568,84 +584,22 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
               </div>
             )}
 
-            {/* Campo de Marchamos en formato de 5 dígitos (primero de 4, resto de 2) */}
+            {/* Campo de Marchamos DINÁMICO - N dígitos por campo */}
             <div className="mt-4">
-              <label className="block text-sm font-bold text-slate-400 mb-3">
-                No. De Marchamos <span className="text-red-400">*</span>
-              </label>
-              <div className="flex items-center gap-2 justify-between">
-                <div className="flex-[2] text-center">
-                  <input
-                    id="marchamo-dig1"
-                    type="text"
-                    value={marchamos.dig1}
-                    onChange={(e) => handleMarchamoChange('dig1', e.target.value)}
-                    onKeyDown={(e) => handleMarchamoKeyDown(e, 'dig1')}
-                    maxLength="4"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-                    placeholder="9018"
-                    required
-                  />
-                </div>
-                <span className="text-2xl text-slate-600">|</span>
-                <div className="flex-1 text-center">
-                  <input
-                    id="marchamo-dig2"
-                    type="text"
-                    value={marchamos.dig2}
-                    onChange={(e) => handleMarchamoChange('dig2', e.target.value)}
-                    onKeyDown={(e) => handleMarchamoKeyDown(e, 'dig2')}
-                    maxLength="2"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-                    placeholder="89"
-                    required
-                  />
-                </div>
-                <span className="text-2xl text-slate-600">|</span>
-                <div className="flex-1 text-center">
-                  <input
-                    id="marchamo-dig3"
-                    type="text"
-                    value={marchamos.dig3}
-                    onChange={(e) => handleMarchamoChange('dig3', e.target.value)}
-                    onKeyDown={(e) => handleMarchamoKeyDown(e, 'dig3')}
-                    maxLength="2"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-                    placeholder="90"
-                    required
-                  />
-                </div>
-                <span className="text-2xl text-slate-600">|</span>
-                <div className="flex-1 text-center">
-                  <input
-                    id="marchamo-dig4"
-                    type="text"
-                    value={marchamos.dig4}
-                    onChange={(e) => handleMarchamoChange('dig4', e.target.value)}
-                    onKeyDown={(e) => handleMarchamoKeyDown(e, 'dig4')}
-                    maxLength="2"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-                    placeholder="91"
-                    required
-                  />
-                </div>
-                <span className="text-2xl text-slate-600">|</span>
-                <div className="flex-1 text-center">
-                  <input
-                    id="marchamo-dig5"
-                    type="text"
-                    value={marchamos.dig5}
-                    onChange={(e) => handleMarchamoChange('dig5', e.target.value)}
-                    onKeyDown={(e) => handleMarchamoKeyDown(e, 'dig5')}
-                    maxLength="2"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-                    placeholder="92"
-                    required
-                  />
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-bold text-slate-400">
+                  No. De Marchamos <span className="text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <Settings className="w-3 h-3" />
+                  <span>{MARCHAMOS_CONFIG.cantidadCampos} campos · {MARCHAMOS_CONFIG.digitosPorCampo.join('-')} dígitos</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2 text-center">
-                Primer campo: 4 dígitos · Campos siguientes: 2 dígitos cada uno (auto-avanza)
+              <div className="flex items-center gap-2 justify-between flex-wrap">
+                {renderMarchamos()}
+              </div>
+              <p className="text-xs text-slate-500 mt-3 text-center">
+                Ingresa los dígitos en cada campo (auto-avanza al completar)
               </p>
             </div>
           </div>
