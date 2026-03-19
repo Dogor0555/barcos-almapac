@@ -30,7 +30,7 @@ export default function LoginPage() {
         router.push('/admin')
       } else if (result.user.rol === 'chequero') {
         router.push('/chequero')
-      } else if (result.user.rol === 'chequerotraslados'){
+      } else {
         router.push('/traslados')
       }
     } else {
