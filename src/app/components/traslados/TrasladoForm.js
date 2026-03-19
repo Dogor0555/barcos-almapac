@@ -6,7 +6,7 @@ import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Truck, User, Hash, Calendar, Clock, Save, FolderOpen,
   Clock3, RotateCw, AlertCircle, Plus, Minus, Play, Pause, StopCircle,
-  Building2, PlusCircle
+  Building2, PlusCircle, CreditCard
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OperativoSelector from './OperativoSelector'
@@ -47,6 +47,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
   
   const [formData, setFormData] = useState({
     nombre_conductor: traslado?.nombre_conductor || '',
+    placa: traslado?.placa || '',
     remolque: traslado?.remolque || '',
     tipo_unidad: traslado?.tipo_unidad || 'plana',
     transporte: traslado?.transporte || '',
@@ -413,12 +414,12 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">
-                  Remolque <span className="text-red-400">*</span>
+                  Placa <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
-                  value={formData.remolque}
-                  onChange={(e) => setFormData({...formData, remolque: e.target.value})}
+                  value={formData.placa}
+                  onChange={(e) => setFormData({...formData, placa: e.target.value})}
                   className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
                   placeholder="Ej: ABC-123"
                   required
@@ -427,6 +428,19 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">
+                  Remolque <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.remolque}
+                  onChange={(e) => setFormData({...formData, remolque: e.target.value})}
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  placeholder="Ej: REM-123"
+                  required
+                />
+              </div>
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">
                   Tipo Unidad <span className="text-red-400">*</span>
@@ -441,9 +455,11 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   <option value="volteo">Volteo</option>
                 </select>
               </div>
-              
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mt-4">
               {/* Selector de Transporte con opción "Otro" */}
-              <div>
+              <div className="col-span-2">
                 <label className="block text-sm font-bold text-slate-400 mb-1">
                   Transporte <span className="text-red-400">*</span>
                 </label>

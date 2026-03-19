@@ -218,8 +218,6 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
             />
           </div>
 
-         
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
@@ -357,6 +355,10 @@ const DetalleTrasladoModal = ({ traslado, onClose, onEdit }) => {
               <div>
                 <p className="text-slate-500 text-xs">Conductor</p>
                 <p className="font-bold text-white">{traslado.nombre_conductor}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs">Placa</p>
+                <p className="font-bold text-white font-mono">{traslado.placa || '—'}</p>
               </div>
               <div>
                 <p className="text-slate-500 text-xs">Remolque</p>
@@ -942,6 +944,7 @@ export default function TrasladosPage() {
       const term = searchTerm.toLowerCase()
       return t.correlativo_viaje?.toLowerCase().includes(term) ||
              t.nombre_conductor?.toLowerCase().includes(term) ||
+             t.placa?.toLowerCase().includes(term) ||
              t.remolque?.toLowerCase().includes(term) ||
              t.transporte?.toLowerCase().includes(term)
     }
@@ -1084,6 +1087,7 @@ export default function TrasladosPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Correlativo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Conductor</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Placa</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Remolque</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Transporte</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
@@ -1099,6 +1103,7 @@ export default function TrasladosPage() {
                       <td className="px-4 py-2 font-mono text-amber-400">{t.correlativo_viaje}</td>
                       <td className="px-4 py-2 text-amber-400">{getOperativoNombre(t.operativo_id)}</td>
                       <td className="px-4 py-2 text-white">{t.nombre_conductor}</td>
+                      <td className="px-4 py-2 font-mono text-blue-400">{t.placa || '—'}</td>
                       <td className="px-4 py-2 font-mono text-blue-400">{t.remolque}</td>
                       <td className="px-4 py-2 text-white">{t.transporte}</td>
                       <td className="px-4 py-2 text-slate-300">{formatFecha(t.fecha)}</td>
