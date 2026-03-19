@@ -218,49 +218,7 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
             />
           </div>
 
-          {/* Cronómetro para el turno */}
-          <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-500/30">
-            <label className="block text-sm font-bold text-blue-400 mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Temporizador de Turno
-            </label>
-            
-            <div className="text-center mb-4">
-              <div className="text-3xl font-mono font-bold text-blue-400 bg-blue-950/50 rounded-lg py-3 px-4 inline-block mx-auto">
-                {formatTiempo(tiempoTranscurrido)}
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-center mb-4">
-              {!cronometroActivo ? (
-                <button
-                  type="button"
-                  onClick={iniciarCronometro}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
-                >
-                  <Play className="w-4 h-4" />
-                  Iniciar
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={pausarCronometro}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
-                >
-                  <Pause className="w-4 h-4" />
-                  Pausar
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={detenerCronometro}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 flex-1"
-              >
-                <StopCircle className="w-4 h-4" />
-                Detener
-              </button>
-            </div>
-          </div>
+         
 
           <div className="grid grid-cols-2 gap-3">
             <div>
