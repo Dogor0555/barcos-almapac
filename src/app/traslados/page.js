@@ -19,7 +19,7 @@ import 'dayjs/locale/es'
 import Link from 'next/link'
 import TrasladoForm from '../components/traslados/TrasladoForm'
 
-// Componente para registrar turnos
+// Componente para registrar turnos - AHORA CON 2 CHEQUEROS Y OPERADOR
 const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -32,6 +32,60 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
     fecha: turno?.fecha || new Date().toISOString().split('T')[0],
     observaciones: turno?.observaciones || ''
   })
+
+  // Cronómetro para el turno
+  const [cronometroActivo, setCronometroActivo] = useState(false)
+  const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0)
+  const [intervalId, setIntervalId] = useState(null)
+
+  useEffect(() => {
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [intervalId])
+
+  const iniciarCronometro = () => {
+    if (cronometroActivo) return
+    setCronometroActivo(true)
+    const id = setInterval(() => {
+      setTiempoTranscurrido(prev => prev + 1)
+    }, 1000)
+    setIntervalId(id)
+  }
+
+  const pausarCronometro = () => {
+    if (intervalId) {
+      clearInterval(intervalId)
+      setIntervalId(null)
+      setCronometroActivo(false)
+    }
+  }
+
+  const detenerCronometro = () => {
+    if (intervalId) {
+      clearInterval(intervalId)
+      setIntervalId(null)
+    }
+    setCronometroActivo(false)
+    
+    // Convertir segundos a horas:minutos
+    const horas = Math.floor(tiempoTranscurrido / 3600)
+    const minutos = Math.floor((tiempoTranscurrido % 3600) / 60)
+    const horaFin = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`
+    
+    setFormData(prev => ({
+      ...prev,
+      hora_fin: horaFin
+    }))
+    setTiempoTranscurrido(0)
+  }
+
+  const formatTiempo = (segundos) => {
+    const horas = Math.floor(segundos / 3600)
+    const minutos = Math.floor((segundos % 3600) / 60)
+    const segs = segundos % 60
+    return `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segs.toString().padStart(2, '0')}`
+  }
 
   const tomarHoraActual = (campo) => {
     const ahora = new Date()
@@ -68,6 +122,7 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
         throw new Error('Debes ingresar hora de inicio')
       }
 
+      // Calcular duración en minutos si hay hora fin
       let duracion_minutos = null
       if (formData.hora_inicio && formData.hora_fin) {
         const inicio = dayjs(`2000-01-01 ${formData.hora_inicio}`)
@@ -78,6 +133,7 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
       }
 
       if (turno) {
+        // Actualizar
         const { error } = await supabase
           .from('turnos_operativos')
           .update({
@@ -90,6 +146,7 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
         if (error) throw error
         toast.success('✅ Turno actualizado')
       } else {
+        // Crear nuevo
         const { error } = await supabase
           .from('turnos_operativos')
           .insert([{
@@ -295,6 +352,7 @@ const DetalleTrasladoModal = ({ traslado, onClose, onEdit }) => {
   const formatHora = (hora) => hora?.substring(0, 5) || '—'
   const formatFecha = (fecha) => fecha ? dayjs(fecha).format('DD/MM/YYYY') : '—'
 
+  // Calcular duración del viaje
   const calcularDuracion = () => {
     if (!traslado.hora_inicio_carga || !traslado.hora_fin_carga) return null
     const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
@@ -398,6 +456,7 @@ const DetalleTrasladoModal = ({ traslado, onClose, onEdit }) => {
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
+            {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
             <button
               onClick={() => {
                 onClose()
@@ -449,6 +508,7 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
     'Falla de equipo frontal'
   ]
 
+  // Calcular duración para mostrar
   const [duracion, setDuracion] = useState(null)
   
   useEffect(() => {
@@ -486,33 +546,19 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
         throw new Error('Debes seleccionar un operativo')
       }
 
-      if (!formData.hora_inicio || !formData.hora_fin) {
-        throw new Error('Debes ingresar hora de inicio y fin')
-      }
-
       // Calcular duración en minutos
       const inicio = dayjs(`2000-01-01 ${formData.hora_inicio}`)
       const fin = dayjs(`2000-01-01 ${formData.hora_fin}`)
       let duracion_minutos = fin.diff(inicio, 'minute')
       if (duracion_minutos < 0) duracion_minutos += 24 * 60
 
-      const datosAtraso = {
-        es_general: true,
-        fecha: formData.fecha,
-        hora_inicio: formData.hora_inicio,
-        hora_fin: formData.hora_fin,
-        tipo_atraso: formData.tipo_atraso,
-        observaciones: formData.observaciones,
-        operativo_id: parseInt(formData.operativo_id),
-        duracion_minutos,
-        created_by: user.id
-      }
-
       if (atraso) {
+        // Actualizar
         const { error } = await supabase
           .from('traslados_atrasos')
           .update({
-            ...datosAtraso,
+            ...formData,
+            duracion_minutos,
             updated_at: new Date().toISOString()
           })
           .eq('id', atraso.id)
@@ -520,9 +566,15 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
         if (error) throw error
         toast.success('✅ Atraso actualizado')
       } else {
+        // Crear nuevo
         const { error } = await supabase
           .from('traslados_atrasos')
-          .insert([datosAtraso])
+          .insert([{
+            es_general: true,
+            ...formData,
+            duracion_minutos,
+            created_by: user.id
+          }])
 
         if (error) throw error
         toast.success('✅ Atraso general registrado')
@@ -704,7 +756,7 @@ export default function TrasladosPage() {
   const [filtroTurnoOperativo, setFiltroTurnoOperativo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [exportando, setExportando] = useState(null)
-  const [vista, setVista] = useState('traslados')
+  const [vista, setVista] = useState('traslados') // 'traslados', 'atrasos', 'turnos'
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -721,6 +773,7 @@ export default function TrasladosPage() {
     try {
       setLoading(true)
       
+      // Cargar traslados
       const { data: trasladosData, error } = await supabase
         .from('traslados')
         .select('*')
@@ -730,6 +783,7 @@ export default function TrasladosPage() {
       if (error) throw error
       setTraslados(trasladosData || [])
 
+      // Cargar operativos
       const { data: operativosData } = await supabase
         .from('operativos_traslados')
         .select('*')
@@ -737,6 +791,7 @@ export default function TrasladosPage() {
 
       setOperativos(operativosData || [])
 
+      // Cargar atrasos generales
       const { data: atrasosData } = await supabase
         .from('traslados_atrasos')
         .select('*')
@@ -746,6 +801,7 @@ export default function TrasladosPage() {
 
       setAtrasosGenerales(atrasosData || [])
 
+      // Cargar turnos
       const { data: turnosData } = await supabase
         .from('turnos_operativos')
         .select('*')
@@ -885,11 +941,13 @@ export default function TrasladosPage() {
   const formatHora = (hora) => hora?.substring(0, 5) || '—'
   const formatFecha = (fecha) => fecha ? dayjs(fecha).format('DD/MM/YYYY') : '—'
 
+  // Calcular estadísticas
   const calcularEstadisticas = () => {
     let tiempoTotalTurnos = 0
     let tiempoInactividad = 0
     let totalUnidades = traslados.length
 
+    // Sumar duración de todos los turnos
     turnos.forEach(t => {
       if (t.hora_inicio && t.hora_fin) {
         const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
@@ -900,10 +958,9 @@ export default function TrasladosPage() {
       }
     })
 
+    // Sumar duración de todos los atrasos
     atrasosGenerales.forEach(a => {
-      if (a.duracion_minutos) {
-        tiempoInactividad += a.duracion_minutos
-      } else if (a.hora_inicio && a.hora_fin) {
+      if (a.hora_inicio && a.hora_fin) {
         const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
         const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
         let diff = fin.diff(inicio, 'minute')
@@ -922,6 +979,7 @@ export default function TrasladosPage() {
 
   const stats = calcularEstadisticas()
 
+  // Filtros para traslados
   const trasladosFiltrados = traslados.filter(t => {
     if (filtroEstado !== 'todos' && t.estado !== filtroEstado) return false
     if (filtroOperativo !== 'todos' && t.operativo_id !== parseInt(filtroOperativo)) return false
@@ -936,11 +994,13 @@ export default function TrasladosPage() {
     return true
   })
 
+  // Filtros para atrasos generales
   const atrasosFiltrados = atrasosGenerales.filter(a => {
     if (filtroAtrasoOperativo !== 'todos' && a.operativo_id !== parseInt(filtroAtrasoOperativo)) return false
     return true
   })
 
+  // Filtros para turnos
   const turnosFiltrados = turnos.filter(t => {
     if (filtroTurnoOperativo !== 'todos' && t.operativo_id !== parseInt(filtroTurnoOperativo)) return false
     return true
@@ -978,6 +1038,7 @@ export default function TrasladosPage() {
               </div>
             </div>
             
+            {/* Botón menú móvil */}
             <button 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="sm:hidden bg-white/10 hover:bg-white/20 p-2 rounded-lg"
@@ -985,6 +1046,7 @@ export default function TrasladosPage() {
               <Menu className="w-5 h-5" />
             </button>
 
+            {/* Menú desktop */}
             <div className="hidden sm:flex flex-wrap gap-2">
               <button onClick={() => setShowTurnoForm(true)} className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
                 <Users className="w-4 h-4" /> Turno
@@ -1009,6 +1071,7 @@ export default function TrasladosPage() {
             </div>
           </div>
 
+          {/* Menú móvil desplegable */}
           {mobileMenuOpen && (
             <div className="sm:hidden mt-3 space-y-2 border-t border-white/10 pt-3">
               <div className="flex flex-col gap-2">
@@ -1038,6 +1101,7 @@ export default function TrasladosPage() {
             </div>
           )}
 
+          {/* Stats - Responsive grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 mt-3 sm:mt-4">
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">T. Turnos</div>
@@ -1058,7 +1122,7 @@ export default function TrasladosPage() {
           </div>
         </div>
 
-        {/* Filtros */}
+        {/* Filtros - Responsive */}
         <div className="bg-[#1e293b] rounded-xl p-3 sm:p-4 border border-white/10">
           <div className="flex flex-col sm:flex-row gap-2">
             {vista === 'traslados' && (
@@ -1099,13 +1163,14 @@ export default function TrasladosPage() {
           </div>
         </div>
 
-        {/* Vista de Traslados */}
+        {/* Vista de Traslados - Tarjetas para móvil, tabla para desktop */}
         {vista === 'traslados' && (
           <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
             <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
               <h2 className="font-bold text-white text-sm sm:text-base">Traslados ({trasladosFiltrados.length})</h2>
             </div>
             
+            {/* Vista móvil: tarjetas */}
             <div className="sm:hidden divide-y divide-white/5">
               {trasladosFiltrados.map((t) => (
                 <div key={t.id} className="p-3 hover:bg-white/5">
@@ -1144,22 +1209,29 @@ export default function TrasladosPage() {
                         <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
                       </p>
                     </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-500">Marchamo</span>
+                      <p className="font-mono text-amber-400 text-xs break-all">{t.no_marchamo}</p>
+                    </div>
                   </div>
                   
                   <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
+                    <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Ver">
                       <Eye className="w-4 h-4 text-blue-400" />
                     </button>
                     {t.estado === 'activo' && (
-                      <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1.5 hover:bg-green-500/20 rounded">
+                      <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1.5 hover:bg-green-500/20 rounded" title="Completar">
                         <CheckCircle className="w-4 h-4 text-green-400" />
                       </button>
                     )}
-                    <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
+                   
+                    {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
+                    <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Editar">
                       <Edit2 className="w-4 h-4 text-blue-400" />
                     </button>
+                    {/* Botón Eliminar - Solo Admin */}
                     {isAdmin() && (
-                      <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1.5 hover:bg-red-500/20 rounded">
+                      <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
                         <Trash2 className="w-4 h-4 text-red-400" />
                       </button>
                     )}
@@ -1168,6 +1240,7 @@ export default function TrasladosPage() {
               ))}
             </div>
 
+            {/* Vista desktop: tabla */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/50">
@@ -1180,6 +1253,7 @@ export default function TrasladosPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Transporte</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Horas</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Marchamo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Estado</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>
                   </tr>
@@ -1199,6 +1273,7 @@ export default function TrasladosPage() {
                         <span className="text-slate-600 mx-1">→</span>
                         <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
                       </td>
+                      <td className="px-4 py-2 font-mono text-amber-400 max-w-[150px] truncate" title={t.no_marchamo}>{t.no_marchamo}</td>
                       <td className="px-4 py-2">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                           t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
@@ -1206,19 +1281,22 @@ export default function TrasladosPage() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1 hover:bg-blue-500/20 rounded">
+                          <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1 hover:bg-blue-500/20 rounded" title="Ver">
                             <Eye className="w-4 h-4 text-blue-400" />
                           </button>
                           {t.estado === 'activo' && (
-                            <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1 hover:bg-green-500/20 rounded">
+                            <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1 hover:bg-green-500/20 rounded" title="Completar">
                               <CheckCircle className="w-4 h-4 text-green-400" />
                             </button>
                           )}
-                          <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded">
+                         
+                          {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
+                          <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
                             <Edit2 className="w-4 h-4 text-blue-400" />
                           </button>
+                          {/* Botón Eliminar - Solo Admin */}
                           {isAdmin() && (
-                            <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded">
+                            <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
                               <Trash2 className="w-4 h-4 text-red-400" />
                             </button>
                           )}
@@ -1232,26 +1310,21 @@ export default function TrasladosPage() {
           </div>
         )}
 
-        {/* Vista de Atrasos */}
+        {/* Vista de Atrasos - Tarjetas para móvil, tabla para desktop */}
         {vista === 'atrasos' && (
           <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
             <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
               <h2 className="font-bold text-white text-sm sm:text-base">Atrasos Generales ({atrasosFiltrados.length})</h2>
             </div>
             
+            {/* Vista móvil: tarjetas */}
             <div className="sm:hidden divide-y divide-white/5">
               {atrasosFiltrados.map((a) => {
                 const operativo = operativos.find(o => o.id === a.operativo_id)
-                const duracion = a.duracion_minutos || (() => {
-                  if (a.hora_inicio && a.hora_fin) {
-                    const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
-                    const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
-                    let diff = fin.diff(inicio, 'minute')
-                    if (diff < 0) diff += 24 * 60
-                    return diff
-                  }
-                  return 0
-                })()
+                const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
+                const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
+                let diffMinutos = fin.diff(inicio, 'minute')
+                if (diffMinutos < 0) diffMinutos += 24 * 60
                 
                 return (
                   <div key={a.id} className="p-3 hover:bg-white/5">
@@ -1260,7 +1333,7 @@ export default function TrasladosPage() {
                         <span className="text-xs text-slate-500">Fecha</span>
                         <p className="font-mono text-slate-300 font-bold text-sm">{formatFecha(a.fecha)}</p>
                       </div>
-                      <span className="text-xs text-red-400">{Math.floor(duracion / 60)}h {duracion % 60}m</span>
+                      <span className="text-xs text-red-400">{Math.floor(diffMinutos / 60)}h {diffMinutos % 60}m</span>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2 text-xs mb-2">
@@ -1290,10 +1363,10 @@ export default function TrasladosPage() {
                     
                     {isAdmin() && (
                       <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
-                        <button onClick={() => { setAtrasoEditando(a); setShowAtrasoGeneralForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
+                        <button onClick={() => { setAtrasoEditando(a); setShowAtrasoGeneralForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Editar">
                           <Edit2 className="w-4 h-4 text-blue-400" />
                         </button>
-                        <button onClick={() => handleEliminarAtrasoGeneral(a.id)} className="p-1.5 hover:bg-red-500/20 rounded">
+                        <button onClick={() => handleEliminarAtrasoGeneral(a.id)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
                           <Trash2 className="w-4 h-4 text-red-400" />
                         </button>
                       </div>
@@ -1303,6 +1376,7 @@ export default function TrasladosPage() {
               })}
             </div>
 
+            {/* Vista desktop: tabla */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/50">
@@ -1319,16 +1393,10 @@ export default function TrasladosPage() {
                 <tbody className="divide-y divide-white/5">
                   {atrasosFiltrados.map((a) => {
                     const operativo = operativos.find(o => o.id === a.operativo_id)
-                    const duracion = a.duracion_minutos || (() => {
-                      if (a.hora_inicio && a.hora_fin) {
-                        const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
-                        const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
-                        let diff = fin.diff(inicio, 'minute')
-                        if (diff < 0) diff += 24 * 60
-                        return diff
-                      }
-                      return 0
-                    })()
+                    const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
+                    const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
+                    let diffMinutos = fin.diff(inicio, 'minute')
+                    if (diffMinutos < 0) diffMinutos += 24 * 60
                     
                     return (
                       <tr key={a.id} className="hover:bg-white/5">
@@ -1340,15 +1408,15 @@ export default function TrasladosPage() {
                         </td>
                         <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
                         <td className="px-4 py-2 text-red-400">{a.tipo_atraso}</td>
-                        <td className="px-4 py-2 font-bold text-white">{Math.floor(duracion / 60)}h {duracion % 60}m</td>
+                        <td className="px-4 py-2 font-bold text-white">{Math.floor(diffMinutos / 60)}h {diffMinutos % 60}m</td>
                         <td className="px-4 py-2 text-slate-400 max-w-xs truncate" title={a.observaciones}>{a.observaciones || '—'}</td>
                         {isAdmin() && (
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-1">
-                              <button onClick={() => { setAtrasoEditando(a); setShowAtrasoGeneralForm(true); }} className="p-1 hover:bg-blue-500/20 rounded">
+                              <button onClick={() => { setAtrasoEditando(a); setShowAtrasoGeneralForm(true); }} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
                                 <Edit2 className="w-4 h-4 text-blue-400" />
                               </button>
-                              <button onClick={() => handleEliminarAtrasoGeneral(a.id)} className="p-1 hover:bg-red-500/20 rounded">
+                              <button onClick={() => handleEliminarAtrasoGeneral(a.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
                             </div>
@@ -1363,13 +1431,14 @@ export default function TrasladosPage() {
           </div>
         )}
 
-        {/* Vista de Turnos */}
+        {/* Vista de Turnos - Tarjetas para móvil, tabla para desktop */}
         {vista === 'turnos' && (
           <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
             <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
               <h2 className="font-bold text-white text-sm sm:text-base">Turnos ({turnosFiltrados.length})</h2>
             </div>
             
+            {/* Vista móvil: tarjetas */}
             <div className="sm:hidden divide-y divide-white/5">
               {turnosFiltrados.map((t) => {
                 const operativo = operativos.find(o => o.id === t.operativo_id)
@@ -1429,7 +1498,7 @@ export default function TrasladosPage() {
                     
                     {isAdmin() && (
                       <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
-                        <button onClick={() => handleEliminarTurno(t.id)} className="p-1.5 hover:bg-red-500/20 rounded">
+                        <button onClick={() => handleEliminarTurno(t.id)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
                           <Trash2 className="w-4 h-4 text-red-400" />
                         </button>
                       </div>
@@ -1439,6 +1508,7 @@ export default function TrasladosPage() {
               })}
             </div>
 
+            {/* Vista desktop: tabla */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/50">
@@ -1480,7 +1550,7 @@ export default function TrasladosPage() {
                         <td className="px-4 py-2 text-slate-400 max-w-xs truncate" title={t.observaciones}>{t.observaciones || '—'}</td>
                         {isAdmin() && (
                           <td className="px-4 py-2">
-                            <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded">
+                            <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
                               <Trash2 className="w-4 h-4 text-red-400" />
                             </button>
                           </td>
@@ -1494,7 +1564,7 @@ export default function TrasladosPage() {
           </div>
         )}
 
-        {/* Mensajes sin datos */}
+        {/* Mensaje si no hay datos */}
         {vista === 'traslados' && trasladosFiltrados.length === 0 && (
           <div className="bg-[#1e293b] rounded-xl p-6 sm:p-8 text-center text-slate-400">
             <Truck className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-slate-600" />
