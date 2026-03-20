@@ -268,7 +268,9 @@ function TablaData({ title, icon: Icon, badge, rows = [], cols = [] }) {
         ? <div style={{ padding: 48, textAlign: 'center', color: C.muted }}><Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} /><p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p></div>
         : <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}</tr></thead>
+              <thead>\\
+                {cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+              </thead>
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={ri} style={{ transition: 'background 0.12s' }} onMouseEnter={e => e.currentTarget.style.background = C.bg} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -316,6 +318,17 @@ export default function DashboardTiemposPage() {
     if (!u || (!isAdmin() && !isChequeroTraslado())) { router.push('/'); return }
     setUser(u); cargarDatos()
   }, [])
+
+  // Función para navegar a traslados con el filtro del operativo seleccionado
+  const navegarATrasladosConFiltro = (operativoId, operativoNombre) => {
+    // Guardar en localStorage el filtro seleccionado
+    localStorage.setItem('dashboardFiltroOperativo', JSON.stringify({
+      id: operativoId,
+      nombre: operativoNombre
+    }))
+    // Navegar a la página de traslados
+    router.push('/traslados')
+  }
 
   const cargarDatos = async () => {
     try {
@@ -398,8 +411,7 @@ export default function DashboardTiemposPage() {
     return Object.entries(m).map(([name, minutos]) => ({ name, minutos })).sort((a, b) => b.minutos - a.minutos).slice(0, 8)
   }, [atF])
 
-  // ── Unidades por turno (NUEVA LÓGICA) ──────────────────────────
-  // Para cada turno, contar cuántos traslados caen dentro de su rango fecha+hora
+  // ── Unidades por turno ──────────────────────────────────────────
   const turnosConUnidades = useMemo(() => {
     return turF.map(turno => {
       let unidadesTurno = 0
@@ -407,17 +419,14 @@ export default function DashboardTiemposPage() {
         const iniTurno = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
         let finTurno   = dayjs(`${turno.fecha} ${turno.hora_fin}`)
         if (finTurno.valueOf() <= iniTurno.valueOf()) finTurno = finTurno.add(1, 'day')
-        // Contar traslados del mismo operativo cuya hora_inicio_carga cae dentro del turno
         unidadesTurno = traslados.filter(tr => {
           if (tr.operativo_id !== turno.operativo_id) return false
-          // Usar fecha del traslado + hora_inicio_carga
           const fechaTr = tr.fecha || turno.fecha
           if (!tr.hora_inicio_carga) return false
           const horaTr = dayjs(`${fechaTr} ${tr.hora_inicio_carga}`)
           return horaTr.isAfter(iniTurno) && horaTr.isBefore(finTurno)
         }).length
       } else {
-        // Sin horario definido: todos los traslados del operativo en esa fecha
         unidadesTurno = traslados.filter(tr =>
           tr.operativo_id === turno.operativo_id && tr.fecha === turno.fecha
         ).length
@@ -512,7 +521,7 @@ export default function DashboardTiemposPage() {
         </div>
 
         {/* Mobile header */}
-        <div className="hdr-mobile" style={{ padding: '0 16px', height: 56, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="hdr-mobile" style={{ padding: '0 16px', height: 56, alignItems: 'center', justifyContent: 'space-between', display: 'flex' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img src="/logo.png" alt="ALMAPAC" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
             <div>
@@ -533,13 +542,11 @@ export default function DashboardTiemposPage() {
         {/* Mobile menu dropdown */}
         {menuOpen && (
           <div className="mobile-menu" style={{ background: C.slateM, borderTop: `1px solid ${C.slateL}`, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {/* Tabs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4, marginBottom: 10 }}>
               {TABS.map(t => (
                 <button key={t} onClick={() => { setTab(t); setMenuOpen(false) }} style={{ background: tab === t ? C.amberL : 'rgba(255,255,255,0.07)', color: tab === t ? C.slate : 'rgba(255,255,255,0.6)', border: 'none', padding: '8px 4px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{t}</button>
               ))}
             </div>
-            {/* Select operativo */}
             <select value={filtroOp} onChange={e => { setFiltroOp(e.target.value); setMenuOpen(false) }} style={{ width: '100%', padding: '8px 10px', borderRadius: 9, border: `1px solid ${C.slateL}`, background: C.slate, color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
               <option value="todos">Todos los operativos</option>
               {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
@@ -679,9 +686,28 @@ export default function DashboardTiemposPage() {
                   const col   = eff >= 70 ? C.teal : eff >= 40 ? C.amberMid : C.red
                   const colBg = eff >= 70 ? C.tealBg : eff >= 40 ? C.amberBg : C.redBg
                   return (
-                    <div key={op.id} style={{ background: C.white, borderRadius: 16, padding: 20, border: `1px solid ${op.tieneActivo ? C.teal : C.border}`, boxShadow: op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all .22s', cursor: 'default' }}
-                      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 22px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-3px)' }}
-                      onMouseLeave={e => { e.currentTarget.style.boxShadow = op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)' }}
+                    <div 
+                      key={op.id} 
+                      onClick={() => navegarATrasladosConFiltro(op.id, op.nombreCompleto)}
+                      style={{ 
+                        background: C.white, 
+                        borderRadius: 16, 
+                        padding: 20, 
+                        border: `1px solid ${op.tieneActivo ? C.teal : C.border}`, 
+                        boxShadow: op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)', 
+                        transition: 'all .22s', 
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={e => { 
+                        e.currentTarget.style.boxShadow = '0 8px 22px rgba(0,0,0,0.1)'
+                        e.currentTarget.style.transform = 'translateY(-3px)'
+                        e.currentTarget.style.border = `1px solid ${C.amberMid}`
+                      }}
+                      onMouseLeave={e => { 
+                        e.currentTarget.style.boxShadow = op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)'
+                        e.currentTarget.style.transform = 'translateY(0)'
+                        e.currentTarget.style.border = `1px solid ${op.tieneActivo ? C.teal : C.border}`
+                      }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                         <div>
@@ -769,7 +795,6 @@ export default function DashboardTiemposPage() {
               <KpiCard label="Promedio Unidades por Turno"     value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
             </div>
 
-            {/* ── Tabla de turnos CON unidades por turno ── */}
             <TablaData
               title="Registro de Turnos con Unidades"
               icon={Clock}
