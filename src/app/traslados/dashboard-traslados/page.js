@@ -5,14 +5,10 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { getCurrentUser, isAdmin, isChequeroTraslado, logout } from '../../lib/auth'
 import {
-  Plus, LogOut, Truck, Calendar, User, Clock, Hash,
-  Package, Edit2, Trash2, Eye, Search, Filter,
-  RefreshCw, AlertCircle, X, CheckCircle, Clock3,
-  Download, ChevronDown, ChevronUp, Loader, MoreVertical,
-  ArrowLeft, BarChart3, TrendingUp, FolderOpen, RotateCw,
-  Wrench, Moon, Sun, Smartphone, Activity, Users,
-  Play, Pause, StopCircle, Menu, TrendingDown, Gauge,
-  Zap, Target, Award, Flame, Shield, Activity as ActivityIcon
+  LogOut, Truck, Calendar, Clock, Package,
+  RefreshCw, AlertCircle, X, BarChart3, TrendingUp,
+  Activity, Users, Gauge, Zap, Target, Filter,
+  ArrowUpRight, ArrowDownRight, Box
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -21,1443 +17,696 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import duration from 'dayjs/plugin/duration'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import Link from 'next/link'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ComposedChart, Line, Legend, PieChart, Pie, Cell, Area, AreaChart,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ComposedChart, Line, Legend,
+  PieChart, Pie, Cell, Area, AreaChart
 } from 'recharts'
 
-// Extender dayjs con plugins
 dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(duration)
 dayjs.extend(relativeTime)
-dayjs.locale("es")
+dayjs.locale('es')
 
-// Colores premium
-const COLORES_PREMIUM = {
-  primary: '#6366f1',
-  secondary: '#8b5cf6',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  info: '#3b82f6',
-  dark: '#0f172a',
-  light: '#f8fafc',
-  gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-  gradientWarm: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
-  gradientCool: 'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)',
+const fmt = (min) => {
+  if (!min && min !== 0) return '0h 00m'
+  const h = Math.floor(min / 60)
+  const m = String(min % 60).padStart(2, '0')
+  return `${h}h ${m}m`
 }
 
-// Componente de estadística premium
-function StatCard({ title, value, icon, color, trend, trendValue, subtitle, delay }) {
+const C = {
+  amber: '#B45309', amberMid: '#D97706', amberL: '#FCD34D', amberBg: '#FFFBEB',
+  teal: '#0F766E', tealL: '#2DD4BF', tealBg: '#F0FDFA',
+  red: '#B91C1C', redL: '#F87171', redBg: '#FEF2F2',
+  blue: '#1D4ED8', blueL: '#60A5FA', blueBg: '#EFF6FF',
+  slate: '#0F172A', slateM: '#1E293B', slateL: '#334155',
+  muted: '#64748B', border: '#E2E8F0', borderL: '#F1F5F9',
+  bg: '#F8FAFC', white: '#FFFFFF',
+}
+
+const PIE_COLS = [C.amberMid, C.teal, C.red, C.blue, '#7C3AED', '#0891B2', '#065F46', '#92400E']
+
+// ── Tooltip ──────────────────────────────────────────────────────
+const DarkTip = ({ active, payload, label, fmtVal }) => {
+  if (!active || !payload?.length) return null
   return (
-    <div className="stat-card" style={{ animationDelay: `${delay}ms` }}>
-      <div className="stat-card-icon" style={{ background: color }}>
-        {icon}
-      </div>
-      <div className="stat-card-content">
-        <p className="stat-card-title">{title}</p>
-        <p className="stat-card-value">{value}</p>
-        {subtitle && <p className="stat-card-subtitle">{subtitle}</p>}
-        {trend && (
-          <div className="stat-card-trend">
-            {trend === 'up' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-            <span>{trendValue}</span>
-          </div>
-        )}
-      </div>
-      <div className="stat-card-glow" style={{ background: color }} />
+    <div style={{ background: C.slateM, border: `1px solid ${C.slateL}`, borderRadius: 10, padding: '10px 14px', fontSize: 12 }}>
+      {label && <p style={{ color: C.amberL, fontWeight: 600, marginBottom: 6, fontFamily: "'DM Mono', monospace" }}>{label}</p>}
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#fff', marginBottom: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+          <span style={{ color: '#94a3b8' }}>{p.name}:</span>
+          <span style={{ fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>{fmtVal ? fmtVal(p.value, p.name) : p.value}</span>
+        </div>
+      ))}
     </div>
   )
 }
 
-// Componente de métrica de tiempo premium
-function TimeMetricsCard({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades }) {
-  const eficiencia = tiempoTotal > 0 ? ((tiempoEfectivo / tiempoTotal) * 100).toFixed(1) : 0
-  const unidadesPorHora = tiempoEfectivo > 0 ? (unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
-  const productividadScore = Math.min(100, Math.round((unidadesPorHora / 25) * 100))
-
-  const formatTiempo = (min) => {
-    if (!min && min !== 0) return '0h 0m'
-    const h = Math.floor(min / 60)
-    const m = min % 60
-    return `${h}h ${m}m`
-  }
-
-  const getEfficiencyColor = () => {
-    const eff = parseFloat(eficiencia)
-    if (eff >= 80) return '#10b981'
-    if (eff >= 60) return '#f59e0b'
-    return '#ef4444'
-  }
-
+// ── KPI Card ─────────────────────────────────────────────────────
+function KpiCard({ label, value, sub, icon: Icon, accent = C.amberMid, accentBg, delay = 0 }) {
+  const bg = accentBg || `${accent}18`
   return (
-    <div className="time-metrics-card">
-      <div className="time-metrics-header">
-        <div className="time-metrics-title">
-          <ActivityIcon size={24} />
-          <span>Métricas de Rendimiento</span>
-        </div>
-        
+    <div className="kpi-card" style={{ animationDelay: `${delay}ms` }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: accent, borderRadius: '16px 16px 0 0' }} />
+      <Icon size={72} style={{ position: 'absolute', right: -8, bottom: -8, color: accent, opacity: 0.05 }} />
+      <div style={{ width: 42, height: 42, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+        <Icon size={20} color={accent} />
       </div>
-
-      <div className="time-metrics-grid">
-        <div className="time-metric-item">
-          <div className="time-metric-icon" style={{ background: '#3b82f6' }}>
-            <Clock size={20} />
-          </div>
-          <div className="time-metric-info">
-            <span className="time-metric-label">Tiempo Total Turnos</span>
-            <strong className="time-metric-value">{formatTiempo(tiempoTotal)}</strong>
-            <span className="time-metric-sub">Sumatoria de turnos</span>
-          </div>
-        </div>
-
-        <div className="time-metric-item">
-          <div className="time-metric-icon" style={{ background: '#ef4444' }}>
-            <AlertCircle size={20} />
-          </div>
-          <div className="time-metric-info">
-            <span className="time-metric-label">Tiempo Inactividad</span>
-            <strong className="time-metric-value">{formatTiempo(tiempoInactividad)}</strong>
-            <span className="time-metric-sub">Atrasos y paros</span>
-          </div>
-        </div>
-
-        <div className="time-metric-item">
-          <div className="time-metric-icon" style={{ background: '#10b981' }}>
-            <Zap size={20} />
-          </div>
-          <div className="time-metric-info">
-            <span className="time-metric-label">Tiempo Efectivo</span>
-            <strong className="time-metric-value">{formatTiempo(tiempoEfectivo)}</strong>
-            <span className="time-metric-sub">Tiempo productivo</span>
-          </div>
-        </div>
-
-        <div className="time-metric-item">
-          <div className="time-metric-icon" style={{ background: '#f59e0b' }}>
-            <Gauge size={20} />
-          </div>
-          <div className="time-metric-info">
-            <span className="time-metric-label">Unidades por Hora</span>
-            <strong className="time-metric-value">{unidadesPorHora}</strong>
-            <span className="time-metric-sub">Promedio descarga</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="efficiency-bar-container">
-        <div className="efficiency-bar-label">
-          <span>Productividad</span>
-          <span>{productividadScore}%</span>
-        </div>
-        <div className="efficiency-bar-track">
-          <div className="efficiency-bar-fill" style={{ width: `${productividadScore}%`, background: COLORES_PREMIUM.gradientCool }} />
-        </div>
-        <div className="efficiency-metrics">
-          <div className="efficiency-metric">
-            <Flame size={12} />
-            <span>{unidades} unidades</span>
-          </div>
-          <div className="efficiency-metric">
-            <Clock size={12} />
-            <span>{Math.floor(tiempoEfectivo / 60)}h efectivas</span>
-          </div>
-        </div>
-      </div>
+      <p className="kpi-label">{label}</p>
+      <p className="kpi-value">{value}</p>
+      {sub && <p className="kpi-sub">{sub}</p>}
     </div>
   )
 }
 
-// Componente de gráfica premium
-function PremiumBarChart({ data, title, icon }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="chart-empty">
-        <BarChart3 size={48} />
-        <p>No hay datos suficientes</p>
-      </div>
-    )
-  }
-
+// ── Ring SVG ─────────────────────────────────────────────────────
+function Ring({ pct, color, label, size = 88 }) {
+  const r = size / 2 - 9
+  const circ = 2 * Math.PI * r
+  const dash = Math.min(1, pct / 100) * circ
   return (
-    <div className="chart-card">
-      <div className="chart-header">
-        <div className="chart-title">
-          {icon}
-          <span>{title}</span>
-        </div>
-        <div className="chart-badge">{data.length} operativos</div>
-      </div>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="nombre" tick={{ fill: '#64748b', fontSize: 11 }} />
-          <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v) => `${Math.floor(v / 60)}h`} />
-          <YAxis yAxisId="right" orientation="right" tick={{ fill: '#64748b', fontSize: 11 }} />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 12, color: '#fff' }}
-            formatter={(value, name) => {
-              const horas = Math.floor(value / 60)
-              const minutos = value % 60
-              if (name === 'unidades') return [`${value} unidades`, 'Unidades']
-              return [`${horas}h ${minutos}m`, name === 'tiempoEfectivo' ? 'Tiempo Efectivo' : 'Tiempo Inactividad']
-            }}
-          />
-          <Legend wrapperStyle={{ paddingTop: 16 }} />
-          <Bar yAxisId="left" dataKey="tiempoEfectivo" name="Tiempo Efectivo" fill="#10b981" radius={[8, 8, 0, 0]} />
-          <Bar yAxisId="left" dataKey="tiempoInactividad" name="Tiempo Inactividad" fill="#ef4444" radius={[8, 8, 0, 0]} />
-          <Line yAxisId="right" type="monotone" dataKey="unidades" name="Unidades" stroke="#f59e0b" strokeWidth={3} dot={{ fill: '#f59e0b', r: 4 }} />
-        </BarChart>
-      </ResponsiveContainer>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <svg width={size} height={size}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`${color}25`} strokeWidth={7} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={7}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          transform={`rotate(-90 ${size/2} ${size/2})`} style={{ transition: 'stroke-dasharray 1.2s ease' }} />
+        <text x={size/2} y={size/2+1} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: 14, fontWeight: 600, fill: color, fontFamily: "'DM Mono', monospace" }}>{pct}%</text>
+      </svg>
+      <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>{label}</span>
     </div>
   )
 }
 
-// Componente de gráfica de tendencia premium
-function TrendChart({ data, title }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="chart-empty">
-        <TrendingUp size={48} />
-        <p>No hay datos de tendencia</p>
-      </div>
-    )
-  }
+// ── Panel oscuro de métricas ──────────────────────────────────────
+function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades }) {
+  const eff   = tiempoTotal > 0 ? Math.round((tiempoEfectivo / tiempoTotal) * 100) : 0
+  const inPct = tiempoTotal > 0 ? Math.round((tiempoInactividad / tiempoTotal) * 100) : 0
+  const uph   = tiempoEfectivo > 0 ? +(unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
+  const prod  = Math.min(100, Math.round((uph / 25) * 100))
 
-  return (
-    <div className="chart-card">
-      <div className="chart-header">
-        <div className="chart-title">
-          <TrendingUp size={18} />
-          <span>{title}</span>
-        </div>
-        <div className="chart-badge">Últimas 24 horas</div>
-      </div>
-      <ResponsiveContainer width="100%" height={250}>
-        <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="hora" tick={{ fill: '#64748b', fontSize: 11 }} />
-          <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 12, color: '#fff' }}
-            formatter={(value) => [`${value} unidades`, 'Descargadas']}
-          />
-          <Area type="monotone" dataKey="unidades" stroke="#6366f1" strokeWidth={3} fill="url(#areaGradient)" />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-// Componente de radar chart para rendimiento
-function PerformanceRadar({ eficiencia, unidadesPorHora, tiempoEfectivo, tiempoInactividad }) {
-  const data = [
-    { subject: 'Eficiencia', value: Math.min(100, eficiencia), fullMark: 100 },
-    { subject: 'Unidades/h', value: Math.min(100, (unidadesPorHora / 25) * 100), fullMark: 100 },
-    { subject: 'Tiempo Efectivo', value: Math.min(100, (tiempoEfectivo / 480) * 100), fullMark: 100 },
-    { subject: 'Productividad', value: Math.min(100, (unidadesPorHora / 20) * 100), fullMark: 100 },
+  const items = [
+    { label: 'Tiempo Total Turnos', value: fmt(tiempoTotal),       sub: 'Sumatoria turnos',     color: C.blueL,   icon: Clock },
+    { label: 'Inactividad',         value: fmt(tiempoInactividad),  sub: `${inPct}% del turno`, color: C.redL,    icon: AlertCircle },
+    { label: 'Tiempo Efectivo',     value: fmt(tiempoEfectivo),    sub: `${eff}% eficiencia`,   color: C.tealL,   icon: Zap },
+    { label: 'Unidades / Hora',     value: uph,                    sub: 'Promedio real',          color: C.amberL,  icon: Gauge },
   ]
 
   return (
-    <div className="chart-card">
-      <div className="chart-header">
-        <div className="chart-title">
-          <Target size={18} />
-          <span>Rendimiento por Métrica</span>
+    <div style={{
+      background: `linear-gradient(135deg, ${C.slate} 0%, ${C.slateM} 100%)`,
+      borderRadius: 20, padding: 26, marginBottom: 22,
+      boxShadow: `0 16px 36px -8px rgba(15,23,42,0.3)`,
+      border: `1px solid ${C.slateL}`, position: 'relative', overflow: 'hidden'
+    }}>
+      <div style={{ position: 'absolute', top: -80, right: -80, width: 240, height: 240, borderRadius: '50%', background: `${C.amberMid}18`, filter: 'blur(70px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: `${C.amberMid}35`, borderRadius: 10, padding: 7 }}><Activity size={17} color={C.amberL} /></div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Métricas de Rendimiento</p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>Traslados de azúcar · En vivo</p>
+            </div>
+          </div>
+          
         </div>
-      </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <RadarChart data={data}>
-          <PolarGrid stroke="#e2e8f0" />
-          <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10 }} />
-          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 9 }} />
-          <Radar name="Rendimiento" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 12, color: '#fff' }}
-            formatter={(value) => [`${value.toFixed(1)}%`, 'Puntaje']}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
 
-// Componente de atrasos por tipo premium
-function AtrasosPieChart({ data, totalMinutos }) {
-  const formatTiempo = (min) => {
-    const h = Math.floor(min / 60)
-    const m = min % 60
-    return `${h}h ${m}m`
-  }
-
-  const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6']
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="chart-empty">
-        <AlertCircle size={48} />
-        <p>No hay atrasos registrados</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="chart-card">
-      <div className="chart-header">
-        <div className="chart-title">
-          <AlertCircle size={18} />
-          <span>Distribución de Atrasos</span>
+        <div className="time-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+          {items.map(({ label, value, sub, color, icon: Icon }) => (
+            <div key={label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.09)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                <div style={{ background: `${color}25`, borderRadius: 7, padding: 5 }}><Icon size={13} color={color} /></div>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+              </div>
+              <p style={{ fontSize: 20, fontWeight: 600, color, fontFamily: "'DM Mono', monospace", lineHeight: 1.2, marginBottom: 2 }}>{value}</p>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{sub}</p>
+            </div>
+          ))}
         </div>
-        <div className="chart-badge">Total: {formatTiempo(totalMinutos)}</div>
-      </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={90}
-            paddingAngle={2}
-            dataKey="minutos"
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-            labelLine={false}
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.38)', marginBottom: 6, fontWeight: 500 }}>
+            <span>Distribución del turno</span>
+            <span style={{ fontFamily: "'DM Mono', monospace" }}>{fmt(tiempoTotal)}</span>
+          </div>
+          <div style={{ height: 7, borderRadius: 7, background: 'rgba(255,255,255,0.1)', overflow: 'hidden', display: 'flex' }}>
+            <div style={{ width: `${eff}%`, background: `linear-gradient(90deg, ${C.teal}, ${C.tealL})`, transition: 'width 1.2s ease' }} />
+            <div style={{ width: `${inPct}%`, background: `linear-gradient(90deg, ${C.red}, ${C.redL})`, transition: 'width 1.2s ease 0.15s' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 18, marginTop: 8 }}>
+            {[{ c: C.tealL, l: `Efectivo (${eff}%)` }, { c: C.redL, l: `Inactividad (${inPct}%)` }].map(({ c, l }) => (
+              <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} /> {l}
+              </div>
             ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 12, color: '#fff' }}
-            formatter={(value) => {
-              const h = Math.floor(value / 60)
-              const m = value % 60
-              return [`${h}h ${m}m`, 'Duración']
-            }}
-          />
-          <Legend wrapperStyle={{ paddingTop: 16 }} />
-        </PieChart>
-      </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
-// Componente de tabla premium
-function PremiumTable({ title, data, columns, badge }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="table-card">
-        <div className="table-header">
-          <div className="table-title">{title}</div>
-          {badge && <div className="table-badge">{badge}</div>}
-        </div>
-        <div className="table-empty">
-          <Package size={32} />
-          <p>No hay datos disponibles</p>
-        </div>
-      </div>
-    )
-  }
-
+// ── Chart wrapper ─────────────────────────────────────────────────
+function ChartCard({ title, icon: Icon, badge, children, style = {} }) {
   return (
-    <div className="table-card">
-      <div className="table-header">
-        <div className="table-title">{title}</div>
-        {badge && <div className="table-badge">{badge}</div>}
+    <div style={{ background: C.white, borderRadius: 18, padding: '20px 20px 14px', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', ...style }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ background: C.amberBg, borderRadius: 9, padding: 6 }}><Icon size={14} color={C.amberMid} /></div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.slate }}>{title}</span>
+        </div>
+        {badge && <span style={{ background: C.slateM, color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{badge}</span>}
       </div>
-      <div className="table-scroll">
-        <table className="premium-table">
-          <thead>
-            <tr>
-              {columns.map((col, idx) => (
-                <th key={idx} className={col.align === 'right' ? 'text-right' : 'text-left'}>
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, idx) => (
-              <tr key={idx}>
-                {columns.map((col, colIdx) => (
-                  <td key={colIdx} className={col.align === 'right' ? 'text-right' : 'text-left'}>
-                    {col.render ? col.render(row[col.key], row) : row[col.key]}
-                  </td>
+      {children}
+    </div>
+  )
+}
+
+// ── Tabla premium ─────────────────────────────────────────────────
+function TablaData({ title, icon: Icon, badge, rows = [], cols = [] }) {
+  return (
+    <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      <div style={{ padding: '15px 22px', borderBottom: `1px solid ${C.border}`, background: `linear-gradient(90deg, ${C.slateM}, ${C.slate})`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{ background: `${C.amberMid}30`, borderRadius: 9, padding: 6 }}><Icon size={14} color={C.amberL} /></div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{title}</span>
+        </div>
+        {badge && <span style={{ background: `${C.amberMid}28`, color: C.amberL, fontSize: 10, fontWeight: 700, padding: '3px 11px', borderRadius: 20 }}>{badge}</span>}
+      </div>
+      {rows.length === 0
+        ? <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>
+            <Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} />
+            <p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p>
+          </div>
+        : <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {cols.map((c, i) => (
+                    <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, ri) => (
+                  <tr key={ri} style={{ transition: 'background 0.12s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {cols.map((c, ci) => (
+                      <td key={ci} style={{ padding: '11px 18px', fontSize: 13, color: C.slateL, textAlign: c.right ? 'right' : 'left', borderBottom: `1px solid ${C.borderL}` }}>
+                        {c.render ? c.render(row[c.key], row) : (row[c.key] ?? '—')}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              </tbody>
+            </table>
+          </div>
+      }
     </div>
   )
 }
 
-// Componente principal
+const Chip = ({ label, color, bg }) => (
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color, fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20 }}>
+    <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />{label}
+  </span>
+)
+
+// ── Componente principal ──────────────────────────────────────────
 export default function DashboardTiemposPage() {
   const router = useRouter()
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [operativos, setOperativos] = useState([])
-  const [traslados, setTraslados] = useState([])
-  const [turnos, setTurnos] = useState([])
-  const [atrasos, setAtrasos] = useState([])
-  const [tiposParo, setTiposParo] = useState([])
-  const [filtroOperativo, setFiltroOperativo] = useState('todos')
+  const [user, setUser]               = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [operativos, setOperativos]   = useState([])
+  const [traslados, setTraslados]     = useState([])
+  const [turnos, setTurnos]           = useState([])
+  const [atrasos, setAtrasos]         = useState([])
+  const [tiposParo, setTiposParo]     = useState([])
+  const [filtroOp, setFiltroOp]       = useState('todos')
   const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null })
-  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showDP, setShowDP]           = useState(false)
+  const [tab, setTab]                 = useState('resumen')
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (!currentUser || (!isAdmin() && !isChequeroTraslado())) {
-      router.push('/')
-      return
-    }
-    setUser(currentUser)
-    cargarDatos()
+    const u = getCurrentUser()
+    if (!u || (!isAdmin() && !isChequeroTraslado())) { router.push('/'); return }
+    setUser(u); cargarDatos()
   }, [])
 
   const cargarDatos = async () => {
     try {
       setLoading(true)
-
-      const { data: operativosData } = await supabase
-        .from('operativos_traslados')
-        .select('*')
-        .order('created_at', { ascending: false })
-      setOperativos(operativosData || [])
-
-      let queryTraslados = supabase.from('traslados').select('*').order('fecha', { ascending: false })
-      let queryTurnos = supabase.from('turnos_operativos').select('*').order('fecha', { ascending: false })
-      let queryAtrasos = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(*)').eq('es_general', true)
-
+      const { data: ops } = await supabase.from('operativos_traslados').select('*').order('created_at', { ascending: false })
+      setOperativos(ops || [])
+      let qT  = supabase.from('traslados').select('*').order('fecha', { ascending: false })
+      let qTu = supabase.from('turnos_operativos').select('*').order('fecha', { ascending: false })
+      let qA  = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(*)').eq('es_general', true)
       if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
-        const fechaInicio = dayjs(filtroFecha.inicio).format('YYYY-MM-DD')
-        const fechaFin = dayjs(filtroFecha.fin).format('YYYY-MM-DD')
-        queryTraslados = queryTraslados.gte('fecha', fechaInicio).lte('fecha', fechaFin)
-        queryTurnos = queryTurnos.gte('fecha', fechaInicio).lte('fecha', fechaFin)
-        queryAtrasos = queryAtrasos.gte('fecha', fechaInicio).lte('fecha', fechaFin)
+        const fi = dayjs(filtroFecha.inicio).format('YYYY-MM-DD')
+        const ff = dayjs(filtroFecha.fin).format('YYYY-MM-DD')
+        qT = qT.gte('fecha', fi).lte('fecha', ff)
+        qTu = qTu.gte('fecha', fi).lte('fecha', ff)
+        qA = qA.gte('fecha', fi).lte('fecha', ff)
       }
-
-      const [trasladosRes, turnosRes, tiposRes, atrasosRes] = await Promise.all([
-        queryTraslados,
-        queryTurnos,
-        supabase.from('tipos_paro').select('*').eq('activo', true),
-        queryAtrasos
-      ])
-
-      setTraslados(trasladosRes.data || [])
-      setTurnos(turnosRes.data || [])
-      setTiposParo(tiposRes.data || [])
-      setAtrasos(atrasosRes.data || [])
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error al cargar datos')
-    } finally {
-      setLoading(false)
-    }
+      const [tr, tu, tp, at] = await Promise.all([qT, qTu, supabase.from('tipos_paro').select('*').eq('activo', true), qA])
+      setTraslados(tr.data || []); setTurnos(tu.data || []); setTiposParo(tp.data || []); setAtrasos(at.data || [])
+    } catch (e) { console.error(e); toast.error('Error al cargar datos') }
+    finally { setLoading(false) }
   }
 
-  const handleRangoFecha = (inicio, fin) => {
-    setFiltroFecha({ activo: true, inicio, fin })
-    setShowDatePicker(false)
-    cargarDatos()
-  }
+  const trasF = filtroOp === 'todos' ? traslados : traslados.filter(t => t.operativo_id === +filtroOp)
+  const turF  = filtroOp === 'todos' ? turnos    : turnos.filter(t => t.operativo_id === +filtroOp)
+  const atF   = useMemo(() =>
+    (filtroOp === 'todos' ? atrasos : atrasos.filter(a => a.operativo_id === +filtroOp))
+      .map(a => ({ ...a, operativo_nombre: a.operativo?.nombre || '—' })),
+    [atrasos, filtroOp])
 
-  const formatTiempo = (min) => {
-    if (!min && min !== 0) return '0h 0m'
-    const h = Math.floor(min / 60)
-    const m = min % 60
-    return `${h}h ${m}m`
-  }
-
-  const trasladosFiltrados = filtroOperativo === 'todos' 
-    ? traslados 
-    : traslados.filter(t => t.operativo_id === parseInt(filtroOperativo))
-
-  const turnosFiltrados = filtroOperativo === 'todos'
-    ? turnos
-    : turnos.filter(t => t.operativo_id === parseInt(filtroOperativo))
-
-  const atrasosFiltrados = filtroOperativo === 'todos'
-    ? atrasos.map(a => ({ ...a, operativo_nombre: a.operativo?.nombre || '—' }))
-    : atrasos.filter(a => a.operativo_id === parseInt(filtroOperativo)).map(a => ({ ...a, operativo_nombre: a.operativo?.nombre || '—' }))
-
-  // Calcular métricas
-  const metricas = useMemo(() => {
-    let tiempoTotalTurnos = 0
-    let tiempoInactividad = 0
-
-    turnosFiltrados.forEach(t => {
-      if (t.hora_inicio && t.hora_fin) {
-        const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
-        const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
-        let diff = fin.diff(inicio, 'minute')
-        if (diff < 0) diff += 24 * 60
-        tiempoTotalTurnos += diff
-      } else if (t.duracion_minutos) {
-        tiempoTotalTurnos += t.duracion_minutos
-      }
+  const met = useMemo(() => {
+    let tT = 0, tI = 0
+    turF.forEach(t => {
+      if (t.hora_inicio && t.hora_fin) { let d = dayjs(`2000-01-01 ${t.hora_fin}`).diff(dayjs(`2000-01-01 ${t.hora_inicio}`), 'minute'); if (d < 0) d += 1440; tT += d }
+      else if (t.duracion_minutos) tT += t.duracion_minutos
     })
-
-    atrasosFiltrados.forEach(a => {
-      if (a.duracion_minutos) {
-        tiempoInactividad += a.duracion_minutos
-      } else if (a.hora_inicio && a.hora_fin) {
-        const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
-        const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
-        let diff = fin.diff(inicio, 'minute')
-        if (diff < 0) diff += 24 * 60
-        tiempoInactividad += diff
-      }
+    atF.forEach(a => {
+      if (a.duracion_minutos) tI += a.duracion_minutos
+      else if (a.hora_inicio && a.hora_fin) { let d = dayjs(`2000-01-01 ${a.hora_fin}`).diff(dayjs(`2000-01-01 ${a.hora_inicio}`), 'minute'); if (d < 0) d += 1440; tI += d }
     })
+    const tE = Math.max(0, tT - tI), n = trasF.length
+    const uph = tE > 0 ? +(n / (tE / 60)).toFixed(1) : 0
+    const eff = tT > 0 ? +((tE / tT) * 100).toFixed(1) : 0
+    return { tT, tI, tE, n, uph, eff }
+  }, [turF, atF, trasF])
 
-    const tiempoEfectivo = Math.max(0, tiempoTotalTurnos - tiempoInactividad)
-    const totalUnidades = trasladosFiltrados.length
-    const unidadesPorHora = tiempoEfectivo > 0 ? (totalUnidades / (tiempoEfectivo / 60)).toFixed(1) : 0
-    const eficiencia = tiempoTotalTurnos > 0 ? ((tiempoEfectivo / tiempoTotalTurnos) * 100).toFixed(1) : 0
-
-    return { tiempoTotalTurnos, tiempoInactividad, tiempoEfectivo, totalUnidades, unidadesPorHora, eficiencia }
-  }, [turnosFiltrados, atrasosFiltrados, trasladosFiltrados])
-
-  // Datos para gráficas
-  const datosOperativos = useMemo(() => {
-    const ops = filtroOperativo === 'todos' ? operativos : operativos.filter(o => o.id === parseInt(filtroOperativo))
+  const datosOps = useMemo(() => {
+    const ops = filtroOp === 'todos' ? operativos : operativos.filter(o => o.id === +filtroOp)
     return ops.map(op => {
-      const turnosOp = turnos.filter(t => t.operativo_id === op.id)
-      const trasladosOp = traslados.filter(t => t.operativo_id === op.id)
-      const atrasosOp = atrasos.filter(a => a.operativo_id === op.id)
-
-      let tiempoTotal = 0
-      turnosOp.forEach(t => {
-        if (t.hora_inicio && t.hora_fin) {
-          const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
-          const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
-          let diff = fin.diff(inicio, 'minute')
-          if (diff < 0) diff += 24 * 60
-          tiempoTotal += diff
-        } else if (t.duracion_minutos) {
-          tiempoTotal += t.duracion_minutos
-        }
+      let tT = 0, tI = 0
+      turnos.filter(t => t.operativo_id === op.id).forEach(t => {
+        if (t.hora_inicio && t.hora_fin) { let d = dayjs(`2000-01-01 ${t.hora_fin}`).diff(dayjs(`2000-01-01 ${t.hora_inicio}`), 'minute'); if (d < 0) d += 1440; tT += d }
+        else if (t.duracion_minutos) tT += t.duracion_minutos
       })
+      atrasos.filter(a => a.operativo_id === op.id).forEach(a => { if (a.duracion_minutos) tI += a.duracion_minutos })
+      return { id: op.id, nombre: op.nombre.length > 15 ? op.nombre.slice(0, 15) + '…' : op.nombre, tiempoEfectivo: Math.max(0, tT - tI), tiempoInactividad: tI, unidades: traslados.filter(t => t.operativo_id === op.id).length }
+    }).filter(o => o.tiempoEfectivo > 0 || o.unidades > 0)
+  }, [operativos, turnos, traslados, atrasos, filtroOp])
 
-      let tiempoInact = 0
-      atrasosOp.forEach(a => {
-        if (a.duracion_minutos) tiempoInact += a.duracion_minutos
-        else if (a.hora_inicio && a.hora_fin) {
-          const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
-          const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
-          let diff = fin.diff(inicio, 'minute')
-          if (diff < 0) diff += 24 * 60
-          tiempoInact += diff
-        }
-      })
+  const datosHora = useMemo(() => {
+    const h = {}
+    trasF.forEach(t => { if (t.hora_inicio_carga) { const k = t.hora_inicio_carga.slice(0, 5); h[k] = (h[k] || 0) + 1 } })
+    return Object.entries(h).map(([hora, unidades]) => ({ hora, unidades })).sort((a, b) => a.hora.localeCompare(b.hora)).slice(-24)
+  }, [trasF])
 
-      return {
-        id: op.id,
-        nombre: op.nombre.length > 20 ? op.nombre.substring(0, 20) + '...' : op.nombre,
-        tiempoTotalTurnos: tiempoTotal,
-        tiempoInactividad: tiempoInact,
-        tiempoEfectivo: Math.max(0, tiempoTotal - tiempoInact),
-        unidades: trasladosOp.length
-      }
-    }).filter(op => op.tiempoTotalTurnos > 0 || op.unidades > 0)
-  }, [operativos, turnos, traslados, atrasos, filtroOperativo])
+  const atrasosTipo = useMemo(() => {
+    const m = {}
+    atF.forEach(a => { const t = tiposParo.find(x => x.id === a.tipo_paro_id); const n = t?.nombre || 'Otros'; m[n] = (m[n] || 0) + (a.duracion_minutos || 0) })
+    return Object.entries(m).map(([name, minutos]) => ({ name, minutos })).sort((a, b) => b.minutos - a.minutos).slice(0, 8)
+  }, [atF, tiposParo])
 
-  const datosUnidadesPorHora = useMemo(() => {
-    if (trasladosFiltrados.length === 0) return []
-    const porHora = {}
-    trasladosFiltrados.forEach(t => {
-      if (t.hora_inicio_carga) {
-        const hora = t.hora_inicio_carga.slice(0, 5)
-        porHora[hora] = (porHora[hora] || 0) + 1
-      }
-    })
-    return Object.entries(porHora).map(([hora, unidades]) => ({ hora, unidades })).sort((a, b) => a.hora.localeCompare(b.hora)).slice(-24)
-  }, [trasladosFiltrados])
+  const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
+  const TABS = ['resumen', 'operativos', 'atrasos', 'turnos']
 
-  const atrasosPorTipo = useMemo(() => {
-    const porTipo = {}
-    atrasosFiltrados.forEach(a => {
-      const tipo = tiposParo.find(t => t.id === a.tipo_paro_id)
-      const nombreTipo = tipo?.nombre || 'Otros'
-      const duracion = a.duracion_minutos || 0
-      porTipo[nombreTipo] = (porTipo[nombreTipo] || 0) + duracion
-    })
-    return Object.entries(porTipo).map(([name, minutos]) => ({ name, minutos })).sort((a, b) => b.minutos - a.minutos).slice(0, 8)
-  }, [atrasosFiltrados, tiposParo])
-
-  const totalMinutosAtrasos = atrasosFiltrados.reduce((sum, a) => sum + (a.duracion_minutos || 0), 0)
-
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-spinner">
-          <div className="loading-ring"></div>
-          <p>Cargando dashboard...</p>
-        </div>
+  if (loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.slate }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: 46, height: 46, border: `3px solid rgba(255,255,255,0.1)`, borderTopColor: C.amberL, borderRadius: '50%', margin: '0 auto 16px', animation: 'spin .8s linear infinite' }} />
+        <p style={{ fontSize: 12, color: C.amberL, fontFamily: "'DM Mono', monospace" }}>Cargando dashboard...</p>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
-    <div className="dashboard-container">
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        
+    <div style={{ minHeight: '100vh', background: C.bg }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-          font-family: 'Inter', sans-serif;
-          background: #f1f5f9;
+          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+          background: ${C.bg};
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
-        
-        .dashboard-container {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        select, input, button, textarea {
+          font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
         }
-        
-        /* Header */
-        .dashboard-header {
-          background: #0f172a;
-          padding: 0 32px;
-          height: 72px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+
+        .kpi-card {
+          background: ${C.white};
+          border-radius: 16px;
+          padding: 18px 20px 16px;
+          border: 1px solid ${C.border};
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          transition: box-shadow .25s, transform .25s;
+          animation: fadeUp .45s ease both;
+          cursor: default;
         }
-        
-        .header-left {
-          display: flex;
-          align-items: center;
-          gap: 24px;
+        .kpi-card:hover {
+          box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+          transform: translateY(-3px);
         }
-        
-        .header-logo {
-          height: 40px;
-          filter: brightness(0) invert(1);
+        .kpi-label {
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.65px;
+          color: ${C.muted};
+          margin-bottom: 4px;
+          font-family: 'Plus Jakarta Sans', sans-serif;
         }
-        
-        .header-divider {
-          width: 1px;
-          height: 40px;
-          background: rgba(255,255,255,0.2);
-        }
-        
-        .header-title h1 {
-          font-size: 18px;
-          font-weight: 700;
-          color: white;
+        .kpi-value {
+          font-family: 'DM Mono', monospace;
+          font-size: 24px;
+          font-weight: 500;
+          color: ${C.slate};
+          line-height: 1.2;
           letter-spacing: -0.3px;
         }
-        
-        .header-title p {
-          font-size: 12px;
-          color: rgba(255,255,255,0.6);
-          font-family: monospace;
-        }
-        
-        .header-actions {
-          display: flex;
-          gap: 12px;
-        }
-        
-        .header-btn {
-          background: rgba(255,255,255,0.1);
-          border: none;
-          padding: 8px 16px;
-          border-radius: 12px;
-          color: white;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          transition: all 0.2s;
-        }
-        
-        .header-btn:hover {
-          background: rgba(255,255,255,0.2);
-          transform: translateY(-1px);
-        }
-        
-        /* Main Content */
-        .dashboard-main {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 32px;
-        }
-        
-        /* Stat Cards */
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 20px;
-          margin-bottom: 32px;
-        }
-        
-        .stat-card {
-          background: white;
-          border-radius: 24px;
-          padding: 20px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          position: relative;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-          transition: all 0.3s;
-          animation: fadeInUp 0.5s ease forwards;
-          opacity: 0;
-          transform: translateY(20px);
-        }
-        
-        .stat-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 24px rgba(0,0,0,0.1);
-        }
-        
-        .stat-card-icon {
-          width: 56px;
-          height: 56px;
-          border-radius: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-        
-        .stat-card-content {
-          flex: 1;
-        }
-        
-        .stat-card-title {
-          font-size: 12px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          color: #64748b;
-          margin-bottom: 4px;
-        }
-        
-        .stat-card-value {
-          font-size: 28px;
-          font-weight: 800;
-          color: #0f172a;
-          line-height: 1.2;
-          font-family: monospace;
-        }
-        
-        .stat-card-subtitle {
+        .kpi-sub {
           font-size: 11px;
-          color: #94a3b8;
+          color: ${C.muted};
           margin-top: 4px;
-        }
-        
-        .stat-card-trend {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 11px;
-          margin-top: 6px;
-          color: #10b981;
-        }
-        
-        .stat-card-glow {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 3px;
-          opacity: 0.6;
-        }
-        
-        /* Time Metrics Card */
-        .time-metrics-card {
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 28px;
-          padding: 28px;
-          margin-bottom: 32px;
-          color: white;
-          box-shadow: 0 20px 35px -10px rgba(0,0,0,0.2);
-        }
-        
-        .time-metrics-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-          flex-wrap: wrap;
-          gap: 16px;
-        }
-        
-        .time-metrics-title {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-size: 18px;
-          font-weight: 700;
-        }
-        
-        .time-metrics-badge {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          border-radius: 40px;
-          font-size: 13px;
-          font-weight: 600;
-        }
-        
-        .time-metrics-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 20px;
-          margin-bottom: 28px;
-        }
-        
-        .time-metric-item {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          background: rgba(255,255,255,0.08);
-          padding: 16px;
-          border-radius: 20px;
-          backdrop-filter: blur(10px);
-        }
-        
-        .time-metric-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-        
-        .time-metric-info {
-          flex: 1;
-        }
-        
-        .time-metric-label {
-          font-size: 11px;
-          color: rgba(255,255,255,0.6);
-          display: block;
-          margin-bottom: 4px;
-        }
-        
-        .time-metric-value {
-          font-size: 20px;
-          font-weight: 800;
-          font-family: monospace;
-          display: block;
-          margin-bottom: 2px;
-        }
-        
-        .time-metric-sub {
-          font-size: 10px;
-          color: rgba(255,255,255,0.5);
-        }
-        
-        .efficiency-bar-container {
-          margin-top: 8px;
-        }
-        
-        .efficiency-bar-label {
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          margin-bottom: 8px;
-          color: rgba(255,255,255,0.7);
-        }
-        
-        .efficiency-bar-track {
-          height: 8px;
-          background: rgba(255,255,255,0.2);
-          border-radius: 10px;
-          overflow: hidden;
-        }
-        
-        .efficiency-bar-fill {
-          height: 100%;
-          border-radius: 10px;
-          transition: width 1s ease;
-        }
-        
-        .efficiency-metrics {
-          display: flex;
-          justify-content: space-between;
-          margin-top: 12px;
-          gap: 16px;
-        }
-        
-        .efficiency-metric {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 11px;
-          color: rgba(255,255,255,0.6);
-        }
-        
-        /* Charts Grid */
-        .charts-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 24px;
-          margin-bottom: 32px;
-        }
-        
-        .chart-card {
-          background: white;
-          border-radius: 24px;
-          padding: 20px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-          transition: all 0.3s;
-        }
-        
-        .chart-card:hover {
-          box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-        }
-        
-        .chart-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-        
-        .chart-title {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 14px;
-          font-weight: 700;
-          color: #0f172a;
-        }
-        
-        .chart-badge {
-          background: #f1f5f9;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 600;
-          color: #475569;
-        }
-        
-        .chart-empty {
-          height: 300px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          color: #94a3b8;
-        }
-        
-        /* Table Card */
-        .table-card {
-          background: white;
-          border-radius: 24px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-          margin-bottom: 24px;
-        }
-        
-        .table-header {
-          padding: 20px 24px;
-          border-bottom: 1px solid #e2e8f0;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-        
-        .table-title {
-          font-size: 16px;
-          font-weight: 800;
-          color: #0f172a;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .table-badge {
-          background: #f1f5f9;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 600;
-          color: #475569;
-        }
-        
-        .table-scroll {
-          overflow-x: auto;
-        }
-        
-        .premium-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        
-        .premium-table th {
-          text-align: left;
-          padding: 14px 20px;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          color: #64748b;
-          background: #f8fafc;
-          border-bottom: 1px solid #e2e8f0;
-        }
-        
-        .premium-table td {
-          padding: 14px 20px;
-          font-size: 13px;
-          color: #334155;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        
-        .premium-table tr:hover td {
-          background: #f8fafc;
-        }
-        
-        .text-right {
-          text-align: right;
-        }
-        
-        .text-left {
-          text-align: left;
-        }
-        
-        .table-empty {
-          padding: 60px;
-          text-align: center;
-          color: #94a3b8;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-        }
-        
-        /* Filter Bar */
-        .filter-bar {
-          background: white;
-          border-radius: 20px;
-          padding: 16px 24px;
-          margin-bottom: 32px;
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          flex-wrap: wrap;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        
-        .filter-label {
-          font-size: 13px;
-          font-weight: 600;
-          color: #64748b;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        
-        .filter-select {
-          padding: 8px 16px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          font-size: 13px;
           font-weight: 500;
-          color: #0f172a;
-          cursor: pointer;
-          outline: none;
-          transition: all 0.2s;
         }
-        
-        .filter-select:hover {
-          border-color: #6366f1;
+
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        
-        .filter-date-btn {
-          padding: 8px 16px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          font-size: 13px;
-          font-weight: 500;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          transition: all 0.2s;
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 1100px) {
+          .kpi-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .time-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .ch2 { grid-template-columns: 1fr !important; }
         }
-        
-        .filter-date-btn.active {
-          background: #0f172a;
-          color: white;
-          border-color: #0f172a;
-        }
-        
-        .filter-clear {
-          background: none;
-          border: none;
-          font-size: 12px;
-          color: #94a3b8;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-        
-        .filter-clear:hover {
-          color: #ef4444;
-        }
-        
-        /* Date Range Picker */
-        .date-picker-container {
-          position: relative;
-        }
-        
-        .date-picker-dropdown {
-          position: absolute;
-          top: 100%;
-          right: 0;
-          margin-top: 8px;
-          background: white;
-          border-radius: 20px;
-          padding: 20px;
-          box-shadow: 0 20px 35px -10px rgba(0,0,0,0.2);
-          z-index: 50;
-          min-width: 280px;
-        }
-        
-        /* Loading */
-        .loading-screen {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        }
-        
-        .loading-spinner {
-          text-align: center;
-          color: white;
-        }
-        
-        .loading-ring {
-          width: 60px;
-          height: 60px;
-          border: 3px solid rgba(255,255,255,0.2);
-          border-top-color: #6366f1;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 20px;
-        }
-        
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        
-        @keyframes fadeInUp {
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @media (max-width: 1024px) {
-          .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .time-metrics-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .charts-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-        
-        @media (max-width: 768px) {
-          .dashboard-main {
-            padding: 20px;
-          }
-          .stats-grid {
-            grid-template-columns: 1fr;
-          }
-          .time-metrics-grid {
-            grid-template-columns: 1fr;
-          }
-          .filter-bar {
-            flex-direction: column;
-            align-items: stretch;
-          }
+        @media (max-width: 640px) {
+          .kpi-grid { grid-template-columns: 1fr !important; }
+          .time-grid { grid-template-columns: 1fr !important; }
+          .main-pad { padding: 14px !important; }
+          .hdr-title { display: none !important; }
+          .tabs-bar { display: none !important; }
         }
       `}</style>
 
-      <header className="dashboard-header">
-        <div className="header-left">
-          <img src="/logo.png" alt="ALMAPAC" className="header-logo" />
-          <div className="header-divider" />
-          <div className="header-title">
-            <h1>Dashboard de Tiempos y Rendimiento</h1>
-            <p>{user?.nombre} · {user?.rol}</p>
+      {/* ── Header ── */}
+      <header style={{ background: C.slate, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', borderBottom: `1px solid ${C.slateL}` }}>
+        <div style={{ height: 2, background: `linear-gradient(90deg, ${C.amberMid}, ${C.amberL} 45%, transparent)` }} />
+        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <img src="/logo.png" alt="ALMAPAC" style={{ height: 32, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
+            <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.14)' }} />
+            <div className="hdr-title">
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Traslados de Azúcar</p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.36)', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{user?.nombre} · {user?.rol}</p>
+            </div>
           </div>
-        </div>
-        <div className="header-actions">
-          <button onClick={cargarDatos} className="header-btn">
-            <RefreshCw size={14} /> Actualizar
-          </button>
-          {isAdmin() && (
-            <button onClick={logout} className="header-btn" style={{ background: 'rgba(239,68,68,0.2)' }}>
-              <LogOut size={14} /> Salir
+
+          <div className="tabs-bar" style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 3 }}>
+            {TABS.map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                background: tab === t ? C.amberL : 'transparent',
+                color: tab === t ? C.slate : 'rgba(255,255,255,0.48)',
+                border: 'none', padding: '5px 14px', borderRadius: 9,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                textTransform: 'capitalize', transition: 'all .18s',
+              }}>{t}</button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={cargarDatos} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '6px 13px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RefreshCw size={12} /> Actualizar
             </button>
-          )}
+            {isAdmin() && (
+              <button onClick={logout} style={{ background: `${C.red}20`, border: `1px solid ${C.red}38`, borderRadius: 10, padding: '6px 13px', color: '#fca5a5', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <LogOut size={12} /> Salir
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
-      <main className="dashboard-main">
+      {/* ── Main ── */}
+      <main className="main-pad" style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 56px' }}>
+
         {/* Filtros */}
-        <div className="filter-bar">
-          <span className="filter-label">
-            <Filter size={14} /> Filtrar por:
+        <div style={{ background: C.white, borderRadius: 14, padding: '11px 18px', marginBottom: 20, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+            <Filter size={11} /> Filtros
           </span>
-          <select
-            value={filtroOperativo}
-            onChange={(e) => setFiltroOperativo(e.target.value)}
-            className="filter-select"
-          >
+          <div style={{ width: 1, height: 16, background: C.border }} />
+          <select value={filtroOp} onChange={e => setFiltroOp(e.target.value)} style={{ padding: '6px 10px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.bg, fontSize: 13, fontWeight: 600, color: C.slate, cursor: 'pointer', outline: 'none' }}>
             <option value="todos">Todos los operativos</option>
-            {operativos.map(op => (
-              <option key={op.id} value={op.id}>{op.nombre}</option>
-            ))}
+            {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
           </select>
 
-          <div className="date-picker-container">
-            <button
-              onClick={() => setShowDatePicker(!showDatePicker)}
-              className={`filter-date-btn ${filtroFecha.activo ? 'active' : ''}`}
-            >
-              <Calendar size={14} />
-              {filtroFecha.activo ? 'Rango activo' : 'Filtrar fechas'}
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowDP(!showDP)} style={{ padding: '6px 12px', borderRadius: 9, cursor: 'pointer', border: `1px solid ${filtroFecha.activo ? C.amberMid : C.border}`, background: filtroFecha.activo ? C.amberBg : C.bg, color: filtroFecha.activo ? C.amber : C.slateL, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Calendar size={12} />
+              {filtroFecha.activo ? `${dayjs(filtroFecha.inicio).format('DD/MM')} — ${dayjs(filtroFecha.fin).format('DD/MM')}` : 'Rango de fechas'}
             </button>
-            {showDatePicker && (
-              <div className="date-picker-dropdown">
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Desde</label>
-                  <input
-                    type="datetime-local"
-                    value={filtroFecha.inicio ? dayjs(filtroFecha.inicio).format('YYYY-MM-DDTHH:mm') : ''}
-                    onChange={(e) => setFiltroFecha({ ...filtroFecha, inicio: dayjs(e.target.value).toDate() })}
-                    style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Hasta</label>
-                  <input
-                    type="datetime-local"
-                    value={filtroFecha.fin ? dayjs(filtroFecha.fin).format('YYYY-MM-DDTHH:mm') : ''}
-                    onChange={(e) => setFiltroFecha({ ...filtroFecha, fin: dayjs(e.target.value).toDate() })}
-                    style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #e2e8f0' }}
-                  />
-                </div>
+            {showDP && (
+              <div style={{ position: 'absolute', top: '110%', left: 0, background: C.white, borderRadius: 14, padding: 18, boxShadow: '0 16px 36px rgba(0,0,0,0.13)', zIndex: 50, minWidth: 248, border: `1px solid ${C.border}` }}>
+                {['inicio', 'fin'].map(k => (
+                  <div key={k} style={{ marginBottom: k === 'inicio' ? 10 : 14 }}>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{k === 'inicio' ? 'Desde' : 'Hasta'}</label>
+                    <input type="datetime-local" value={filtroFecha[k] ? dayjs(filtroFecha[k]).format('YYYY-MM-DDTHH:mm') : ''} onChange={e => setFiltroFecha(p => ({ ...p, [k]: dayjs(e.target.value).toDate() }))} style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.slate, outline: 'none' }} />
+                  </div>
+                ))}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => {
-                      if (filtroFecha.inicio && filtroFecha.fin) {
-                        handleRangoFecha(filtroFecha.inicio, filtroFecha.fin)
-                      }
-                    }}
-                    style={{ flex: 1, background: '#6366f1', color: 'white', border: 'none', padding: '8px', borderRadius: 8, cursor: 'pointer' }}
-                  >
-                    Aplicar
-                  </button>
-                  <button
-                    onClick={() => setShowDatePicker(false)}
-                    style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: 'none', padding: '8px', borderRadius: 8, cursor: 'pointer' }}
-                  >
-                    Cancelar
-                  </button>
+                  {[{ l: 'Aplicar', fn: () => { if (filtroFecha.inicio && filtroFecha.fin) { setFiltroFecha(f => ({ ...f, activo: true })); setShowDP(false); cargarDatos() } }, bg: C.amberMid, col: '#fff' }, { l: 'Cancelar', fn: () => setShowDP(false), bg: C.bg, col: C.slateL }].map(b => (
+                    <button key={b.l} onClick={b.fn} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: b.bg, color: b.col, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{b.l}</button>
+                  ))}
                 </div>
               </div>
             )}
           </div>
 
-          {filtroOperativo !== 'todos' && (
-            <button onClick={() => setFiltroOperativo('todos')} className="filter-clear">
-              <X size={12} /> Limpiar operativo
+          {(filtroOp !== 'todos' || filtroFecha.activo) && (
+            <button onClick={() => { setFiltroOp('todos'); setFiltroFecha({ activo: false, inicio: null, fin: null }); cargarDatos() }} style={{ background: 'none', border: 'none', fontSize: 11, color: C.red, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+              <X size={11} /> Limpiar
             </button>
           )}
-          {filtroFecha.activo && (
-            <button onClick={() => { setFiltroFecha({ activo: false, inicio: null, fin: null }); cargarDatos(); }} className="filter-clear">
-              <X size={12} /> Limpiar fechas
-            </button>
-          )}
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted, fontFamily: "'DM Mono', monospace" }}>
+            {trasF.length} traslados · {turF.length} turnos · {atF.length} atrasos
+          </div>
         </div>
 
-        {/* Stat Cards */}
-        <div className="stats-grid">
-          <StatCard 
-            title="Unidades Cargadas" 
-            value={metricas.totalUnidades} 
-            icon={<Truck size={28} />} 
-            color={COLORES_PREMIUM.gradientCool}
-            delay={0}
-          />
-          <StatCard 
-            title="Tiempo Total Turnos" 
-            value={formatTiempo(metricas.tiempoTotalTurnos)} 
-            icon={<Clock size={28} />} 
-            color={COLORES_PREMIUM.gradient}
-            delay={100}
-          />
-          <StatCard 
-            title="Tiempo de Inactividad" 
-            value={formatTiempo(metricas.tiempoInactividad)} 
-            icon={<AlertCircle size={28} />} 
-            color={COLORES_PREMIUM.gradientWarm}
-            subtitle={`${metricas.tiempoTotalTurnos > 0 ? ((metricas.tiempoInactividad / metricas.tiempoTotalTurnos) * 100).toFixed(1) : 0}% del total`}
-            delay={200}
-          />
-          <StatCard 
-            title="Tiempo Efectivo" 
-            value={formatTiempo(metricas.tiempoEfectivo)} 
-            icon={<Zap size={28} />} 
-            color={COLORES_PREMIUM.gradientCool}
-            subtitle={`${metricas.eficiencia}% de productividad`}
-            delay={300}
-          />
-        </div>
+        {/* ══ RESUMEN ══ */}
+        {tab === 'resumen' && (
+          <>
+            <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 20 }}>
+              <KpiCard label="Unidades Trasladadas" value={met.n.toLocaleString()} icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  sub="Sacos / camiones" delay={0} />
+              <KpiCard label="Tiempo Total Turnos"  value={fmt(met.tT)}           icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub="Suma de turnos"   delay={55} />
+              <KpiCard label="Tiempo Inactividad"   value={fmt(met.tI)}           icon={AlertCircle} accent={C.red}      accentBg={C.redBg}   sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del turno`} delay={110} />
+              <KpiCard label="Tiempo Efectivo"      value={fmt(met.tE)}           icon={Zap}         accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`} delay={165} />
+            </div>
 
-        {/* Time Metrics Card */}
-        <TimeMetricsCard
-          tiempoTotal={metricas.tiempoTotalTurnos}
-          tiempoInactividad={metricas.tiempoInactividad}
-          tiempoEfectivo={metricas.tiempoEfectivo}
-          unidades={metricas.totalUnidades}
-        />
+            <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} />
 
-        {/* Charts Grid */}
-        <div className="charts-grid">
-          <PremiumBarChart 
-            data={datosOperativos} 
-            title="Tiempos por Operativo" 
-            icon={<BarChart3 size={18} />} 
-          />
-          <TrendChart 
-            data={datosUnidadesPorHora} 
-            title="Tendencia de Unidades por Hora" 
-          />
-        </div>
-
-        <div className="charts-grid">
-          <AtrasosPieChart 
-            data={atrasosPorTipo} 
-            totalMinutos={totalMinutosAtrasos} 
-          />
-          <PerformanceRadar 
-            eficiencia={parseFloat(metricas.eficiencia)}
-            unidadesPorHora={parseFloat(metricas.unidadesPorHora)}
-            tiempoEfectivo={metricas.tiempoEfectivo}
-            tiempoInactividad={metricas.tiempoInactividad}
-          />
-        </div>
-
-        {/* Atrasos Table */}
-        <PremiumTable
-          title="Registro de Atrasos"
-          badge={`${atrasosFiltrados.length} registros`}
-          data={atrasosFiltrados}
-          columns={[
-            { key: 'fecha', label: 'Fecha', render: (v) => dayjs(v).format('DD/MM/YY') },
-            { key: 'hora_inicio', label: 'Inicio', render: (v) => v?.slice(0, 5) || '—' },
-            { key: 'hora_fin', label: 'Fin', render: (v) => v?.slice(0, 5) || 'En curso' },
-            { 
-              key: 'tipo_paro_id', 
-              label: 'Tipo', 
-              render: (v, row) => {
-                const tipo = tiposParo.find(t => t.id === v)
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, background: '#ef4444' }} />
-                    <span>{tipo?.nombre || '—'}</span>
-                  </div>
-                )
-              }
-            },
-            { key: 'operativo_nombre', label: 'Operativo' },
-            { key: 'duracion_minutos', label: 'Duración', align: 'right', render: (v) => formatTiempo(v || 0) },
-            { key: 'observaciones', label: 'Observaciones', render: (v) => v || '—' }
-          ]}
-        />
-
-        {/* Turnos Table */}
-        <PremiumTable
-          title="Turnos Registrados"
-          badge={`${turnosFiltrados.length} turnos`}
-          data={turnosFiltrados}
-          columns={[
-            { key: 'fecha', label: 'Fecha', render: (v) => dayjs(v).format('DD/MM/YY') },
-            { key: 'chequero1', label: 'Chequero 1', render: (v) => v || '—' },
-            { key: 'chequero2', label: 'Chequero 2', render: (v) => v || '—' },
-            { key: 'operador', label: 'Operador', render: (v) => <strong>{v}</strong> },
-            { 
-              key: 'operativo_id', 
-              label: 'Operativo', 
-              render: (v) => operativos.find(o => o.id === v)?.nombre || '—' 
-            },
-            { key: 'hora_inicio', label: 'Inicio', render: (v) => v?.slice(0, 5) || '—' },
-            { key: 'hora_fin', label: 'Fin', render: (v) => v?.slice(0, 5) || '—' },
-            { 
-              key: 'duracion', 
-              label: 'Duración', 
-              align: 'right',
-              render: (_, row) => {
-                let dur = null
-                if (row.hora_inicio && row.hora_fin) {
-                  const inicio = dayjs(`2000-01-01 ${row.hora_inicio}`)
-                  const fin = dayjs(`2000-01-01 ${row.hora_fin}`)
-                  let diff = fin.diff(inicio, 'minute')
-                  if (diff < 0) diff += 24 * 60
-                  dur = diff
-                } else if (row.duracion_minutos) {
-                  dur = row.duracion_minutos
+            <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <ChartCard title="Unidades por Hora" icon={TrendingUp} badge="Tendencia">
+                {datosHora.length === 0
+                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><TrendingUp size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin datos</span></div>
+                  : <ResponsiveContainer width="100%" height={196}>
+                      <AreaChart data={datosHora} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={C.amberMid} stopOpacity={0.2} />
+                            <stop offset="100%" stopColor={C.amberMid} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} />
+                        <XAxis dataKey="hora" tick={{ fill: C.muted, fontSize: 10, fontFamily: "'DM Mono', monospace" }} />
+                        <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
+                        <Tooltip content={<DarkTip fmtVal={v => `${v} unidades`} />} />
+                        <Area type="monotone" dataKey="unidades" name="Unidades" stroke={C.amberMid} strokeWidth={2} fill="url(#ag)" dot={{ fill: C.amberMid, r: 3 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
                 }
-                return dur ? formatTiempo(dur) : '—'
-              }
-            },
-            { key: 'observaciones', label: 'Observaciones', render: (v) => v || '—' }
-          ]}
-        />
+              </ChartCard>
 
-        <div style={{ textAlign: 'center', padding: '24px', fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
-          🔄 Datos en tiempo real · {filtroOperativo !== 'todos' ? `Operativo: ${operativos.find(o => o.id === parseInt(filtroOperativo))?.nombre}` : 'Todos los operativos'}
-          {filtroFecha.activo && ` · Rango: ${dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - ${dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}`}
-        </div>
+              <ChartCard title="Distribución de Atrasos" icon={AlertCircle} badge={`Total ${fmt(totalMinAt)}`}>
+                {atrasosTipo.length === 0
+                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><AlertCircle size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin atrasos</span></div>
+                  : <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                      <ResponsiveContainer width="48%" height={186}>
+                        <PieChart>
+                          <Pie data={atrasosTipo} cx="50%" cy="50%" innerRadius={46} outerRadius={68} dataKey="minutos" paddingAngle={3}>
+                            {atrasosTipo.map((_, i) => <Cell key={i} fill={PIE_COLS[i % PIE_COLS.length]} />)}
+                          </Pie>
+                          <Tooltip content={<DarkTip fmtVal={v => fmt(v)} />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {atrasosTipo.map((d, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 2, background: PIE_COLS[i % PIE_COLS.length], flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, color: C.slateL, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: C.slate, fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>{fmt(d.minutos)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                }
+              </ChartCard>
+            </div>
+
+            <ChartCard title="Tiempos por Operativo" icon={BarChart3} badge={`${datosOps.length} operativos`} style={{ marginBottom: 20 }}>
+              {datosOps.length === 0
+                ? <div style={{ height: 234, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><BarChart3 size={42} style={{ opacity: 0.22 }} /><span style={{ fontSize: 13 }}>Sin datos</span></div>
+                : <ResponsiveContainer width="100%" height={234}>
+                    <ComposedChart data={datosOps} margin={{ top: 6, right: 34, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} />
+                      <XAxis dataKey="nombre" tick={{ fill: C.muted, fontSize: 11 }} />
+                      <YAxis yAxisId="l" tick={{ fill: C.muted, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
+                      <YAxis yAxisId="r" orientation="right" tick={{ fill: C.muted, fontSize: 10 }} />
+                      <Tooltip content={<DarkTip fmtVal={(v, n) => n === 'Unidades' ? `${v} unidades` : fmt(v)} />} />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                      <Bar yAxisId="l" dataKey="tiempoEfectivo"    name="Tiempo Efectivo" fill={C.teal}  radius={[5,5,0,0]} />
+                      <Bar yAxisId="l" dataKey="tiempoInactividad" name="Inactividad"     fill={C.redL}  radius={[5,5,0,0]} />
+                      <Line yAxisId="r" type="monotone" dataKey="unidades" name="Unidades" stroke={C.amberMid} strokeWidth={2.5} dot={{ fill: C.amberMid, r: 4, strokeWidth: 2, stroke: C.white }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+              }
+            </ChartCard>
+          </>
+        )}
+
+        {/* ══ OPERATIVOS ══ */}
+        {tab === 'operativos' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+            {datosOps.length === 0
+              ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 56, color: C.muted }}><Box size={42} style={{ margin: '0 auto 12px', opacity: 0.22 }} /><p style={{ fontSize: 14, fontWeight: 600 }}>Sin operativos con datos</p></div>
+              : datosOps.map(op => {
+                  const total = op.tiempoEfectivo + op.tiempoInactividad
+                  const eff   = total > 0 ? Math.round((op.tiempoEfectivo / total) * 100) : 0
+                  const col   = eff >= 70 ? C.teal : eff >= 40 ? C.amberMid : C.red
+                  const colBg = eff >= 70 ? C.tealBg : eff >= 40 ? C.amberBg : C.redBg
+                  return (
+                    <div key={op.id} style={{ background: C.white, borderRadius: 16, padding: 20, border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all .22s', cursor: 'default' }}
+                      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 22px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-3px)' }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: C.slate }}>{op.nombre}</p>
+                          <p style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'DM Mono', monospace" }}>ID #{op.id}</p>
+                        </div>
+                        <span style={{ background: colBg, color: col, padding: '3px 10px', borderRadius: 20, fontSize: 13, fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>{eff}%</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
+                        {[{ l: 'Efectivo', v: fmt(op.tiempoEfectivo), c: C.teal }, { l: 'Inactivo', v: fmt(op.tiempoInactividad), c: C.red }, { l: 'Unidades', v: op.unidades, c: C.amberMid }].map(({ l, v, c }) => (
+                          <div key={l} style={{ background: `${c}0f`, borderRadius: 10, padding: '9px 10px' }}>
+                            <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: c }}>{l}</p>
+                            <p style={{ fontSize: 15, fontWeight: 600, color: C.slate, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ height: 5, borderRadius: 5, background: C.borderL, overflow: 'hidden' }}>
+                        <div style={{ width: `${eff}%`, height: '100%', background: col, borderRadius: 5, transition: 'width 1s ease' }} />
+                      </div>
+                    </div>
+                  )
+                })
+            }
+          </div>
+        )}
+
+        {/* ══ ATRASOS ══ */}
+        {tab === 'atrasos' && (
+          <>
+            <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <ChartCard title="Atrasos por Tipo de Paro" icon={AlertCircle} badge={fmt(totalMinAt)}>
+                {atrasosTipo.length === 0
+                  ? <div style={{ height: 210, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><AlertCircle size={36} style={{ opacity: 0.22 }} /><span>Sin atrasos</span></div>
+                  : <ResponsiveContainer width="100%" height={210}>
+                      <BarChart data={atrasosTipo} layout="vertical" margin={{ left: 0, right: 14, top: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} horizontal={false} />
+                        <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
+                        <YAxis type="category" dataKey="name" tick={{ fill: C.slateL, fontSize: 10 }} width={84} />
+                        <Tooltip content={<DarkTip fmtVal={v => fmt(v)} />} />
+                        <Bar dataKey="minutos" name="Duración" radius={[0,5,5,0]}>
+                          {atrasosTipo.map((_, i) => <Cell key={i} fill={PIE_COLS[i % PIE_COLS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                }
+              </ChartCard>
+
+              <div style={{ background: C.white, borderRadius: 18, padding: 20, border: `1px solid ${C.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ background: C.amberBg, borderRadius: 9, padding: 6 }}><Target size={14} color={C.amberMid} /></div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.slate }}>Resumen de Paros</span>
+                </div>
+                {[{ l: 'Total eventos', v: atF.length, c: C.slate }, { l: 'Tiempo total parado', v: fmt(totalMinAt), c: C.red }, { l: 'Promedio por evento', v: atF.length > 0 ? fmt(Math.round(totalMinAt / atF.length)) : '0h 0m', c: C.amberMid }, { l: 'Tipos de paro distintos', v: atrasosTipo.length, c: C.teal }].map(({ l, v, c }) => (
+                  <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 13px', background: C.bg, borderRadius: 10, marginBottom: 7 }}>
+                    <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>{l}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: c, fontFamily: "'DM Mono', monospace" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <TablaData title="Registro Detallado de Atrasos" icon={AlertCircle} badge={`${atF.length} eventos`} rows={atF}
+              cols={[
+                { key: 'fecha',            label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
+                { key: 'hora_inicio',      label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
+                { key: 'hora_fin',         label: 'Fin',          render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="En curso" color={C.amberMid} bg={C.amberBg} /> },
+                { key: 'tipo_paro_id',     label: 'Tipo',         render: v => { const t = tiposParo.find(x => x.id === v); return t ? <Chip label={t.nombre} color={C.red} bg={C.redBg} /> : <span style={{ color: C.muted }}>—</span> } },
+                { key: 'operativo_nombre', label: 'Operativo' },
+                { key: 'duracion_minutos', label: 'Duración', right: true, render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: C.red, fontSize: 12 }}>{fmt(v || 0)}</span> },
+                { key: 'observaciones',    label: 'Observaciones', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+              ]}
+            />
+          </>
+        )}
+
+        {/* ══ TURNOS ══ */}
+        {tab === 'turnos' && (
+          <>
+            <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
+              <KpiCard label="Total Turnos"          value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
+              <KpiCard label="Tiempo Promedio/Turno" value={turF.length > 0 ? fmt(Math.round(met.tT / turF.length)) : '0h 0m'} icon={Clock} accent={C.amberMid} accentBg={C.amberBg} delay={55} />
+              <KpiCard label="Unidades por Turno"    value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
+            </div>
+
+            <TablaData title="Registro de Turnos Operativos" icon={Clock} badge={`${turF.length} turnos`} rows={turF}
+              cols={[
+                { key: 'fecha',        label: 'Fecha',      render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
+                { key: 'chequero1',    label: 'Chequero 1', render: v => v || <span style={{ color: C.muted }}>—</span> },
+                { key: 'chequero2',    label: 'Chequero 2', render: v => v || <span style={{ color: C.muted }}>—</span> },
+                { key: 'operador',     label: 'Operador',   render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong> },
+                { key: 'operativo_id', label: 'Operativo',  render: v => operativos.find(o => o.id === v)?.nombre || '—' },
+                { key: 'hora_inicio',  label: 'Inicio',     render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
+                { key: 'hora_fin',     label: 'Fin',        render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="Activo" color={C.teal} bg={C.tealBg} /> },
+                { key: 'duracion', label: 'Duración', right: true, render: (_, r) => {
+                  let d = null
+                  if (r.hora_inicio && r.hora_fin) { let x = dayjs(`2000-01-01 ${r.hora_fin}`).diff(dayjs(`2000-01-01 ${r.hora_inicio}`), 'minute'); if (x < 0) x += 1440; d = x }
+                  else if (r.duracion_minutos) d = r.duracion_minutos
+                  return d ? <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: C.teal, fontSize: 12 }}>{fmt(d)}</span> : '—'
+                }},
+                { key: 'observaciones', label: 'Notas', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+              ]}
+            />
+          </>
+        )}
+
+        <p style={{ textAlign: 'center', marginTop: 26, fontSize: 10, color: C.muted, fontFamily: "'DM Mono', monospace" }}>
+          🍬 ALMAPAC · Traslados de Azúcar ·{' '}
+          {filtroOp !== 'todos' ? operativos.find(o => o.id === +filtroOp)?.nombre : 'Todos los operativos'}
+          {filtroFecha.activo && ` · ${dayjs(filtroFecha.inicio).format('DD/MM/YY')} – ${dayjs(filtroFecha.fin).format('DD/MM/YY')}`}
+        </p>
       </main>
     </div>
   )
