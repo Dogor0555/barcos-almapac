@@ -25,7 +25,7 @@ const TRANSPORTES_PREDEFINIDOS = [
 // Configuración de marchamos - puedes cambiar estos valores
 const MARCHAMOS_CONFIG = {
   cantidadCampos: 5,        // Número de campos de marchamo
-  digitosPorCampo: [6, 6, 6, 6, 6] // Dígitos para cada campo (6 cada uno)
+  digitosPorCampo: [7, 7, 7, 7, 7] // Dígitos para cada campo (6 cada uno)
 }
 
 export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
