@@ -14,7 +14,7 @@ import {
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
   Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus,
-  User, FolderOpen, RotateCw
+  User, FolderOpen, RotateCw, Gauge
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
@@ -1645,7 +1645,7 @@ export default function AdminPage() {
                 Último acceso: {dayjs().format('DD/MM/YYYY HH:mm')}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <button
                 onClick={() => {
                   setVista('barcos')
@@ -1671,6 +1671,14 @@ export default function AdminPage() {
               >
                 <Truck className="w-4 h-4" />
                 Traslados Azúcar
+              </Link>
+
+              <Link
+                href="/dashboard-tiempos"
+                className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                <Gauge className="w-4 h-4" />
+                Dashboard Tiempos
               </Link>
               
               <button
@@ -1756,70 +1764,70 @@ export default function AdminPage() {
             </button>
           </div>
 
-          {/* Stats rápidas - AHORA EN HORIZONTAL */}
-<div className="grid grid-cols-5 gap-4 mt-6">
-  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-    <div className="flex items-center gap-3">
-      <div className="bg-blue-500/30 p-3 rounded-lg">
-        <Ship className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-blue-200 text-xs">Barcos Activos</p>
-        <p className="text-2xl font-black text-white">
-          {barcos.filter(b => b.estado === 'activo').length}
-        </p>
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-    <div className="flex items-center gap-3">
-      <div className="bg-green-500/30 p-3 rounded-lg">
-        <Users className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-blue-200 text-xs">Usuarios</p>
-        <p className="text-2xl font-black text-white">{usuarios.length}</p>
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-    <div className="flex items-center gap-3">
-      <div className="bg-purple-500/30 p-3 rounded-lg">
-        <Package className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-blue-200 text-xs">Productos</p>
-        <p className="text-2xl font-black text-white">{productos.length}</p>
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-    <div className="flex items-center gap-3">
-      <div className="bg-amber-500/30 p-3 rounded-lg">
-        <FolderOpen className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-blue-200 text-xs">Operativos</p>
-        <p className="text-2xl font-black text-white">{operativos.length}</p>
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-    <div className="flex items-center gap-3">
-      <div className="bg-yellow-500/30 p-3 rounded-lg">
-        <Activity className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-blue-200 text-xs">Total Barcos</p>
-        <p className="text-2xl font-black text-white">{barcos.length}</p>
-      </div>
-    </div>
-  </div>
-</div>
+          {/* Stats rápidas */}
+          <div className="grid grid-cols-5 gap-4 mt-6">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-500/30 p-3 rounded-lg">
+                  <Ship className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Barcos Activos</p>
+                  <p className="text-2xl font-black text-white">
+                    {barcos.filter(b => b.estado === 'activo').length}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-green-500/30 p-3 rounded-lg">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Usuarios</p>
+                  <p className="text-2xl font-black text-white">{usuarios.length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-purple-500/30 p-3 rounded-lg">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Productos</p>
+                  <p className="text-2xl font-black text-white">{productos.length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-500/30 p-3 rounded-lg">
+                  <FolderOpen className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Operativos</p>
+                  <p className="text-2xl font-black text-white">{operativos.length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-500/30 p-3 rounded-lg">
+                  <Activity className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-blue-200 text-xs">Total Barcos</p>
+                  <p className="text-2xl font-black text-white">{barcos.length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* VISTA DE ESTADÍSTICAS */}
@@ -2048,7 +2056,7 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Registros</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Token</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {barcosFiltrados.map((barco) => {
@@ -2066,7 +2074,7 @@ export default function AdminPage() {
                               <span>{barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}</span>
                             </div>
                           </div>
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           {barco.codigo_barco ? (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-mono">
@@ -2075,7 +2083,7 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-slate-600">—</span>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           {barco.tipo_operacion === 'exportacion' ? (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
@@ -2088,7 +2096,7 @@ export default function AdminPage() {
                               IMPORTACIÓN
                             </span>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                             barco.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
@@ -2097,7 +2105,7 @@ export default function AdminPage() {
                           }`}>
                             {barco.estado}
                           </span>
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           {barco.pesador ? (
                             <div>
@@ -2107,7 +2115,7 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-slate-500">No asignado</span>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             {barco.tipo_operacion !== 'exportacion' && (
@@ -2123,7 +2131,7 @@ export default function AdminPage() {
                               </span>
                             )}
                           </div>
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <code className="text-xs bg-slate-900 px-2 py-1 rounded border border-white/10 font-mono">
@@ -2137,7 +2145,7 @@ export default function AdminPage() {
                               <Copy className="w-4 h-4" />
                             </button>
                           </div>
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <AccionesBarcoMenu
                             barco={barco}
@@ -2155,8 +2163,8 @@ export default function AdminPage() {
                             onExportarBarco={handleExportarBarco}
                             onEliminarBarco={handleEliminarBarco}
                           />
-                        </td>
-                      </tr>
+                         </td>
+                       </tr>
                     )
                   })}
                 </tbody>
@@ -2217,22 +2225,22 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Colores</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {productos.map((prod) => (
                     <tr key={prod.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <span className="text-3xl">{prod.icono}</span>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <code className="bg-slate-900 px-2 py-1 rounded text-sm font-mono text-blue-400">
                           {prod.codigo}
                         </code>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <p className="font-bold text-white">{prod.nombre}</p>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${
                           prod.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
@@ -2243,20 +2251,20 @@ export default function AdminPage() {
                           {prod.tipo_registro === 'banda' && <><Scale className="w-3 h-3" /> Banda</>}
                           {prod.tipo_registro === 'viajes' && <><Truck className="w-3 h-3" /> Viajes</>}
                         </span>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded" style={{ backgroundColor: prod.color_accent }} />
                           <span className="text-xs text-slate-400">{prod.color_from} → {prod.color_to}</span>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                           prod.activo ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                         }`}>
                           {prod.activo ? 'Activo' : 'Inactivo'}
                         </span>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
@@ -2277,8 +2285,8 @@ export default function AdminPage() {
                             <Trash2 className="w-4 h-4 text-red-400" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))}
                 </tbody>
               </table>
@@ -2286,7 +2294,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* VISTA DE OPERATIVOS */}
+        {/* VISTA DE OPERATIVOS - CON BOTÓN IR AL DASHBOARD */}
         {vista === 'operativos' && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
@@ -2317,7 +2325,7 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Creado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {operativos.map((op) => (
@@ -2354,6 +2362,13 @@ export default function AdminPage() {
                             title="Ver traslados"
                           >
                             <Eye className="w-4 h-4 text-blue-400" />
+                          </Link>
+                          <Link
+                            href={`/dashboard-tiempos?operativo=${op.id}`}
+                            className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors"
+                            title="Ir al Dashboard de Tiempos"
+                          >
+                            <Gauge className="w-4 h-4 text-purple-400" />
                           </Link>
                           <button
                             onClick={() => handleEliminarOperativo(op.id, op.nombre)}
