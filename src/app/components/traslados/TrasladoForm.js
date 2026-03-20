@@ -6,7 +6,7 @@ import { getCurrentUser } from '../../lib/auth'
 import { 
   X, Truck, User, Hash, Calendar, Clock, Save, FolderOpen,
   Clock3, RotateCw, AlertCircle, Plus, Minus, Play, Pause, StopCircle,
-  Building2, PlusCircle, CreditCard, Settings
+  Building2, PlusCircle, CreditCard, Settings, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OperativoSelector from './OperativoSelector'
@@ -25,7 +25,7 @@ const TRANSPORTES_PREDEFINIDOS = [
 // Configuración de marchamos - puedes cambiar estos valores
 const MARCHAMOS_CONFIG = {
   cantidadCampos: 5,        // Número de campos de marchamo
-  digitosPorCampo: [7, 7, 7, 7, 7] // Dígitos para cada campo (6 cada uno)
+  digitosPorCampo: [7, 7, 7, 7, 7] // Dígitos para cada campo
 }
 
 export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
@@ -74,6 +74,19 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
         for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
           if (partes[i-1]) {
             initialMarchamos[`dig${i}`] = partes[i-1].trim()
+          }
+        }
+      } else {
+        // Si es un solo string, tratar de distribuirlo
+        const marchamoStr = formData.no_marchamo.replace(/\s+/g, '')
+        if (marchamoStr.length > 0) {
+          let startIndex = 0
+          for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
+            const length = MARCHAMOS_CONFIG.digitosPorCampo[i-1] || 7
+            if (startIndex < marchamoStr.length) {
+              initialMarchamos[`dig${i}`] = marchamoStr.substr(startIndex, length)
+              startIndex += length
+            }
           }
         }
       }
@@ -224,7 +237,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
     
     // Obtener el índice del campo (1-based)
     const index = parseInt(digito.replace('dig', ''))
-    const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[index - 1] || 10
+    const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[index - 1] || 7
     
     if (soloNumeros.length <= maxLength) {
       setMarchamos(prev => ({
@@ -253,6 +266,27 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
     }
   }
 
+  // Función para pegar marchamo completo
+  const handlePaste = (e) => {
+    e.preventDefault()
+    const pastedText = e.clipboardData.getData('text')
+    // Eliminar cualquier caracter que no sea número o separador común
+    const cleanText = pastedText.replace(/[^0-9|\s-]/g, '')
+    
+    // Intentar separar por |, espacio o -
+    const parts = cleanText.split(/[|\s-]+/).filter(p => p.length > 0)
+    
+    if (parts.length > 0) {
+      const newMarchamos = { ...marchamos }
+      for (let i = 0; i < Math.min(parts.length, MARCHAMOS_CONFIG.cantidadCampos); i++) {
+        const digito = `dig${i + 1}`
+        const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[i] || 7
+        newMarchamos[digito] = parts[i].substring(0, maxLength)
+      }
+      setMarchamos(newMarchamos)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -261,14 +295,11 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
       return
     }
 
-    // Validar que todos los dígitos del marchamo estén completos
-    for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
-      const digito = `dig${i}`
-      const requiredLength = MARCHAMOS_CONFIG.digitosPorCampo[i-1]
-      if (!marchamos[digito] || marchamos[digito].length < requiredLength) {
-        toast.error(`El campo ${i} del marchamo debe tener ${requiredLength} dígitos`)
-        return
-      }
+    // Validar que al menos un campo de marchamo tenga contenido
+    const tieneAlgunMarchamo = Object.values(marchamos).some(val => val && val.length > 0)
+    if (!tieneAlgunMarchamo) {
+      toast.error('Debes ingresar al menos un número de marchamo')
+      return
     }
 
     // Validar transporte
@@ -345,28 +376,31 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
   const duracionTotal = duracionCalculada?.total || 0
   const duracionConCabaleo = duracionTotal + (formData.tiempo_cabaleo_minutos || 0)
 
-  // Generar los campos de marchamo dinámicamente
+  // Generar los campos de marchamo dinámicamente con diseño responsive - VERSIÓN CORREGIDA
   const renderMarchamos = () => {
     const campos = []
+    
     for (let i = 1; i <= MARCHAMOS_CONFIG.cantidadCampos; i++) {
       const digito = `dig${i}`
-      const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[i-1] || 10
+      const maxLength = MARCHAMOS_CONFIG.digitosPorCampo[i-1] || 7
       
       campos.push(
-        <div key={i} className="flex-1 text-center">
+        <div key={i} className="flex-1 min-w-[60px] sm:min-w-[80px] text-center">
           <input
             id={`marchamo-${digito}`}
             type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={marchamos[digito] || ''}
             onChange={(e) => handleMarchamoChange(digito, e.target.value)}
             onKeyDown={(e) => handleMarchamoKeyDown(e, digito)}
+            onPaste={i === 1 ? handlePaste : undefined}
             maxLength={maxLength}
-            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-3 text-white text-center text-xl font-mono focus:border-amber-500 focus:outline-none"
-            placeholder={'0'.repeat(maxLength)}
-            required
+            className="w-full bg-slate-900 border border-white/10 rounded-lg px-2 py-3 text-white text-center font-mono text-base sm:text-xl focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            placeholder={'•'.repeat(maxLength)}
           />
           <span className="text-[10px] text-slate-500 mt-1 block">
-            {maxLength} dígitos
+            {maxLength}
           </span>
         </div>
       )
@@ -374,31 +408,38 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
       // Agregar separador | entre campos (excepto después del último)
       if (i < MARCHAMOS_CONFIG.cantidadCampos) {
         campos.push(
-          <span key={`sep-${i}`} className="text-2xl text-slate-600">|</span>
+          <span key={`sep-${i}`} className="text-slate-600 text-lg sm:text-2xl flex-shrink-0">
+            |
+          </span>
         )
       }
     }
-    return campos
+    
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
+        {campos}
+      </div>
+    )
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4 sticky top-0 flex items-center justify-between">
-          <h3 className="text-xl font-black text-white flex items-center gap-2">
-            <Truck className="w-5 h-5" />
-            {traslado ? 'Editar Traslado' : 'Nuevo Traslado'}
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 flex items-center justify-between z-10">
+          <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2 truncate">
+            <Truck className="w-5 h-5 flex-shrink-0" />
+            <span className="truncate">{traslado ? 'Editar Traslado' : 'Nuevo Traslado'}</span>
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0">
             <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Selector de Operativo */}
-          <div className="bg-slate-900/50 rounded-xl p-5 border border-amber-500/20">
-            <h4 className="text-white font-bold mb-3 flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-amber-400" />
+          <div className="bg-slate-900/50 rounded-xl p-4 sm:p-5 border border-amber-500/20">
+            <h4 className="text-white font-bold mb-3 flex items-center gap-2 text-sm sm:text-base">
+              <FolderOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
               Operativo <span className="text-red-400">*</span>
             </h4>
             <OperativoSelector 
@@ -408,13 +449,13 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
           </div>
 
           {/* Datos del traslado */}
-          <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
-            <h4 className="text-white font-bold mb-4 flex items-center gap-2">
-              <Truck className="w-4 h-4 text-blue-400" />
+          <div className="bg-slate-900/50 rounded-xl p-4 sm:p-5 border border-white/5">
+            <h4 className="text-white font-bold mb-4 flex items-center gap-2 text-sm sm:text-base">
+              <Truck className="w-4 h-4 text-blue-400 flex-shrink-0" />
               Datos del Traslado
             </h4>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">
                   Conductor <span className="text-red-400">*</span>
@@ -423,7 +464,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   type="text"
                   value={formData.nombre_conductor}
                   onChange={(e) => setFormData({...formData, nombre_conductor: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   placeholder="Ej: Juan Pérez"
                   required
                 />
@@ -436,14 +477,14 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   type="text"
                   value={formData.placa}
                   onChange={(e) => setFormData({...formData, placa: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   placeholder="Ej: ABC-123"
                   required
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-3 sm:mt-4">
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">
                   Remolque <span className="text-red-400">*</span>
@@ -452,7 +493,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   type="text"
                   value={formData.remolque}
                   onChange={(e) => setFormData({...formData, remolque: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   placeholder="Ej: REM-123"
                   required
                 />
@@ -464,7 +505,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                 <select
                   value={formData.tipo_unidad}
                   onChange={(e) => setFormData({...formData, tipo_unidad: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   required
                 >
                   <option value="plana">Plana</option>
@@ -473,51 +514,49 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              {/* Selector de Transporte con opción "Otro" */}
-              <div className="col-span-2">
-                <label className="block text-sm font-bold text-slate-400 mb-1">
-                  Transporte <span className="text-red-400">*</span>
-                </label>
-                <div className="space-y-2">
-                  <select
-                    value={transporteSeleccionado}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setTransporteSeleccionado(value)
-                      setMostrarOtroTransporte(value === 'otro')
-                      if (value !== 'otro') {
-                        setOtroTransporte('')
-                      }
-                    }}
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
-                    required={!mostrarOtroTransporte}
-                  >
-                    <option value="">Seleccionar transporte</option>
-                    {TRANSPORTES_PREDEFINIDOS.map(trans => (
-                      <option key={trans} value={trans}>{trans}</option>
-                    ))}
-                    <option value="otro">➕ Otro (especificar)</option>
-                  </select>
+            {/* Selector de Transporte con opción "Otro" */}
+            <div className="mt-3 sm:mt-4">
+              <label className="block text-sm font-bold text-slate-400 mb-1">
+                Transporte <span className="text-red-400">*</span>
+              </label>
+              <div className="space-y-2">
+                <select
+                  value={transporteSeleccionado}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setTransporteSeleccionado(value)
+                    setMostrarOtroTransporte(value === 'otro')
+                    if (value !== 'otro') {
+                      setOtroTransporte('')
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
+                  required={!mostrarOtroTransporte}
+                >
+                  <option value="">Seleccionar transporte</option>
+                  {TRANSPORTES_PREDEFINIDOS.map(trans => (
+                    <option key={trans} value={trans}>{trans}</option>
+                  ))}
+                  <option value="otro">➕ Otro (especificar)</option>
+                </select>
 
-                  {mostrarOtroTransporte && (
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                      <input
-                        type="text"
-                        value={otroTransporte}
-                        onChange={(e) => setOtroTransporte(e.target.value)}
-                        placeholder="Nombre del transporte"
-                        className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-4 py-2 text-white"
-                        autoFocus
-                      />
-                    </div>
-                  )}
-                </div>
+                {mostrarOtroTransporte && (
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <input
+                      type="text"
+                      value={otroTransporte}
+                      onChange={(e) => setOtroTransporte(e.target.value)}
+                      placeholder="Nombre del transporte"
+                      className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-3 sm:mt-4">
               <label className="block text-sm font-bold text-slate-400 mb-1">
                 Fecha <span className="text-red-400">*</span>
               </label>
@@ -525,13 +564,13 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                 type="date"
                 value={formData.fecha}
                 onChange={(e) => setFormData({...formData, fecha: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                 required
               />
             </div>
 
             {/* Horas con botones de "Ahora" */}
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-3 sm:mt-4">
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
                   <span>Hora Inicio <span className="text-red-400">*</span></span>
@@ -548,7 +587,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   type="time"
                   value={formData.hora_inicio_carga}
                   onChange={(e) => setFormData({...formData, hora_inicio_carga: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   required
                 />
               </div>
@@ -568,7 +607,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   type="time"
                   value={formData.hora_fin_carga}
                   onChange={(e) => setFormData({...formData, hora_fin_carga: e.target.value})}
-                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                   required
                 />
               </div>
@@ -577,38 +616,43 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
             {/* Mostrar duración calculada */}
             {duracionCalculada && (
               <div className="mt-3 bg-slate-800 rounded-lg p-3 flex items-center justify-between">
-                <span className="text-sm text-slate-400">Duración del viaje:</span>
-                <span className="font-bold text-green-400">
+                <span className="text-xs sm:text-sm text-slate-400">Duración del viaje:</span>
+                <span className="font-bold text-green-400 text-sm sm:text-base">
                   {duracionCalculada.horas}h {duracionCalculada.minutos}m
                 </span>
               </div>
             )}
 
-            {/* Campo de Marchamos DINÁMICO - N dígitos por campo */}
+            {/* Campo de Marchamos - VERSIÓN CORREGIDA */}
             <div className="mt-4">
               <div className="flex items-center justify-between mb-3">
                 <label className="text-sm font-bold text-slate-400">
                   No. De Marchamos <span className="text-red-400">*</span>
                 </label>
-                <div className="flex items-center gap-1 text-xs text-slate-500">
+                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-500">
                   <Settings className="w-3 h-3" />
-                  <span>{MARCHAMOS_CONFIG.cantidadCampos} campos · {MARCHAMOS_CONFIG.digitosPorCampo.join('-')} dígitos</span>
+                  <span className="hidden sm:inline">
+                    {MARCHAMOS_CONFIG.cantidadCampos} campos · {MARCHAMOS_CONFIG.digitosPorCampo.join('-')} dígitos
+                  </span>
+                  <span className="sm:hidden">
+                    {MARCHAMOS_CONFIG.cantidadCampos} × {MARCHAMOS_CONFIG.digitosPorCampo.join('-')}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 justify-between flex-wrap">
-                {renderMarchamos()}
-              </div>
-              <p className="text-xs text-slate-500 mt-3 text-center">
-                Ingresa los dígitos en cada campo (auto-avanza al completar)
+              
+              {renderMarchamos()}
+              
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-3 text-center">
+                Ingresa los dígitos en cada campo (puedes dejar campos vacíos)
               </p>
             </div>
           </div>
 
           {/* Sección de Cabaleo (reintento de vaciado) */}
-          <div className="bg-slate-900/50 rounded-xl p-5 border border-purple-500/20">
+          <div className="bg-slate-900/50 rounded-xl p-4 sm:p-5 border border-purple-500/20">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-white font-bold flex items-center gap-2">
-                <RotateCw className="w-4 h-4 text-purple-400" />
+              <h4 className="text-white font-bold flex items-center gap-2 text-sm sm:text-base">
+                <RotateCw className="w-4 h-4 text-purple-400 flex-shrink-0" />
                 Cabaleo (Reintento de vaciado)
               </h4>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -619,7 +663,6 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                     setMostrarCabaleo(e.target.checked)
                     setFormData({...formData, tiene_cabaleo: e.target.checked})
                     if (!e.target.checked) {
-                      // Si se desactiva, resetear el cronómetro
                       resetearCronometro()
                     }
                   }}
@@ -631,7 +674,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
 
             {mostrarCabaleo && (
               <div className="space-y-4">
-                {/* TEMPORIZADOR EN VIVO */}
+                {/* TEMPORIZADOR EN VIVO - Versión responsive */}
                 <div className="bg-purple-900/30 rounded-xl p-4 border border-purple-500/30">
                   <label className="block text-sm font-bold text-purple-400 mb-2 flex items-center gap-2">
                     <Clock3 className="w-4 h-4" />
@@ -640,18 +683,18 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                   
                   {/* Display del tiempo */}
                   <div className="text-center mb-4">
-                    <div className="text-4xl font-mono font-bold text-purple-400 bg-purple-950/50 rounded-lg py-3 px-4 inline-block mx-auto">
+                    <div className="text-3xl sm:text-4xl font-mono font-bold text-purple-400 bg-purple-950/50 rounded-lg py-3 px-4 inline-block mx-auto">
                       {formatTiempo(tiempoTranscurrido)}
                     </div>
                   </div>
 
                   {/* Controles del temporizador */}
-                  <div className="flex gap-2 justify-center">
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center">
                     {!cronometroActivo ? (
                       <button
                         type="button"
                         onClick={iniciarCronometro}
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all flex-1"
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all flex-1 text-sm sm:text-base"
                       >
                         <Play className="w-5 h-5" />
                         Iniciar
@@ -660,7 +703,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                       <button
                         type="button"
                         onClick={pausarCronometro}
-                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all flex-1"
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 sm:px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all flex-1 text-sm sm:text-base"
                       >
                         <Pause className="w-5 h-5" />
                         Pausar
@@ -669,7 +712,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                     <button
                       type="button"
                       onClick={detenerCronometro}
-                      className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all flex-1"
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 sm:px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all flex-1 text-sm sm:text-base"
                     >
                       <StopCircle className="w-5 h-5" />
                       Detener
@@ -690,7 +733,7 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                     value={formData.observaciones_cabaleo}
                     onChange={(e) => setFormData({...formData, observaciones_cabaleo: e.target.value})}
                     rows="2"
-                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                    className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-3 sm:py-2 text-white text-sm"
                     placeholder="Ej: Vació mal la primera vez, se devolvió a rehacer"
                   />
                 </div>
@@ -698,15 +741,16 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
                 {/* Tiempo total con cabaleo */}
                 {duracionCalculada && (
                   <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-purple-400">Tiempo total con cabaleo:</span>
-                      <span className="font-bold text-purple-400 text-lg">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                      <span className="text-xs sm:text-sm text-purple-400">Tiempo total con cabaleo:</span>
+                      <span className="font-bold text-purple-400 text-base sm:text-lg">
                         {Math.floor(duracionConCabaleo / 60)}h {duracionConCabaleo % 60}m
                       </span>
                     </div>
-                    <div className="flex justify-between items-center text-xs text-slate-500 mt-1">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center text-[10px] sm:text-xs text-slate-500 mt-1 gap-1">
                       <span>Viaje: {duracionCalculada.horas}h {duracionCalculada.minutos}m</span>
-                      <span>+ Cabaleo: {formData.tiempo_cabaleo_minutos}m</span>
+                      <span className="hidden sm:inline">+</span>
+                      <span>Cabaleo: {formData.tiempo_cabaleo_minutos}m</span>
                     </div>
                   </div>
                 )}
@@ -714,20 +758,21 @@ export default function TrasladoForm({ traslado = null, onClose, onSuccess }) {
             )}
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-white/10">
-            <button
-              type="submit"
-              disabled={loading || !operativoId}
-              className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold py-3 rounded-lg disabled:opacity-50"
-            >
-              {loading ? 'Guardando...' : traslado ? 'Actualizar Traslado' : 'Crear Traslado'}
-            </button>
+          {/* Botones de acción */}
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4 border-t border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-lg"
+              className="sm:flex-1 bg-slate-800 text-white font-bold py-3 sm:py-3 rounded-lg text-sm sm:text-base order-1 sm:order-none"
             >
               Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !operativoId}
+              className="sm:flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold py-3 sm:py-3 rounded-lg disabled:opacity-50 text-sm sm:text-base order-2 sm:order-none"
+            >
+              {loading ? 'Guardando...' : traslado ? 'Actualizar Traslado' : 'Crear Traslado'}
             </button>
           </div>
         </form>
