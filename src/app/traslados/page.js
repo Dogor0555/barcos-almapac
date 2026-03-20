@@ -11,7 +11,7 @@ import {
   Download, ChevronDown, ChevronUp, Loader, MoreVertical,
   ArrowLeft, BarChart3, TrendingUp, FolderOpen, RotateCw,
   Wrench, Moon, Sun, Smartphone, Activity, Users,
-  Play, Pause, StopCircle
+  Play, Pause, StopCircle, Menu
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -169,29 +169,29 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4 sticky top-0 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Users className="w-5 h-5 text-white" />
-            <h3 className="text-lg font-black text-white">
+            <Users className="w-5 h-5 text-white flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-black text-white truncate">
               {turno ? 'Editar Turno' : 'Registrar Turno'}
             </h3>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0">
             <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Operativo <span className="text-red-400">*</span>
             </label>
             <select
               value={formData.operativo_id}
               onChange={(e) => setFormData({...formData, operativo_id: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-white text-sm"
               required
             >
               <option value="">Seleccionar operativo</option>
@@ -201,72 +201,70 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1">
-                Chequero 1 <span className="text-red-400">*</span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
+                Cheq. 1 <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={formData.chequero1}
                 onChange={(e) => setFormData({...formData, chequero1: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
-                placeholder="Nombre del chequero 1"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="Nombre"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1">
-                Chequero 2 <span className="text-red-400">*</span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
+                Cheq. 2 <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={formData.chequero2}
                 onChange={(e) => setFormData({...formData, chequero2: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
-                placeholder="Nombre del chequero 2"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="Nombre"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Operador <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
               value={formData.operador}
               onChange={(e) => setFormData({...formData, operador: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               placeholder="Nombre del operador"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Fecha <span className="text-red-400">*</span>
             </label>
             <input
               type="date"
               value={formData.fecha}
               onChange={(e) => setFormData({...formData, fecha: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               required
             />
           </div>
 
-          
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
-                <span>Hora Inicio <span className="text-red-400">*</span></span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
+                <span>Inicio <span className="text-red-400">*</span></span>
                 <button
                   type="button"
                   onClick={() => tomarHoraActual('hora_inicio')}
-                  className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-2 py-1 rounded"
+                  className="text-[10px] sm:text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded"
                 >
                   Ahora
                 </button>
@@ -275,17 +273,17 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
                 type="time"
                 value={formData.hora_inicio}
                 onChange={(e) => setFormData({...formData, hora_inicio: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
-                <span>Hora Fin</span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
+                <span>Fin</span>
                 <button
                   type="button"
                   onClick={() => tomarHoraActual('hora_fin')}
-                  className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-2 py-1 rounded"
+                  className="text-[10px] sm:text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded"
                 >
                   Ahora
                 </button>
@@ -294,15 +292,15 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
                 type="time"
                 value={formData.hora_fin}
                 onChange={(e) => setFormData({...formData, hora_fin: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
           </div>
 
           {formData.hora_inicio && formData.hora_fin && (
-            <div className="bg-slate-800 rounded-lg p-3 text-center">
-              <span className="text-sm text-slate-400">Duración del turno:</span>
-              <span className="ml-2 font-bold text-green-400">
+            <div className="bg-slate-800 rounded-lg p-2 sm:p-3 text-center">
+              <span className="text-xs sm:text-sm text-slate-400">Duración:</span>
+              <span className="ml-2 font-bold text-green-400 text-sm sm:text-base">
                 {(() => {
                   const inicio = dayjs(`2000-01-01 ${formData.hora_inicio}`)
                   const fin = dayjs(`2000-01-01 ${formData.hora_fin}`)
@@ -315,32 +313,32 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
           )}
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Observaciones
             </label>
             <textarea
               value={formData.observaciones}
               onChange={(e) => setFormData({...formData, observaciones: e.target.value})}
               rows="2"
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               placeholder="Notas sobre el turno..."
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-bold py-2 rounded-lg disabled:opacity-50"
-            >
-              {loading ? 'Guardando...' : turno ? 'Actualizar Turno' : 'Registrar Turno'}
-            </button>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-2 rounded-lg"
+              className="w-full sm:flex-1 bg-slate-800 text-white font-bold py-2 sm:py-2.5 rounded-lg text-sm sm:text-base order-1 sm:order-none"
             >
               Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:flex-1 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-bold py-2 sm:py-2.5 rounded-lg disabled:opacity-50 text-sm sm:text-base order-2 sm:order-none"
+            >
+              {loading ? 'Guardando...' : turno ? 'Actualizar' : 'Registrar'}
             </button>
           </div>
         </form>
@@ -369,110 +367,109 @@ const DetalleTrasladoModal = ({ traslado, onClose, onEdit }) => {
   const tiempoTotal = (duracionViaje || 0) + duracionCabaleo
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl">
-        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4 flex items-center justify-between sticky top-0">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-xl">
-              <Truck className="w-6 h-6 text-white" />
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-white/20 p-2 rounded-xl flex-shrink-0">
+              <Truck className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
-            <div>
-              <h3 className="text-xl font-black text-white">Detalle de Traslado</h3>
-              <p className="text-amber-200 text-sm font-mono">{traslado.correlativo_viaje}</p>
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-xl font-black text-white truncate">Detalle de Traslado</h3>
+              <p className="text-amber-200 text-xs sm:text-sm font-mono truncate">{traslado.correlativo_viaje}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0">
             <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)] space-y-4">
-          <div className="bg-slate-900 rounded-xl p-5 border border-white/5">
-            <h4 className="text-white font-bold mb-4 flex items-center gap-2">
+        <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)] space-y-3 sm:space-y-4">
+          <div className="bg-slate-900 rounded-xl p-4 sm:p-5 border border-white/5">
+            <h4 className="text-white font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
               <Truck className="w-4 h-4 text-blue-400" />
               Datos del Traslado
             </h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
               <div>
-                <p className="text-slate-500 text-xs">Conductor</p>
-                <p className="font-bold text-white">{traslado.nombre_conductor}</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Conductor</p>
+                <p className="font-bold text-white break-words">{traslado.nombre_conductor}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-xs">Placa</p>
-                <p className="font-bold text-white font-mono">{traslado.placa || '—'}</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Placa</p>
+                <p className="font-bold text-white font-mono break-words">{traslado.placa || '—'}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-xs">Remolque</p>
-                <p className="font-bold text-white font-mono">{traslado.remolque}</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Remolque</p>
+                <p className="font-bold text-white font-mono break-words">{traslado.remolque}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-xs">Tipo Unidad</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Tipo Unidad</p>
                 <p className={`font-bold capitalize ${traslado.tipo_unidad === 'plana' ? 'text-blue-400' : 'text-purple-400'}`}>
                   {traslado.tipo_unidad}
                 </p>
               </div>
               <div>
-                <p className="text-slate-500 text-xs">Transporte</p>
-                <p className="font-bold text-white">{traslado.transporte}</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Transporte</p>
+                <p className="font-bold text-white break-words">{traslado.transporte}</p>
               </div>
               <div>
-                <p className="text-slate-500 text-xs">Fecha</p>
+                <p className="text-slate-500 text-[10px] sm:text-xs">Fecha</p>
                 <p className="font-bold text-white">{formatFecha(traslado.fecha)}</p>
               </div>
-              <div className="col-span-2">
-                <p className="text-slate-500 text-xs">Horas</p>
+              <div className="col-span-1 sm:col-span-2">
+                <p className="text-slate-500 text-[10px] sm:text-xs">Horas</p>
                 <p className="font-bold">
                   <span className="text-green-400">{formatHora(traslado.hora_inicio_carga)}</span>
-                  <span className="text-slate-600 mx-2">→</span>
+                  <span className="text-slate-600 mx-1 sm:mx-2">→</span>
                   <span className="text-red-400">{formatHora(traslado.hora_fin_carga)}</span>
                 </p>
               </div>
-              <div className="col-span-2">
-                <p className="text-slate-500 text-xs">No. Marchamo</p>
-                <p className="font-bold text-white font-mono">{traslado.no_marchamo}</p>
+              <div className="col-span-1 sm:col-span-2">
+                <p className="text-slate-500 text-[10px] sm:text-xs">No. Marchamo</p>
+                <p className="font-bold text-white font-mono text-xs sm:text-sm break-all">{traslado.no_marchamo}</p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-slate-900 rounded-xl p-4 border border-blue-500/20">
-              <p className="text-xs text-slate-400">Tiempo Viaje</p>
-              <p className="text-xl font-bold text-blue-400">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-slate-900 rounded-xl p-3 sm:p-4 border border-blue-500/20">
+              <p className="text-[10px] sm:text-xs text-slate-400">Tiempo Viaje</p>
+              <p className="text-base sm:text-xl font-bold text-blue-400">
                 {duracionViaje ? `${Math.floor(duracionViaje / 60)}h ${duracionViaje % 60}m` : '—'}
               </p>
             </div>
             {duracionCabaleo > 0 && (
-              <div className="bg-slate-900 rounded-xl p-4 border border-purple-500/20">
-                <p className="text-xs text-slate-400">Cabaleo</p>
-                <p className="text-xl font-bold text-purple-400">
+              <div className="bg-slate-900 rounded-xl p-3 sm:p-4 border border-purple-500/20">
+                <p className="text-[10px] sm:text-xs text-slate-400">Cabaleo</p>
+                <p className="text-base sm:text-xl font-bold text-purple-400">
                   {Math.floor(duracionCabaleo / 60)}h {duracionCabaleo % 60}m
                 </p>
               </div>
             )}
-            <div className="bg-slate-900 rounded-xl p-4 border border-green-500/20">
-              <p className="text-xs text-slate-400">Tiempo Total</p>
-              <p className="text-xl font-bold text-green-400">
+            <div className="bg-slate-900 rounded-xl p-3 sm:p-4 border border-green-500/20">
+              <p className="text-[10px] sm:text-xs text-slate-400">Tiempo Total</p>
+              <p className="text-base sm:text-xl font-bold text-green-400">
                 {Math.floor(tiempoTotal / 60)}h {tiempoTotal % 60}m
               </p>
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            {isAdmin() && (
-              <button
-                onClick={() => {
-                  onClose()
-                  onEdit(traslado)
-                }}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-              >
-                <Edit2 className="w-4 h-4" />
-                Editar
-              </button>
-            )}
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
+            {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
+            <button
+              onClick={() => {
+                onClose()
+                onEdit(traslado)
+              }}
+              className="w-full sm:flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 sm:py-3 rounded-xl flex items-center justify-center gap-2 transition-all text-sm sm:text-base"
+            >
+              <Edit2 className="w-4 h-4" />
+              Editar
+            </button>
             <button
               onClick={onClose}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl"
+              className="w-full sm:flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 sm:py-3 rounded-xl text-sm sm:text-base"
             >
               Cerrar
             </button>
@@ -593,32 +590,32 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-red-600 to-red-800 px-6 py-4 sticky top-0 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-red-600 to-red-800 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Wrench className="w-5 h-5 text-white" />
-            <h3 className="text-lg font-black text-white">
-              {atraso ? 'Editar Atraso' : 'Registrar Atraso General'}
+            <Wrench className="w-5 h-5 text-white flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-black text-white truncate">
+              {atraso ? 'Editar Atraso' : 'Registrar Atraso'}
             </h3>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0">
             <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Operativo <span className="text-red-400">*</span>
             </label>
             <select
               value={formData.operativo_id}
               onChange={(e) => setFormData({...formData, operativo_id: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               required
             >
-              <option value="">Seleccionar operativo</option>
+              <option value="">Seleccionar</option>
               {operativos.map(op => (
                 <option key={op.id} value={op.id}>{op.nombre}</option>
               ))}
@@ -626,26 +623,26 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Fecha <span className="text-red-400">*</span>
             </label>
             <input
               type="date"
               value={formData.fecha}
               onChange={(e) => setFormData({...formData, fecha: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               required
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
-                <span>Hora Inicio <span className="text-red-400">*</span></span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
+                <span>Inicio <span className="text-red-400">*</span></span>
                 <button
                   type="button"
                   onClick={() => tomarHoraActual('hora_inicio')}
-                  className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-2 py-1 rounded"
+                  className="text-[10px] sm:text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded"
                 >
                   Ahora
                 </button>
@@ -654,17 +651,17 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
                 type="time"
                 value={formData.hora_inicio}
                 onChange={(e) => setFormData({...formData, hora_inicio: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
-                <span>Hora Fin <span className="text-red-400">*</span></span>
+              <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
+                <span>Fin <span className="text-red-400">*</span></span>
                 <button
                   type="button"
                   onClick={() => tomarHoraActual('hora_fin')}
-                  className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-2 py-1 rounded"
+                  className="text-[10px] sm:text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded"
                 >
                   Ahora
                 </button>
@@ -673,27 +670,27 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
                 type="time"
                 value={formData.hora_fin}
                 onChange={(e) => setFormData({...formData, hora_fin: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
                 required
               />
             </div>
           </div>
 
           {duracion && (
-            <div className="bg-slate-800 rounded-lg p-3 text-center">
-              <span className="text-sm text-slate-400">Duración:</span>
-              <span className="ml-2 font-bold text-green-400">{duracion.texto}</span>
+            <div className="bg-slate-800 rounded-lg p-2 sm:p-3 text-center">
+              <span className="text-xs sm:text-sm text-slate-400">Duración:</span>
+              <span className="ml-2 font-bold text-green-400 text-sm sm:text-base">{duracion.texto}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
-              Tipo de Atraso <span className="text-red-400">*</span>
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
+              Tipo <span className="text-red-400">*</span>
             </label>
             <select
               value={formData.tipo_atraso}
               onChange={(e) => setFormData({...formData, tipo_atraso: e.target.value})}
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
               required
             >
               <option value="">Seleccionar</option>
@@ -702,32 +699,32 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-1">
+            <label className="block text-xs sm:text-sm font-bold text-slate-400 mb-1">
               Observaciones
             </label>
             <textarea
               value={formData.observaciones}
               onChange={(e) => setFormData({...formData, observaciones: e.target.value})}
-              rows="3"
-              className="w-full bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-white"
-              placeholder="Detalles del atraso..."
+              rows="2"
+              className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 sm:px-4 py-2 text-white text-sm"
+              placeholder="Detalles..."
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-gradient-to-r from-red-500 to-red-700 text-white font-bold py-2 rounded-lg disabled:opacity-50"
-            >
-              {loading ? 'Guardando...' : atraso ? 'Actualizar' : 'Registrar'}
-            </button>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-3 sm:pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-slate-800 text-white font-bold py-2 rounded-lg"
+              className="w-full sm:flex-1 bg-slate-800 text-white font-bold py-2 sm:py-2.5 rounded-lg text-sm sm:text-base order-1 sm:order-none"
             >
               Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:flex-1 bg-gradient-to-r from-red-500 to-red-700 text-white font-bold py-2 sm:py-2.5 rounded-lg disabled:opacity-50 text-sm sm:text-base order-2 sm:order-none"
+            >
+              {loading ? 'Guardando...' : atraso ? 'Actualizar' : 'Registrar'}
             </button>
           </div>
         </form>
@@ -760,6 +757,7 @@ export default function TrasladosPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [exportando, setExportando] = useState(null)
   const [vista, setVista] = useState('traslados') // 'traslados', 'atrasos', 'turnos'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -1023,23 +1021,33 @@ export default function TrasladosPage() {
 
   return (
     <div className="min-h-screen bg-[#0f172a]">
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
+      <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl p-4 text-white">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl p-3 sm:p-4 text-white">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {isAdmin() && (
-                <Link href="/admin" className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
-                  <ArrowLeft className="w-5 h-5" />
+                <Link href="/admin" className="bg-white/10 hover:bg-white/20 p-1.5 sm:p-2 rounded-lg">
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                 </Link>
               )}
               <div>
-                <h1 className="text-xl font-black">Gestión de Traslados</h1>
-                <p className="text-sm text-amber-200">{user?.nombre} · {user?.rol}</p>
+                <h1 className="text-base sm:text-xl font-black">Gestión de Traslados</h1>
+                <p className="text-[10px] sm:text-sm text-amber-200 truncate max-w-[150px] sm:max-w-none">{user?.nombre} · {user?.rol}</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            
+            {/* Botón menú móvil */}
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="sm:hidden bg-white/10 hover:bg-white/20 p-2 rounded-lg"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Menú desktop */}
+            <div className="hidden sm:flex flex-wrap gap-2">
               <button onClick={() => setShowTurnoForm(true)} className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
                 <Users className="w-4 h-4" /> Turno
               </button>
@@ -1063,69 +1071,177 @@ export default function TrasladosPage() {
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-4 gap-2 mt-4">
-            <div className="bg-white/10 rounded-lg p-2">
-              <div className="text-xs text-amber-200">T. Turnos</div>
-              <div className="text-lg font-bold">{Math.floor(stats.tiempoTotal / 60)}h</div>
+          {/* Menú móvil desplegable */}
+          {mobileMenuOpen && (
+            <div className="sm:hidden mt-3 space-y-2 border-t border-white/10 pt-3">
+              <div className="flex flex-col gap-2">
+                <button onClick={() => { setShowTurnoForm(true); setMobileMenuOpen(false); }} className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-full">
+                  <Users className="w-4 h-4" /> Registrar Turno
+                </button>
+                <button onClick={() => { setShowForm(true); setMobileMenuOpen(false); }} className="bg-white text-amber-600 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-full">
+                  <Plus className="w-4 h-4" /> Nuevo Traslado
+                </button>
+                <button onClick={() => { setShowAtrasoGeneralForm(true); setMobileMenuOpen(false); }} className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-full">
+                  <Wrench className="w-4 h-4" /> Registrar Atraso
+                </button>
+                <select value={vista} onChange={(e) => setVista(e.target.value)} className="bg-white/10 text-white px-3 py-2 rounded-lg text-sm font-bold border border-white/20 w-full">
+                  <option value="traslados">📦 Ver Traslados</option>
+                  <option value="atrasos">🔧 Ver Atrasos</option>
+                  <option value="turnos">👥 Ver Turnos</option>
+                </select>
+                <div className="flex gap-2">
+                  <button onClick={cargarDatos} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg flex-1 flex items-center justify-center">
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                  <button onClick={logout} className="bg-red-500/20 hover:bg-red-500/30 p-2 rounded-lg flex-1 flex items-center justify-center">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="bg-white/10 rounded-lg p-2">
-              <div className="text-xs text-amber-200">Inactividad</div>
-              <div className="text-lg font-bold text-red-300">{Math.floor(stats.tiempoInactividad / 60)}h</div>
+          )}
+
+          {/* Stats - Responsive grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 mt-3 sm:mt-4">
+            <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
+              <div className="text-[10px] sm:text-xs text-amber-200">T. Turnos</div>
+              <div className="text-sm sm:text-lg font-bold">{Math.floor(stats.tiempoTotal / 60)}h</div>
             </div>
-            <div className="bg-white/10 rounded-lg p-2">
-              <div className="text-xs text-amber-200">Efectivo</div>
-              <div className="text-lg font-bold text-green-300">{Math.floor(stats.tiempoEfectivo / 60)}h</div>
+            <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
+              <div className="text-[10px] sm:text-xs text-amber-200">Inactividad</div>
+              <div className="text-sm sm:text-lg font-bold text-red-300">{Math.floor(stats.tiempoInactividad / 60)}h</div>
             </div>
-            <div className="bg-white/10 rounded-lg p-2">
-              <div className="text-xs text-amber-200">Unidades</div>
-              <div className="text-lg font-bold">{stats.totalUnidades}</div>
+            <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
+              <div className="text-[10px] sm:text-xs text-amber-200">Efectivo</div>
+              <div className="text-sm sm:text-lg font-bold text-green-300">{Math.floor(stats.tiempoEfectivo / 60)}h</div>
+            </div>
+            <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
+              <div className="text-[10px] sm:text-xs text-amber-200">Unidades</div>
+              <div className="text-sm sm:text-lg font-bold">{stats.totalUnidades}</div>
             </div>
           </div>
         </div>
 
-        {/* Filtros */}
-        <div className="bg-[#1e293b] rounded-xl p-4 border border-white/10">
-          <div className="flex flex-wrap gap-2">
+        {/* Filtros - Responsive */}
+        <div className="bg-[#1e293b] rounded-xl p-3 sm:p-4 border border-white/10">
+          <div className="flex flex-col sm:flex-row gap-2">
             {vista === 'traslados' && (
               <>
-                <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                  <option value="todos">Todos</option>
+                <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="w-full sm:w-auto bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-white">
+                  <option value="todos">Todos los estados</option>
                   <option value="activo">Activos</option>
                   <option value="completado">Completados</option>
                 </select>
-                <select value={filtroOperativo} onChange={(e) => setFiltroOperativo(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                  <option value="todos">Todos ops</option>
+                <select value={filtroOperativo} onChange={(e) => setFiltroOperativo(e.target.value)} className="w-full sm:w-auto bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-white">
+                  <option value="todos">Todos los operativos</option>
                   {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
                 </select>
               </>
             )}
             {vista === 'atrasos' && (
-              <select value={filtroAtrasoOperativo} onChange={(e) => setFiltroAtrasoOperativo(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+              <select value={filtroAtrasoOperativo} onChange={(e) => setFiltroAtrasoOperativo(e.target.value)} className="w-full sm:w-auto bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-white">
                 <option value="todos">Todos los operativos</option>
                 {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
               </select>
             )}
             {vista === 'turnos' && (
-              <select value={filtroTurnoOperativo} onChange={(e) => setFiltroTurnoOperativo(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+              <select value={filtroTurnoOperativo} onChange={(e) => setFiltroTurnoOperativo(e.target.value)} className="w-full sm:w-auto bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-white">
                 <option value="todos">Todos los operativos</option>
                 {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
               </select>
             )}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Buscar..." className="w-full bg-slate-800 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-slate-500" />
+              <input 
+                type="text" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                placeholder="Buscar..." 
+                className="w-full bg-slate-800 border border-white/10 rounded-lg pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 text-xs sm:text-sm text-white" 
+              />
             </div>
           </div>
         </div>
 
-        {/* Tabla de Traslados */}
+        {/* Vista de Traslados - Tarjetas para móvil, tabla para desktop */}
         {vista === 'traslados' && (
           <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
-            <div className="bg-slate-800 px-4 py-3 border-b border-white/10">
-              <h2 className="font-bold text-white">Traslados ({trasladosFiltrados.length})</h2>
+            <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
+              <h2 className="font-bold text-white text-sm sm:text-base">Traslados ({trasladosFiltrados.length})</h2>
             </div>
-            <div className="overflow-x-auto">
+            
+            {/* Vista móvil: tarjetas */}
+            <div className="sm:hidden divide-y divide-white/5">
+              {trasladosFiltrados.map((t) => (
+                <div key={t.id} className="p-3 hover:bg-white/5">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <span className="text-xs text-slate-500">Correlativo</span>
+                      <p className="font-mono text-amber-400 font-bold text-sm">{t.correlativo_viaje}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                      t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
+                    }`}>{t.estado}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                    <div>
+                      <span className="text-slate-500">Conductor</span>
+                      <p className="font-bold text-white truncate">{t.nombre_conductor}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Operativo</span>
+                      <p className="text-amber-400 truncate">{getOperativoNombre(t.operativo_id)}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Placa/Remolque</span>
+                      <p className="font-mono text-blue-400">{t.placa || '—'} / {t.remolque}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Transporte</span>
+                      <p className="text-white truncate">{t.transporte}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-500">Horas</span>
+                      <p>
+                        <span className="text-green-400">{formatHora(t.hora_inicio_carga)}</span>
+                        <span className="text-slate-600 mx-1">→</span>
+                        <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-500">Marchamo</span>
+                      <p className="font-mono text-amber-400 text-xs break-all">{t.no_marchamo}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                    <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Ver">
+                      <Eye className="w-4 h-4 text-blue-400" />
+                    </button>
+                    {t.estado === 'activo' && (
+                      <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1.5 hover:bg-green-500/20 rounded" title="Completar">
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                      </button>
+                    )}
+                   
+                    {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
+                    <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Editar">
+                      <Edit2 className="w-4 h-4 text-blue-400" />
+                    </button>
+                    {/* Botón Eliminar - Solo Admin */}
+                    {isAdmin() && (
+                      <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vista desktop: tabla */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/50">
                   <tr>
@@ -1157,7 +1273,7 @@ export default function TrasladosPage() {
                         <span className="text-slate-600 mx-1">→</span>
                         <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
                       </td>
-                      <td className="px-4 py-2 font-mono text-amber-400">{t.no_marchamo}</td>
+                      <td className="px-4 py-2 font-mono text-amber-400 max-w-[150px] truncate" title={t.no_marchamo}>{t.no_marchamo}</td>
                       <td className="px-4 py-2">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                           t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
@@ -1173,18 +1289,16 @@ export default function TrasladosPage() {
                               <CheckCircle className="w-4 h-4 text-green-400" />
                             </button>
                           )}
-                          <button onClick={() => handleExportar(t)} disabled={exportando === t.id} className="p-1 hover:bg-indigo-500/20 rounded" title="Exportar">
-                            {exportando === t.id ? <Loader className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-indigo-400" />}
+                         
+                          {/* Botón Editar - AHORA VISIBLE PARA TODOS LOS USUARIOS */}
+                          <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
+                            <Edit2 className="w-4 h-4 text-blue-400" />
                           </button>
+                          {/* Botón Eliminar - Solo Admin */}
                           {isAdmin() && (
-                            <>
-                              <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
-                                <Edit2 className="w-4 h-4 text-blue-400" />
-                              </button>
-                              <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
-                            </>
+                            <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1196,13 +1310,74 @@ export default function TrasladosPage() {
           </div>
         )}
 
-        {/* Tabla de Atrasos */}
+        {/* Vista de Atrasos - Tarjetas para móvil, tabla para desktop */}
         {vista === 'atrasos' && (
           <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
-            <div className="bg-slate-800 px-4 py-3 border-b border-white/10">
-              <h2 className="font-bold text-white">Atrasos Generales ({atrasosFiltrados.length})</h2>
+            <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
+              <h2 className="font-bold text-white text-sm sm:text-base">Atrasos Generales ({atrasosFiltrados.length})</h2>
             </div>
-            <div className="overflow-x-auto">
+            
+            {/* Vista móvil: tarjetas */}
+            <div className="sm:hidden divide-y divide-white/5">
+              {atrasosFiltrados.map((a) => {
+                const operativo = operativos.find(o => o.id === a.operativo_id)
+                const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
+                const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
+                let diffMinutos = fin.diff(inicio, 'minute')
+                if (diffMinutos < 0) diffMinutos += 24 * 60
+                
+                return (
+                  <div key={a.id} className="p-3 hover:bg-white/5">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="text-xs text-slate-500">Fecha</span>
+                        <p className="font-mono text-slate-300 font-bold text-sm">{formatFecha(a.fecha)}</p>
+                      </div>
+                      <span className="text-xs text-red-400">{Math.floor(diffMinutos / 60)}h {diffMinutos % 60}m</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Operativo</span>
+                        <p className="text-amber-400 font-bold">{operativo?.nombre || '—'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Tipo</span>
+                        <p className="text-red-400">{a.tipo_atraso}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Horas</span>
+                        <p>
+                          <span className="text-green-400">{formatHora(a.hora_inicio)}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-red-400">{formatHora(a.hora_fin)}</span>
+                        </p>
+                      </div>
+                      {a.observaciones && (
+                        <div className="col-span-2">
+                          <span className="text-slate-500">Obs.</span>
+                          <p className="text-slate-400 text-xs">{a.observaciones}</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {isAdmin() && (
+                      <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                        <button onClick={() => { setAtrasoEditando(a); setShowAtrasoGeneralForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded" title="Editar">
+                          <Edit2 className="w-4 h-4 text-blue-400" />
+                        </button>
+                        <button onClick={() => handleEliminarAtrasoGeneral(a.id)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Vista desktop: tabla */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-800/50">
                   <tr>
@@ -1234,7 +1409,7 @@ export default function TrasladosPage() {
                         <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
                         <td className="px-4 py-2 text-red-400">{a.tipo_atraso}</td>
                         <td className="px-4 py-2 font-bold text-white">{Math.floor(diffMinutos / 60)}h {diffMinutos % 60}m</td>
-                        <td className="px-4 py-2 text-slate-400 max-w-xs truncate">{a.observaciones || '—'}</td>
+                        <td className="px-4 py-2 text-slate-400 max-w-xs truncate" title={a.observaciones}>{a.observaciones || '—'}</td>
                         {isAdmin() && (
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-1">
@@ -1256,84 +1431,156 @@ export default function TrasladosPage() {
           </div>
         )}
 
-        {/* Tabla de Turnos */}
-{vista === 'turnos' && (
-  <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
-    <div className="bg-slate-800 px-4 py-3 border-b border-white/10">
-      <h2 className="font-bold text-white">Turnos ({turnosFiltrados.length})</h2>
-    </div>
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-800/50">
-          <tr>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 1</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 2</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operador</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Inicio</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fin</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
-            <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Observaciones</th>
-            {isAdmin() && <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/5">
-          {turnosFiltrados.map((t) => {
-            const operativo = operativos.find(o => o.id === t.operativo_id)
-            let duracion = null
-            if (t.hora_inicio && t.hora_fin) {
-              const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
-              const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
-              let diff = fin.diff(inicio, 'minute')
-              if (diff < 0) diff += 24 * 60
-              duracion = diff
-            }
+        {/* Vista de Turnos - Tarjetas para móvil, tabla para desktop */}
+        {vista === 'turnos' && (
+          <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
+            <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
+              <h2 className="font-bold text-white text-sm sm:text-base">Turnos ({turnosFiltrados.length})</h2>
+            </div>
             
-            return (
-              <tr key={t.id} className="hover:bg-white/5">
-                <td className="px-4 py-2 font-mono text-slate-300">{formatFecha(t.fecha)}</td>
-                <td className="px-4 py-2 text-white">{t.chequero1 || '—'}</td>
-                <td className="px-4 py-2 text-white">{t.chequero2 || '—'}</td>
-                <td className="px-4 py-2 text-white">{t.operador}</td>
-                <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
-                <td className="px-4 py-2 text-green-400">{formatHora(t.hora_inicio)}</td>
-                <td className="px-4 py-2 text-red-400">{formatHora(t.hora_fin) || '—'}</td>
-                <td className="px-4 py-2 font-bold text-white">{duracion ? `${Math.floor(duracion / 60)}h ${duracion % 60}m` : '—'}</td>
-                <td className="px-4 py-2 text-slate-400 max-w-xs truncate">{t.observaciones || '—'}</td>
-                {isAdmin() && (
-                  <td className="px-4 py-2">
-                    <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                  </td>
-                )}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)}
+            {/* Vista móvil: tarjetas */}
+            <div className="sm:hidden divide-y divide-white/5">
+              {turnosFiltrados.map((t) => {
+                const operativo = operativos.find(o => o.id === t.operativo_id)
+                let duracion = null
+                if (t.hora_inicio && t.hora_fin) {
+                  const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
+                  const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
+                  let diff = fin.diff(inicio, 'minute')
+                  if (diff < 0) diff += 24 * 60
+                  duracion = diff
+                }
+                
+                return (
+                  <div key={t.id} className="p-3 hover:bg-white/5">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="text-xs text-slate-500">Fecha</span>
+                        <p className="font-mono text-slate-300 font-bold text-sm">{formatFecha(t.fecha)}</p>
+                      </div>
+                      {duracion && (
+                        <span className="text-xs text-green-400">{Math.floor(duracion / 60)}h {duracion % 60}m</span>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                      <div>
+                        <span className="text-slate-500">Cheq. 1</span>
+                        <p className="text-white">{t.chequero1 || '—'}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Cheq. 2</span>
+                        <p className="text-white">{t.chequero2 || '—'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Operador</span>
+                        <p className="text-white font-bold">{t.operador}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Operativo</span>
+                        <p className="text-amber-400">{operativo?.nombre || '—'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Horas</span>
+                        <p>
+                          <span className="text-green-400">{formatHora(t.hora_inicio)}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-red-400">{formatHora(t.hora_fin) || '—'}</span>
+                        </p>
+                      </div>
+                      {t.observaciones && (
+                        <div className="col-span-2">
+                          <span className="text-slate-500">Obs.</span>
+                          <p className="text-slate-400 text-xs">{t.observaciones}</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {isAdmin() && (
+                      <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                        <button onClick={() => handleEliminarTurno(t.id)} className="p-1.5 hover:bg-red-500/20 rounded" title="Eliminar">
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Vista desktop: tabla */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-800/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 1</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Chequero 2</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operador</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Inicio</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fin</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Duración</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Observaciones</th>
+                    {isAdmin() && <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {turnosFiltrados.map((t) => {
+                    const operativo = operativos.find(o => o.id === t.operativo_id)
+                    let duracion = null
+                    if (t.hora_inicio && t.hora_fin) {
+                      const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
+                      const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
+                      let diff = fin.diff(inicio, 'minute')
+                      if (diff < 0) diff += 24 * 60
+                      duracion = diff
+                    }
+                    
+                    return (
+                      <tr key={t.id} className="hover:bg-white/5">
+                        <td className="px-4 py-2 font-mono text-slate-300">{formatFecha(t.fecha)}</td>
+                        <td className="px-4 py-2 text-white">{t.chequero1 || '—'}</td>
+                        <td className="px-4 py-2 text-white">{t.chequero2 || '—'}</td>
+                        <td className="px-4 py-2 text-white">{t.operador}</td>
+                        <td className="px-4 py-2 text-amber-400">{operativo?.nombre || '—'}</td>
+                        <td className="px-4 py-2 text-green-400">{formatHora(t.hora_inicio)}</td>
+                        <td className="px-4 py-2 text-red-400">{formatHora(t.hora_fin) || '—'}</td>
+                        <td className="px-4 py-2 font-bold text-white">{duracion ? `${Math.floor(duracion / 60)}h ${duracion % 60}m` : '—'}</td>
+                        <td className="px-4 py-2 text-slate-400 max-w-xs truncate" title={t.observaciones}>{t.observaciones || '—'}</td>
+                        {isAdmin() && (
+                          <td className="px-4 py-2">
+                            <button onClick={() => handleEliminarTurno(t.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Mensaje si no hay datos */}
         {vista === 'traslados' && trasladosFiltrados.length === 0 && (
-          <div className="bg-[#1e293b] rounded-xl p-8 text-center text-slate-400">
-            <Truck className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-            <p>No hay traslados</p>
+          <div className="bg-[#1e293b] rounded-xl p-6 sm:p-8 text-center text-slate-400">
+            <Truck className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-slate-600" />
+            <p className="text-xs sm:text-sm">No hay traslados</p>
           </div>
         )}
         {vista === 'atrasos' && atrasosFiltrados.length === 0 && (
-          <div className="bg-[#1e293b] rounded-xl p-8 text-center text-slate-400">
-            <Wrench className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-            <p>No hay atrasos</p>
+          <div className="bg-[#1e293b] rounded-xl p-6 sm:p-8 text-center text-slate-400">
+            <Wrench className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-slate-600" />
+            <p className="text-xs sm:text-sm">No hay atrasos</p>
           </div>
         )}
         {vista === 'turnos' && turnosFiltrados.length === 0 && (
-          <div className="bg-[#1e293b] rounded-xl p-8 text-center text-slate-400">
-            <Users className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-            <p>No hay turnos</p>
+          <div className="bg-[#1e293b] rounded-xl p-6 sm:p-8 text-center text-slate-400">
+            <Users className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 text-slate-600" />
+            <p className="text-xs sm:text-sm">No hay turnos</p>
           </div>
         )}
       </div>
