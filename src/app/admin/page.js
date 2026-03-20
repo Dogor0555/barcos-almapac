@@ -1673,13 +1673,7 @@ export default function AdminPage() {
                 Traslados Azúcar
               </Link>
 
-              <Link
-                href="/traslados/dashboard-traslados"
-                className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-purple-500 hover:bg-purple-600 text-white"
-              >
-                <Gauge className="w-4 h-4" />
-                Dashboard Tiempos
-              </Link>
+              
               
               <button
                 onClick={cargarDatos}
