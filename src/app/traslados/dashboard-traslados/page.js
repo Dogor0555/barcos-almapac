@@ -47,20 +47,7 @@ const C = {
 
 const PIE_COLS = [C.amberMid, C.teal, C.red, C.blue, '#7C3AED', '#0891B2', '#065F46', '#92400E']
 
-// =================================================================
-// LOGICA DE TIEMPO
-//
-// Tiempo Total del operativo:
-//   hora_inicio del turno MAS ANTIGUO (primer turno)
-//   --> NOW() si hay un turno activo ahora
-//   --> hora_fin del ultimo turno si ya terminaron todos
-//
-// Turno activo = el de created_at mas reciente Y la hora actual
-//   cae dentro de su rango hora_inicio-hora_fin
-// =================================================================
-
 function construirFechaHora(fecha, hora) {
-  // fecha: 'YYYY-MM-DD', hora: 'HH:mm:ss'
   if (!fecha || !hora) return null
   return dayjs(`${fecha} ${hora}`)
 }
@@ -69,8 +56,6 @@ function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
 
   const ahora = dayjs()
-
-  // Ordenar por fecha + hora_inicio para encontrar el primero cronologico
   const validos = turnosOp.filter(t => t.fecha && t.hora_inicio)
   if (validos.length === 0) {
     return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
@@ -82,20 +67,16 @@ function calcTiempoTotalOperativo(turnosOp) {
     return fa.valueOf() - fb.valueOf()
   })
 
-  // Inicio global = hora_inicio del primer turno cronologico
   const inicioGlobal = dayjs(`${ordenados[0].fecha} ${ordenados[0].hora_inicio}`)
 
-  // Turno mas reciente = candidato a activo
   const masReciente = turnosOp.reduce((prev, curr) =>
     dayjs(curr.created_at).isAfter(dayjs(prev.created_at)) ? curr : prev
   , turnosOp[0])
 
-  // Verificar si el turno mas reciente esta corriendo ahora
   let estaActivo = false
   if (masReciente.fecha && masReciente.hora_inicio && masReciente.hora_fin) {
     const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
-    let fin   = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
-    // Cruce de medianoche: si fin <= ini, el turno termina al dia siguiente
+    let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
     if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     estaActivo = ahora.isAfter(ini) && ahora.isBefore(fin)
   } else if (masReciente.hora_inicio && !masReciente.hora_fin) {
@@ -103,16 +84,14 @@ function calcTiempoTotalOperativo(turnosOp) {
   }
 
   if (estaActivo) {
-    // Tiempo total = desde primer inicio hasta AHORA
     return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
   }
 
-  // Todos terminaron: calcular fin global = hora_fin mas tarde entre todos los turnos
   let finGlobal = null
   ordenados.forEach(t => {
     if (!t.hora_fin) return
     const ini = dayjs(`${t.fecha} ${t.hora_inicio}`)
-    let fin   = dayjs(`${t.fecha} ${t.hora_fin}`)
+    let fin = dayjs(`${t.fecha} ${t.hora_fin}`)
     if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     if (!finGlobal || fin.isAfter(finGlobal)) finGlobal = fin
   })
@@ -133,12 +112,10 @@ function hayTurnoActivo(turnosOp) {
   if (!masReciente.hora_inicio) return false
   if (!masReciente.hora_fin) return true
   const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
-  let fin   = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
+  let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
   if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
   return ahora.isAfter(ini) && ahora.isBefore(fin)
 }
-
-// =================================================================
 
 const DarkTip = ({ active, payload, label, fmtVal }) => {
   if (!active || !payload?.length) return null
@@ -200,16 +177,16 @@ function Ring({ pct, color, label, size = 88 }) {
 }
 
 function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades, hayActivo }) {
-  const eff   = tiempoTotal > 0 ? Math.round((tiempoEfectivo / tiempoTotal) * 100) : 0
+  const eff = tiempoTotal > 0 ? Math.round((tiempoEfectivo / tiempoTotal) * 100) : 0
   const inPct = tiempoTotal > 0 ? Math.round((tiempoInactividad / tiempoTotal) * 100) : 0
-  const uph   = tiempoEfectivo > 0 ? +(unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
-  const prod  = Math.min(100, Math.round((uph / 25) * 100))
+  const uph = tiempoEfectivo > 0 ? +(unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
+  const prod = Math.min(100, Math.round((uph / 25) * 100))
 
   const items = [
-    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: hayActivo ? 'Primer turno → ahora' : 'Primer turno → ultimo fin', color: C.blueL,  icon: Clock },
-    { label: 'Inactividad',            value: fmt(tiempoInactividad), sub: `${inPct}% del total`,                                            color: C.redL,   icon: AlertCircle },
-    { label: 'Tiempo Efectivo',        value: fmt(tiempoEfectivo),   sub: `${eff}% eficiencia`,                                              color: C.tealL,  icon: Zap },
-    { label: 'Unidades / Hora',        value: uph,                   sub: 'Promedio real',                                                    color: C.amberL, icon: Gauge },
+    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal), sub: hayActivo ? 'Primer turno → ahora' : 'Primer turno → ultimo fin', color: C.blueL, icon: Clock },
+    { label: 'Inactividad', value: fmt(tiempoInactividad), sub: `${inPct}% del total`, color: C.redL, icon: AlertCircle },
+    { label: 'Tiempo Efectivo', value: fmt(tiempoEfectivo), sub: `${eff}% eficiencia`, color: C.tealL, icon: Zap },
+    { label: 'Unidades / Hora', value: uph, sub: 'Promedio real', color: C.amberL, icon: Gauge },
   ]
 
   return (
@@ -235,8 +212,8 @@ function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidade
             </div>
           </div>
           <div style={{ display: 'flex', gap: 18 }}>
-            <Ring pct={eff}  color={C.amberL} label="Eficiencia"    />
-            <Ring pct={prod} color={C.tealL}  label="Productividad" />
+            <Ring pct={eff} color={C.amberL} label="Eficiencia" />
+            <Ring pct={prod} color={C.tealL} label="Productividad" />
           </div>
         </div>
 
@@ -304,7 +281,7 @@ function TablaData({ title, icon: Icon, badge, rows = [], cols = [] }) {
         ? <div style={{ padding: 48, textAlign: 'center', color: C.muted }}><Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} /><p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p></div>
         : <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}</tr></thead>
+              <thead>{cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}</thead>
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={ri} style={{ transition: 'background 0.12s' }} onMouseEnter={e => e.currentTarget.style.background = C.bg} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -327,20 +304,19 @@ const Chip = ({ label, color, bg }) => (
 
 export default function DashboardTiemposPage() {
   const router = useRouter()
-  const [user, setUser]               = useState(null)
-  const [loading, setLoading]         = useState(true)
-  const [operativos, setOperativos]   = useState([])
-  const [traslados, setTraslados]     = useState([])
-  const [turnos, setTurnos]           = useState([])
-  const [atrasos, setAtrasos]         = useState([])
-  const [tiposParo, setTiposParo]     = useState([])
-  const [filtroOp, setFiltroOp]       = useState('todos')
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [operativos, setOperativos] = useState([])
+  const [traslados, setTraslados] = useState([])
+  const [turnos, setTurnos] = useState([])
+  const [atrasos, setAtrasos] = useState([])
+  const [tiposParo, setTiposParo] = useState([])
+  const [filtroOp, setFiltroOp] = useState('todos')
   const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null })
-  const [showDP, setShowDP]           = useState(false)
-  const [tab, setTab]                 = useState('resumen')
-  const [tick, setTick]               = useState(0)
+  const [showDP, setShowDP] = useState(false)
+  const [tab, setTab] = useState('resumen')
+  const [tick, setTick] = useState(0)
 
-  // Reloj cada 60s para refrescar calculos de tiempo real
   useEffect(() => {
     const iv = setInterval(() => setTick(t => t + 1), 60000)
     return () => clearInterval(iv)
@@ -349,39 +325,90 @@ export default function DashboardTiemposPage() {
   useEffect(() => {
     const u = getCurrentUser()
     if (!u || (!isAdmin() && !isChequeroTraslado())) { router.push('/'); return }
-    setUser(u); cargarDatos()
+    setUser(u)
+    cargarDatos()
   }, [])
 
   const cargarDatos = async () => {
     try {
       setLoading(true)
-      const { data: ops } = await supabase.from('operativos_traslados').select('*').order('created_at', { ascending: false })
+      
+      const { data: ops } = await supabase
+        .from('operativos_traslados')
+        .select('*')
+        .order('created_at', { ascending: false })
       setOperativos(ops || [])
-      let qT  = supabase.from('traslados').select('*').order('fecha', { ascending: false })
-      let qTu = supabase.from('turnos_operativos').select('*').order('created_at', { ascending: true })
-      let qA  = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(*)').eq('es_general', true)
+      
+      let qT = supabase
+        .from('traslados')
+        .select('*')
+        .order('fecha', { ascending: false })
+      
+      let qTu = supabase
+        .from('turnos_operativos')
+        .select('*')
+        .order('created_at', { ascending: true })
+      
+      let qA = supabase
+        .from('traslados_atrasos')
+        .select(`
+          *,
+          operativo:operativo_id (
+            id,
+            nombre
+          )
+        `)
+        .eq('es_general', true)
+      
       if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
         const fi = dayjs(filtroFecha.inicio).format('YYYY-MM-DD')
         const ff = dayjs(filtroFecha.fin).format('YYYY-MM-DD')
-        qT  = qT.gte('fecha', fi).lte('fecha', ff)
+        qT = qT.gte('fecha', fi).lte('fecha', ff)
         qTu = qTu.gte('fecha', fi).lte('fecha', ff)
-        qA  = qA.gte('fecha', fi).lte('fecha', ff)
+        qA = qA.gte('fecha', fi).lte('fecha', ff)
       }
-      const [tr, tu, tp, at] = await Promise.all([qT, qTu, supabase.from('tipos_paro').select('*').eq('activo', true), qA])
-      setTraslados(tr.data || []); setTurnos(tu.data || []); setTiposParo(tp.data || []); setAtrasos(at.data || [])
-    } catch (e) { console.error(e); toast.error('Error al cargar datos') }
-    finally { setLoading(false) }
+      
+      const [tr, tu, tp, at] = await Promise.all([
+        qT,
+        qTu,
+        supabase.from('tipos_paro').select('*').eq('activo', true),
+        qA
+      ])
+      
+      setTraslados(tr.data || [])
+      setTurnos(tu.data || [])
+      setTiposParo(tp.data || [])
+      
+      const atrasosConOperativo = (at.data || []).map(a => ({
+        ...a,
+        operativo_nombre: a.operativo?.nombre || '—',
+        tipo_paro_id: a.tipo_paro_id || null
+      }))
+      setAtrasos(atrasosConOperativo)
+      
+    } catch (e) {
+      console.error('Error cargando datos:', e)
+      toast.error('Error al cargar datos')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const trasF = filtroOp === 'todos' ? traslados : traslados.filter(t => t.operativo_id === +filtroOp)
-  const turF  = filtroOp === 'todos' ? turnos    : turnos.filter(t => t.operativo_id === +filtroOp)
-  const atF   = useMemo(() =>
-    (filtroOp === 'todos' ? atrasos : atrasos.filter(a => a.operativo_id === +filtroOp))
-      .map(a => ({ ...a, operativo_nombre: a.operativo?.nombre || '—' })),
-    [atrasos, filtroOp])
+  const turF = filtroOp === 'todos' ? turnos : turnos.filter(t => t.operativo_id === +filtroOp)
+  
+  const atF = useMemo(() => {
+    const filtrados = filtroOp === 'todos' 
+      ? atrasos 
+      : atrasos.filter(a => a.operativo_id === +filtroOp)
+    
+    return filtrados.map(a => ({
+      ...a,
+      operativo_nombre: a.operativo?.nombre || a.operativo_nombre || '—'
+    }))
+  }, [atrasos, filtroOp])
 
   const met = useMemo(() => {
-    // Agrupar turnosF por operativo y sumar el tiempo total de cada uno
     const opIds = [...new Set(turF.map(t => t.operativo_id).filter(Boolean))]
     let tT = 0
     if (opIds.length > 0) {
@@ -389,21 +416,22 @@ export default function DashboardTiemposPage() {
         tT += calcTiempoTotalOperativo(turF.filter(t => t.operativo_id === opId))
       })
     } else if (turF.length > 0) {
-      // Edge case: turnos sin operativo_id
       tT = calcTiempoTotalOperativo(turF)
     }
 
     let tI = 0
     atF.forEach(a => {
-      if (a.duracion_minutos) tI += a.duracion_minutos
-      else if (a.hora_inicio && a.hora_fin) {
+      if (a.duracion_minutos) {
+        tI += a.duracion_minutos
+      } else if (a.hora_inicio && a.hora_fin) {
         let d = dayjs(`2000-01-01 ${a.hora_fin}`).diff(dayjs(`2000-01-01 ${a.hora_inicio}`), 'minute')
-        if (d < 0) d += 1440; tI += d
+        if (d < 0) d += 1440
+        tI += d
       }
     })
 
     const tE = Math.max(0, tT - tI)
-    const n  = trasF.length
+    const n = trasF.length
     const uph = tE > 0 ? +(n / (tE / 60)).toFixed(1) : 0
     const eff = tT > 0 ? +((tE / tT) * 100).toFixed(1) : 0
     const tieneActivo = opIds.length > 0
@@ -411,7 +439,6 @@ export default function DashboardTiemposPage() {
       : hayTurnoActivo(turF)
 
     return { tT, tI, tE, n, uph, eff, tieneActivo }
-  // tick hace que se recalcule cada minuto cuando hay turno activo
   }, [turF, atF, trasF, tick])
 
   const datosOps = useMemo(() => {
@@ -420,7 +447,9 @@ export default function DashboardTiemposPage() {
       const turnosOp = turnos.filter(t => t.operativo_id === op.id)
       const tT = calcTiempoTotalOperativo(turnosOp)
       let tI = 0
-      atrasos.filter(a => a.operativo_id === op.id).forEach(a => { if (a.duracion_minutos) tI += a.duracion_minutos })
+      atrasos.filter(a => a.operativo_id === op.id).forEach(a => {
+        if (a.duracion_minutos) tI += a.duracion_minutos
+      })
       const activo = hayTurnoActivo(turnosOp)
       return {
         id: op.id,
@@ -436,15 +465,23 @@ export default function DashboardTiemposPage() {
 
   const datosHora = useMemo(() => {
     const h = {}
-    trasF.forEach(t => { if (t.hora_inicio_carga) { const k = t.hora_inicio_carga.slice(0, 5); h[k] = (h[k] || 0) + 1 } })
+    trasF.forEach(t => {
+      if (t.hora_inicio_carga) {
+        const k = t.hora_inicio_carga.slice(0, 5)
+        h[k] = (h[k] || 0) + 1
+      }
+    })
     return Object.entries(h).map(([hora, unidades]) => ({ hora, unidades })).sort((a, b) => a.hora.localeCompare(b.hora)).slice(-24)
   }, [trasF])
 
   const atrasosTipo = useMemo(() => {
     const m = {}
-    atF.forEach(a => { const t = tiposParo.find(x => x.id === a.tipo_paro_id); const n = t?.nombre || 'Otros'; m[n] = (m[n] || 0) + (a.duracion_minutos || 0) })
+    atF.forEach(a => {
+      const nombre = a.tipo_atraso || 'Otros'
+      m[nombre] = (m[nombre] || 0) + (a.duracion_minutos || 0)
+    })
     return Object.entries(m).map(([name, minutos]) => ({ name, minutos })).sort((a, b) => b.minutos - a.minutos).slice(0, 8)
-  }, [atF, tiposParo])
+  }, [atF])
 
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
   const TABS = ['resumen', 'operativos', 'atrasos', 'turnos']
@@ -481,7 +518,6 @@ export default function DashboardTiemposPage() {
         @media (max-width:640px)  { .kpi-grid{grid-template-columns:1fr!important} .time-grid{grid-template-columns:1fr!important} .main-pad{padding:14px!important} .hdr-title{display:none!important} .tabs-bar{display:none!important} }
       `}</style>
 
-      {/* Header */}
       <header style={{ background: C.slate, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', borderBottom: `1px solid ${C.slateL}` }}>
         <div style={{ height: 2, background: `linear-gradient(90deg, ${C.amberMid}, ${C.amberL} 45%, transparent)` }} />
         <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
@@ -489,7 +525,7 @@ export default function DashboardTiemposPage() {
             <img src="/logo.png" alt="ALMAPAC" style={{ height: 32, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
             <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.14)' }} />
             <div className="hdr-title">
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Traslados de Azucar</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Dashboard de Tiempos</p>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.36)', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{user?.nombre} · {user?.rol}</p>
             </div>
           </div>
@@ -513,7 +549,6 @@ export default function DashboardTiemposPage() {
 
       <main className="main-pad" style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 56px' }}>
 
-        {/* Filtros */}
         <div style={{ background: C.white, borderRadius: 14, padding: '11px 18px', marginBottom: 20, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.7px' }}><Filter size={11} /> Filtros</span>
           <div style={{ width: 1, height: 16, background: C.border }} />
@@ -535,9 +570,8 @@ export default function DashboardTiemposPage() {
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[{ l: 'Aplicar', fn: () => { if (filtroFecha.inicio && filtroFecha.fin) { setFiltroFecha(f => ({ ...f, activo: true })); setShowDP(false); cargarDatos() } }, bg: C.amberMid, col: '#fff' }, { l: 'Cancelar', fn: () => setShowDP(false), bg: C.bg, col: C.slateL }].map(b => (
-                    <button key={b.l} onClick={b.fn} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: b.bg, color: b.col, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{b.l}</button>
-                  ))}
+                  <button onClick={() => { if (filtroFecha.inicio && filtroFecha.fin) { setFiltroFecha(f => ({ ...f, activo: true })); setShowDP(false); cargarDatos() } }} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.amberMid, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Aplicar</button>
+                  <button onClick={() => setShowDP(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.bg, color: C.slateL, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
                 </div>
               </div>
             )}
@@ -553,14 +587,13 @@ export default function DashboardTiemposPage() {
           </div>
         </div>
 
-        {/* RESUMEN */}
         {tab === 'resumen' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 20 }}>
-              <KpiCard label="Unidades Trasladadas"  value={met.n.toLocaleString()} icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  sub="Sacos / camiones"                                              delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}           icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55}  live={met.tieneActivo} />
-              <KpiCard label="Tiempo Inactividad"    value={fmt(met.tI)}            icon={AlertCircle} accent={C.red}      accentBg={C.redBg}   sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del total`} delay={110} />
-              <KpiCard label="Tiempo Efectivo"       value={fmt(met.tE)}            icon={Zap}         accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`}                                   delay={165} />
+              <KpiCard label="Unidades Trasladadas" value={met.n.toLocaleString()} icon={Truck} accent={C.teal} accentBg={C.tealBg} sub="Sacos / camiones" delay={0} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock} accent={C.blue} accentBg={C.blueBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
+              <KpiCard label="Tiempo Inactividad" value={fmt(met.tI)} icon={AlertCircle} accent={C.red} accentBg={C.redBg} sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del total`} delay={110} />
+              <KpiCard label="Tiempo Efectivo" value={fmt(met.tE)} icon={Zap} accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`} delay={165} />
             </div>
             <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} hayActivo={met.tieneActivo} />
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -610,8 +643,8 @@ export default function DashboardTiemposPage() {
                       <YAxis yAxisId="r" orientation="right" tick={{ fill: C.muted, fontSize: 10 }} />
                       <Tooltip content={<DarkTip fmtVal={(v, n) => n === 'Unidades' ? `${v} unidades` : fmt(v)} />} />
                       <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                      <Bar yAxisId="l" dataKey="tiempoEfectivo"    name="Tiempo Efectivo" fill={C.teal} radius={[5,5,0,0]} />
-                      <Bar yAxisId="l" dataKey="tiempoInactividad" name="Inactividad"     fill={C.redL} radius={[5,5,0,0]} />
+                      <Bar yAxisId="l" dataKey="tiempoEfectivo" name="Tiempo Efectivo" fill={C.teal} radius={[5,5,0,0]} />
+                      <Bar yAxisId="l" dataKey="tiempoInactividad" name="Inactividad" fill={C.redL} radius={[5,5,0,0]} />
                       <Line yAxisId="r" type="monotone" dataKey="unidades" name="Unidades" stroke={C.amberMid} strokeWidth={2.5} dot={{ fill: C.amberMid, r: 4, strokeWidth: 2, stroke: C.white }} />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -620,15 +653,14 @@ export default function DashboardTiemposPage() {
           </>
         )}
 
-        {/* OPERATIVOS */}
         {tab === 'operativos' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
             {datosOps.length === 0
               ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 56, color: C.muted }}><Box size={42} style={{ margin: '0 auto 12px', opacity: 0.22 }} /><p style={{ fontSize: 14, fontWeight: 600 }}>Sin operativos con datos</p></div>
               : datosOps.map(op => {
                   const total = op.tiempoEfectivo + op.tiempoInactividad
-                  const eff   = total > 0 ? Math.round((op.tiempoEfectivo / total) * 100) : 0
-                  const col   = eff >= 70 ? C.teal : eff >= 40 ? C.amberMid : C.red
+                  const eff = total > 0 ? Math.round((op.tiempoEfectivo / total) * 100) : 0
+                  const col = eff >= 70 ? C.teal : eff >= 40 ? C.amberMid : C.red
                   const colBg = eff >= 70 ? C.tealBg : eff >= 40 ? C.amberBg : C.redBg
                   return (
                     <div key={op.id} style={{ background: C.white, borderRadius: 16, padding: 20, border: `1px solid ${op.tieneActivo ? C.teal : C.border}`, boxShadow: op.tieneActivo ? `0 0 0 1px ${C.teal}40, 0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all .22s', cursor: 'default' }}
@@ -668,11 +700,10 @@ export default function DashboardTiemposPage() {
           </div>
         )}
 
-        {/* ATRASOS */}
         {tab === 'atrasos' && (
           <>
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <ChartCard title="Atrasos por Tipo de Paro" icon={AlertCircle} badge={fmt(totalMinAt)}>
+              <ChartCard title="Atrasos por Tipo" icon={AlertCircle} badge={fmt(totalMinAt)}>
                 {atrasosTipo.length === 0
                   ? <div style={{ height: 210, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><AlertCircle size={36} style={{ opacity: 0.22 }} /><span>Sin atrasos</span></div>
                   : <ResponsiveContainer width="100%" height={210}>
@@ -701,37 +732,36 @@ export default function DashboardTiemposPage() {
             </div>
             <TablaData title="Registro Detallado de Atrasos" icon={AlertCircle} badge={`${atF.length} eventos`} rows={atF}
               cols={[
-                { key: 'fecha',            label: 'Fecha',         render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
-                { key: 'hora_inicio',      label: 'Inicio',        render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
-                { key: 'hora_fin',         label: 'Fin',           render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="En curso" color={C.amberMid} bg={C.amberBg} /> },
-                { key: 'tipo_paro_id',     label: 'Tipo',          render: v => { const t = tiposParo.find(x => x.id === v); return t ? <Chip label={t.nombre} color={C.red} bg={C.redBg} /> : <span style={{ color: C.muted }}>—</span> } },
+                { key: 'fecha', label: 'Fecha', render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
+                { key: 'hora_inicio', label: 'Inicio', render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
+                { key: 'hora_fin', label: 'Fin', render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="En curso" color={C.amberMid} bg={C.amberBg} /> },
+                { key: 'tipo_atraso', label: 'Tipo', render: v => <Chip label={v || 'Otros'} color={C.red} bg={C.redBg} /> },
                 { key: 'operativo_nombre', label: 'Operativo' },
                 { key: 'duracion_minutos', label: 'Duracion', right: true, render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: C.red, fontSize: 12 }}>{fmt(v || 0)}</span> },
-                { key: 'observaciones',    label: 'Observaciones', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+                { key: 'observaciones', label: 'Observaciones', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
               ]}
             />
           </>
         )}
 
-        {/* TURNOS */}
         {tab === 'turnos' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
-              <KpiCard label="Total Turnos"           value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
-              <KpiCard label="Unidades por Turno"     value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
+              <KpiCard label="Total Turnos" value={turF.length} icon={Users} accent={C.teal} accentBg={C.tealBg} delay={0} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock} accent={C.amberMid} accentBg={C.amberBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
+              <KpiCard label="Unidades por Turno" value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
             </div>
             <TablaData title="Registro de Turnos Operativos" icon={Clock} badge={`${turF.length} turnos`} rows={turF}
               cols={[
-                { key: 'fecha',            label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
-                { key: 'chequero1',        label: 'Chequero 1',   render: v => v || <span style={{ color: C.muted }}>—</span> },
-                { key: 'chequero2',        label: 'Chequero 2',   render: v => v || <span style={{ color: C.muted }}>—</span> },
-                { key: 'operador',         label: 'Operador',     render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong> },
-                { key: 'operativo_id',     label: 'Operativo',    render: v => operativos.find(o => o.id === v)?.nombre || '—' },
-                { key: 'hora_inicio',      label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
-                { key: 'hora_fin',         label: 'Fin',          render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="Activo" color={C.teal} bg={C.tealBg} /> },
-                { key: 'duracion_minutos', label: 'Dur. Reg.',    right: true, render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: C.teal, fontSize: 12 }}>{fmt(v)}</span> : '—' },
-                { key: 'observaciones',    label: 'Notas',        render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+                { key: 'fecha', label: 'Fecha', render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
+                { key: 'chequero1', label: 'Chequero 1', render: v => v || <span style={{ color: C.muted }}>—</span> },
+                { key: 'chequero2', label: 'Chequero 2', render: v => v || <span style={{ color: C.muted }}>—</span> },
+                { key: 'operador', label: 'Operador', render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong> },
+                { key: 'operativo_id', label: 'Operativo', render: v => operativos.find(o => o.id === v)?.nombre || '—' },
+                { key: 'hora_inicio', label: 'Inicio', render: v => <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
+                { key: 'hora_fin', label: 'Fin', render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="Activo" color={C.teal} bg={C.tealBg} /> },
+                { key: 'duracion_minutos', label: 'Dur. Reg.', right: true, render: v => v ? <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 600, color: C.teal, fontSize: 12 }}>{fmt(v)}</span> : '—' },
+                { key: 'observaciones', label: 'Notas', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
               ]}
             />
           </>
