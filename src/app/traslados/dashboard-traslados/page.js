@@ -766,7 +766,7 @@ export default function DashboardTiemposPage() {
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
               <KpiCard label="Total Turnos"           value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
               <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
-              <KpiCard label="Unidades por Turno"     value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
+              <KpiCard label="Promedio Unidades por Turno"     value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
             </div>
 
             {/* ── Tabla de turnos CON unidades por turno ── */}
