@@ -1674,7 +1674,7 @@ export default function AdminPage() {
               </Link>
 
               <Link
-                href="/dashboard-tiempos"
+                href="/traslados/dashboard-traslados"
                 className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-purple-500 hover:bg-purple-600 text-white"
               >
                 <Gauge className="w-4 h-4" />
@@ -2364,7 +2364,7 @@ export default function AdminPage() {
                             <Eye className="w-4 h-4 text-blue-400" />
                           </Link>
                           <Link
-                            href={`/dashboard-tiempos?operativo=${op.id}`}
+                            href={`/traslados/dashboard-traslados?operativo=${op.id}`}
                             className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors"
                             title="Ir al Dashboard de Tiempos"
                           >

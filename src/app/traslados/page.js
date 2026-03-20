@@ -33,36 +33,6 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
     observaciones: turno?.observaciones || ''
   })
 
-
-  const [filtroEstado, setFiltroEstado] = useState('todos')
-const [filtroOperativo, setFiltroOperativo] = useState('todos')
-const [filtroAtrasoOperativo, setFiltroAtrasoOperativo] = useState('todos')
-const [filtroTurnoOperativo, setFiltroTurnoOperativo] = useState('todos')
-
-  // Agrega esto después de los useState en tu componente TrasladosPage
-useEffect(() => {
-  // Leer el filtro guardado desde el dashboard
-  const filtroGuardado = localStorage.getItem('dashboardFiltroOperativo')
-  if (filtroGuardado) {
-    try {
-      const { id, nombre } = JSON.parse(filtroGuardado)
-      if (id && id !== 'todos') {
-        // Aplicar el filtro del operativo
-        setFiltroOperativo(id.toString())
-        // Opcionalmente también aplicar a otros filtros si existen
-        setFiltroAtrasoOperativo(id.toString())
-        setFiltroTurnoOperativo(id.toString())
-        // Mostrar notificación
-        toast.success(`Filtrado por: ${nombre}`)
-        // Limpiar el localStorage después de aplicar
-        localStorage.removeItem('dashboardFiltroOperativo')
-      }
-    } catch (error) {
-      console.error('Error al leer filtro:', error)
-    }
-  }
-}, [])
-
   const tomarHoraActual = (campo) => {
     const ahora = new Date()
     const hora = ahora.getHours().toString().padStart(2, '0')
@@ -70,7 +40,7 @@ useEffect(() => {
     setFormData({ ...formData, [campo]: `${hora}:${minutos}` })
   }
 
-
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -142,9 +112,6 @@ useEffect(() => {
       setLoading(false)
     }
   }
-
-
-  
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50">
