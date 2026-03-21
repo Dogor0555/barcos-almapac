@@ -47,39 +47,45 @@ const C = {
 
 const PIE_COLS = [C.amberMid, C.teal, C.red, C.blue, '#7C3AED', '#0891B2', '#065F46', '#92400E']
 
-// ─────────────────────────────────────────────────────────────────
-// LÓGICA DE TIEMPO
-// Tiempo Total = hora_inicio del PRIMER turno → NOW() si hay activo,
-// o hora_fin del último turno si todos terminaron
-// ─────────────────────────────────────────────────────────────────
-
 function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
+  
   const ahora = dayjs()
+  
+  // 1. Filtrar turnos válidos (con fecha y hora_inicio)
   const validos = turnosOp.filter(t => t.fecha && t.hora_inicio)
-  if (validos.length === 0) return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
-
+  
+  // 2. Ordenar por fecha/hora para encontrar el PRIMER turno
   const ordenados = [...validos].sort((a, b) =>
-    dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() - dayjs(`${b.fecha} ${b.hora_inicio}`).valueOf()
+    dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() - 
+    dayjs(`${b.fecha} ${b.hora_inicio}`).valueOf()
   )
+  
+  // 3. El inicio GLOBAL es la hora_inicio del PRIMER turno
   const inicioGlobal = dayjs(`${ordenados[0].fecha} ${ordenados[0].hora_inicio}`)
-
+  
+  // 4. Encontrar el turno más reciente (último creado)
   const masReciente = turnosOp.reduce((prev, curr) =>
     dayjs(curr.created_at).isAfter(dayjs(prev.created_at)) ? curr : prev
   , turnosOp[0])
-
+  
+  // 5. Verificar si HAY UN TURNO ACTIVO (sin hora_fin o con hora_fin en el futuro)
   let estaActivo = false
   if (masReciente.fecha && masReciente.hora_inicio && masReciente.hora_fin) {
     const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
     let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
-    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
+    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day') // Cruza medianoche
     estaActivo = ahora.isAfter(ini) && ahora.isBefore(fin)
   } else if (masReciente.hora_inicio && !masReciente.hora_fin) {
-    estaActivo = true
+    estaActivo = true // Turno sin hora_fin = activo
   }
-
-  if (estaActivo) return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
-
+  
+  // 6. Si HAY TURNO ACTIVO → desde primer turno hasta AHORA
+  if (estaActivo) {
+    return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
+  }
+  
+  // 7. Si NO HAY TURNO ACTIVO → buscar el último FIN
   let finGlobal = null
   ordenados.forEach(t => {
     if (!t.hora_fin) return
@@ -88,7 +94,13 @@ function calcTiempoTotalOperativo(turnosOp) {
     if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     if (!finGlobal || fin.isAfter(finGlobal)) finGlobal = fin
   })
-  if (!finGlobal) return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
+  
+  // 8. Si no hay finGlobal, sumar duraciones individuales
+  if (!finGlobal) {
+    return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
+  }
+  
+  // 9. Retornar desde primer inicio hasta último fin
   return Math.max(0, finGlobal.diff(inicioGlobal, 'minute'))
 }
 
