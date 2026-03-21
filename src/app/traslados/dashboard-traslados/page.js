@@ -177,7 +177,7 @@ function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidade
     { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: hayActivo ? 'Primer turno → ahora' : 'Primer turno → ultimo fin', color: C.blueL,  icon: Clock },
     { label: 'Inactividad',            value: fmt(tiempoInactividad), sub: `${inPct}% del total`,                                            color: C.redL,   icon: AlertCircle },
     { label: 'Tiempo Efectivo',        value: fmt(tiempoEfectivo),   sub: `${eff}% eficiencia`,                                              color: C.tealL,  icon: Zap },
-    { label: 'Unidades / Hora',        value: uph,                   sub: 'Promedio real',                                                    color: C.amberL, icon: Gauge },
+    { label: 'Unidades / Hora',        value: uph.toFixed(1),         sub: 'Promedio real de unidades por hora efectiva',                    color: C.amberL, icon: Gauge },
   ]
   return (
     <div style={{ background: `linear-gradient(135deg,${C.slate} 0%,${C.slateM} 100%)`, borderRadius: 20, padding: 26, marginBottom: 22, boxShadow: '0 16px 36px -8px rgba(15,23,42,0.3)', border: `1px solid ${C.slateL}`, position: 'relative', overflow: 'hidden' }}>
@@ -268,7 +268,7 @@ function TablaData({ title, icon: Icon, badge, rows = [], cols = [] }) {
         ? <div style={{ padding: 48, textAlign: 'center', color: C.muted }}><Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} /><p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p></div>
         : <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>\\
+              <thead>
                 {cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}
               </thead>
               <tbody>
@@ -321,12 +321,10 @@ export default function DashboardTiemposPage() {
 
   // Función para navegar a traslados con el filtro del operativo seleccionado
   const navegarATrasladosConFiltro = (operativoId, operativoNombre) => {
-    // Guardar en localStorage el filtro seleccionado
     localStorage.setItem('dashboardFiltroOperativo', JSON.stringify({
       id: operativoId,
       nombre: operativoNombre
     }))
-    // Navegar a la página de traslados
     router.push('/traslados')
   }
 
@@ -619,9 +617,9 @@ export default function DashboardTiemposPage() {
             </div>
             <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} hayActivo={met.tieneActivo} />
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <ChartCard title="Unidades por Hora" icon={TrendingUp} badge="Tendencia">
+              <ChartCard title="Unidades por Hora" icon={TrendingUp} badge="Tendencia horaria">
                 {datosHora.length === 0
-                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><TrendingUp size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin datos</span></div>
+                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><TrendingUp size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin datos de unidades por hora</span></div>
                   : <ResponsiveContainer width="100%" height={196}>
                       <AreaChart data={datosHora} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
                         <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.amberMid} stopOpacity={0.2} /><stop offset="100%" stopColor={C.amberMid} stopOpacity={0} /></linearGradient></defs>
@@ -629,7 +627,7 @@ export default function DashboardTiemposPage() {
                         <XAxis dataKey="hora" tick={{ fill: C.muted, fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
                         <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
                         <Tooltip content={<DarkTip fmtVal={v => `${v} unidades`} />} />
-                        <Area type="monotone" dataKey="unidades" name="Unidades" stroke={C.amberMid} strokeWidth={2} fill="url(#ag)" dot={{ fill: C.amberMid, r: 3 }} />
+                        <Area type="monotone" dataKey="unidades" name="Unidades por hora" stroke={C.amberMid} strokeWidth={2} fill="url(#ag)" dot={{ fill: C.amberMid, r: 3 }} />
                       </AreaChart>
                     </ResponsiveContainer>
                 }
@@ -792,7 +790,7 @@ export default function DashboardTiemposPage() {
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
               <KpiCard label="Total Turnos"           value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
               <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
-              <KpiCard label="Promedio Unidades por Turno"     value={turF.length > 0 ? +(met.n / turF.length).toFixed(1) : 0} icon={Package} accent={C.blue} accentBg={C.blueBg} delay={110} />
+              <KpiCard label="Unidades por Hora"      value={met.uph.toFixed(1)} icon={Gauge} accent={C.amberMid} accentBg={C.amberBg} sub="Promedio real de unidades por hora efectiva" delay={110} />
             </div>
 
             <TablaData
