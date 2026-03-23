@@ -378,6 +378,15 @@ export default function DashboardTiemposPage() {
     router.push('/traslados')
   }
 
+
+  // Calcular flujo promedio de carga (unidades por hora efectiva)
+  const flujoPromedio = useMemo(() => {
+    if (met.tE === 0) return 0
+    // met.tE está en minutos, convertimos a horas y calculamos unidades/hora
+    const horasEfectivas = met.tE / 60
+    return met.n / horasEfectivas
+  }, [met.tE, met.n])
+
   const cargarDatos = async () => {
     try {
       setLoading(true)
@@ -818,6 +827,15 @@ export default function DashboardTiemposPage() {
               <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}            icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub="Suma de todos los turnos" delay={55}  live={met.tieneActivo} />
               <KpiCard label="Tiempo Inactividad"     value={fmt(met.tI)}            icon={AlertCircle} accent={C.red}      accentBg={C.redBg}   sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del total`} delay={110} />
               <KpiCard label="Tiempo Efectivo"        value={fmt(met.tE)}            icon={Zap}         accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`}                                    delay={165} />
+               <KpiCard 
+                label="Flujo Promedio de Carga" 
+                value={flujoPromedio.toFixed(2)} 
+                icon={Gauge} 
+                accent={C.green} 
+                accentBg={C.greenBg} 
+                sub="Unidades por hora efectiva" 
+                delay={220} 
+              />
             </div>
             <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} hayActivo={met.tieneActivo} />
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
