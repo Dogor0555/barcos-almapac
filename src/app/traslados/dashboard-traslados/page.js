@@ -537,6 +537,13 @@ export default function DashboardTiemposPage() {
     return met.n / horasEfectivas
   }, [met.tE, met.n])
 
+  // Calcular tiempo promedio por unidad (minutos por unidad)
+const tiempoPromedioPorUnidad = useMemo(() => {
+  if (met.n === 0) return 0
+  // met.tE está en minutos, dividimos entre número de unidades
+  return met.tE / met.n
+}, [met.tE, met.n])
+
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
   const TABS = ['resumen', 'operativos', 'atrasos', 'turnos', 'traslados']
   const ahoraStr = dayjs().format('HH:mm')
@@ -838,6 +845,16 @@ export default function DashboardTiemposPage() {
                 sub="Unidades por hora efectiva" 
                 delay={220} 
               />
+
+              <KpiCard 
+        label="Tiempo Promedio por Unidad" 
+        value={tiempoPromedioPorUnidad.toFixed(1)} 
+        icon={Clock} 
+        accent={C.amberMid} 
+        accentBg={C.amberBg} 
+        sub="Minutos por unidad" 
+        delay={275} 
+      />
             </div>
             <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} hayActivo={met.tieneActivo} />
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
