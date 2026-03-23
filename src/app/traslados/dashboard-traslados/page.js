@@ -62,15 +62,21 @@ function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
   const ahora = dayjs()
   const validos = turnosOp.filter(t => t.fecha && t.hora_inicio)
+  if (validos.length === 0) return 0
+  
   const ordenados = [...validos].sort((a, b) =>
     dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() -
     dayjs(`${b.fecha} ${b.hora_inicio}`).valueOf()
   )
+  
   const inicioGlobal = dayjs(`${ordenados[0].fecha} ${ordenados[0].hora_inicio}`)
+  
+  // Verificar si hay algún turno activo
+  let estaActivo = false
   const masReciente = turnosOp.reduce((prev, curr) =>
     dayjs(curr.created_at).isAfter(dayjs(prev.created_at)) ? curr : prev
   , turnosOp[0])
-  let estaActivo = false
+  
   if (masReciente.fecha && masReciente.hora_inicio && masReciente.hora_fin) {
     const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
     let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
@@ -79,7 +85,12 @@ function calcTiempoTotalOperativo(turnosOp) {
   } else if (masReciente.hora_inicio && !masReciente.hora_fin) {
     estaActivo = true
   }
-  if (estaActivo) return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
+  
+  if (estaActivo) {
+    return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
+  }
+  
+  // Encontrar el último fin de turno
   let finGlobal = null
   ordenados.forEach(t => {
     if (!t.hora_fin) return
@@ -88,7 +99,12 @@ function calcTiempoTotalOperativo(turnosOp) {
     if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     if (!finGlobal || fin.isAfter(finGlobal)) finGlobal = fin
   })
-  if (!finGlobal) return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
+  
+  if (!finGlobal) {
+    // Si no hay hora_fin en ningún turno, sumar duraciones individuales
+    return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
+  }
+  
   return Math.max(0, finGlobal.diff(inicioGlobal, 'minute'))
 }
 
@@ -319,7 +335,7 @@ function TablaData({ title, icon: Icon, badge, rows = [], cols = [], onExport, o
                     {cols.map((c, ci) => (
                       <td key={ci} style={{ padding: '11px 18px', fontSize: 13, color: C.text, textAlign: c.right ? 'right' : 'left', borderBottom: `1px solid ${C.borderL}` }}>
                         {c.render ? c.render(row[c.key], row) : (row[c.key] ?? '—')}
-                       </td>
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -386,9 +402,7 @@ export default function DashboardTiemposPage() {
       const { data: ops } = await supabase.from('operativos_traslados').select('*').order('created_at', { ascending: false })
       setOperativos(ops || [])
       let qT  = supabase.from('traslados').select('*').order('fecha', { ascending: false })
-      // Ordenar turnos del más reciente al más antiguo (por fecha descendente y hora_inicio descendente)
       let qTu = supabase.from('turnos_operativos').select('*').order('fecha', { ascending: false }).order('hora_inicio', { ascending: false })
-      // Ordenar atrasos del más reciente al más antiguo (por fecha descendente y hora_inicio descendente)
       let qA  = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(id,nombre)').eq('es_general', true).order('fecha', { ascending: false }).order('hora_inicio', { ascending: false })
       if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
         const fi = dayjs(filtroFecha.inicio).format('YYYY-MM-DD')
@@ -414,21 +428,66 @@ export default function DashboardTiemposPage() {
     [atrasos, filtroOp])
 
   const met = useMemo(() => {
-    const opIds = [...new Set(turF.map(t => t.operativo_id).filter(Boolean))]
+    // Agrupar turnos por operativo para calcular el tiempo total correctamente
+    const turnosPorOperativo = {}
+    turF.forEach(turno => {
+      if (!turno.operativo_id) return
+      if (!turnosPorOperativo[turno.operativo_id]) {
+        turnosPorOperativo[turno.operativo_id] = []
+      }
+      turnosPorOperativo[turno.operativo_id].push(turno)
+    })
+
+    // Calcular tiempo total sumando los tiempos de cada operativo
     let tT = 0
-    if (opIds.length > 0) opIds.forEach(id => { tT += calcTiempoTotalOperativo(turF.filter(t => t.operativo_id === id)) })
-    else if (turF.length > 0) tT = calcTiempoTotalOperativo(turF)
+    Object.values(turnosPorOperativo).forEach(turnosOp => {
+      tT += calcTiempoTotalOperativo(turnosOp)
+    })
+
+    // Si no se pudo calcular por operativo (ej: turnos sin operativo_id), calcular como un solo grupo
+    if (tT === 0 && turF.length > 0) {
+      const uniqueOperativos = new Set(turF.map(t => t.operativo_id).filter(Boolean))
+      if (uniqueOperativos.size === 1) {
+        tT = calcTiempoTotalOperativo(turF)
+      } else if (uniqueOperativos.size > 1) {
+        uniqueOperativos.forEach(opId => {
+          const turnosOp = turF.filter(t => t.operativo_id === opId)
+          tT += calcTiempoTotalOperativo(turnosOp)
+        })
+      } else {
+        // Turnos sin operativo_id
+        tT = calcTiempoTotalOperativo(turF)
+      }
+    }
+
     let tI = 0
     atF.forEach(a => {
       if (a.duracion_minutos) tI += a.duracion_minutos
-      else if (a.hora_inicio && a.hora_fin) { let d = dayjs(`2000-01-01 ${a.hora_fin}`).diff(dayjs(`2000-01-01 ${a.hora_inicio}`), 'minute'); if (d < 0) d += 1440; tI += d }
+      else if (a.hora_inicio && a.hora_fin) {
+        let d = dayjs(`2000-01-01 ${a.hora_fin}`).diff(dayjs(`2000-01-01 ${a.hora_inicio}`), 'minute')
+        if (d < 0) d += 1440
+        tI += d
+      }
     })
-    const tE = Math.max(0, tT - tI), n = trasF.length
+    
+    const tE = Math.max(0, tT - tI)
+    const n = trasF.length
     const uph = tE > 0 ? +(n / (tE / 60)).toFixed(1) : 0
     const eff = tT > 0 ? +((tE / tT) * 100).toFixed(1) : 0
-    const tieneActivo = opIds.length > 0
-      ? opIds.some(id => hayTurnoActivo(turF.filter(t => t.operativo_id === id)))
-      : hayTurnoActivo(turF)
+    
+    // Verificar si algún operativo tiene turno activo
+    let tieneActivo = false
+    if (Object.keys(turnosPorOperativo).length > 0) {
+      for (const turnosOp of Object.values(turnosPorOperativo)) {
+        if (hayTurnoActivo(turnosOp)) {
+          tieneActivo = true
+          break
+        }
+      }
+    } else {
+      tieneActivo = hayTurnoActivo(turF)
+    }
+    
     return { tT, tI, tE, n, uph, eff, tieneActivo }
   }, [turF, atF, trasF, tick])
 
@@ -986,8 +1045,6 @@ export default function DashboardTiemposPage() {
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 18 }}>
               <KpiCard label="Total Traslados"  value={trasF.length}                                icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  delay={0} />
-              {/* <KpiCard label="Activos"          value={trasF.filter(t => t.estado === 'activo').length}      icon={Clock}       accent={C.green}    accentBg={C.greenBg} delay={55} /> */}
-             {/*  <KpiCard label="Completados"      value={trasF.filter(t => t.estado === 'completado').length}  icon={CheckCircle} accent={C.blue}     accentBg={C.blueBg}  delay={110} /> */}
               <KpiCard label="Promedio por día" value={(() => {
                 const dias = new Set(trasF.map(t => t.fecha)).size
                 return dias > 0 ? (trasF.length / dias).toFixed(1) : '0'
@@ -1006,7 +1063,6 @@ export default function DashboardTiemposPage() {
                 <option value="activo">Activos</option>
                 <option value="completado">Completados</option>
               </select>
-              {/* Solo volteo o plana */}
               <select
                 value={filtroTipoTraslados}
                 onChange={(e) => setFiltroTipoTraslados(e.target.value)}
@@ -1058,7 +1114,6 @@ export default function DashboardTiemposPage() {
                 { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
                 { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
                 { key: 'tipo_unidad',       label: 'Tipo',
-                  // Solo volteo o plana
                   render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
                   sortable: true
                 },
