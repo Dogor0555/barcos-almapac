@@ -7,7 +7,8 @@ import { getCurrentUser, isAdmin, isChequeroTraslado, logout } from '../../lib/a
 import {
   LogOut, Truck, Calendar, Clock, Package,
   RefreshCw, AlertCircle, X, BarChart3, TrendingUp,
-  Activity, Users, Gauge, Zap, Target, Filter, Box, Menu
+  Activity, Users, Gauge, Zap, Target, Filter, Box, Menu, Eye,
+  Download, Search, ChevronDown, ChevronUp, ArrowUpDown, FileSpreadsheet, CheckCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -16,6 +17,7 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import duration from 'dayjs/plugin/duration'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import * as XLSX from 'xlsx'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ComposedChart, Line, Legend,
@@ -38,54 +40,46 @@ const fmt = (min) => {
 const C = {
   amber: '#B45309', amberMid: '#D97706', amberL: '#FCD34D', amberBg: '#FFFBEB',
   teal: '#0F766E', tealL: '#2DD4BF', tealBg: '#F0FDFA',
+  green: '#15803D', greenL: '#4ADE80', greenBg: '#F0FDF4',
   red: '#B91C1C', redL: '#F87171', redBg: '#FEF2F2',
   blue: '#1D4ED8', blueL: '#60A5FA', blueBg: '#EFF6FF',
   slate: '#0F172A', slateM: '#1E293B', slateL: '#334155',
-  muted: '#64748B', border: '#E2E8F0', borderL: '#F1F5F9',
+  muted: '#374151', border: '#E2E8F0', borderL: '#F1F5F9',
   bg: '#F8FAFC', white: '#FFFFFF',
+  text: '#111827', textSub: '#374151',
 }
 
 const PIE_COLS = [C.amberMid, C.teal, C.red, C.blue, '#7C3AED', '#0891B2', '#065F46', '#92400E']
 
+// Extrae número del correlativo para ordenamiento numérico real
+const extraerNumeroCorrelativo = (correlativo) => {
+  if (!correlativo) return 0
+  const match = String(correlativo).match(/\d+/)
+  return match ? parseInt(match[0], 10) : 0
+}
+
 function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
-  
   const ahora = dayjs()
-  
-  // 1. Filtrar turnos válidos (con fecha y hora_inicio)
   const validos = turnosOp.filter(t => t.fecha && t.hora_inicio)
-  
-  // 2. Ordenar por fecha/hora para encontrar el PRIMER turno
   const ordenados = [...validos].sort((a, b) =>
-    dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() - 
+    dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() -
     dayjs(`${b.fecha} ${b.hora_inicio}`).valueOf()
   )
-  
-  // 3. El inicio GLOBAL es la hora_inicio del PRIMER turno
   const inicioGlobal = dayjs(`${ordenados[0].fecha} ${ordenados[0].hora_inicio}`)
-  
-  // 4. Encontrar el turno más reciente (último creado)
   const masReciente = turnosOp.reduce((prev, curr) =>
     dayjs(curr.created_at).isAfter(dayjs(prev.created_at)) ? curr : prev
   , turnosOp[0])
-  
-  // 5. Verificar si HAY UN TURNO ACTIVO (sin hora_fin o con hora_fin en el futuro)
   let estaActivo = false
   if (masReciente.fecha && masReciente.hora_inicio && masReciente.hora_fin) {
     const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
     let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
-    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day') // Cruza medianoche
+    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     estaActivo = ahora.isAfter(ini) && ahora.isBefore(fin)
   } else if (masReciente.hora_inicio && !masReciente.hora_fin) {
-    estaActivo = true // Turno sin hora_fin = activo
+    estaActivo = true
   }
-  
-  // 6. Si HAY TURNO ACTIVO → desde primer turno hasta AHORA
-  if (estaActivo) {
-    return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
-  }
-  
-  // 7. Si NO HAY TURNO ACTIVO → buscar el último FIN
+  if (estaActivo) return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
   let finGlobal = null
   ordenados.forEach(t => {
     if (!t.hora_fin) return
@@ -94,13 +88,7 @@ function calcTiempoTotalOperativo(turnosOp) {
     if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
     if (!finGlobal || fin.isAfter(finGlobal)) finGlobal = fin
   })
-  
-  // 8. Si no hay finGlobal, sumar duraciones individuales
-  if (!finGlobal) {
-    return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
-  }
-  
-  // 9. Retornar desde primer inicio hasta último fin
+  if (!finGlobal) return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
   return Math.max(0, finGlobal.diff(inicioGlobal, 'minute'))
 }
 
@@ -118,7 +106,6 @@ function hayTurnoActivo(turnosOp) {
   return ahora.isAfter(ini) && ahora.isBefore(fin)
 }
 
-// ─── Tooltip ───────────────────────────────────────────────────
 const DarkTip = ({ active, payload, label, fmtVal }) => {
   if (!active || !payload?.length) return null
   return (
@@ -135,7 +122,6 @@ const DarkTip = ({ active, payload, label, fmtVal }) => {
   )
 }
 
-// ─── KPI Card ──────────────────────────────────────────────────
 function KpiCard({ label, value, sub, icon: Icon, accent = C.amberMid, accentBg, delay = 0, live = false }) {
   return (
     <div className="kpi-card" style={{ animationDelay: `${delay}ms` }}>
@@ -159,7 +145,6 @@ function KpiCard({ label, value, sub, icon: Icon, accent = C.amberMid, accentBg,
   )
 }
 
-// ─── Ring SVG ──────────────────────────────────────────────────
 function Ring({ pct, color, label, size = 88 }) {
   const r = size / 2 - 9
   const circ = 2 * Math.PI * r
@@ -179,7 +164,6 @@ function Ring({ pct, color, label, size = 88 }) {
   )
 }
 
-// ─── Panel oscuro de métricas ───────────────────────────────────
 function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades, hayActivo }) {
   const eff   = tiempoTotal > 0 ? Math.round((tiempoEfectivo / tiempoTotal) * 100) : 0
   const inPct = tiempoTotal > 0 ? Math.round((tiempoInactividad / tiempoTotal) * 100) : 0
@@ -249,7 +233,6 @@ function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidade
   )
 }
 
-// ─── Chart wrapper ──────────────────────────────────────────────
 function ChartCard({ title, icon: Icon, badge, children, style = {} }) {
   return (
     <div style={{ background: C.white, borderRadius: 18, padding: '20px 20px 14px', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', ...style }}>
@@ -265,28 +248,79 @@ function ChartCard({ title, icon: Icon, badge, children, style = {} }) {
   )
 }
 
-// ─── Tabla premium ──────────────────────────────────────────────
-function TablaData({ title, icon: Icon, badge, rows = [], cols = [] }) {
+function TablaData({ title, icon: Icon, badge, rows = [], cols = [], onExport, onSearch, searchTerm, onSort, sortConfig }) {
   return (
     <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-      <div style={{ padding: '15px 22px', borderBottom: `1px solid ${C.border}`, background: `linear-gradient(90deg,${C.slateM},${C.slate})`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '15px 22px', borderBottom: `1px solid ${C.border}`, background: `linear-gradient(90deg,${C.slateM},${C.slate})`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <div style={{ background: `${C.amberMid}30`, borderRadius: 9, padding: 6 }}><Icon size={14} color={C.amberL} /></div>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{title}</span>
         </div>
-        {badge && <span style={{ background: `${C.amberMid}28`, color: C.amberL, fontSize: 10, fontWeight: 700, padding: '3px 11px', borderRadius: 20 }}>{badge}</span>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {onSearch && (
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Buscar..."
+                style={{ padding: '6px 10px 6px 32px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, width: 200, outline: 'none', color: C.text }}
+              />
+            </div>
+          )}
+          {onExport && (
+            <button onClick={onExport} style={{ background: `${C.green}20`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '6px 12px', color: C.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <FileSpreadsheet size={12} /> Exportar
+            </button>
+          )}
+          {badge && <span style={{ background: `${C.amberMid}28`, color: C.amberMid, fontSize: 10, fontWeight: 700, padding: '3px 11px', borderRadius: 20 }}>{badge}</span>}
+        </div>
       </div>
       {rows.length === 0
-        ? <div style={{ padding: 48, textAlign: 'center', color: C.muted }}><Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} /><p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p></div>
+        ? <div style={{ padding: 48, textAlign: 'center', color: C.text }}><Box size={34} style={{ margin: '0 auto 10px', opacity: 0.25 }} /><p style={{ fontSize: 13, fontWeight: 600 }}>Sin registros</p></div>
         : <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                {cols.map((c, i) => <th key={i} style={{ padding: '10px 18px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: C.muted, textAlign: c.right ? 'right' : 'left', background: C.bg, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{c.label}</th>)}
+                <tr>
+                  {cols.map((c, i) => (
+                    <th
+                      key={i}
+                      style={{
+                        padding: '10px 18px',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.6px',
+                        color: C.slate,
+                        textAlign: c.right ? 'right' : 'left',
+                        background: C.bg,
+                        borderBottom: `1px solid ${C.border}`,
+                        whiteSpace: 'nowrap',
+                        cursor: c.sortable ? 'pointer' : 'default',
+                        userSelect: 'none'
+                      }}
+                      onClick={() => c.sortable && onSort && onSort(c.key)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: c.right ? 'flex-end' : 'flex-start' }}>
+                        {c.label}
+                        {c.sortable && sortConfig?.key === c.key && (
+                          sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                        )}
+                        {c.sortable && sortConfig?.key !== c.key && <ArrowUpDown size={12} style={{ opacity: 0.3 }} />}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={ri} style={{ transition: 'background 0.12s' }} onMouseEnter={e => e.currentTarget.style.background = C.bg} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    {cols.map((c, ci) => <td key={ci} style={{ padding: '11px 18px', fontSize: 13, color: C.slateL, textAlign: c.right ? 'right' : 'left', borderBottom: `1px solid ${C.borderL}` }}>{c.render ? c.render(row[c.key], row) : (row[c.key] ?? '—')}</td>)}
+                    {cols.map((c, ci) => (
+                      <td key={ci} style={{ padding: '11px 18px', fontSize: 13, color: C.text, textAlign: c.right ? 'right' : 'left', borderBottom: `1px solid ${C.borderL}` }}>
+                        {c.render ? c.render(row[c.key], row) : (row[c.key] ?? '—')}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -303,7 +337,6 @@ const Chip = ({ label, color, bg }) => (
   </span>
 )
 
-// ─── Componente principal ───────────────────────────────────────
 export default function DashboardTiemposPage() {
   const router = useRouter()
   const [user, setUser]               = useState(null)
@@ -319,6 +352,14 @@ export default function DashboardTiemposPage() {
   const [tab, setTab]                 = useState('resumen')
   const [tick, setTick]               = useState(0)
   const [menuOpen, setMenuOpen]       = useState(false)
+  const [showDetalleModal, setShowDetalleModal] = useState(false)
+  const [trasladoSeleccionado, setTrasladoSeleccionado] = useState(null)
+
+  // Estados para la tabla de traslados
+  const [searchTraslados, setSearchTraslados] = useState('')
+  const [sortTraslados, setSortTraslados] = useState({ key: 'correlativo_num', direction: 'asc' })
+  const [filtroEstadoTraslados, setFiltroEstadoTraslados] = useState('todos')
+  const [filtroTipoTraslados, setFiltroTipoTraslados] = useState('todos')
 
   useEffect(() => {
     const iv = setInterval(() => setTick(t => t + 1), 60000)
@@ -331,7 +372,6 @@ export default function DashboardTiemposPage() {
     setUser(u); cargarDatos()
   }, [])
 
-  // Función para navegar a traslados con el filtro del operativo seleccionado
   const navegarATrasladosConFiltro = (operativoId, operativoNombre) => {
     localStorage.setItem('dashboardFiltroOperativo', JSON.stringify({
       id: operativoId,
@@ -421,7 +461,6 @@ export default function DashboardTiemposPage() {
     return Object.entries(m).map(([name, minutos]) => ({ name, minutos })).sort((a, b) => b.minutos - a.minutos).slice(0, 8)
   }, [atF])
 
-  // ── Unidades por turno ──────────────────────────────────────────
   const turnosConUnidades = useMemo(() => {
     return turF.map(turno => {
       let unidadesTurno = 0
@@ -446,8 +485,121 @@ export default function DashboardTiemposPage() {
   }, [turF, traslados, tick])
 
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
-  const TABS = ['resumen', 'operativos', 'atrasos', 'turnos']
+  const TABS = ['resumen', 'operativos', 'atrasos', 'turnos', 'traslados']
   const ahoraStr = dayjs().format('HH:mm')
+
+  const formatHora  = (hora)  => hora?.substring(0, 5) || '—'
+  const formatFecha = (fecha) => fecha ? dayjs(fecha).format('DD/MM/YYYY') : '—'
+
+  const getOperativoNombre = (operativoId) => {
+    const op = operativos.find(o => o.id === operativoId)
+    return op ? op.nombre : '—'
+  }
+
+  // Datos para la tabla de traslados con filtros, búsqueda y ordenamiento
+  const trasladosParaTabla = useMemo(() => {
+    let filtered = trasF.map(t => ({
+      ...t,
+      operativo_nombre: getOperativoNombre(t.operativo_id),
+      correlativo_num: extraerNumeroCorrelativo(t.correlativo_viaje),
+    }))
+
+    // Filtro por estado
+    if (filtroEstadoTraslados !== 'todos') {
+      filtered = filtered.filter(t => t.estado === filtroEstadoTraslados)
+    }
+
+    // Filtro por tipo de unidad (solo volteo o plana)
+    if (filtroTipoTraslados !== 'todos') {
+      filtered = filtered.filter(t => t.tipo_unidad === filtroTipoTraslados)
+    }
+
+    // Búsqueda
+    if (searchTraslados) {
+      const term = searchTraslados.toLowerCase()
+      filtered = filtered.filter(t =>
+        t.correlativo_viaje?.toLowerCase().includes(term) ||
+        t.nombre_conductor?.toLowerCase().includes(term) ||
+        t.placa?.toLowerCase().includes(term) ||
+        t.remolque?.toLowerCase().includes(term) ||
+        t.transporte?.toLowerCase().includes(term) ||
+        t.no_marchamo?.toLowerCase().includes(term) ||
+        getOperativoNombre(t.operativo_id).toLowerCase().includes(term)
+      )
+    }
+
+    // Ordenamiento — correlativo usa extracción numérica
+    filtered.sort((a, b) => {
+      let aVal, bVal
+
+      if (sortTraslados.key === 'correlativo_num') {
+        aVal = a.correlativo_num ?? 0
+        bVal = b.correlativo_num ?? 0
+      } else if (sortTraslados.key === 'fecha') {
+        aVal = a.fecha ? new Date(a.fecha) : new Date(0)
+        bVal = b.fecha ? new Date(b.fecha) : new Date(0)
+      } else if (sortTraslados.key === 'hora_inicio_carga' || sortTraslados.key === 'hora_fin_carga') {
+        aVal = a[sortTraslados.key] || '00:00'
+        bVal = b[sortTraslados.key] || '00:00'
+      } else {
+        aVal = a[sortTraslados.key] ?? ''
+        bVal = b[sortTraslados.key] ?? ''
+      }
+
+      if (aVal < bVal) return sortTraslados.direction === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortTraslados.direction === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return filtered
+  }, [trasF, searchTraslados, sortTraslados, filtroEstadoTraslados, filtroTipoTraslados, operativos])
+
+  // Exportar a Excel real con xlsx
+  const exportarTraslados = () => {
+    const headers = [
+      'Correlativo', 'Fecha', 'Operativo', 'Conductor', 'Placa', 'Remolque',
+      'Transporte', 'Tipo Unidad', 'Hora Inicio', 'Hora Fin', 'Estado', 'No. Marchamo', 'Observaciones'
+    ]
+
+    const rows = trasladosParaTabla.map(t => [
+      t.correlativo_viaje || '',
+      formatFecha(t.fecha),
+      getOperativoNombre(t.operativo_id),
+      t.nombre_conductor || '',
+      t.placa || '',
+      t.remolque || '',
+      t.transporte || '',
+      t.tipo_unidad || '',
+      formatHora(t.hora_inicio_carga),
+      formatHora(t.hora_fin_carga),
+      t.estado || 'activo',
+      t.no_marchamo || '',
+      t.observaciones || ''
+    ])
+
+    const wsData = [headers, ...rows]
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+    // Ancho de columnas
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 12 },
+      { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 16 }, { wch: 30 }
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Traslados')
+    XLSX.writeFile(wb, `traslados_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`)
+    toast.success('✅ Exportado a Excel')
+  }
+
+  // Cambiar ordenamiento
+  const handleSort = (key) => {
+    setSortTraslados(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
 
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.slate }}>
@@ -460,23 +612,23 @@ export default function DashboardTiemposPage() {
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:${C.bg};-webkit-font-smoothing:antialiased}
-        select,input,button,textarea{font-family:'Plus Jakarta Sans',-apple-system,sans-serif}
+        body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:${C.bg};color:${C.text};-webkit-font-smoothing:antialiased}
+        select,input,button,textarea{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;color:${C.text}}
+        p,span,div,td,th,label{color:inherit}
         .kpi-card{background:${C.white};border-radius:16px;padding:18px 20px 16px;border:1px solid ${C.border};position:relative;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:box-shadow .25s,transform .25s;animation:fadeUp .45s ease both;cursor:default}
         .kpi-card:hover{box-shadow:0 8px 24px rgba(0,0,0,0.1);transform:translateY(-3px)}
-        .kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.65px;color:${C.muted};margin-bottom:4px}
+        .kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.65px;color:${C.textSub};margin-bottom:4px}
         .kpi-value{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:${C.slate};line-height:1.2;letter-spacing:-0.3px}
-        .kpi-sub{font-size:11px;color:${C.muted};margin-top:4px;font-weight:500}
+        .kpi-sub{font-size:11px;color:${C.textSub};margin-top:4px;font-weight:500}
         @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.5)}}
         .dot-pulse{animation:dotPulse 1.4s ease-in-out infinite}
 
-        /* ── Responsive ── */
         @media(max-width:1100px){
           .kpi-grid{grid-template-columns:repeat(2,1fr)!important}
           .time-grid{grid-template-columns:repeat(2,1fr)!important}
@@ -488,6 +640,8 @@ export default function DashboardTiemposPage() {
           .hdr-desktop{display:none!important}
           .hdr-mobile{display:flex!important}
           .tabs-desktop{display:none!important}
+          .filtros-traslados{flex-direction:column!important}
+          .filtros-traslados select, .filtros-traslados input{width:100%!important}
         }
         @media(min-width:769px){
           .hdr-mobile{display:none!important}
@@ -499,23 +653,21 @@ export default function DashboardTiemposPage() {
         }
       `}</style>
 
-      {/* ── Header ── */}
       <header style={{ background: C.slate, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', borderBottom: `1px solid ${C.slateL}` }}>
         <div style={{ height: 2, background: `linear-gradient(90deg,${C.amberMid},${C.amberL} 45%,transparent)` }} />
 
-        {/* Desktop header */}
         <div className="hdr-desktop" style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <img src="/logo.png" alt="ALMAPAC" style={{ height: 32, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
             <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.14)' }} />
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Traslados de Azucar</p>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.36)', fontFamily: "'DM Mono',monospace", marginTop: 1 }}>{user?.nombre} · {user?.rol}</p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: "'DM Mono',monospace", marginTop: 1 }}>{user?.nombre} · {user?.rol}</p>
             </div>
           </div>
           <div className="tabs-desktop" style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 3 }}>
             {TABS.map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? C.amberL : 'transparent', color: tab === t ? C.slate : 'rgba(255,255,255,0.48)', border: 'none', padding: '5px 14px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', transition: 'all .18s' }}>{t}</button>
+              <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? C.amberL : 'transparent', color: tab === t ? C.slate : 'rgba(255,255,255,0.6)', border: 'none', padding: '5px 14px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', transition: 'all .18s' }}>{t}</button>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -530,13 +682,12 @@ export default function DashboardTiemposPage() {
           </div>
         </div>
 
-        {/* Mobile header */}
         <div className="hdr-mobile" style={{ padding: '0 16px', height: 56, alignItems: 'center', justifyContent: 'space-between', display: 'flex' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img src="/logo.png" alt="ALMAPAC" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>Traslados</p>
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: "'DM Mono',monospace" }}>{met.tieneActivo ? '● EN VIVO' : ahoraStr}</p>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: "'DM Mono',monospace" }}>{met.tieneActivo ? '● EN VIVO' : ahoraStr}</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -549,12 +700,11 @@ export default function DashboardTiemposPage() {
           </div>
         </div>
 
-        {/* Mobile menu dropdown */}
         {menuOpen && (
           <div className="mobile-menu" style={{ background: C.slateM, borderTop: `1px solid ${C.slateL}`, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4, marginBottom: 10 }}>
               {TABS.map(t => (
-                <button key={t} onClick={() => { setTab(t); setMenuOpen(false) }} style={{ background: tab === t ? C.amberL : 'rgba(255,255,255,0.07)', color: tab === t ? C.slate : 'rgba(255,255,255,0.6)', border: 'none', padding: '8px 4px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{t}</button>
+                <button key={t} onClick={() => { setTab(t); setMenuOpen(false) }} style={{ background: tab === t ? C.amberL : 'rgba(255,255,255,0.07)', color: tab === t ? C.slate : 'rgba(255,255,255,0.7)', border: 'none', padding: '8px 4px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{t}</button>
               ))}
             </div>
             <select value={filtroOp} onChange={e => { setFiltroOp(e.target.value); setMenuOpen(false) }} style={{ width: '100%', padding: '8px 10px', borderRadius: 9, border: `1px solid ${C.slateL}`, background: C.slate, color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
@@ -568,7 +718,7 @@ export default function DashboardTiemposPage() {
                 </button>
               )}
               {filtroOp !== 'todos' && (
-                <button onClick={() => { setFiltroOp('todos'); setMenuOpen(false) }} style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 9, padding: '8px', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={() => { setFiltroOp('todos'); setMenuOpen(false) }} style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 9, padding: '8px', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   Ver todos
                 </button>
               )}
@@ -579,16 +729,16 @@ export default function DashboardTiemposPage() {
 
       <main className="main-pad" style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 56px' }}>
 
-        {/* Filtros — solo visible en desktop */}
+        {/* Barra de filtros globales */}
         <div style={{ background: C.white, borderRadius: 14, padding: '11px 18px', marginBottom: 20, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.7px' }}><Filter size={11} /> Filtros</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.slate, textTransform: 'uppercase', letterSpacing: '0.7px' }}><Filter size={11} /> Filtros</span>
           <div style={{ width: 1, height: 16, background: C.border }} />
           <select value={filtroOp} onChange={e => setFiltroOp(e.target.value)} style={{ padding: '6px 10px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.bg, fontSize: 13, fontWeight: 600, color: C.slate, cursor: 'pointer', outline: 'none' }}>
             <option value="todos">Todos los operativos</option>
             {operativos.map(op => <option key={op.id} value={op.id}>{op.nombre}</option>)}
           </select>
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowDP(!showDP)} style={{ padding: '6px 12px', borderRadius: 9, cursor: 'pointer', border: `1px solid ${filtroFecha.activo ? C.amberMid : C.border}`, background: filtroFecha.activo ? C.amberBg : C.bg, color: filtroFecha.activo ? C.amber : C.slateL, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => setShowDP(!showDP)} style={{ padding: '6px 12px', borderRadius: 9, cursor: 'pointer', border: `1px solid ${filtroFecha.activo ? C.amberMid : C.border}`, background: filtroFecha.activo ? C.amberBg : C.bg, color: filtroFecha.activo ? C.amber : C.slate, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Calendar size={12} />
               {filtroFecha.activo ? `${dayjs(filtroFecha.inicio).format('DD/MM')} — ${dayjs(filtroFecha.fin).format('DD/MM')}` : 'Rango de fechas'}
             </button>
@@ -596,13 +746,13 @@ export default function DashboardTiemposPage() {
               <div style={{ position: 'absolute', top: '110%', left: 0, background: C.white, borderRadius: 14, padding: 18, boxShadow: '0 16px 36px rgba(0,0,0,0.13)', zIndex: 50, minWidth: 248, border: `1px solid ${C.border}` }}>
                 {['inicio', 'fin'].map(k => (
                   <div key={k} style={{ marginBottom: k === 'inicio' ? 10 : 14 }}>
-                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{k === 'inicio' ? 'Desde' : 'Hasta'}</label>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.slate, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{k === 'inicio' ? 'Desde' : 'Hasta'}</label>
                     <input type="datetime-local" value={filtroFecha[k] ? dayjs(filtroFecha[k]).format('YYYY-MM-DDTHH:mm') : ''} onChange={e => setFiltroFecha(p => ({ ...p, [k]: dayjs(e.target.value).toDate() }))} style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.slate, outline: 'none' }} />
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { if (filtroFecha.inicio && filtroFecha.fin) { setFiltroFecha(f => ({ ...f, activo: true })); setShowDP(false); cargarDatos() } }} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.amberMid, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Aplicar</button>
-                  <button onClick={() => setShowDP(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.bg, color: C.slateL, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                  <button onClick={() => setShowDP(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.bg, color: C.slate, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
                 </div>
               </div>
             )}
@@ -612,13 +762,13 @@ export default function DashboardTiemposPage() {
               <X size={11} /> Limpiar
             </button>
           )}
-          <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted, fontFamily: "'DM Mono',monospace" }}>
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: C.slate, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>
             {trasF.length} traslados · {turF.length} turnos · {atF.length} atrasos
             {met.tieneActivo && <span style={{ marginLeft: 8, color: C.teal, fontWeight: 700 }}>● EN VIVO {ahoraStr}</span>}
           </div>
         </div>
 
-        {/* ══ RESUMEN ══ */}
+        {/* ===================== TAB RESUMEN ===================== */}
         {tab === 'resumen' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 20 }}>
@@ -631,13 +781,13 @@ export default function DashboardTiemposPage() {
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <ChartCard title="Unidades por Hora" icon={TrendingUp} badge="Tendencia horaria">
                 {datosHora.length === 0
-                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><TrendingUp size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin datos de unidades por hora</span></div>
+                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.text, gap: 8 }}><TrendingUp size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin datos de unidades por hora</span></div>
                   : <ResponsiveContainer width="100%" height={196}>
                       <AreaChart data={datosHora} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
                         <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.amberMid} stopOpacity={0.2} /><stop offset="100%" stopColor={C.amberMid} stopOpacity={0} /></linearGradient></defs>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} />
-                        <XAxis dataKey="hora" tick={{ fill: C.muted, fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
-                        <YAxis tick={{ fill: C.muted, fontSize: 10 }} />
+                        <XAxis dataKey="hora" tick={{ fill: C.textSub, fontSize: 10, fontFamily: "'DM Mono',monospace" }} />
+                        <YAxis tick={{ fill: C.textSub, fontSize: 10 }} />
                         <Tooltip content={<DarkTip fmtVal={v => `${v} unidades`} />} />
                         <Area type="monotone" dataKey="unidades" name="Unidades por hora" stroke={C.amberMid} strokeWidth={2} fill="url(#ag)" dot={{ fill: C.amberMid, r: 3 }} />
                       </AreaChart>
@@ -646,7 +796,7 @@ export default function DashboardTiemposPage() {
               </ChartCard>
               <ChartCard title="Distribucion de Atrasos" icon={AlertCircle} badge={`Total ${fmt(totalMinAt)}`}>
                 {atrasosTipo.length === 0
-                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><AlertCircle size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin atrasos</span></div>
+                  ? <div style={{ height: 196, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.text, gap: 8 }}><AlertCircle size={34} style={{ opacity: 0.22 }} /><span style={{ fontSize: 12 }}>Sin atrasos</span></div>
                   : <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
                       <ResponsiveContainer width="48%" height={186}>
                         <PieChart><Pie data={atrasosTipo} cx="50%" cy="50%" innerRadius={46} outerRadius={68} dataKey="minutos" paddingAngle={3}>{atrasosTipo.map((_, i) => <Cell key={i} fill={PIE_COLS[i % PIE_COLS.length]} />)}</Pie><Tooltip content={<DarkTip fmtVal={v => fmt(v)} />} /></PieChart>
@@ -655,7 +805,7 @@ export default function DashboardTiemposPage() {
                         {atrasosTipo.map((d, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                             <span style={{ width: 7, height: 7, borderRadius: 2, background: PIE_COLS[i % PIE_COLS.length], flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, color: C.slateL, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                            <span style={{ fontSize: 11, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                             <span style={{ fontSize: 11, fontWeight: 500, color: C.slate, fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>{fmt(d.minutos)}</span>
                           </div>
                         ))}
@@ -666,15 +816,15 @@ export default function DashboardTiemposPage() {
             </div>
             <ChartCard title="Tiempos por Operativo" icon={BarChart3} badge={`${datosOps.length} operativos`} style={{ marginBottom: 20 }}>
               {datosOps.length === 0
-                ? <div style={{ height: 234, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><BarChart3 size={42} style={{ opacity: 0.22 }} /><span style={{ fontSize: 13 }}>Sin datos</span></div>
+                ? <div style={{ height: 234, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.text, gap: 8 }}><BarChart3 size={42} style={{ opacity: 0.22 }} /><span style={{ fontSize: 13 }}>Sin datos</span></div>
                 : <ResponsiveContainer width="100%" height={234}>
                     <ComposedChart data={datosOps} margin={{ top: 6, right: 34, left: -12, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} />
-                      <XAxis dataKey="nombre" tick={{ fill: C.muted, fontSize: 11 }} />
-                      <YAxis yAxisId="l" tick={{ fill: C.muted, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
-                      <YAxis yAxisId="r" orientation="right" tick={{ fill: C.muted, fontSize: 10 }} />
+                      <XAxis dataKey="nombre" tick={{ fill: C.textSub, fontSize: 11 }} />
+                      <YAxis yAxisId="l" tick={{ fill: C.textSub, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
+                      <YAxis yAxisId="r" orientation="right" tick={{ fill: C.textSub, fontSize: 10 }} />
                       <Tooltip content={<DarkTip fmtVal={(v, n) => n === 'Unidades' ? `${v} unidades` : fmt(v)} />} />
-                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10, color: C.text }} />
                       <Bar yAxisId="l" dataKey="tiempoEfectivo"    name="Tiempo Efectivo" fill={C.teal} radius={[5,5,0,0]} />
                       <Bar yAxisId="l" dataKey="tiempoInactividad" name="Inactividad"     fill={C.redL} radius={[5,5,0,0]} />
                       <Line yAxisId="r" type="monotone" dataKey="unidades" name="Unidades" stroke={C.amberMid} strokeWidth={2.5} dot={{ fill: C.amberMid, r: 4, strokeWidth: 2, stroke: C.white }} />
@@ -685,35 +835,35 @@ export default function DashboardTiemposPage() {
           </>
         )}
 
-        {/* ══ OPERATIVOS ══ */}
+        {/* ===================== TAB OPERATIVOS ===================== */}
         {tab === 'operativos' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
             {datosOps.length === 0
-              ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 56, color: C.muted }}><Box size={42} style={{ margin: '0 auto 12px', opacity: 0.22 }} /><p style={{ fontSize: 14, fontWeight: 600 }}>Sin operativos con datos</p></div>
+              ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 56, color: C.text }}><Box size={42} style={{ margin: '0 auto 12px', opacity: 0.22 }} /><p style={{ fontSize: 14, fontWeight: 600 }}>Sin operativos con datos</p></div>
               : datosOps.map(op => {
                   const total = op.tiempoEfectivo + op.tiempoInactividad
                   const eff   = total > 0 ? Math.round((op.tiempoEfectivo / total) * 100) : 0
                   const col   = eff >= 70 ? C.teal : eff >= 40 ? C.amberMid : C.red
                   const colBg = eff >= 70 ? C.tealBg : eff >= 40 ? C.amberBg : C.redBg
                   return (
-                    <div 
-                      key={op.id} 
+                    <div
+                      key={op.id}
                       onClick={() => navegarATrasladosConFiltro(op.id, op.nombreCompleto)}
-                      style={{ 
-                        background: C.white, 
-                        borderRadius: 16, 
-                        padding: 20, 
-                        border: `1px solid ${op.tieneActivo ? C.teal : C.border}`, 
-                        boxShadow: op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)', 
-                        transition: 'all .22s', 
+                      style={{
+                        background: C.white,
+                        borderRadius: 16,
+                        padding: 20,
+                        border: `1px solid ${op.tieneActivo ? C.teal : C.border}`,
+                        boxShadow: op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)',
+                        transition: 'all .22s',
                         cursor: 'pointer'
                       }}
-                      onMouseEnter={e => { 
+                      onMouseEnter={e => {
                         e.currentTarget.style.boxShadow = '0 8px 22px rgba(0,0,0,0.1)'
                         e.currentTarget.style.transform = 'translateY(-3px)'
                         e.currentTarget.style.border = `1px solid ${C.amberMid}`
                       }}
-                      onMouseLeave={e => { 
+                      onMouseLeave={e => {
                         e.currentTarget.style.boxShadow = op.tieneActivo ? `0 0 0 1px ${C.teal}40,0 4px 16px rgba(15,118,110,0.1)` : '0 2px 8px rgba(0,0,0,0.04)'
                         e.currentTarget.style.transform = 'translateY(0)'
                         e.currentTarget.style.border = `1px solid ${op.tieneActivo ? C.teal : C.border}`
@@ -729,7 +879,7 @@ export default function DashboardTiemposPage() {
                               </span>
                             )}
                           </div>
-                          <p style={{ fontSize: 11, color: C.muted, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>ID #{op.id}</p>
+                          <p style={{ fontSize: 11, color: C.textSub, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>ID #{op.id}</p>
                         </div>
                         <span style={{ background: colBg, color: col, padding: '3px 10px', borderRadius: 20, fontSize: 13, fontWeight: 600, fontFamily: "'DM Mono',monospace" }}>{eff}%</span>
                       </div>
@@ -751,18 +901,18 @@ export default function DashboardTiemposPage() {
           </div>
         )}
 
-        {/* ══ ATRASOS ══ */}
+        {/* ===================== TAB ATRASOS ===================== */}
         {tab === 'atrasos' && (
           <>
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <ChartCard title="Atrasos por Tipo" icon={AlertCircle} badge={fmt(totalMinAt)}>
                 {atrasosTipo.length === 0
-                  ? <div style={{ height: 210, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, gap: 8 }}><AlertCircle size={36} style={{ opacity: 0.22 }} /><span>Sin atrasos</span></div>
+                  ? <div style={{ height: 210, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.text, gap: 8 }}><AlertCircle size={36} style={{ opacity: 0.22 }} /><span>Sin atrasos</span></div>
                   : <ResponsiveContainer width="100%" height={210}>
                       <BarChart data={atrasosTipo} layout="vertical" margin={{ left: 0, right: 14, top: 4, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.borderL} horizontal={false} />
-                        <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
-                        <YAxis type="category" dataKey="name" tick={{ fill: C.slateL, fontSize: 10 }} width={84} />
+                        <XAxis type="number" tick={{ fill: C.textSub, fontSize: 10 }} tickFormatter={v => `${Math.floor(v/60)}h`} />
+                        <YAxis type="category" dataKey="name" tick={{ fill: C.text, fontSize: 10 }} width={84} />
                         <Tooltip content={<DarkTip fmtVal={v => fmt(v)} />} />
                         <Bar dataKey="minutos" name="Duracion" radius={[0,5,5,0]}>{atrasosTipo.map((_, i) => <Cell key={i} fill={PIE_COLS[i % PIE_COLS.length]} />)}</Bar>
                       </BarChart>
@@ -776,7 +926,7 @@ export default function DashboardTiemposPage() {
                 </div>
                 {[{ l: 'Total eventos', v: atF.length, c: C.slate }, { l: 'Tiempo total parado', v: fmt(totalMinAt), c: C.red }, { l: 'Promedio por evento', v: atF.length > 0 ? fmt(Math.round(totalMinAt / atF.length)) : '0h 0m', c: C.amberMid }, { l: 'Tipos distintos', v: atrasosTipo.length, c: C.teal }].map(({ l, v, c }) => (
                   <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 13px', background: C.bg, borderRadius: 10, marginBottom: 7 }}>
-                    <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>{l}</span>
+                    <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{l}</span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: c, fontFamily: "'DM Mono',monospace" }}>{v}</span>
                   </div>
                 ))}
@@ -784,19 +934,19 @@ export default function DashboardTiemposPage() {
             </div>
             <TablaData title="Registro Detallado de Atrasos" icon={AlertCircle} badge={`${atF.length} eventos`} rows={atF}
               cols={[
-                { key: 'fecha',            label: 'Fecha',         render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
-                { key: 'hora_inicio',      label: 'Inicio',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
-                { key: 'hora_fin',         label: 'Fin',           render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="En curso" color={C.amberMid} bg={C.amberBg} /> },
-                { key: 'tipo_atraso',      label: 'Tipo',          render: v => <Chip label={v || 'Otros'} color={C.red} bg={C.redBg} /> },
-                { key: 'operativo_nombre', label: 'Operativo' },
-                { key: 'duracion_minutos', label: 'Duracion', right: true, render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.red, fontSize: 12 }}>{fmt(v || 0)}</span> },
-                { key: 'observaciones',    label: 'Observaciones', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+                { key: 'fecha',            label: 'Fecha',         render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{dayjs(v).format('DD/MM/YY')}</span>, sortable: true },
+                { key: 'hora_inicio',      label: 'Inicio',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v?.slice(0,5) || '—'}</span>, sortable: true },
+                { key: 'hora_fin',         label: 'Fin',           render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v.slice(0,5)}</span> : <Chip label="En curso" color={C.amberMid} bg={C.amberBg} />, sortable: true },
+                { key: 'tipo_atraso',      label: 'Tipo',          render: v => <Chip label={v || 'Otros'} color={C.red} bg={C.redBg} />, sortable: true },
+                { key: 'operativo_nombre', label: 'Operativo', sortable: true },
+                { key: 'duracion_minutos', label: 'Duracion', right: true, render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.red, fontSize: 12 }}>{fmt(v || 0)}</span>, sortable: true },
+                { key: 'observaciones',    label: 'Observaciones', render: v => <span style={{ color: C.text, fontSize: 12 }}>{v || '—'}</span> },
               ]}
             />
           </>
         )}
 
-        {/* ══ TURNOS ══ */}
+        {/* ===================== TAB TURNOS ===================== */}
         {tab === 'turnos' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
@@ -811,38 +961,212 @@ export default function DashboardTiemposPage() {
               badge={`${turnosConUnidades.length} turnos`}
               rows={turnosConUnidades}
               cols={[
-                { key: 'fecha',        label: 'Fecha',      render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12 }}>{dayjs(v).format('DD/MM/YY')}</span> },
+                { key: 'fecha',        label: 'Fecha',      render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{dayjs(v).format('DD/MM/YY')}</span>, sortable: true },
                 { key: 'operativo_id', label: 'Operativo',  render: v => {
                   const op = operativos.find(o => o.id === v)
                   return <span style={{ fontWeight: 600, color: C.slate }}>{op?.nombre || '—'}</span>
-                }},
-                { key: 'operador',     label: 'Operador',   render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong> },
-                { key: 'chequero1',    label: 'Chequero 1', render: v => v || <span style={{ color: C.muted }}>—</span> },
-                { key: 'chequero2',    label: 'Chequero 2', render: v => v || <span style={{ color: C.muted }}>—</span> },
-                { key: 'hora_inicio',  label: 'Inicio',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12 }}>{v?.slice(0,5) || '—'}</span> },
-                { key: 'hora_fin',     label: 'Fin',        render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12 }}>{v.slice(0,5)}</span> : <Chip label="Activo" color={C.teal} bg={C.tealBg} /> },
-                { key: 'duracion_minutos', label: 'Dur.', right: true, render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, color: C.teal, fontSize: 12 }}>{fmt(v)}</span> : '—' },
-                {
-                  key: 'unidades_turno', label: 'Unidades', right: true,
-                  render: v => (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: `${C.amberMid}18`, color: C.amber, fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, fontFamily: "'DM Mono',monospace" }}>
-                      <Truck size={11} /> {v ?? 0}
-                    </span>
-                  )
-                },
-                { key: 'observaciones', label: 'Notas', render: v => v || <span style={{ color: C.muted, fontSize: 12 }}>—</span> },
+                }, sortable: true },
+                { key: 'operador',     label: 'Operador',   render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
+                { key: 'chequero1',    label: 'Chequero 1', render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+                { key: 'chequero2',    label: 'Chequero 2', render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+                { key: 'hora_inicio',  label: 'Inicio',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v?.slice(0,5) || '—'}</span>, sortable: true },
+                { key: 'hora_fin',     label: 'Fin',        render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v.slice(0,5)}</span> : <Chip label="Activo" color={C.teal} bg={C.tealBg} />, sortable: true },
+                { key: 'duracion_minutos', label: 'Dur.', right: true, render: v => v ? <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, color: C.teal, fontSize: 12 }}>{fmt(v)}</span> : <span style={{ color: C.text }}>—</span>, sortable: true },
+                { key: 'unidades_turno', label: 'Unidades', right: true, render: v => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: `${C.amberMid}18`, color: C.amber, fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 20, fontFamily: "'DM Mono',monospace" }}><Truck size={11} /> {v ?? 0}</span>, sortable: true },
+                { key: 'observaciones', label: 'Notas', render: v => <span style={{ color: C.text, fontSize: 12 }}>{v || '—'}</span> },
               ]}
             />
           </>
         )}
 
-        <p style={{ textAlign: 'center', marginTop: 26, fontSize: 10, color: C.muted, fontFamily: "'DM Mono',monospace" }}>
+        {/* ===================== TAB TRASLADOS ===================== */}
+        {tab === 'traslados' && (
+          <>
+            <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 18 }}>
+              <KpiCard label="Total Traslados"  value={trasF.length}                                icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  delay={0} />
+              {/* <KpiCard label="Activos"          value={trasF.filter(t => t.estado === 'activo').length}      icon={Clock}       accent={C.green}    accentBg={C.greenBg} delay={55} /> */}
+             {/*  <KpiCard label="Completados"      value={trasF.filter(t => t.estado === 'completado').length}  icon={CheckCircle} accent={C.blue}     accentBg={C.blueBg}  delay={110} /> */}
+              <KpiCard label="Promedio por día" value={(() => {
+                const dias = new Set(trasF.map(t => t.fecha)).size
+                return dias > 0 ? (trasF.length / dias).toFixed(1) : '0'
+              })()} icon={Calendar} accent={C.amberMid} accentBg={C.amberBg} delay={165} />
+            </div>
+
+            {/* Filtros adicionales para la tabla de traslados */}
+            <div className="filtros-traslados" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', background: C.white, padding: '12px 18px', borderRadius: 14, border: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.slate, display: 'flex', alignItems: 'center', gap: 4 }}><Filter size={12} /> Filtrar:</span>
+              <select
+                value={filtroEstadoTraslados}
+                onChange={(e) => setFiltroEstadoTraslados(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, background: C.bg, color: C.slate }}
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="activo">Activos</option>
+                <option value="completado">Completados</option>
+              </select>
+              {/* Solo volteo o plana */}
+              <select
+                value={filtroTipoTraslados}
+                onChange={(e) => setFiltroTipoTraslados(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, background: C.bg, color: C.slate }}
+              >
+                <option value="todos">Todos los tipos</option>
+                <option value="volteo">Volteo</option>
+                <option value="plana">Plana</option>
+              </select>
+              <div style={{ flex: 1, position: 'relative', maxWidth: 300 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.textSub }} />
+                <input
+                  type="text"
+                  value={searchTraslados}
+                  onChange={(e) => setSearchTraslados(e.target.value)}
+                  placeholder="Buscar por correlativo, conductor, placa..."
+                  style={{ width: '100%', padding: '6px 10px 6px 32px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, outline: 'none', color: C.text, background: C.bg }}
+                />
+              </div>
+              <button
+                onClick={exportarTraslados}
+                style={{ background: `${C.green}20`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '6px 14px', color: C.green, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Download size={14} /> Exportar Excel
+              </button>
+              {(searchTraslados || filtroEstadoTraslados !== 'todos' || filtroTipoTraslados !== 'todos') && (
+                <button
+                  onClick={() => { setSearchTraslados(''); setFiltroEstadoTraslados('todos'); setFiltroTipoTraslados('todos') }}
+                  style={{ background: 'none', border: 'none', fontSize: 11, color: C.red, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}
+                >
+                  <X size={12} /> Limpiar filtros
+                </button>
+              )}
+            </div>
+
+            <TablaData
+              title="Registro de Traslados"
+              icon={Truck}
+              badge={`${trasladosParaTabla.length} traslados`}
+              rows={trasladosParaTabla}
+              onSort={handleSort}
+              sortConfig={sortTraslados}
+              cols={[
+                { key: 'correlativo_num',   label: 'Correlativo',  render: (v, row) => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.amberMid, fontSize: 12 }}>{row.correlativo_viaje}</span>, sortable: true },
+                { key: 'fecha',             label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{formatFecha(v)}</span>, sortable: true },
+                { key: 'operativo_nombre',  label: 'Operativo',    render: v => <span style={{ fontWeight: 600, color: C.slate }}>{v}</span>, sortable: true },
+                { key: 'nombre_conductor',  label: 'Conductor',    render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
+                { key: 'placa',             label: 'Placa',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v || '—'}</span>, sortable: true },
+                { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
+                { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+                { key: 'tipo_unidad',       label: 'Tipo',
+                  // Solo volteo o plana
+                  render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
+                  sortable: true
+                },
+                { key: 'hora_inicio_carga', label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+                { key: 'hora_fin_carga',    label: 'Fin',          render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+                { key: 'estado',            label: 'Estado',       render: v => <Chip label={v || 'activo'} color={v === 'activo' ? C.teal : C.blue} bg={v === 'activo' ? C.tealBg : C.blueBg} />, sortable: true },
+                { key: 'no_marchamo',       label: 'Marchamo',     render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+                { key: 'id', label: 'Ver', right: true, render: (v, row) => (
+                  <button
+                    onClick={() => { setTrasladoSeleccionado(row); setShowDetalleModal(true) }}
+                    style={{ background: C.amberBg, border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, color: C.amberMid, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}
+                  >
+                    <Eye size={14} /> Ver
+                  </button>
+                )},
+              ]}
+            />
+          </>
+        )}
+
+        <p style={{ textAlign: 'center', marginTop: 26, fontSize: 10, color: C.textSub, fontFamily: "'DM Mono',monospace" }}>
           Traslados de Azucar · ALMAPAC ·{' '}
           {filtroOp !== 'todos' ? operativos.find(o => o.id === +filtroOp)?.nombre : 'Todos los operativos'}
           {filtroFecha.activo && ` · ${dayjs(filtroFecha.inicio).format('DD/MM/YY')} - ${dayjs(filtroFecha.fin).format('DD/MM/YY')}`}
           {` · ${ahoraStr}`}
         </p>
       </main>
+
+      {/* ===================== MODAL DETALLE ===================== */}
+      {showDetalleModal && trasladoSeleccionado && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 16px' }}>
+          <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+            {/* Header modal */}
+            <div style={{ background: `linear-gradient(90deg,${C.amber},${C.amberMid})`, padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 8 }}><Truck size={22} color="#fff" /></div>
+                <div>
+                  <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff' }}>Detalle de Traslado</h3>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: "'DM Mono',monospace" }}>{trasladoSeleccionado.correlativo_viaje}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDetalleModal(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', display: 'flex' }}>
+                <X size={18} color="#fff" />
+              </button>
+            </div>
+
+            {/* Body modal */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: 'calc(90vh - 80px)' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '18px 20px', border: '1px solid rgba(255,255,255,0.07)', marginBottom: 16 }}>
+                <h4 style={{ color: '#fff', fontWeight: 700, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <Truck size={14} color={C.blueL} /> Datos del Traslado
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '12px 20px' }}>
+                  {[
+                    { l: 'Conductor', v: trasladoSeleccionado.nombre_conductor, color: '#fff' },
+                    { l: 'Placa',     v: trasladoSeleccionado.placa || '—',     color: '#fff', mono: true },
+                    { l: 'Remolque',  v: trasladoSeleccionado.remolque,         color: '#fff', mono: true },
+                    { l: 'Tipo Unidad', v: trasladoSeleccionado.tipo_unidad,    color: trasladoSeleccionado.tipo_unidad === 'volteo' ? C.tealL : C.amberL },
+                    { l: 'Transporte', v: trasladoSeleccionado.transporte,      color: '#fff' },
+                    { l: 'Operativo',  v: getOperativoNombre(trasladoSeleccionado.operativo_id), color: C.amberL },
+                    { l: 'Fecha',      v: formatFecha(trasladoSeleccionado.fecha), color: '#fff' },
+                    { l: 'Estado',     v: trasladoSeleccionado.estado || 'activo', color: trasladoSeleccionado.estado === 'activo' ? C.tealL : C.blueL },
+                  ].map(({ l, v, color, mono }) => (
+                    <div key={l}>
+                      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{l}</p>
+                      <p style={{ fontWeight: 700, color, fontSize: 13, fontFamily: mono ? "'DM Mono',monospace" : 'inherit', wordBreak: 'break-word' }}>{v}</p>
+                    </div>
+                  ))}
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>No. Marchamo</p>
+                    <p style={{ fontWeight: 700, color: '#fff', fontFamily: "'DM Mono',monospace", fontSize: 13, wordBreak: 'break-all' }}>{trasladoSeleccionado.no_marchamo}</p>
+                  </div>
+                  {trasladoSeleccionado.observaciones && (
+                    <div style={{ gridColumn: '1/-1' }}>
+                      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Observaciones</p>
+                      <p style={{ color: '#fff', fontSize: 13 }}>{trasladoSeleccionado.observaciones}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+                {[
+                  { l: 'Inicio Carga', v: formatHora(trasladoSeleccionado.hora_inicio_carga), c: C.blueL,  borderC: `${C.blue}50` },
+                  { l: 'Fin Carga',    v: formatHora(trasladoSeleccionado.hora_fin_carga),    c: C.redL,   borderC: `${C.red}50` },
+                  { l: 'Tiempo Viaje', v: (() => {
+                    if (!trasladoSeleccionado.hora_inicio_carga || !trasladoSeleccionado.hora_fin_carga) return '—'
+                    const inicio = dayjs(`2000-01-01 ${trasladoSeleccionado.hora_inicio_carga}`)
+                    const fin    = dayjs(`2000-01-01 ${trasladoSeleccionado.hora_fin_carga}`)
+                    let diff = fin.diff(inicio, 'minute')
+                    if (diff < 0) diff += 24 * 60
+                    return `${Math.floor(diff / 60)}h ${diff % 60}m`
+                  })(), c: C.tealL, borderC: `${C.teal}50` },
+                ].map(({ l, v, c, borderC }) => (
+                  <div key={l} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '14px 16px', border: `1px solid ${borderC}` }}>
+                    <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{l}</p>
+                    <p style={{ fontSize: 22, fontWeight: 700, color: c, fontFamily: "'DM Mono',monospace" }}>{v}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowDetalleModal(false)} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '9px 22px', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
