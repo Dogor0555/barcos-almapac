@@ -529,20 +529,48 @@ export default function DashboardTiemposPage() {
     })
   }, [turF, traslados, tick])
 
-  // Calcular flujo promedio de carga (unidades por hora efectiva)
-  const flujoPromedio = useMemo(() => {
-    if (met.tE === 0) return 0
-    // met.tE está en minutos, convertimos a horas y calculamos unidades/hora
-    const horasEfectivas = met.tE / 60
-    return met.n / horasEfectivas
-  }, [met.tE, met.n])
+ // Calcular flujo promedio de carga (unidades por hora efectiva) - BASADO EN DURACIÓN REAL DE TRASLADOS
+const flujoPromedio = useMemo(() => {
+  // Calcular suma de duraciones reales de cada traslado (en minutos)
+  let sumaDuracionesReales = 0
+  let trasladosValidos = 0
+  
+  trasF.forEach(traslado => {
+    if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
+      const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
+      const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
+      let diff = fin.diff(inicio, 'minute')
+      if (diff < 0) diff += 24 * 60
+      sumaDuracionesReales += diff
+      trasladosValidos++
+    }
+  })
+  
+  if (sumaDuracionesReales === 0) return 0
+  // Convertir a horas y calcular unidades por hora
+  const horasReales = sumaDuracionesReales / 60
+  return trasladosValidos / horasReales
+}, [trasF])
 
-  // Calcular tiempo promedio por unidad (minutos por unidad)
+// Calcular tiempo promedio por unidad (minutos por unidad) - BASADO EN DURACIÓN REAL DE TRASLADOS
 const tiempoPromedioPorUnidad = useMemo(() => {
-  if (met.n === 0) return 0
-  // met.tE está en minutos, dividimos entre número de unidades
-  return met.tE / met.n
-}, [met.tE, met.n])
+  let sumaDuracionesReales = 0
+  let trasladosValidos = 0
+  
+  trasF.forEach(traslado => {
+    if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
+      const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
+      const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
+      let diff = fin.diff(inicio, 'minute')
+      if (diff < 0) diff += 24 * 60
+      sumaDuracionesReales += diff
+      trasladosValidos++
+    }
+  })
+  
+  if (trasladosValidos === 0) return 0
+  return sumaDuracionesReales / trasladosValidos
+}, [trasF])
 
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
   const TABS = ['resumen', 'operativos', 'atrasos', 'turnos', 'traslados']
