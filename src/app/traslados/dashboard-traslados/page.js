@@ -58,54 +58,36 @@ const extraerNumeroCorrelativo = (correlativo) => {
   return match ? parseInt(match[0], 10) : 0
 }
 
+// FUNCIÓN CORREGIDA: Suma la duración de TODOS los turnos individualmente
 function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
-  const ahora = dayjs()
-  const validos = turnosOp.filter(t => t.fecha && t.hora_inicio)
-  if (validos.length === 0) return 0
   
-  const ordenados = [...validos].sort((a, b) =>
-    dayjs(`${a.fecha} ${a.hora_inicio}`).valueOf() -
-    dayjs(`${b.fecha} ${b.hora_inicio}`).valueOf()
-  )
+  let totalMinutos = 0
   
-  const inicioGlobal = dayjs(`${ordenados[0].fecha} ${ordenados[0].hora_inicio}`)
-  
-  // Verificar si hay algún turno activo
-  let estaActivo = false
-  const masReciente = turnosOp.reduce((prev, curr) =>
-    dayjs(curr.created_at).isAfter(dayjs(prev.created_at)) ? curr : prev
-  , turnosOp[0])
-  
-  if (masReciente.fecha && masReciente.hora_inicio && masReciente.hora_fin) {
-    const ini = dayjs(`${masReciente.fecha} ${masReciente.hora_inicio}`)
-    let fin = dayjs(`${masReciente.fecha} ${masReciente.hora_fin}`)
-    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
-    estaActivo = ahora.isAfter(ini) && ahora.isBefore(fin)
-  } else if (masReciente.hora_inicio && !masReciente.hora_fin) {
-    estaActivo = true
-  }
-  
-  if (estaActivo) {
-    return Math.max(0, ahora.diff(inicioGlobal, 'minute'))
-  }
-  
-  // Encontrar el último fin de turno
-  let finGlobal = null
-  ordenados.forEach(t => {
-    if (!t.hora_fin) return
-    const ini = dayjs(`${t.fecha} ${t.hora_inicio}`)
-    let fin = dayjs(`${t.fecha} ${t.hora_fin}`)
-    if (fin.valueOf() <= ini.valueOf()) fin = fin.add(1, 'day')
-    if (!finGlobal || fin.isAfter(finGlobal)) finGlobal = fin
+  turnosOp.forEach(turno => {
+    // Si ya tiene duracion_minutos calculada, usarla
+    if (turno.duracion_minutos) {
+      totalMinutos += turno.duracion_minutos
+    } 
+    // Si tiene hora_inicio y hora_fin, calcular la duración
+    else if (turno.hora_inicio && turno.hora_fin) {
+      const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+      let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+      let diff = fin.diff(inicio, 'minute')
+      // Si la hora_fin es menor que hora_inicio, asumir que pasó de medianoche
+      if (diff < 0) diff += 24 * 60
+      totalMinutos += diff
+    }
+    // Si solo tiene hora_inicio y no hora_fin (turno activo)
+    else if (turno.hora_inicio && !turno.hora_fin) {
+      const ahora = dayjs()
+      const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+      const diff = ahora.diff(inicio, 'minute')
+      if (diff > 0) totalMinutos += diff
+    }
   })
   
-  if (!finGlobal) {
-    // Si no hay hora_fin en ningún turno, sumar duraciones individuales
-    return turnosOp.reduce((s, t) => s + (t.duracion_minutos || 0), 0)
-  }
-  
-  return Math.max(0, finGlobal.diff(inicioGlobal, 'minute'))
+  return totalMinutos
 }
 
 function hayTurnoActivo(turnosOp) {
@@ -186,7 +168,7 @@ function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidade
   const uph   = tiempoEfectivo > 0 ? +(unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
   const prod  = Math.min(100, Math.round((uph / 25) * 100))
   const items = [
-    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: hayActivo ? 'Primer turno → ahora' : 'Primer turno → ultimo fin', color: C.blueL,  icon: Clock },
+    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: hayActivo ? 'Suma de todos los turnos (incluye activo)' : 'Suma de todos los turnos', color: C.blueL,  icon: Clock },
     { label: 'Inactividad',            value: fmt(tiempoInactividad), sub: `${inPct}% del total`,                                            color: C.redL,   icon: AlertCircle },
     { label: 'Tiempo Efectivo',        value: fmt(tiempoEfectivo),   sub: `${eff}% eficiencia`,                                              color: C.tealL,  icon: Zap },
     { label: 'Unidades / Hora',        value: uph.toFixed(1),         sub: 'Promedio real de unidades por hora efectiva',                    color: C.amberL, icon: Gauge },
@@ -207,7 +189,7 @@ function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidade
                   </span>
                 )}
               </div>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>{hayActivo ? 'Tiempo corriendo en tiempo real' : 'Todos los turnos finalizados'}</p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>{hayActivo ? 'Hay un turno en curso' : 'Todos los turnos finalizados'}</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 18 }}>
@@ -428,37 +410,30 @@ export default function DashboardTiemposPage() {
     [atrasos, filtroOp])
 
   const met = useMemo(() => {
-    // Agrupar turnos por operativo para calcular el tiempo total correctamente
-    const turnosPorOperativo = {}
-    turF.forEach(turno => {
-      if (!turno.operativo_id) return
-      if (!turnosPorOperativo[turno.operativo_id]) {
-        turnosPorOperativo[turno.operativo_id] = []
-      }
-      turnosPorOperativo[turno.operativo_id].push(turno)
-    })
-
-    // Calcular tiempo total sumando los tiempos de cada operativo
+    // Sumar la duración de TODOS los turnos (cada turno individualmente)
     let tT = 0
-    Object.values(turnosPorOperativo).forEach(turnosOp => {
-      tT += calcTiempoTotalOperativo(turnosOp)
-    })
-
-    // Si no se pudo calcular por operativo (ej: turnos sin operativo_id), calcular como un solo grupo
-    if (tT === 0 && turF.length > 0) {
-      const uniqueOperativos = new Set(turF.map(t => t.operativo_id).filter(Boolean))
-      if (uniqueOperativos.size === 1) {
-        tT = calcTiempoTotalOperativo(turF)
-      } else if (uniqueOperativos.size > 1) {
-        uniqueOperativos.forEach(opId => {
-          const turnosOp = turF.filter(t => t.operativo_id === opId)
-          tT += calcTiempoTotalOperativo(turnosOp)
-        })
-      } else {
-        // Turnos sin operativo_id
-        tT = calcTiempoTotalOperativo(turF)
+    
+    turF.forEach(turno => {
+      // Si ya tiene duracion_minutos calculada
+      if (turno.duracion_minutos) {
+        tT += turno.duracion_minutos
       }
-    }
+      // Si tiene hora_inicio y hora_fin, calcular la duración
+      else if (turno.hora_inicio && turno.hora_fin) {
+        const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+        let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        tT += diff
+      }
+      // Si solo tiene hora_inicio y no hora_fin (turno activo)
+      else if (turno.hora_inicio && !turno.hora_fin) {
+        const ahora = dayjs()
+        const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+        const diff = ahora.diff(inicio, 'minute')
+        if (diff > 0) tT += diff
+      }
+    })
 
     let tI = 0
     atF.forEach(a => {
@@ -475,18 +450,8 @@ export default function DashboardTiemposPage() {
     const uph = tE > 0 ? +(n / (tE / 60)).toFixed(1) : 0
     const eff = tT > 0 ? +((tE / tT) * 100).toFixed(1) : 0
     
-    // Verificar si algún operativo tiene turno activo
-    let tieneActivo = false
-    if (Object.keys(turnosPorOperativo).length > 0) {
-      for (const turnosOp of Object.values(turnosPorOperativo)) {
-        if (hayTurnoActivo(turnosOp)) {
-          tieneActivo = true
-          break
-        }
-      }
-    } else {
-      tieneActivo = hayTurnoActivo(turF)
-    }
+    // Verificar si hay algún turno activo
+    let tieneActivo = turF.some(turno => !turno.hora_fin && turno.hora_inicio)
     
     return { tT, tI, tE, n, uph, eff, tieneActivo }
   }, [turF, atF, trasF, tick])
@@ -495,7 +460,23 @@ export default function DashboardTiemposPage() {
     const ops = filtroOp === 'todos' ? operativos : operativos.filter(o => o.id === +filtroOp)
     return ops.map(op => {
       const turnosOp = turnos.filter(t => t.operativo_id === op.id)
-      const tT = calcTiempoTotalOperativo(turnosOp)
+      let tT = 0
+      turnosOp.forEach(turno => {
+        if (turno.duracion_minutos) {
+          tT += turno.duracion_minutos
+        } else if (turno.hora_inicio && turno.hora_fin) {
+          const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+          let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+          let diff = fin.diff(inicio, 'minute')
+          if (diff < 0) diff += 24 * 60
+          tT += diff
+        } else if (turno.hora_inicio && !turno.hora_fin) {
+          const ahora = dayjs()
+          const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+          const diff = ahora.diff(inicio, 'minute')
+          if (diff > 0) tT += diff
+        }
+      })
       let tI = 0
       atrasos.filter(a => a.operativo_id === op.id).forEach(a => { if (a.duracion_minutos) tI += a.duracion_minutos })
       return {
@@ -505,7 +486,7 @@ export default function DashboardTiemposPage() {
         tiempoEfectivo: Math.max(0, tT - tI),
         tiempoInactividad: tI,
         unidades: traslados.filter(t => t.operativo_id === op.id).length,
-        tieneActivo: hayTurnoActivo(turnosOp),
+        tieneActivo: turnosOp.some(turno => !turno.hora_fin && turno.hora_inicio),
       }
     }).filter(o => o.tiempoEfectivo > 0 || o.unidades > 0)
   }, [operativos, turnos, traslados, atrasos, filtroOp, tick])
@@ -834,7 +815,7 @@ export default function DashboardTiemposPage() {
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 20 }}>
               <KpiCard label="Unidades Trasladadas"   value={met.n.toLocaleString()} icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  sub="Sacos / camiones"                                               delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}            icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55}  live={met.tieneActivo} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}            icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub="Suma de todos los turnos" delay={55}  live={met.tieneActivo} />
               <KpiCard label="Tiempo Inactividad"     value={fmt(met.tI)}            icon={AlertCircle} accent={C.red}      accentBg={C.redBg}   sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del total`} delay={110} />
               <KpiCard label="Tiempo Efectivo"        value={fmt(met.tE)}            icon={Zap}         accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`}                                    delay={165} />
             </div>
@@ -1012,7 +993,7 @@ export default function DashboardTiemposPage() {
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
               <KpiCard label="Total Turnos"           value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub={met.tieneActivo ? 'Primer turno a ahora' : 'Primer turno a fin'} delay={55} live={met.tieneActivo} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub="Suma de todos los turnos" delay={55} live={met.tieneActivo} />
               <KpiCard label="Unidades por Hora"      value={met.uph.toFixed(1)} icon={Gauge} accent={C.amberMid} accentBg={C.amberBg} sub="Promedio real de unidades por hora efectiva" delay={110} />
             </div>
 
