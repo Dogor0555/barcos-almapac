@@ -1117,38 +1117,68 @@ const tiempoPromedioPorUnidad = useMemo(() => {
             </div>
 
             <TablaData
-              title="Registro de Traslados"
-              icon={Truck}
-              badge={`${trasladosParaTabla.length} traslados`}
-              rows={trasladosParaTabla}
-              onSort={handleSort}
-              sortConfig={sortTraslados}
-              cols={[
-                { key: 'correlativo_num',   label: 'Correlativo',  render: (v, row) => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.amberMid, fontSize: 12 }}>{row.correlativo_viaje}</span>, sortable: true },
-                { key: 'fecha',             label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{formatFecha(v)}</span>, sortable: true },
-                { key: 'operativo_nombre',  label: 'Operativo',    render: v => <span style={{ fontWeight: 600, color: C.slate }}>{v}</span>, sortable: true },
-                { key: 'nombre_conductor',  label: 'Conductor',    render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
-                { key: 'placa',             label: 'Placa',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
-                { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'tipo_unidad',       label: 'Tipo',
-                  render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
-                  sortable: true
-                },
-                { key: 'hora_inicio_carga', label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
-                { key: 'hora_fin_carga',    label: 'Fin',          render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
-                { key: 'estado',            label: 'Estado',       render: v => <Chip label={v || 'activo'} color={v === 'activo' ? C.teal : C.blue} bg={v === 'activo' ? C.tealBg : C.blueBg} />, sortable: true },
-                { key: 'no_marchamo',       label: 'Marchamo',     render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'id', label: 'Ver', right: true, render: (v, row) => (
-                  <button
-                    onClick={() => { setTrasladoSeleccionado(row); setShowDetalleModal(true) }}
-                    style={{ background: C.amberBg, border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, color: C.amberMid, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}
-                  >
-                    <Eye size={14} /> Ver
-                  </button>
-                )},
-              ]}
-            />
+  title="Registro de Traslados"
+  icon={Truck}
+  badge={`${trasladosParaTabla.length} traslados`}
+  rows={trasladosParaTabla}
+  onSort={handleSort}
+  sortConfig={sortTraslados}
+  cols={[
+    { key: 'correlativo_num',   label: 'Correlativo',  render: (v, row) => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.amberMid, fontSize: 12 }}>{row.correlativo_viaje}</span>, sortable: true },
+    { key: 'fecha',             label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{formatFecha(v)}</span>, sortable: true },
+    { key: 'operativo_nombre',  label: 'Operativo',    render: v => <span style={{ fontWeight: 600, color: C.slate }}>{v}</span>, sortable: true },
+    { key: 'nombre_conductor',  label: 'Conductor',    render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
+    { key: 'placa',             label: 'Placa',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
+    { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'tipo_unidad',       label: 'Tipo',
+      render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
+      sortable: true
+    },
+    { key: 'hora_inicio_carga', label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+    { key: 'hora_fin_carga',    label: 'Fin',          render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+    { 
+      key: 'duracion', 
+      label: 'Duración', 
+      render: (v, row) => {
+        if (!row.hora_inicio_carga || !row.hora_fin_carga) {
+          return <Chip label="Sin datos" color={C.textSub} bg={C.borderL} />
+        }
+        const inicio = dayjs(`2000-01-01 ${row.hora_inicio_carga}`)
+        const fin = dayjs(`2000-01-01 ${row.hora_fin_carga}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        const horas = Math.floor(diff / 60)
+        const minutos = diff % 60
+        return (
+          <span style={{ 
+            fontFamily: "'DM Mono',monospace", 
+            fontSize: 12, 
+            fontWeight: 600, 
+            color: diff > 120 ? C.red : diff > 60 ? C.amberMid : C.teal,
+            background: diff > 120 ? `${C.red}10` : diff > 60 ? `${C.amberMid}10` : `${C.teal}10`,
+            padding: '2px 8px',
+            borderRadius: 12,
+            display: 'inline-block'
+          }}>
+            {horas > 0 ? `${horas}h ` : ''}{minutos}m
+          </span>
+        )
+      },
+      sortable: true
+    },
+    { key: 'estado',            label: 'Estado',       render: v => <Chip label={v || 'activo'} color={v === 'activo' ? C.teal : C.blue} bg={v === 'activo' ? C.tealBg : C.blueBg} />, sortable: true },
+    { key: 'no_marchamo',       label: 'Marchamo',     render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'id', label: 'Ver', right: true, render: (v, row) => (
+      <button
+        onClick={() => { setTrasladoSeleccionado(row); setShowDetalleModal(true) }}
+        style={{ background: C.amberBg, border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, color: C.amberMid, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}
+      >
+        <Eye size={14} /> Ver
+      </button>
+    )},
+  ]}
+/>
           </>
         )}
 
