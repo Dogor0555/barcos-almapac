@@ -448,7 +448,8 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
     'Calibración de llantas de equipo frontal',
     'Ubicación equipo frontal',
     'Lluvia',
-    'Falla de equipo frontal'
+    'Falla de equipo frontal',
+    'Corte de energía electrica'
   ]
 
   const [duracion, setDuracion] = useState(null)
