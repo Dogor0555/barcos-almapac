@@ -319,7 +319,7 @@ function TablaData({ title, icon: Icon, badge, rows = [], cols = [], onExport, o
                     {cols.map((c, ci) => (
                       <td key={ci} style={{ padding: '11px 18px', fontSize: 13, color: C.text, textAlign: c.right ? 'right' : 'left', borderBottom: `1px solid ${C.borderL}` }}>
                         {c.render ? c.render(row[c.key], row) : (row[c.key] ?? '—')}
-                      </td>
+                       </td>
                     ))}
                   </tr>
                 ))}
@@ -386,8 +386,10 @@ export default function DashboardTiemposPage() {
       const { data: ops } = await supabase.from('operativos_traslados').select('*').order('created_at', { ascending: false })
       setOperativos(ops || [])
       let qT  = supabase.from('traslados').select('*').order('fecha', { ascending: false })
-      let qTu = supabase.from('turnos_operativos').select('*').order('created_at', { ascending: true })
-      let qA  = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(id,nombre)').eq('es_general', true)
+      // Ordenar turnos del más reciente al más antiguo (por fecha descendente y hora_inicio descendente)
+      let qTu = supabase.from('turnos_operativos').select('*').order('fecha', { ascending: false }).order('hora_inicio', { ascending: false })
+      // Ordenar atrasos del más reciente al más antiguo (por fecha descendente y hora_inicio descendente)
+      let qA  = supabase.from('traslados_atrasos').select('*, operativo:operativo_id(id,nombre)').eq('es_general', true).order('fecha', { ascending: false }).order('hora_inicio', { ascending: false })
       if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
         const fi = dayjs(filtroFecha.inicio).format('YYYY-MM-DD')
         const ff = dayjs(filtroFecha.fin).format('YYYY-MM-DD')
