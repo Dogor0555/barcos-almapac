@@ -379,13 +379,7 @@ export default function DashboardTiemposPage() {
   }
 
 
-  // Calcular flujo promedio de carga (unidades por hora efectiva)
-  const flujoPromedio = useMemo(() => {
-    if (met.tE === 0) return 0
-    // met.tE está en minutos, convertimos a horas y calculamos unidades/hora
-    const horasEfectivas = met.tE / 60
-    return met.n / horasEfectivas
-  }, [met.tE, met.n])
+  
 
   const cargarDatos = async () => {
     try {
@@ -534,6 +528,14 @@ export default function DashboardTiemposPage() {
       return { ...turno, unidades_turno: unidadesTurno }
     })
   }, [turF, traslados, tick])
+
+  // Calcular flujo promedio de carga (unidades por hora efectiva)
+  const flujoPromedio = useMemo(() => {
+    if (met.tE === 0) return 0
+    // met.tE está en minutos, convertimos a horas y calculamos unidades/hora
+    const horasEfectivas = met.tE / 60
+    return met.n / horasEfectivas
+  }, [met.tE, met.n])
 
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
   const TABS = ['resumen', 'operativos', 'atrasos', 'turnos', 'traslados']
