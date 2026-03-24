@@ -58,44 +58,36 @@ const extraerNumeroCorrelativo = (correlativo) => {
   return match ? parseInt(match[0], 10) : 0
 }
 
-// FUNCIÓN CORREGIDA: Tiempo desde el inicio del primer turno hasta el final del último traslado
-function calcTiempoTotalOperativo(turnosOp, trasladosList) {
+// FUNCIÓN CORREGIDA: Suma la duración de TODOS los turnos individualmente
+function calcTiempoTotalOperativo(turnosOp) {
   if (!turnosOp || turnosOp.length === 0) return 0
   
-  // Encontrar la hora del PRIMER turno (más antigua)
-  let horaInicial = null
-  let fechaInicial = null
+  let totalMinutos = 0
   
   turnosOp.forEach(turno => {
-    if (turno.hora_inicio && turno.fecha) {
-      const fechaHora = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
-      if (!horaInicial || fechaHora.isBefore(horaInicial)) {
-        horaInicial = fechaHora
-        fechaInicial = turno.fecha
-      }
+    // Si ya tiene duracion_minutos calculada, usarla
+    if (turno.duracion_minutos) {
+      totalMinutos += turno.duracion_minutos
+    } 
+    // Si tiene hora_inicio y hora_fin, calcular la duración
+    else if (turno.hora_inicio && turno.hora_fin) {
+      const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+      let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+      let diff = fin.diff(inicio, 'minute')
+      // Si la hora_fin es menor que hora_inicio, asumir que pasó de medianoche
+      if (diff < 0) diff += 24 * 60
+      totalMinutos += diff
+    }
+    // Si solo tiene hora_inicio y no hora_fin (turno activo)
+    else if (turno.hora_inicio && !turno.hora_fin) {
+      const ahora = dayjs()
+      const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+      const diff = ahora.diff(inicio, 'minute')
+      if (diff > 0) totalMinutos += diff
     }
   })
   
-  if (!horaInicial) return 0
-  
-  // Encontrar la hora del ÚLTIMO traslado (más reciente)
-  let horaFinal = null
-  
-  trasladosList.forEach(traslado => {
-    if (traslado.hora_fin_carga && traslado.fecha) {
-      const fechaHora = dayjs(`${traslado.fecha} ${traslado.hora_fin_carga}`)
-      if (!horaFinal || fechaHora.isAfter(horaFinal)) {
-        horaFinal = fechaHora
-      }
-    }
-  })
-  
-  if (!horaFinal) return 0
-  
-  // Calcular la diferencia en minutos
-  const diffMinutos = horaFinal.diff(horaInicial, 'minute')
-  
-  return Math.max(0, diffMinutos)
+  return totalMinutos
 }
 
 function hayTurnoActivo(turnosOp) {
@@ -170,13 +162,13 @@ function Ring({ pct, color, label, size = 88 }) {
   )
 }
 
-function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades, hayActivo, fechaPrimerTurno, horaPrimerTurno, fechaUltimoTraslado, horaUltimoTraslado }) {
+function BloqueTiempos({ tiempoTotal, tiempoInactividad, tiempoEfectivo, unidades, hayActivo }) {
   const eff   = tiempoTotal > 0 ? Math.round((tiempoEfectivo / tiempoTotal) * 100) : 0
   const inPct = tiempoTotal > 0 ? Math.round((tiempoInactividad / tiempoTotal) * 100) : 0
   const uph   = tiempoEfectivo > 0 ? +(unidades / (tiempoEfectivo / 60)).toFixed(1) : 0
   const prod  = Math.min(100, Math.round((uph / 25) * 100))
   const items = [
-    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: `Desde ${fechaPrimerTurno || '—'} ${horaPrimerTurno || '—'} hasta ${fechaUltimoTraslado || '—'} ${horaUltimoTraslado || '—'}`, color: C.blueL,  icon: Clock },
+    { label: 'Tiempo Total Operativo', value: fmt(tiempoTotal),      sub: hayActivo ? 'Suma de todos los turnos (incluye activo)' : 'Suma de todos los turnos', color: C.blueL,  icon: Clock },
     { label: 'Inactividad',            value: fmt(tiempoInactividad), sub: `${inPct}% del total`,                                            color: C.redL,   icon: AlertCircle },
     { label: 'Tiempo Efectivo',        value: fmt(tiempoEfectivo),   sub: `${eff}% eficiencia`,                                              color: C.tealL,  icon: Zap },
     { label: 'Unidades / Hora',        value: uph.toFixed(1),         sub: 'Promedio real de unidades por hora efectiva',                    color: C.amberL, icon: Gauge },
@@ -386,6 +378,9 @@ export default function DashboardTiemposPage() {
     router.push('/traslados')
   }
 
+
+  
+
   const cargarDatos = async () => {
     try {
       setLoading(true)
@@ -418,9 +413,31 @@ export default function DashboardTiemposPage() {
     [atrasos, filtroOp])
 
   const met = useMemo(() => {
-    // Tiempo Total Operativo: desde inicio del primer turno hasta fin del último traslado
-    const tT = calcTiempoTotalOperativo(turF, trasF)
+    // Sumar la duración de TODOS los turnos (cada turno individualmente)
+    let tT = 0
     
+    turF.forEach(turno => {
+      // Si ya tiene duracion_minutos calculada
+      if (turno.duracion_minutos) {
+        tT += turno.duracion_minutos
+      }
+      // Si tiene hora_inicio y hora_fin, calcular la duración
+      else if (turno.hora_inicio && turno.hora_fin) {
+        const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+        let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        tT += diff
+      }
+      // Si solo tiene hora_inicio y no hora_fin (turno activo)
+      else if (turno.hora_inicio && !turno.hora_fin) {
+        const ahora = dayjs()
+        const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+        const diff = ahora.diff(inicio, 'minute')
+        if (diff > 0) tT += diff
+      }
+    })
+
     let tI = 0
     atF.forEach(a => {
       if (a.duracion_minutos) tI += a.duracion_minutos
@@ -436,54 +453,33 @@ export default function DashboardTiemposPage() {
     const uph = tE > 0 ? +(n / (tE / 60)).toFixed(1) : 0
     const eff = tT > 0 ? +((tE / tT) * 100).toFixed(1) : 0
     
-    // Obtener información del primer turno y último traslado para mostrar en el subtítulo
-    let primerTurnoFecha = null
-    let primerTurnoHora = null
-    let ultimoTrasladoFecha = null
-    let ultimoTrasladoHora = null
-    
-    // Encontrar primer turno
-    let horaInicial = null
-    turF.forEach(turno => {
-      if (turno.hora_inicio && turno.fecha) {
-        const fechaHora = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
-        if (!horaInicial || fechaHora.isBefore(horaInicial)) {
-          horaInicial = fechaHora
-          primerTurnoFecha = turno.fecha
-          primerTurnoHora = turno.hora_inicio?.slice(0, 5)
-        }
-      }
-    })
-    
-    // Encontrar último traslado
-    let horaFinal = null
-    trasF.forEach(traslado => {
-      if (traslado.hora_fin_carga && traslado.fecha) {
-        const fechaHora = dayjs(`${traslado.fecha} ${traslado.hora_fin_carga}`)
-        if (!horaFinal || fechaHora.isAfter(horaFinal)) {
-          horaFinal = fechaHora
-          ultimoTrasladoFecha = traslado.fecha
-          ultimoTrasladoHora = traslado.hora_fin_carga?.slice(0, 5)
-        }
-      }
-    })
-    
     // Verificar si hay algún turno activo
     let tieneActivo = turF.some(turno => !turno.hora_fin && turno.hora_inicio)
     
-    return { 
-      tT, tI, tE, n, uph, eff, tieneActivo,
-      primerTurnoFecha, primerTurnoHora,
-      ultimoTrasladoFecha, ultimoTrasladoHora
-    }
+    return { tT, tI, tE, n, uph, eff, tieneActivo }
   }, [turF, atF, trasF, tick])
 
   const datosOps = useMemo(() => {
     const ops = filtroOp === 'todos' ? operativos : operativos.filter(o => o.id === +filtroOp)
     return ops.map(op => {
       const turnosOp = turnos.filter(t => t.operativo_id === op.id)
-      const trasladosOp = traslados.filter(t => t.operativo_id === op.id)
-      const tT = calcTiempoTotalOperativo(turnosOp, trasladosOp)
+      let tT = 0
+      turnosOp.forEach(turno => {
+        if (turno.duracion_minutos) {
+          tT += turno.duracion_minutos
+        } else if (turno.hora_inicio && turno.hora_fin) {
+          const inicio = dayjs(`2000-01-01 ${turno.hora_inicio}`)
+          let fin = dayjs(`2000-01-01 ${turno.hora_fin}`)
+          let diff = fin.diff(inicio, 'minute')
+          if (diff < 0) diff += 24 * 60
+          tT += diff
+        } else if (turno.hora_inicio && !turno.hora_fin) {
+          const ahora = dayjs()
+          const inicio = dayjs(`${turno.fecha} ${turno.hora_inicio}`)
+          const diff = ahora.diff(inicio, 'minute')
+          if (diff > 0) tT += diff
+        }
+      })
       let tI = 0
       atrasos.filter(a => a.operativo_id === op.id).forEach(a => { if (a.duracion_minutos) tI += a.duracion_minutos })
       return {
@@ -492,7 +488,7 @@ export default function DashboardTiemposPage() {
         nombreCompleto: op.nombre,
         tiempoEfectivo: Math.max(0, tT - tI),
         tiempoInactividad: tI,
-        unidades: trasladosOp.length,
+        unidades: traslados.filter(t => t.operativo_id === op.id).length,
         tieneActivo: turnosOp.some(turno => !turno.hora_fin && turno.hora_inicio),
       }
     }).filter(o => o.tiempoEfectivo > 0 || o.unidades > 0)
@@ -533,46 +529,48 @@ export default function DashboardTiemposPage() {
     })
   }, [turF, traslados, tick])
 
-  // Calcular flujo promedio de carga (unidades por hora efectiva) - BASADO EN DURACIÓN REAL DE TRASLADOS
-  const flujoPromedio = useMemo(() => {
-    let sumaDuracionesReales = 0
-    let trasladosValidos = 0
-    
-    trasF.forEach(traslado => {
-      if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
-        const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
-        const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
-        let diff = fin.diff(inicio, 'minute')
-        if (diff < 0) diff += 24 * 60
-        sumaDuracionesReales += diff
-        trasladosValidos++
-      }
-    })
-    
-    if (sumaDuracionesReales === 0) return 0
-    const horasReales = sumaDuracionesReales / 60
-    return trasladosValidos / horasReales
-  }, [trasF])
+ // Calcular flujo promedio de carga (unidades por hora efectiva) - BASADO EN DURACIÓN REAL DE TRASLADOS
+const flujoPromedio = useMemo(() => {
+  // Calcular suma de duraciones reales de cada traslado (en minutos)
+  let sumaDuracionesReales = 0
+  let trasladosValidos = 0
+  
+  trasF.forEach(traslado => {
+    if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
+      const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
+      const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
+      let diff = fin.diff(inicio, 'minute')
+      if (diff < 0) diff += 24 * 60
+      sumaDuracionesReales += diff
+      trasladosValidos++
+    }
+  })
+  
+  if (sumaDuracionesReales === 0) return 0
+  // Convertir a horas y calcular unidades por hora
+  const horasReales = sumaDuracionesReales / 60
+  return trasladosValidos / horasReales
+}, [trasF])
 
-  // Calcular tiempo promedio por unidad (minutos por unidad) - BASADO EN DURACIÓN REAL DE TRASLADOS
-  const tiempoPromedioPorUnidad = useMemo(() => {
-    let sumaDuracionesReales = 0
-    let trasladosValidos = 0
-    
-    trasF.forEach(traslado => {
-      if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
-        const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
-        const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
-        let diff = fin.diff(inicio, 'minute')
-        if (diff < 0) diff += 24 * 60
-        sumaDuracionesReales += diff
-        trasladosValidos++
-      }
-    })
-    
-    if (trasladosValidos === 0) return 0
-    return sumaDuracionesReales / trasladosValidos
-  }, [trasF])
+// Calcular tiempo promedio por unidad (minutos por unidad) - BASADO EN DURACIÓN REAL DE TRASLADOS
+const tiempoPromedioPorUnidad = useMemo(() => {
+  let sumaDuracionesReales = 0
+  let trasladosValidos = 0
+  
+  trasF.forEach(traslado => {
+    if (traslado.hora_inicio_carga && traslado.hora_fin_carga) {
+      const inicio = dayjs(`2000-01-01 ${traslado.hora_inicio_carga}`)
+      const fin = dayjs(`2000-01-01 ${traslado.hora_fin_carga}`)
+      let diff = fin.diff(inicio, 'minute')
+      if (diff < 0) diff += 24 * 60
+      sumaDuracionesReales += diff
+      trasladosValidos++
+    }
+  })
+  
+  if (trasladosValidos === 0) return 0
+  return sumaDuracionesReales / trasladosValidos
+}, [trasF])
 
   const totalMinAt = atF.reduce((s, a) => s + (a.duracion_minutos || 0), 0)
   const TABS = ['resumen', 'operativos', 'atrasos', 'turnos', 'traslados']
@@ -594,14 +592,17 @@ export default function DashboardTiemposPage() {
       correlativo_num: extraerNumeroCorrelativo(t.correlativo_viaje),
     }))
 
+    // Filtro por estado
     if (filtroEstadoTraslados !== 'todos') {
       filtered = filtered.filter(t => t.estado === filtroEstadoTraslados)
     }
 
+    // Filtro por tipo de unidad (solo volteo o plana)
     if (filtroTipoTraslados !== 'todos') {
       filtered = filtered.filter(t => t.tipo_unidad === filtroTipoTraslados)
     }
 
+    // Búsqueda
     if (searchTraslados) {
       const term = searchTraslados.toLowerCase()
       filtered = filtered.filter(t =>
@@ -615,6 +616,7 @@ export default function DashboardTiemposPage() {
       )
     }
 
+    // Ordenamiento — correlativo usa extracción numérica
     filtered.sort((a, b) => {
       let aVal, bVal
 
@@ -640,6 +642,7 @@ export default function DashboardTiemposPage() {
     return filtered
   }, [trasF, searchTraslados, sortTraslados, filtroEstadoTraslados, filtroTipoTraslados, operativos])
 
+  // Exportar a Excel real con xlsx
   const exportarTraslados = () => {
     const headers = [
       'Correlativo', 'Fecha', 'Operativo', 'Conductor', 'Placa', 'Remolque',
@@ -665,6 +668,7 @@ export default function DashboardTiemposPage() {
     const wsData = [headers, ...rows]
     const ws = XLSX.utils.aoa_to_sheet(wsData)
 
+    // Ancho de columnas
     ws['!cols'] = [
       { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 12 },
       { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
@@ -677,6 +681,7 @@ export default function DashboardTiemposPage() {
     toast.success('✅ Exportado a Excel')
   }
 
+  // Cambiar ordenamiento
   const handleSort = (key) => {
     setSortTraslados(prev => ({
       key,
@@ -812,6 +817,7 @@ export default function DashboardTiemposPage() {
 
       <main className="main-pad" style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 56px' }}>
 
+        {/* Barra de filtros globales */}
         <div style={{ background: C.white, borderRadius: 14, padding: '11px 18px', marginBottom: 20, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.slate, textTransform: 'uppercase', letterSpacing: '0.7px' }}><Filter size={11} /> Filtros</span>
           <div style={{ width: 1, height: 16, background: C.border }} />
@@ -850,14 +856,15 @@ export default function DashboardTiemposPage() {
           </div>
         </div>
 
+        {/* ===================== TAB RESUMEN ===================== */}
         {tab === 'resumen' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 20 }}>
               <KpiCard label="Unidades Trasladadas"   value={met.n.toLocaleString()} icon={Truck}       accent={C.teal}     accentBg={C.tealBg}  sub="Sacos / camiones"                                               delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}            icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub={`Desde ${met.primerTurnoFecha || '—'} ${met.primerTurnoHora || '—'} hasta ${met.ultimoTrasladoFecha || '—'} ${met.ultimoTrasladoHora || '—'}`} delay={55} live={met.tieneActivo} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)}            icon={Clock}       accent={C.blue}     accentBg={C.blueBg}  sub="Suma de todos los turnos" delay={55}  live={met.tieneActivo} />
               <KpiCard label="Tiempo Inactividad"     value={fmt(met.tI)}            icon={AlertCircle} accent={C.red}      accentBg={C.redBg}   sub={`${met.tT > 0 ? +((met.tI/met.tT)*100).toFixed(1) : 0}% del total`} delay={110} />
               <KpiCard label="Tiempo Efectivo"        value={fmt(met.tE)}            icon={Zap}         accent={C.amberMid} accentBg={C.amberBg} sub={`${met.eff}% productividad`}                                    delay={165} />
-              <KpiCard 
+               <KpiCard 
                 label="Flujo Promedio de Carga" 
                 value={flujoPromedio.toFixed(2)} 
                 icon={Gauge} 
@@ -866,27 +873,18 @@ export default function DashboardTiemposPage() {
                 sub="Unidades por hora efectiva" 
                 delay={220} 
               />
+
               <KpiCard 
-                label="Tiempo Promedio por Unidad" 
-                value={tiempoPromedioPorUnidad.toFixed(1)} 
-                icon={Clock} 
-                accent={C.amberMid} 
-                accentBg={C.amberBg} 
-                sub="Minutos por unidad" 
-                delay={275} 
-              />
+        label="Tiempo Promedio por Unidad" 
+        value={tiempoPromedioPorUnidad.toFixed(1)} 
+        icon={Clock} 
+        accent={C.amberMid} 
+        accentBg={C.amberBg} 
+        sub="Minutos por unidad" 
+        delay={275} 
+      />
             </div>
-            <BloqueTiempos 
-              tiempoTotal={met.tT} 
-              tiempoInactividad={met.tI} 
-              tiempoEfectivo={met.tE} 
-              unidades={met.n} 
-              hayActivo={met.tieneActivo}
-              fechaPrimerTurno={met.primerTurnoFecha}
-              horaPrimerTurno={met.primerTurnoHora}
-              fechaUltimoTraslado={met.ultimoTrasladoFecha}
-              horaUltimoTraslado={met.ultimoTrasladoHora}
-            />
+            <BloqueTiempos tiempoTotal={met.tT} tiempoInactividad={met.tI} tiempoEfectivo={met.tE} unidades={met.n} hayActivo={met.tieneActivo} />
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <ChartCard title="Unidades por Hora" icon={TrendingUp} badge="Tendencia horaria">
                 {datosHora.length === 0
@@ -944,6 +942,7 @@ export default function DashboardTiemposPage() {
           </>
         )}
 
+        {/* ===================== TAB OPERATIVOS ===================== */}
         {tab === 'operativos' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
             {datosOps.length === 0
@@ -1009,6 +1008,7 @@ export default function DashboardTiemposPage() {
           </div>
         )}
 
+        {/* ===================== TAB ATRASOS ===================== */}
         {tab === 'atrasos' && (
           <>
             <div className="ch2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -1053,11 +1053,12 @@ export default function DashboardTiemposPage() {
           </>
         )}
 
+        {/* ===================== TAB TURNOS ===================== */}
         {tab === 'turnos' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 15, marginBottom: 18 }}>
               <KpiCard label="Total Turnos"           value={turF.length} icon={Users}   accent={C.teal}     accentBg={C.tealBg}  delay={0} />
-              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub={`Desde ${met.primerTurnoFecha || '—'} ${met.primerTurnoHora || '—'} hasta ${met.ultimoTrasladoFecha || '—'} ${met.ultimoTrasladoHora || '—'}`} delay={55} live={met.tieneActivo} />
+              <KpiCard label="Tiempo Total Operativo" value={fmt(met.tT)} icon={Clock}   accent={C.amberMid} accentBg={C.amberBg} sub="Suma de todos los turnos" delay={55} live={met.tieneActivo} />
               <KpiCard label="Unidades por Hora"      value={met.uph.toFixed(1)} icon={Gauge} accent={C.amberMid} accentBg={C.amberBg} sub="Promedio real de unidades por hora efectiva" delay={110} />
             </div>
 
@@ -1085,6 +1086,7 @@ export default function DashboardTiemposPage() {
           </>
         )}
 
+        {/* ===================== TAB TRASLADOS ===================== */}
         {tab === 'traslados' && (
           <>
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 18 }}>
@@ -1095,6 +1097,7 @@ export default function DashboardTiemposPage() {
               })()} icon={Calendar} accent={C.amberMid} accentBg={C.amberBg} delay={165} />
             </div>
 
+            {/* Filtros adicionales para la tabla de traslados */}
             <div className="filtros-traslados" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', background: C.white, padding: '12px 18px', borderRadius: 14, border: `1px solid ${C.border}` }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: C.slate, display: 'flex', alignItems: 'center', gap: 4 }}><Filter size={12} /> Filtrar:</span>
               <select
@@ -1142,68 +1145,68 @@ export default function DashboardTiemposPage() {
             </div>
 
             <TablaData
-              title="Registro de Traslados"
-              icon={Truck}
-              badge={`${trasladosParaTabla.length} traslados`}
-              rows={trasladosParaTabla}
-              onSort={handleSort}
-              sortConfig={sortTraslados}
-              cols={[
-                { key: 'correlativo_num',   label: 'Correlativo',  render: (v, row) => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.amberMid, fontSize: 12 }}>{row.correlativo_viaje}</span>, sortable: true },
-                { key: 'fecha',             label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{formatFecha(v)}</span>, sortable: true },
-                { key: 'operativo_nombre',  label: 'Operativo',    render: v => <span style={{ fontWeight: 600, color: C.slate }}>{v}</span>, sortable: true },
-                { key: 'nombre_conductor',  label: 'Conductor',    render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
-                { key: 'placa',             label: 'Placa',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
-                { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'tipo_unidad',       label: 'Tipo',
-                  render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
-                  sortable: true
-                },
-                { key: 'hora_inicio_carga', label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
-                { key: 'hora_fin_carga',    label: 'Fin',          render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
-                { 
-                  key: 'duracion', 
-                  label: 'Duración', 
-                  render: (v, row) => {
-                    if (!row.hora_inicio_carga || !row.hora_fin_carga) {
-                      return <Chip label="Sin datos" color={C.textSub} bg={C.borderL} />
-                    }
-                    const inicio = dayjs(`2000-01-01 ${row.hora_inicio_carga}`)
-                    const fin = dayjs(`2000-01-01 ${row.hora_fin_carga}`)
-                    let diff = fin.diff(inicio, 'minute')
-                    if (diff < 0) diff += 24 * 60
-                    const horas = Math.floor(diff / 60)
-                    const minutos = diff % 60
-                    return (
-                      <span style={{ 
-                        fontFamily: "'DM Mono',monospace", 
-                        fontSize: 12, 
-                        fontWeight: 600, 
-                        color: diff > 120 ? C.red : diff > 60 ? C.amberMid : C.teal,
-                        background: diff > 120 ? `${C.red}10` : diff > 60 ? `${C.amberMid}10` : `${C.teal}10`,
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        display: 'inline-block'
-                      }}>
-                        {horas > 0 ? `${horas}h ` : ''}{minutos}m
-                      </span>
-                    )
-                  },
-                  sortable: true
-                },
-                { key: 'estado',            label: 'Estado',       render: v => <Chip label={v || 'activo'} color={v === 'activo' ? C.teal : C.blue} bg={v === 'activo' ? C.tealBg : C.blueBg} />, sortable: true },
-                { key: 'no_marchamo',       label: 'Marchamo',     render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
-                { key: 'id', label: 'Ver', right: true, render: (v, row) => (
-                  <button
-                    onClick={() => { setTrasladoSeleccionado(row); setShowDetalleModal(true) }}
-                    style={{ background: C.amberBg, border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, color: C.amberMid, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}
-                  >
-                    <Eye size={14} /> Ver
-                  </button>
-                )},
-              ]}
-            />
+  title="Registro de Traslados"
+  icon={Truck}
+  badge={`${trasladosParaTabla.length} traslados`}
+  rows={trasladosParaTabla}
+  onSort={handleSort}
+  sortConfig={sortTraslados}
+  cols={[
+    { key: 'correlativo_num',   label: 'Correlativo',  render: (v, row) => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600, color: C.amberMid, fontSize: 12 }}>{row.correlativo_viaje}</span>, sortable: true },
+    { key: 'fecha',             label: 'Fecha',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 500, fontSize: 12, color: C.text }}>{formatFecha(v)}</span>, sortable: true },
+    { key: 'operativo_nombre',  label: 'Operativo',    render: v => <span style={{ fontWeight: 600, color: C.slate }}>{v}</span>, sortable: true },
+    { key: 'nombre_conductor',  label: 'Conductor',    render: v => <strong style={{ color: C.slate, fontWeight: 700 }}>{v}</strong>, sortable: true },
+    { key: 'placa',             label: 'Placa',        render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'remolque',          label: 'Remolque',     render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{v}</span>, sortable: true },
+    { key: 'transporte',        label: 'Transporte',   render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'tipo_unidad',       label: 'Tipo',
+      render: v => <Chip label={v || '—'} color={v === 'volteo' ? C.teal : v === 'plana' ? C.amberMid : C.textSub} bg={v === 'volteo' ? C.tealBg : v === 'plana' ? C.amberBg : C.borderL} />,
+      sortable: true
+    },
+    { key: 'hora_inicio_carga', label: 'Inicio',       render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+    { key: 'hora_fin_carga',    label: 'Fin',          render: v => <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{formatHora(v)}</span>, sortable: true },
+    { 
+      key: 'duracion', 
+      label: 'Duración', 
+      render: (v, row) => {
+        if (!row.hora_inicio_carga || !row.hora_fin_carga) {
+          return <Chip label="Sin datos" color={C.textSub} bg={C.borderL} />
+        }
+        const inicio = dayjs(`2000-01-01 ${row.hora_inicio_carga}`)
+        const fin = dayjs(`2000-01-01 ${row.hora_fin_carga}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        const horas = Math.floor(diff / 60)
+        const minutos = diff % 60
+        return (
+          <span style={{ 
+            fontFamily: "'DM Mono',monospace", 
+            fontSize: 12, 
+            fontWeight: 600, 
+            color: diff > 120 ? C.red : diff > 60 ? C.amberMid : C.teal,
+            background: diff > 120 ? `${C.red}10` : diff > 60 ? `${C.amberMid}10` : `${C.teal}10`,
+            padding: '2px 8px',
+            borderRadius: 12,
+            display: 'inline-block'
+          }}>
+            {horas > 0 ? `${horas}h ` : ''}{minutos}m
+          </span>
+        )
+      },
+      sortable: true
+    },
+    { key: 'estado',            label: 'Estado',       render: v => <Chip label={v || 'activo'} color={v === 'activo' ? C.teal : C.blue} bg={v === 'activo' ? C.tealBg : C.blueBg} />, sortable: true },
+    { key: 'no_marchamo',       label: 'Marchamo',     render: v => <span style={{ color: C.text }}>{v || '—'}</span>, sortable: true },
+    { key: 'id', label: 'Ver', right: true, render: (v, row) => (
+      <button
+        onClick={() => { setTrasladoSeleccionado(row); setShowDetalleModal(true) }}
+        style={{ background: C.amberBg, border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, color: C.amberMid, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}
+      >
+        <Eye size={14} /> Ver
+      </button>
+    )},
+  ]}
+/>
           </>
         )}
 
@@ -1215,9 +1218,11 @@ export default function DashboardTiemposPage() {
         </p>
       </main>
 
+      {/* ===================== MODAL DETALLE ===================== */}
       {showDetalleModal && trasladoSeleccionado && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 16px' }}>
           <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+            {/* Header modal */}
             <div style={{ background: `linear-gradient(90deg,${C.amber},${C.amberMid})`, padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 8 }}><Truck size={22} color="#fff" /></div>
@@ -1231,6 +1236,7 @@ export default function DashboardTiemposPage() {
               </button>
             </div>
 
+            {/* Body modal */}
             <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: 'calc(90vh - 80px)' }}>
               <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '18px 20px', border: '1px solid rgba(255,255,255,0.07)', marginBottom: 16 }}>
                 <h4 style={{ color: '#fff', fontWeight: 700, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
