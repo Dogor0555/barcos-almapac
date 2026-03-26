@@ -1,7 +1,7 @@
 // barco/[token]/page.js - Página principal para registro de viajes, lecturas de banda y bitácora de flujos por producto
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from './../../lib/supabase'
 import { 
@@ -15,7 +15,7 @@ import {
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
   Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox,
-  Download // 👈 NUEVO: Icono para exportar
+  Download, ArrowUpDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -23,7 +23,7 @@ import { verificarNumeroViaje, getSiguienteNumeroViaje } from '../../utils/viaje
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import * as XLSX from 'xlsx' // 👈 NUEVO: Librería para Excel
+import * as XLSX from 'xlsx'
 
 // Extender dayjs con plugins de zona horaria
 dayjs.extend(utc)
@@ -56,6 +56,12 @@ export default function BarcoPesadorPage() {
   
   // Estado para el buscador de placas
   const [buscarPlaca, setBuscarPlaca] = useState('')
+  
+  // ✅ NUEVO: Estado para orden de la tabla de viajes
+  const [ordenViajes, setOrdenViajes] = useState('asc') // 'asc' o 'desc'
+  
+  // Refs para navegación con Enter
+  const inputRefs = useRef({})
   
   const [nuevoViaje, setNuevoViaje] = useState({
     viaje_numero: 1,
@@ -111,13 +117,118 @@ export default function BarcoPesadorPage() {
     return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm:ss')
   }
 
-  // ✅ Función mejorada para obtener hora actual en formato 24h HH:MM:SS
+  // Función mejorada para obtener hora actual en formato 24h HH:MM:SS
   const getHoraActual24h = () => {
     const ahora = new Date()
     const horas = ahora.getHours().toString().padStart(2, '0')
     const minutos = ahora.getMinutes().toString().padStart(2, '0')
     const segundos = ahora.getSeconds().toString().padStart(2, '0')
     return `${horas}:${minutos}:${segundos}`
+  }
+
+  // ✅ FUNCIÓN PARA AUTO-FORMATEAR NÚMEROS - Solo formatea cuando tiene 5+ dígitos
+const autoFormatearNumero = (valor, campo = '') => {
+  if (!valor) return valor
+  
+  const strValor = String(valor).trim()
+  
+  // Si ya tiene punto decimal, devolver como está
+  if (strValor.includes('.')) return strValor
+  
+  // Limpiar caracteres no numéricos
+  const soloNumeros = strValor.replace(/[^0-9]/g, '')
+  
+  // Si no hay números, devolver vacío
+  if (soloNumeros === '') return ''
+  
+  const numero = parseFloat(soloNumeros)
+  
+  // ✅ NUEVA REGLA: Solo convertir si tiene 5 o más dígitos (mínimo 10,000 kg)
+  if (!isNaN(numero) && soloNumeros.length >= 5) {
+    const convertido = numero / 1000
+    toast.success(`💰 ${campo || 'Peso'}: ${numero.toLocaleString()} kg → ${convertido.toFixed(3)} TM`, {
+      duration: 2000,
+      id: `convert-${campo}-${Date.now()}`
+    })
+    return convertido.toString()
+  }
+  
+  // Si tiene menos de 5 dígitos, devolver el valor original (el usuario sigue escribiendo)
+  return strValor
+}
+
+  // ✅ FUNCIÓN PARA MANEJAR ENTER COMO TAB
+  const handleKeyDownEnter = (e, nextFieldId) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (nextFieldId && inputRefs.current[nextFieldId]) {
+        inputRefs.current[nextFieldId].focus()
+      }
+    }
+  }
+
+  // ✅ FUNCIÓN PARA RECALCULAR ACUMULADO UPDP
+  const recalcularAcumuladoUPDP = async (productoId) => {
+    try {
+      // Obtener todos los viajes completos del producto
+      const viajesCompletos = viajes.filter(v => 
+        v.producto_id === productoId && 
+        v.estado === 'completo' &&
+        v.peso_neto_updp_tm !== null
+      )
+      
+      // Calcular el total acumulado de peso neto UPDP
+      const totalAcumulado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+      
+      // Actualizar cada viaje completo con el nuevo total_acumulado_tm
+      for (const viaje of viajesCompletos) {
+        // Solo actualizar si el viaje no tiene ya este acumulado o si cambió
+        const acumuladoAnterior = viaje.total_acumulado_tm || 0
+        if (Math.abs(acumuladoAnterior - totalAcumulado) > 0.001) {
+          await supabase
+            .from('viajes')
+            .update({ total_acumulado_tm: totalAcumulado })
+            .eq('id', viaje.id)
+        }
+      }
+      
+      console.log(`✅ Acumulado UPDP recalculado para producto ${productoId}: ${totalAcumulado.toFixed(3)} TM`)
+      return totalAcumulado
+    } catch (error) {
+      console.error('Error recalculando acumulado UPDP:', error)
+      return 0
+    }
+  }
+
+  // ✅ FUNCIÓN PARA ACTUALIZAR ACUMULADO DESPUÉS DE REGISTRAR/EDITAR VIAJE
+  const actualizarAcumuladoUPDP = async (productoId) => {
+    try {
+      // Obtener todos los viajes completos del producto ORDENADOS por número de viaje
+      const viajesCompletos = viajes
+        .filter(v => v.producto_id === productoId && v.estado === 'completo')
+        .sort((a, b) => a.viaje_numero - b.viaje_numero)
+      
+      let acumuladoCorrido = 0
+      
+      // Actualizar cada viaje con su acumulado corrido
+      for (const viaje of viajesCompletos) {
+        acumuladoCorrido += Number(viaje.peso_neto_updp_tm) || 0
+        
+        // Solo actualizar si el valor cambió
+        if (Math.abs((viaje.total_acumulado_tm || 0) - acumuladoCorrido) > 0.001) {
+          await supabase
+            .from('viajes')
+            .update({ total_acumulado_tm: acumuladoCorrido })
+            .eq('id', viaje.id)
+        }
+      }
+      
+      console.log(`✅ Acumulado UPDP actualizado para producto ${productoId}: ${acumuladoCorrido.toFixed(3)} TM`)
+      return acumuladoCorrido
+    } catch (error) {
+      console.error('Error actualizando acumulado UPDP:', error)
+      return 0
+    }
   }
 
   // Función para calcular flujo entre lecturas consecutivas del mismo destino
@@ -182,8 +293,18 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  // Función para editar viaje directamente desde el Paso 2
+  // ✅ FUNCIÓN MEJORADA: Editar viaje desde Paso 2 manteniendo todos los datos
   const handleEditarViajeDesdePaso2 = (viaje) => {
+    console.log('✏️ Editando viaje desde paso 2:', {
+      id: viaje.id,
+      viaje_numero: viaje.viaje_numero,
+      peso_neto_updp_tm: viaje.peso_neto_updp_tm,
+      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm,
+      peso_bruto_updp_tm: viaje.peso_bruto_updp_tm,
+      hora_salida_updp: viaje.hora_salida_updp,
+      hora_entrada_almapac: viaje.hora_entrada_almapac
+    })
+    
     setEditandoViaje(viaje)
     setNuevoViaje({
       viaje_numero: viaje.viaje_numero,
@@ -200,7 +321,7 @@ export default function BarcoPesadorPage() {
     })
     setModoRegistro('editar')
     setViajeSeleccionado(null)
-    toast.success('Editando viaje en Paso 1')
+    toast.success(`✏️ Editando viaje #${viaje.viaje_numero} en Paso 1`)
   }
 
   // Llama esto cuando el usuario termina de escribir el número (onBlur o onChange con debounce)
@@ -231,24 +352,541 @@ export default function BarcoPesadorPage() {
     toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
   }
 
-  // 👇 NUEVA FUNCIÓN: Exportar todos los registros a Excel
+  // ✅ HANDLER MEJORADO: Con auto-formato de números y navegación con Enter
+  const handleNuevoViajeChange = (e) => {
+    const { name, value } = e.target
+    
+    // Si es un campo de peso, aplicar auto-formato
+    if (name === 'peso_neto_updp_tm' || name === 'peso_bruto_almapac_tm' || name === 'peso_bruto_updp_tm') {
+      let nombreCampo = ''
+      if (name === 'peso_neto_updp_tm') nombreCampo = 'Peso Neto UPDP'
+      if (name === 'peso_bruto_almapac_tm') nombreCampo = 'Peso Bruto Almapac'
+      if (name === 'peso_bruto_updp_tm') nombreCampo = 'Peso Bruto UPDP'
+      const valorFormateado = autoFormatearNumero(value, nombreCampo)
+      setNuevoViaje(prev => ({ ...prev, [name]: valorFormateado }))
+    } else {
+      setNuevoViaje(prev => ({ ...prev, [name]: value }))
+    }
+  }
+
+  const handleCompletarViajeChange = (e) => {
+    const { name, value } = e.target
+    setCompletarViaje(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleLecturaChange = (e) => {
+    const { name, value } = e.target
+    setLecturaActual(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleBitacoraChange = (e) => {
+    const { name, value } = e.target
+    setBitacoraActual(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleEditarViaje = (viaje) => {
+    setEditandoViaje(viaje)
+    setNuevoViaje({
+      viaje_numero: viaje.viaje_numero,
+      fecha: viaje.fecha?.split('T')[0] || getLocalDateString(),
+      hora_salida_updp: viaje.hora_salida_updp || '',
+      hora_entrada_almapac: viaje.hora_entrada_almapac || '',
+      placa: viaje.placa || 'C-',
+      peso_neto_updp_tm: viaje.peso_neto_updp_tm || '',
+      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
+      peso_bruto_updp_tm: viaje.peso_bruto_updp_tm || '',
+      producto_id: viaje.producto_id,
+      destino_id: viaje.destino_id || '',
+      observaciones: viaje.observaciones || ''
+    })
+    setModoRegistro('editar')
+  }
+
+  const handleEditarLectura = (lectura) => {
+    setEditandoLectura(lectura)
+    setLecturaActual({
+      fecha_hora: formatUTCToSV(lectura.fecha_hora, 'YYYY-MM-DDTHH:mm:ss'),
+      acumulado_tm: lectura.acumulado_tm || '',
+      destino_id: lectura.destino_id || ''
+    })
+  }
+
+  const handleEditarBitacora = (registro) => {
+    setEditandoBitacora(registro)
+    setBitacoraActual({
+      fecha_hora: registro.fecha_hora?.slice(0, 19) || '',
+      comentarios: registro.comentarios || ''
+    })
+  }
+
+  const handleEliminarViaje = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar este viaje? Esta acción no se puede deshacer.')) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('viajes')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      toast.success('Viaje eliminado correctamente')
+      await cargarDatos()
+      
+      // ✅ Recalcular acumulado UPDP después de eliminar
+      if (productoActivo) {
+        await actualizarAcumuladoUPDP(productoActivo.id)
+      }
+      
+      if (editandoViaje?.id === id) {
+        setEditandoViaje(null)
+        setModoRegistro('nuevo')
+      }
+    } catch (error) {
+      console.error('Error eliminando viaje:', error)
+      toast.error('Error al eliminar el viaje')
+    }
+  }
+
+  const handleEliminarLectura = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar esta lectura?')) return
+
+    try {
+      const { error } = await supabase
+        .from('lecturas_banda')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      toast.success('Lectura eliminada correctamente')
+      await cargarDatos()
+      setEditandoLectura(null)
+    } catch (error) {
+      console.error('Error eliminando lectura:', error)
+      toast.error('Error al eliminar la lectura')
+    }
+  }
+
+  const handleEliminarBitacora = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar este registro?')) return
+
+    try {
+      const { error } = await supabase
+        .from('bitacora_flujos')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      toast.success('Registro eliminado correctamente')
+      await cargarDatos()
+      setEditandoBitacora(null)
+    } catch (error) {
+      console.error('Error eliminando registro:', error)
+      toast.error('Error al eliminar el registro')
+    }
+  }
+
+  const handleGuardarIncompleto = async () => {
+    try {
+      if (barco.estado === 'finalizado') {
+        toast.error('La operación está finalizada.')
+        return
+      }
+
+      if (!nuevoViaje.placa || nuevoViaje.placa === 'C-') {
+        toast.error('La placa es obligatoria')
+        return
+      }
+
+      if (!nuevoViaje.producto_id) {
+        toast.error('Debes seleccionar un producto')
+        return
+      }
+
+      if (!barco || !barco.id) {
+        toast.error('Error: No hay información del barco')
+        return
+      }
+
+      let horaSalidaUPDP = null
+      let horaEntradaAlmapac = null
+
+      if (nuevoViaje.hora_salida_updp) {
+        if (detectarFormatoAmPm(nuevoViaje.hora_salida_updp)) {
+          toast.warning('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
+        }
+        horaSalidaUPDP = validateHora24h(nuevoViaje.hora_salida_updp)
+      }
+
+      if (nuevoViaje.hora_entrada_almapac) {
+        if (detectarFormatoAmPm(nuevoViaje.hora_entrada_almapac)) {
+          toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
+        }
+        horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
+      }
+
+      const datosInsertar = {
+        barco_id: barco.id,
+        viaje_numero: Number(nuevoViaje.viaje_numero),
+        fecha: nuevoViaje.fecha,
+        hora_salida_updp: horaSalidaUPDP,
+        hora_entrada_almapac: horaEntradaAlmapac,
+        placa: nuevoViaje.placa,
+        peso_neto_updp_tm: Number(nuevoViaje.peso_neto_updp_tm) || null,
+        peso_bruto_almapac_tm: Number(nuevoViaje.peso_bruto_almapac_tm) || null,
+        peso_bruto_updp_tm: Number(nuevoViaje.peso_bruto_updp_tm) || null,
+        producto_id: Number(nuevoViaje.producto_id),
+        destino_id: nuevoViaje.destino_id ? Number(nuevoViaje.destino_id) : null,
+        estado: 'incompleto',
+        observaciones: nuevoViaje.observaciones || null
+      }
+
+      let result
+      
+      if (editandoViaje) {
+        result = await supabase
+          .from('viajes')
+          .update(datosInsertar)
+          .eq('id', editandoViaje.id)
+          .select()
+        
+        if (!result.error) {
+          toast.success('Viaje actualizado correctamente')
+          setEditandoViaje(null)
+          setModoRegistro('nuevo')
+          
+          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
+          setNuevoViaje(prev => ({
+            ...prev,
+            viaje_numero: siguienteNumero,
+            fecha: getLocalDateString(),
+            hora_salida_updp: '',
+            hora_entrada_almapac: '',
+            placa: 'C-',
+            peso_neto_updp_tm: '',
+            peso_bruto_almapac_tm: '',
+            peso_bruto_updp_tm: '',
+            destino_id: '',
+            observaciones: ''
+          }))
+        }
+      } else {
+        result = await supabase
+          .from('viajes')
+          .insert([datosInsertar])
+          .select()
+        
+        if (result.error) {
+          if (result.error.code === '23505' && result.error.message.includes('viajes_barco_id_producto_id_viaje_numero')) {
+            const siguienteLibre = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
+            
+            setConflicto({
+              ocupado: nuevoViaje.viaje_numero,
+              sugerido: siguienteLibre
+            })
+            
+            toast.error(`⚠️ El viaje #${nuevoViaje.viaje_numero} fue tomado por otro usuario justo ahora. Intenta con el #${siguienteLibre}`, {
+              duration: 6000,
+              id: 'viaje-conflicto-insert'
+            })
+            return
+          }
+          
+          console.error('Error:', result.error)
+          toast.error(`Error: ${result.error.message}`)
+          return
+        }
+        
+        if (!result.error) {
+          toast.success('Viaje registrado exitosamente')
+          
+          const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
+          
+          setNuevoViaje({
+            viaje_numero: siguienteNumero,
+            fecha: getLocalDateString(),
+            hora_salida_updp: '',
+            hora_entrada_almapac: '',
+            placa: 'C-',
+            peso_neto_updp_tm: '',
+            peso_bruto_almapac_tm: '',
+            peso_bruto_updp_tm: '',
+            producto_id: nuevoViaje.producto_id,
+            destino_id: '',
+            observaciones: ''
+          })
+        }
+      }
+
+      if (result.error) {
+        console.error('Error:', result.error)
+        toast.error(`Error: ${result.error.message}`)
+        return
+      }
+
+      await cargarDatos()
+      
+      // ✅ RECALCULAR ACUMULADO UPDP después de guardar/actualizar
+      if (productoActivo) {
+        await actualizarAcumuladoUPDP(productoActivo.id)
+      }
+      
+      setConflicto(null)
+
+    } catch (error) {
+      console.error('Error inesperado:', error)
+      toast.error('Error inesperado al guardar')
+    }
+  }
+
+  const handleCompletarViaje = async () => {
+    try {
+      if (barco.estado === 'finalizado') {
+        toast.error('La operación está finalizada.')
+        return
+      }
+
+      if (!viajeSeleccionado) {
+        toast.error('Selecciona un viaje para completar')
+        return
+      }
+
+      if (!completarViaje.destino_id) {
+        toast.error('Selecciona un destino')
+        return
+      }
+
+      if (!completarViaje.peso_destino_tm) {
+        toast.error('Ingresa el peso en destino')
+        return
+      }
+
+      if (!completarViaje.hora_salida_almapac) {
+        toast.error('Ingresa la hora de salida de Almapac')
+        return
+      }
+
+      let horaSalidaAlmapac = null
+      if (completarViaje.hora_salida_almapac) {
+        if (detectarFormatoAmPm(completarViaje.hora_salida_almapac)) {
+          toast.warning('Formato AM/PM detectado en Hora Salida Almapac. Convirtiendo a 24h.')
+        }
+        horaSalidaAlmapac = validateHora24h(completarViaje.hora_salida_almapac)
+      }
+
+      const viajesCompletosDelProducto = [...viajes]
+        .filter(v => v.producto_id === viajeSeleccionado.producto_id && v.estado === 'completo')
+        .sort((a, b) => a.viaje_numero - b.viaje_numero)
+      
+      const acumuladoAnterior = viajesCompletosDelProducto.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+      const totalAcumuladoTM = acumuladoAnterior + Number(completarViaje.peso_destino_tm)
+
+      const datosActualizar = {
+        destino_id: Number(completarViaje.destino_id),
+        peso_destino_tm: Number(completarViaje.peso_destino_tm),
+        fecha: viajeSeleccionado.fecha,
+        hora_salida_almapac: horaSalidaAlmapac,
+        total_acumulado_tm: totalAcumuladoTM,
+        estado: 'completo',
+        observaciones_destino: completarViaje.observaciones_destino || null,
+        completado_at: new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('viajes')
+        .update(datosActualizar)
+        .eq('id', viajeSeleccionado.id)
+
+      if (error) {
+        console.error('Error:', error)
+        toast.error(`Error: ${error.message}`)
+        return
+      }
+
+      toast.success('Viaje completado exitosamente')
+      
+      setModoRegistro('nuevo')
+      setViajeSeleccionado(null)
+      setCompletarViaje({
+        destino_id: '',
+        peso_destino_tm: '',
+        hora_salida_almapac: '',
+        observaciones_destino: ''
+      })
+
+      await cargarDatos()
+      
+      // ✅ RECALCULAR ACUMULADO UPDP después de completar
+      if (productoActivo) {
+        await actualizarAcumuladoUPDP(productoActivo.id)
+      }
+
+    } catch (error) {
+      console.error('Error inesperado:', error)
+      toast.error('Error inesperado al completar')
+    }
+  }
+
+  const handleGuardarLectura = async () => {
+    try {
+      if (barco.estado === 'finalizado') {
+        toast.error('La operación está finalizada.')
+        return
+      }
+
+      if (!lecturaActual.acumulado_tm) {
+        toast.error('El acumulado es obligatorio')
+        return
+      }
+      if (!productoActivo) {
+        toast.error('No hay producto seleccionado')
+        return
+      }
+      if (!lecturaActual.destino_id) {
+        toast.error('Selecciona un destino')
+        return
+      }
+      if (!lecturaActual.fecha_hora) {
+        toast.error('La fecha y hora son obligatorias')
+        return
+      }
+
+      const acumuladoTM = Number(lecturaActual.acumulado_tm)
+      
+      const fechaUTC = svToUTC(lecturaActual.fecha_hora)
+      
+      const datosInsertar = {
+        barco_id: barco.id,
+        fecha_hora: fechaUTC,
+        producto_id: productoActivo.id,
+        acumulado_tm: acumuladoTM,
+        acumulado_kg: acumuladoTM * 1000,
+        destino_id: Number(lecturaActual.destino_id)
+      }
+
+      let result
+      
+      if (editandoLectura) {
+        result = await supabase
+          .from('lecturas_banda')
+          .update(datosInsertar)
+          .eq('id', editandoLectura.id)
+        
+        if (!result.error) {
+          toast.success('Lectura actualizada correctamente')
+          setEditandoLectura(null)
+        }
+      } else {
+        result = await supabase
+          .from('lecturas_banda')
+          .insert([datosInsertar])
+        
+        if (!result.error) {
+          toast.success('Lectura de banda guardada')
+        }
+      }
+
+      if (result.error) {
+        console.error('Error:', result.error)
+        toast.error(`Error: ${result.error.message}`)
+        return
+      }
+
+      setLecturaActual({
+        fecha_hora: getCurrentSVTimeForInput(),
+        acumulado_tm: '',
+        destino_id: ''
+      })
+
+      await cargarDatos()
+
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error inesperado')
+    }
+  }
+
+  const handleGuardarBitacora = async () => {
+    try {
+      if (barco.estado === 'finalizado') {
+        toast.error('La operación está finalizada.')
+        return
+      }
+
+      if (!productoActivo) {
+        toast.error('No hay producto seleccionado')
+        return
+      }
+      if (!bitacoraActual.fecha_hora) {
+        toast.error('La fecha y hora son obligatorias')
+        return
+      }
+
+      const datosInsertar = {
+        barco_id: barco.id,
+        fecha_hora: bitacoraActual.fecha_hora,
+        producto_id: productoActivo.id,
+        comentarios: bitacoraActual.comentarios || null
+      }
+
+      let result
+      
+      if (editandoBitacora) {
+        result = await supabase
+          .from('bitacora_flujos')
+          .update(datosInsertar)
+          .eq('id', editandoBitacora.id)
+        
+        if (!result.error) {
+          toast.success('Registro actualizado correctamente')
+          setEditandoBitacora(null)
+        }
+      } else {
+        result = await supabase
+          .from('bitacora_flujos')
+          .insert([datosInsertar])
+        
+        if (!result.error) {
+          toast.success('Entrada de bitácora guardada')
+        }
+      }
+
+      if (result.error) {
+        console.error('Error:', result.error)
+        toast.error(`Error: ${result.error.message}`)
+        return
+      }
+
+      setBitacoraActual({
+        fecha_hora: '',
+        comentarios: ''
+      })
+
+      await cargarDatos()
+
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error inesperado')
+    }
+  }
+
   const exportarTodoAExcel = () => {
     try {
-      // Crear un nuevo libro de Excel
       const wb = XLSX.utils.book_new()
       
-      // --- HOJA 1: RESUMEN GENERAL ---
       const resumenData = []
       
-      // Encabezados del resumen
       resumenData.push(['RESUMEN DE OPERACIONES'])
       resumenData.push(['Barco:', barco.nombre])
       resumenData.push(['Código:', barco.codigo_barco || 'N/A'])
       resumenData.push(['Fecha de exportación:', new Date().toLocaleString('es-ES')])
       resumenData.push(['Estado:', barco.estado?.toUpperCase()])
-      resumenData.push([]) // Fila vacía
+      resumenData.push([])
       
-      // Tiempos importantes
       resumenData.push(['TIEMPOS DE OPERACIÓN'])
       resumenData.push(['Arribo:', barco.tiempo_arribo ? new Date(barco.tiempo_arribo).toLocaleString('es-ES') : 'N/A'])
       resumenData.push(['Ataque:', barco.tiempo_ataque ? new Date(barco.tiempo_ataque).toLocaleString('es-ES') : 'N/A'])
@@ -257,7 +895,6 @@ export default function BarcoPesadorPage() {
       resumenData.push(['Fin descarga:', barco.operacion_finalizada_at ? new Date(barco.operacion_finalizada_at).toLocaleString('es-ES') : 'N/A'])
       resumenData.push([])
       
-      // Resumen por producto
       resumenData.push(['RESUMEN POR PRODUCTO'])
       resumenData.push(['Producto', 'Tipo', 'Meta (TM)', 'Total (TM)', 'Viajes', 'Lecturas Banda', 'Registros Bitácora', '% Completado'])
       
@@ -276,7 +913,6 @@ export default function BarcoPesadorPage() {
       
       resumenData.push([])
       
-      // Resumen por destino (si hay producto activo)
       if (productoActivo && resumenPorDestino.length > 0) {
         resumenData.push([`RESUMEN POR DESTINO - ${productoActivo.nombre}`])
         resumenData.push(['Destino', 'Límite (TM)', 'Total Viajes (TM)', 'Total Banda (TM)', 'Total (TM)', '% Límite'])
@@ -298,7 +934,6 @@ export default function BarcoPesadorPage() {
       const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
       XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
       
-      // --- HOJA 2: VIAJES COMPLETOS ---
       const viajesData = []
       viajesData.push(['VIAJES COMPLETOS'])
       viajesData.push(['Barco:', barco.nombre])
@@ -316,6 +951,7 @@ export default function BarcoPesadorPage() {
         'Peso Bruto Almapac (TM)',
         'Destino',
         'Peso Destino (TM)',
+        'Acumulado UPDP (TM)',
         'Observaciones',
         'Observaciones Destino'
       ])
@@ -337,6 +973,7 @@ export default function BarcoPesadorPage() {
             v.peso_bruto_almapac_tm?.toFixed(3) || '0.000',
             v.destino?.nombre || '—',
             v.peso_destino_tm?.toFixed(3) || '0.000',
+            v.total_acumulado_tm?.toFixed(3) || '0.000',
             v.observaciones || '',
             v.observaciones_destino || ''
           ])
@@ -345,7 +982,6 @@ export default function BarcoPesadorPage() {
       const wsViajes = XLSX.utils.aoa_to_sheet(viajesData)
       XLSX.utils.book_append_sheet(wb, wsViajes, 'Viajes Completos')
       
-      // --- HOJA 3: VIAJES INCOMPLETOS ---
       const incompletosData = []
       incompletosData.push(['VIAJES INCOMPLETOS / PENDIENTES'])
       incompletosData.push(['Barco:', barco.nombre])
@@ -386,7 +1022,6 @@ export default function BarcoPesadorPage() {
       const wsIncompletos = XLSX.utils.aoa_to_sheet(incompletosData)
       XLSX.utils.book_append_sheet(wb, wsIncompletos, 'Viajes Pendientes')
       
-      // --- HOJA 4: LECTURAS DE BANDA ---
       const bandaData = []
       bandaData.push(['LECTURAS DE BANDA'])
       bandaData.push(['Barco:', barco.nombre])
@@ -414,7 +1049,6 @@ export default function BarcoPesadorPage() {
       const wsBanda = XLSX.utils.aoa_to_sheet(bandaData)
       XLSX.utils.book_append_sheet(wb, wsBanda, 'Lecturas Banda')
       
-      // --- HOJA 5: BITÁCORA ---
       const bitacoraData = []
       bitacoraData.push(['BITÁCORA DE OPERACIONES'])
       bitacoraData.push(['Barco:', barco.nombre])
@@ -438,11 +1072,9 @@ export default function BarcoPesadorPage() {
       const wsBitacora = XLSX.utils.aoa_to_sheet(bitacoraData)
       XLSX.utils.book_append_sheet(wb, wsBitacora, 'Bitácora')
       
-      // Generar nombre del archivo
       const fechaStr = new Date().toISOString().split('T')[0]
       const nombreArchivo = `${barco.nombre.replace(/\s+/g, '_')}_${fechaStr}_completo.xlsx`
       
-      // Exportar el archivo
       XLSX.writeFile(wb, nombreArchivo)
       
       toast.success('✅ Archivo Excel generado correctamente')
@@ -450,6 +1082,85 @@ export default function BarcoPesadorPage() {
       console.error('Error exportando a Excel:', error)
       toast.error('Error al generar el archivo Excel')
     }
+  }
+
+  const cambiarProducto = (producto) => {
+    setProductoActivo(producto)
+    
+    const siguienteNumero = getSiguienteNumeroViaje(producto.id)
+    
+    setNuevoViaje(prev => ({ 
+      ...prev, 
+      producto_id: producto.id,
+      viaje_numero: siguienteNumero,
+      fecha: getLocalDateString()
+    }))
+    setModoRegistro('nuevo')
+    setViajeSeleccionado(null)
+    setEditandoViaje(null)
+    setEditandoLectura(null)
+    setEditandoBitacora(null)
+    setVistaGraficos(false)
+    setBuscarPlaca('')
+    
+    if (producto.tipo_registro === 'banda') {
+      setTipoRegistro('banda')
+    } else if (producto.tipo_registro === 'viajes') {
+      setTipoRegistro('viajes')
+    } else {
+      setTipoRegistro('viajes')
+    }
+  }
+
+  const seleccionarViajeParaCompletar = (viaje) => {
+    setViajeSeleccionado(viaje)
+    setModoRegistro('completar')
+    setCompletarViaje({
+      destino_id: viaje.destino_id || '',
+      peso_destino_tm: '',
+      hora_salida_almapac: '',
+      observaciones_destino: ''
+    })
+  }
+
+  const cancelarEdicion = () => {
+    setEditandoViaje(null)
+    setEditandoLectura(null)
+    setEditandoBitacora(null)
+    setModoRegistro('nuevo')
+    
+    if (productoActivo) {
+      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
+      setNuevoViaje(prev => ({
+        ...prev,
+        viaje_numero: siguienteNumero,
+        fecha: getLocalDateString(),
+        hora_salida_updp: '',
+        hora_entrada_almapac: '',
+        placa: 'C-',
+        peso_neto_updp_tm: '',
+        peso_bruto_almapac_tm: '',
+        peso_bruto_updp_tm: '',
+        destino_id: '',
+        observaciones: ''
+      }))
+    }
+    
+    setCompletarViaje({
+      destino_id: '',
+      peso_destino_tm: '',
+      hora_salida_almapac: '',
+      observaciones_destino: ''
+    })
+    setLecturaActual({
+      fecha_hora: getCurrentSVTimeForInput(),
+      acumulado_tm: '',
+      destino_id: ''
+    })
+    setBitacoraActual({
+      fecha_hora: '',
+      comentarios: ''
+    })
   }
 
   // Datos para gráfica de flujo acumulado por hora
@@ -567,7 +1278,6 @@ export default function BarcoPesadorPage() {
       const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
       const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
       
-      // ✅ TRES ACUMULADOS NUEVOS
       const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
       const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
       const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
@@ -613,7 +1323,6 @@ export default function BarcoPesadorPage() {
         viajesTM: totalViajesTM,
         bandaTM: totalBandaTM,
         totalTM,
-        // ✅ AGREGAR LOS TRES NUEVOS ACUMULADOS AQUÍ
         acumuladoUPDP: acumuladoUPDP,
         acumuladoAlmapac: acumuladoAlmapac,
         acumuladoSistema: acumuladoSistema,
@@ -638,7 +1347,7 @@ export default function BarcoPesadorPage() {
     return resumen
   }, [productos, viajes, lecturasBanda, bitacora, barco])
 
-  // Viajes completos filtrados por búsqueda
+  // ✅ Viajes completos filtrados por búsqueda CON ORDEN ASC/DESC
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
     
@@ -646,19 +1355,28 @@ export default function BarcoPesadorPage() {
       v.producto_id === productoActivo.id && v.estado === 'completo'
     )
     
-    if (!searchTerm.trim()) return completos
+    let filtrados = completos
+    if (searchTerm.trim()) {
+      const termino = searchTerm.trim().toLowerCase()
+      filtrados = completos.filter(viaje => 
+        viaje.placa.toLowerCase().includes(termino)
+      )
+    }
     
-    const termino = searchTerm.trim().toLowerCase()
-    return completos.filter(viaje => 
-      viaje.placa.toLowerCase().includes(termino)
-    )
-  }, [viajes, productoActivo, searchTerm])
+    // ✅ Aplicar orden: asc o desc por número de viaje
+    return [...filtrados].sort((a, b) => {
+      if (ordenViajes === 'asc') {
+        return a.viaje_numero - b.viaje_numero
+      } else {
+        return b.viaje_numero - a.viaje_numero
+      }
+    })
+  }, [viajes, productoActivo, searchTerm, ordenViajes])
 
-  // 👇 NUEVO: Resumen por destino del producto activo CON LÍMITES
+  // Resumen por destino del producto activo CON LÍMITES
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
 
-    // Obtener límites por destino del barco
     const limitesDestino = barco?.metas_json?.limites_destino || {}
 
     const mapa = {}
@@ -715,7 +1433,6 @@ export default function BarcoPesadorPage() {
       }
       d.total_tm = d.viajes_tm + d.banda_tm
       
-      // 👇 Calcular porcentaje y estado respecto al límite del destino
       d.porcentaje = d.limite_tm > 0 ? (d.total_tm / d.limite_tm) * 100 : 0
       d.faltante_tm = Math.max(0, d.limite_tm - d.total_tm)
       d.excedente_tm = Math.max(0, d.total_tm - d.limite_tm)
@@ -726,7 +1443,7 @@ export default function BarcoPesadorPage() {
     return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
   }, [productoActivo, viajes, lecturasBanda, destinos, barco])
 
-   // 👇 ALERTAS AUTOMÁTICAS CORREGIDAS - usa toast() en lugar de toast.warning()
+  // ALERTAS AUTOMÁTICAS
   useEffect(() => {
     if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
       resumenPorDestino.forEach(dest => {
@@ -776,7 +1493,6 @@ export default function BarcoPesadorPage() {
       .sort((a, b) => b.viaje_numero - a.viaje_numero)
   }, [viajes, productoActivo])
 
-  // ✅ PRIMERO: Definir viajesIncompletosProducto
   const viajesIncompletosProducto = useMemo(() => {
     if (!productoActivo) return []
     return viajes
@@ -784,7 +1500,6 @@ export default function BarcoPesadorPage() {
       .sort((a, b) => b.viaje_numero - a.viaje_numero)
   }, [viajes, productoActivo])
 
-  // ✅ SEGUNDO: Definir viajesIncompletosFiltrados (depende del anterior)
   const viajesIncompletosFiltrados = useMemo(() => {
     if (!viajesIncompletosProducto.length) return []
     
@@ -809,41 +1524,6 @@ export default function BarcoPesadorPage() {
       .filter(b => b.producto_id === productoActivo.id)
       .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
   }, [bitacora, productoActivo])
-
-  useEffect(() => {
-    cargarDatos()
-  }, [token])
-
-  useEffect(() => {
-    if (productos.length > 0 && !productoActivo) {
-      setProductoActivo(productos[0])
-      
-      const siguienteNumero = getSiguienteNumeroViaje(productos[0].id)
-      
-      setNuevoViaje(prev => ({ 
-        ...prev, 
-        producto_id: productos[0].id,
-        viaje_numero: siguienteNumero,
-        fecha: getLocalDateString()
-      }))
-      
-      if (productos[0].tipo_registro === 'banda') {
-        setTipoRegistro('banda')
-      }
-    }
-  }, [productos])
-
-  useEffect(() => {
-    if (productoActivo && modoRegistro === 'nuevo' && !editandoViaje) {
-      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
-      setNuevoViaje(prev => ({ 
-        ...prev, 
-        producto_id: productoActivo.id,
-        viaje_numero: siguienteNumero,
-        fecha: getLocalDateString()
-      }))
-    }
-  }, [productoActivo, viajes, modoRegistro])
 
   const cargarDatos = async () => {
     try {
@@ -892,7 +1572,7 @@ export default function BarcoPesadorPage() {
           destino:destino_id(codigo, nombre)
         `)
         .eq('barco_id', barcoData.id)
-        .order('viaje_numero', { ascending: false })
+        .order('viaje_numero', { ascending: true })
 
       setViajes(viajesData || [])
       
@@ -930,588 +1610,40 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  const handleNuevoViajeChange = (e) => {
-    const { name, value } = e.target
-    setNuevoViaje(prev => ({ ...prev, [name]: value }))
-  }
+  useEffect(() => {
+    cargarDatos()
+  }, [token])
 
-  const handleCompletarViajeChange = (e) => {
-    const { name, value } = e.target
-    setCompletarViaje(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleLecturaChange = (e) => {
-    const { name, value } = e.target
-    setLecturaActual(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleBitacoraChange = (e) => {
-    const { name, value } = e.target
-    setBitacoraActual(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleEditarViaje = (viaje) => {
-    setEditandoViaje(viaje)
-    setNuevoViaje({
-      viaje_numero: viaje.viaje_numero,
-      fecha: viaje.fecha?.split('T')[0] || getLocalDateString(),
-      hora_salida_updp: viaje.hora_salida_updp || '',
-      hora_entrada_almapac: viaje.hora_entrada_almapac || '',
-      placa: viaje.placa || 'C-',
-      peso_neto_updp_tm: viaje.peso_neto_updp_tm || '',
-      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
-      peso_bruto_updp_tm: viaje.peso_bruto_updp_tm || '',
-      producto_id: viaje.producto_id,
-      destino_id: viaje.destino_id || '',
-      observaciones: viaje.observaciones || ''
-    })
-    setModoRegistro('editar')
-  }
-
-  const handleEditarLectura = (lectura) => {
-    setEditandoLectura(lectura)
-    // CONVERTIR de UTC a hora El Salvador para editar
-    setLecturaActual({
-      fecha_hora: formatUTCToSV(lectura.fecha_hora, 'YYYY-MM-DDTHH:mm:ss'),
-      acumulado_tm: lectura.acumulado_tm || '',
-      destino_id: lectura.destino_id || ''
-    })
-  }
-
-  const handleEditarBitacora = (registro) => {
-    setEditandoBitacora(registro)
-    setBitacoraActual({
-      fecha_hora: registro.fecha_hora?.slice(0, 19) || '',
-      comentarios: registro.comentarios || ''
-    })
-  }
-
-  const handleEliminarViaje = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este viaje? Esta acción no se puede deshacer.')) {
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from('viajes')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-
-      toast.success('Viaje eliminado correctamente')
-      await cargarDatos()
+  useEffect(() => {
+    if (productos.length > 0 && !productoActivo) {
+      setProductoActivo(productos[0])
       
-      if (editandoViaje?.id === id) {
-        setEditandoViaje(null)
-        setModoRegistro('nuevo')
-      }
-    } catch (error) {
-      console.error('Error eliminando viaje:', error)
-      toast.error('Error al eliminar el viaje')
-    }
-  }
-
-  const handleEliminarLectura = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar esta lectura?')) return
-
-    try {
-      const { error } = await supabase
-        .from('lecturas_banda')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-
-      toast.success('Lectura eliminada correctamente')
-      await cargarDatos()
-      setEditandoLectura(null)
-    } catch (error) {
-      console.error('Error eliminando lectura:', error)
-      toast.error('Error al eliminar la lectura')
-    }
-  }
-
-  const handleEliminarBitacora = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este registro?')) return
-
-    try {
-      const { error } = await supabase
-        .from('bitacora_flujos')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-
-      toast.success('Registro eliminado correctamente')
-      await cargarDatos()
-      setEditandoBitacora(null)
-    } catch (error) {
-      console.error('Error eliminando registro:', error)
-      toast.error('Error al eliminar el registro')
-    }
-  }
-
- const handleGuardarIncompleto = async () => {
-  try {
-    // Verificar si la operación está finalizada
-    if (barco.estado === 'finalizado') {
-      toast.error('La operación está finalizada.')
-     
-    }
-
-    if (!nuevoViaje.placa || nuevoViaje.placa === 'C-') {
-      toast.error('La placa es obligatoria')
-      return
-    }
-
-    if (!nuevoViaje.producto_id) {
-      toast.error('Debes seleccionar un producto')
-      return
-    }
-
-    if (!barco || !barco.id) {
-      toast.error('Error: No hay información del barco')
-      return
-    }
-
-    let horaSalidaUPDP = null
-    let horaEntradaAlmapac = null
-
-    if (nuevoViaje.hora_salida_updp) {
-      if (detectarFormatoAmPm(nuevoViaje.hora_salida_updp)) {
-        toast.warning('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
-      }
-      horaSalidaUPDP = validateHora24h(nuevoViaje.hora_salida_updp)
-    }
-
-    if (nuevoViaje.hora_entrada_almapac) {
-      if (detectarFormatoAmPm(nuevoViaje.hora_entrada_almapac)) {
-        toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
-      }
-      horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
-    }
-
-    const datosInsertar = {
-      barco_id: barco.id,
-      viaje_numero: Number(nuevoViaje.viaje_numero),
-      fecha: nuevoViaje.fecha,
-      hora_salida_updp: horaSalidaUPDP,
-      hora_entrada_almapac: horaEntradaAlmapac,
-      placa: nuevoViaje.placa,
-      peso_neto_updp_tm: Number(nuevoViaje.peso_neto_updp_tm) || null,
-      peso_bruto_almapac_tm: Number(nuevoViaje.peso_bruto_almapac_tm) || null,
-      peso_bruto_updp_tm: Number(nuevoViaje.peso_bruto_updp_tm) || null,
-      producto_id: Number(nuevoViaje.producto_id),
-      destino_id: nuevoViaje.destino_id ? Number(nuevoViaje.destino_id) : null,
-      estado: 'incompleto',
-      observaciones: nuevoViaje.observaciones || null
-    }
-
-    let result
-    
-    if (editandoViaje) {
-      result = await supabase
-        .from('viajes')
-        .update(datosInsertar)
-        .eq('id', editandoViaje.id)
-        .select()
+      const siguienteNumero = getSiguienteNumeroViaje(productos[0].id)
       
-      if (!result.error) {
-        toast.success('Viaje actualizado correctamente')
-        setEditandoViaje(null)
-        setModoRegistro('nuevo')
-        
-        const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
-        setNuevoViaje(prev => ({
-          ...prev,
-          viaje_numero: siguienteNumero,
-          fecha: getLocalDateString(),
-          hora_salida_updp: '',
-          hora_entrada_almapac: '',
-          placa: 'C-',
-          peso_neto_updp_tm: '',
-          peso_bruto_almapac_tm: '',
-          peso_bruto_updp_tm: '',
-          destino_id: '',
-          observaciones: ''
-        }))
-      }
-    } else {
-      result = await supabase
-        .from('viajes')
-        .insert([datosInsertar])
-        .select()
-      
-      // ✅ NUEVO: Manejar específicamente el error de duplicado
-      if (result.error) {
-        // Verificar si es el error de unique constraint
-        if (result.error.code === '23505' && result.error.message.includes('viajes_barco_id_producto_id_viaje_numero')) {
-          // Obtener el siguiente número disponible automáticamente
-          const siguienteLibre = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
-          
-          setConflicto({
-            ocupado: nuevoViaje.viaje_numero,
-            sugerido: siguienteLibre
-          })
-          
-          toast.error(`⚠️ El viaje #${nuevoViaje.viaje_numero} fue tomado por otro usuario justo ahora. Intenta con el #${siguienteLibre}`, {
-            duration: 6000,
-            id: 'viaje-conflicto-insert'
-          })
-          return
-        }
-        
-        // Si es otro tipo de error, mostrarlo normalmente
-        console.error('Error:', result.error)
-        toast.error(`Error: ${result.error.message}`)
-        return
-      }
-      
-      if (!result.error) {
-        toast.success('Viaje registrado exitosamente')
-        
-        const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
-        
-        setNuevoViaje({
-          viaje_numero: siguienteNumero,
-          fecha: getLocalDateString(),
-          hora_salida_updp: '',
-          hora_entrada_almapac: '',
-          placa: 'C-',
-          peso_neto_updp_tm: '',
-          peso_bruto_almapac_tm: '',
-          peso_bruto_updp_tm: '',
-          producto_id: nuevoViaje.producto_id,
-          destino_id: '',
-          observaciones: ''
-        })
-      }
-    }
-
-    if (result.error) {
-      console.error('Error:', result.error)
-      toast.error(`Error: ${result.error.message}`)
-      return
-    }
-
-    await cargarDatos()
-    setConflicto(null) // Limpiar conflicto si todo salió bien
-
-  } catch (error) {
-    console.error('Error inesperado:', error)
-    toast.error('Error inesperado al guardar')
-  }
-}
-
-  const handleCompletarViaje = async () => {
-    try {
-      // Verificar si la operación está finalizada
-      if (barco.estado === 'finalizado') {
-        toast.error('La operación está finalizada.')
-        
-      }
-
-      if (!viajeSeleccionado) {
-        toast.error('Selecciona un viaje para completar')
-        return
-      }
-
-      if (!completarViaje.destino_id) {
-        toast.error('Selecciona un destino')
-        return
-      }
-
-      if (!completarViaje.peso_destino_tm) {
-        toast.error('Ingresa el peso en destino')
-        return
-      }
-
-      if (!completarViaje.hora_salida_almapac) {
-        toast.error('Ingresa la hora de salida de Almapac')
-        return
-      }
-
-      let horaSalidaAlmapac = null
-      if (completarViaje.hora_salida_almapac) {
-        if (detectarFormatoAmPm(completarViaje.hora_salida_almapac)) {
-          toast.warning('Formato AM/PM detectado en Hora Salida Almapac. Convirtiendo a 24h.')
-        }
-        horaSalidaAlmapac = validateHora24h(completarViaje.hora_salida_almapac)
-      }
-
-      const viajesCompletosDelProducto = [...viajes]
-        .filter(v => v.producto_id === viajeSeleccionado.producto_id && v.estado === 'completo')
-        .sort((a, b) => a.viaje_numero - b.viaje_numero)
-      
-      const acumuladoAnterior = viajesCompletosDelProducto.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-      const totalAcumuladoTM = acumuladoAnterior + Number(completarViaje.peso_destino_tm)
-
-      const datosActualizar = {
-        destino_id: Number(completarViaje.destino_id),
-        peso_destino_tm: Number(completarViaje.peso_destino_tm),
-        fecha: viajeSeleccionado.fecha,
-        hora_salida_almapac: horaSalidaAlmapac,
-        total_acumulado_tm: totalAcumuladoTM,
-        estado: 'completo',
-        observaciones_destino: completarViaje.observaciones_destino || null,
-        completado_at: new Date().toISOString()
-      }
-
-      const { error } = await supabase
-        .from('viajes')
-        .update(datosActualizar)
-        .eq('id', viajeSeleccionado.id)
-
-      if (error) {
-        console.error('Error:', error)
-        toast.error(`Error: ${error.message}`)
-        return
-      }
-
-      toast.success('Viaje completado exitosamente')
-      
-      setModoRegistro('nuevo')
-      setViajeSeleccionado(null)
-      setCompletarViaje({
-        destino_id: '',
-        peso_destino_tm: '',
-        hora_salida_almapac: '',
-        observaciones_destino: ''
-      })
-
-      await cargarDatos()
-
-    } catch (error) {
-      console.error('Error inesperado:', error)
-      toast.error('Error inesperado al completar')
-    }
-  }
-
-  const handleGuardarLectura = async () => {
-    try {
-      // Verificar si la operación está finalizada
-      if (barco.estado === 'finalizado') {
-        toast.error('La operación está finalizada.')
-        
-      }
-
-      if (!lecturaActual.acumulado_tm) {
-        toast.error('El acumulado es obligatorio')
-        return
-      }
-      if (!productoActivo) {
-        toast.error('No hay producto seleccionado')
-        return
-      }
-      if (!lecturaActual.destino_id) {
-        toast.error('Selecciona un destino')
-        return
-      }
-      if (!lecturaActual.fecha_hora) {
-        toast.error('La fecha y hora son obligatorias')
-        return
-      }
-
-      const acumuladoTM = Number(lecturaActual.acumulado_tm)
-      
-      // ¡CONVERTIR a UTC antes de guardar!
-      const fechaUTC = svToUTC(lecturaActual.fecha_hora)
-      
-      const datosInsertar = {
-        barco_id: barco.id,
-        fecha_hora: fechaUTC,
-        producto_id: productoActivo.id,
-        acumulado_tm: acumuladoTM,
-        acumulado_kg: acumuladoTM * 1000,
-        destino_id: Number(lecturaActual.destino_id)
-      }
-
-      let result
-      
-      if (editandoLectura) {
-        result = await supabase
-          .from('lecturas_banda')
-          .update(datosInsertar)
-          .eq('id', editandoLectura.id)
-        
-        if (!result.error) {
-          toast.success('Lectura actualizada correctamente')
-          setEditandoLectura(null)
-        }
-      } else {
-        result = await supabase
-          .from('lecturas_banda')
-          .insert([datosInsertar])
-        
-        if (!result.error) {
-          toast.success('Lectura de banda guardada')
-        }
-      }
-
-      if (result.error) {
-        console.error('Error:', result.error)
-        toast.error(`Error: ${result.error.message}`)
-        return
-      }
-
-      setLecturaActual({
-        fecha_hora: getCurrentSVTimeForInput(),
-        acumulado_tm: '',
-        destino_id: ''
-      })
-
-      await cargarDatos()
-
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error inesperado')
-    }
-  }
-
-  const handleGuardarBitacora = async () => {
-    try {
-      // Verificar si la operación está finalizada
-      if (barco.estado === 'finalizado') {
-        toast.error('La operación está finalizada.')
-        return
-      }
-
-      if (!productoActivo) {
-        toast.error('No hay producto seleccionado')
-        return
-      }
-      if (!bitacoraActual.fecha_hora) {
-        toast.error('La fecha y hora son obligatorias')
-        return
-      }
-
-      const datosInsertar = {
-        barco_id: barco.id,
-        fecha_hora: bitacoraActual.fecha_hora,
-        producto_id: productoActivo.id,
-        comentarios: bitacoraActual.comentarios || null
-      }
-
-      let result
-      
-      if (editandoBitacora) {
-        result = await supabase
-          .from('bitacora_flujos')
-          .update(datosInsertar)
-          .eq('id', editandoBitacora.id)
-        
-        if (!result.error) {
-          toast.success('Registro actualizado correctamente')
-          setEditandoBitacora(null)
-        }
-      } else {
-        result = await supabase
-          .from('bitacora_flujos')
-          .insert([datosInsertar])
-        
-        if (!result.error) {
-          toast.success('Entrada de bitácora guardada')
-        }
-      }
-
-      if (result.error) {
-        console.error('Error:', result.error)
-        toast.error(`Error: ${result.error.message}`)
-        return
-      }
-
-      setBitacoraActual({
-        fecha_hora: '',
-        comentarios: ''
-      })
-
-      await cargarDatos()
-
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error inesperado')
-    }
-  }
-
-  const cambiarProducto = (producto) => {
-    setProductoActivo(producto)
-    
-    const siguienteNumero = getSiguienteNumeroViaje(producto.id)
-    
-    setNuevoViaje(prev => ({ 
-      ...prev, 
-      producto_id: producto.id,
-      viaje_numero: siguienteNumero,
-      fecha: getLocalDateString()
-    }))
-    setModoRegistro('nuevo')
-    setViajeSeleccionado(null)
-    setEditandoViaje(null)
-    setEditandoLectura(null)
-    setEditandoBitacora(null)
-    setVistaGraficos(false)
-    setBuscarPlaca('') // Limpiar búsqueda al cambiar producto
-    
-    if (producto.tipo_registro === 'banda') {
-      setTipoRegistro('banda')
-    } else if (producto.tipo_registro === 'viajes') {
-      setTipoRegistro('viajes')
-    } else {
-      setTipoRegistro('viajes')
-    }
-  }
-
-  const seleccionarViajeParaCompletar = (viaje) => {
-    setViajeSeleccionado(viaje)
-    setModoRegistro('completar')
-    setCompletarViaje({
-      destino_id: viaje.destino_id || '',
-      peso_destino_tm: '',
-      hora_salida_almapac: '',
-      observaciones_destino: ''
-    })
-  }
-
-  const cancelarEdicion = () => {
-    setEditandoViaje(null)
-    setEditandoLectura(null)
-    setEditandoBitacora(null)
-    setModoRegistro('nuevo')
-    
-    if (productoActivo) {
-      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
-      setNuevoViaje(prev => ({
-        ...prev,
+      setNuevoViaje(prev => ({ 
+        ...prev, 
+        producto_id: productos[0].id,
         viaje_numero: siguienteNumero,
-        fecha: getLocalDateString(),
-        hora_salida_updp: '',
-        hora_entrada_almapac: '',
-        placa: 'C-',
-        peso_neto_updp_tm: '',
-        peso_bruto_almapac_tm: '',
-        peso_bruto_updp_tm: '',
-        destino_id: '',
-        observaciones: ''
+        fecha: getLocalDateString()
+      }))
+      
+      if (productos[0].tipo_registro === 'banda') {
+        setTipoRegistro('banda')
+      }
+    }
+  }, [productos])
+
+  useEffect(() => {
+    if (productoActivo && modoRegistro === 'nuevo' && !editandoViaje) {
+      const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
+      setNuevoViaje(prev => ({ 
+        ...prev, 
+        producto_id: productoActivo.id,
+        viaje_numero: siguienteNumero,
+        fecha: getLocalDateString()
       }))
     }
-    
-    setCompletarViaje({
-      destino_id: '',
-      peso_destino_tm: '',
-      hora_salida_almapac: '',
-      observaciones_destino: ''
-    })
-    setLecturaActual({
-      fecha_hora: getCurrentSVTimeForInput(),
-      acumulado_tm: '',
-      destino_id: ''
-    })
-    setBitacoraActual({
-      fecha_hora: '',
-      comentarios: ''
-    })
-  }
+  }, [productoActivo, viajes, modoRegistro])
 
   if (loading) {
     return (
@@ -1551,7 +1683,6 @@ export default function BarcoPesadorPage() {
                     {barco.codigo_barco}
                   </span>
                 )}
-                {/* Badge de estado */}
                 <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
                   barco.estado === 'activo' 
                     ? 'bg-green-500/20 text-green-400' 
@@ -1577,7 +1708,6 @@ export default function BarcoPesadorPage() {
                 </div>
               )}
               
-              {/* 👇 NUEVO BOTÓN DE EXPORTAR A EXCEL */}
               <button
                 onClick={exportarTodoAExcel}
                 className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg"
@@ -1599,7 +1729,6 @@ export default function BarcoPesadorPage() {
 
           {/* Indicadores de inicio/fin de descarga */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Estado de Inicio de Descarga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_iniciada_at 
                 ? 'bg-green-500/20 border border-green-500/30' 
@@ -1652,7 +1781,6 @@ export default function BarcoPesadorPage() {
               </div>
             </div>
 
-            {/* Estado de Fin de Descarga */}
             <div className={`rounded-xl p-4 ${
               barco.operacion_finalizada_at 
                 ? 'bg-red-500/20 border border-red-500/30' 
@@ -2085,7 +2213,6 @@ export default function BarcoPesadorPage() {
         {/* RESUMEN POR DESTINO CON LÍMITES */}
         {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-            {/* Cabecera */}
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Warehouse className="w-5 h-5 text-teal-400" />
@@ -2104,7 +2231,6 @@ export default function BarcoPesadorPage() {
               </span>
             </div>
 
-            {/* Tarjetas de destinos */}
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {resumenPorDestino.map((dest) => {
                 const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
@@ -2451,15 +2577,16 @@ export default function BarcoPesadorPage() {
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* CAMBIO 3: Input de # Viaje con validación */}
                   <div>
                     <label className="block text-xs text-slate-400 mb-1"># Viaje</label>
                     <input
+                      ref={(el) => inputRefs.current['viaje_numero'] = el}
                       type="number"
                       name="viaje_numero"
                       value={nuevoViaje.viaje_numero}
                       onChange={handleNuevoViajeChange}
                       onBlur={(e) => !editandoViaje && handleValidarNumeroViaje(e.target.value)}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'fecha')}
                       className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${
                         conflicto ? 'border-red-500 bg-red-500/10' : 'border-white/10'
                       }`}
@@ -2491,10 +2618,12 @@ export default function BarcoPesadorPage() {
                       Fecha <span className="text-red-400">*</span>
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['fecha'] = el}
                       type="date"
                       name="fecha"
                       value={nuevoViaje.fecha}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'hora_salida_updp')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
                       required
                     />
@@ -2505,6 +2634,7 @@ export default function BarcoPesadorPage() {
                     </label>
                     <div className="relative">
                       <input
+                        ref={(el) => inputRefs.current['hora_salida_updp'] = el}
                         type="time"
                         name="hora_salida_updp"
                         value={nuevoViaje.hora_salida_updp}
@@ -2518,6 +2648,7 @@ export default function BarcoPesadorPage() {
                             handleNuevoViajeChange(e)
                           }
                         }}
+                        onKeyDown={(e) => handleKeyDownEnter(e, 'hora_entrada_almapac')}
                         step="1"
                         className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
                       />
@@ -2539,6 +2670,7 @@ export default function BarcoPesadorPage() {
                     </label>
                     <div className="relative">
                       <input
+                        ref={(el) => inputRefs.current['hora_entrada_almapac'] = el}
                         type="time"
                         name="hora_entrada_almapac"
                         value={nuevoViaje.hora_entrada_almapac}
@@ -2552,6 +2684,7 @@ export default function BarcoPesadorPage() {
                             handleNuevoViajeChange(e)
                           }
                         }}
+                        onKeyDown={(e) => handleKeyDownEnter(e, 'placa')}
                         step="1"
                         className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
                       />
@@ -2572,10 +2705,12 @@ export default function BarcoPesadorPage() {
                       Placa <span className="text-red-400">*</span>
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['placa'] = el}
                       type="text"
                       name="placa"
                       value={nuevoViaje.placa}
                       onChange={handlePlacaChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_neto_updp_tm')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="C-909389"
                       required
@@ -2586,13 +2721,15 @@ export default function BarcoPesadorPage() {
                       Peso Neto UPDP (TM)
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['peso_neto_updp_tm'] = el}
                       type="number"
                       step="0.001"
                       name="peso_neto_updp_tm"
                       value={nuevoViaje.peso_neto_updp_tm}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_almapac_tm')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="19.815"
+                      placeholder="19.345 (o 19345)"
                     />
                   </div>
                   <div>
@@ -2600,13 +2737,15 @@ export default function BarcoPesadorPage() {
                       Peso Bruto Almapac (TM)
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['peso_bruto_almapac_tm'] = el}
                       type="number"
                       step="0.001"
                       name="peso_bruto_almapac_tm"
                       value={nuevoViaje.peso_bruto_almapac_tm}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_updp_tm')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="30.865"
+                      placeholder="30.865 (o 30865)"
                     />
                   </div>
                   <div>
@@ -2614,25 +2753,28 @@ export default function BarcoPesadorPage() {
                       Peso Bruto UPDP (TM)
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
                       type="number"
                       step="0.001"
                       name="peso_bruto_updp_tm"
                       value={nuevoViaje.peso_bruto_updp_tm}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="31.500"
+                      placeholder="31.500 (o 31500)"
                     />
                   </div>
                   
-                  {/* Destino en paso 1 */}
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Destino (opcional en paso 1)
                     </label>
                     <select
+                      ref={(el) => inputRefs.current['destino_id'] = el}
                       name="destino_id"
                       value={nuevoViaje.destino_id}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'observaciones')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                     >
                       <option value="">Seleccionar destino (opcional)</option>
@@ -2650,12 +2792,19 @@ export default function BarcoPesadorPage() {
                       Observaciones
                     </label>
                     <input
+                      ref={(el) => inputRefs.current['observaciones'] = el}
                       type="text"
                       name="observaciones"
                       value={nuevoViaje.observaciones}
                       onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleGuardarIncompleto()
+                        }
+                      }}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="Notas del viaje"
+                      placeholder="Notas del viaje (presiona Enter para guardar)"
                     />
                   </div>
                   <div className="flex items-end col-span-4 gap-2">
@@ -2692,7 +2841,6 @@ export default function BarcoPesadorPage() {
 
                 {!viajeSeleccionado ? (
                   <div className="mb-6">
-                    {/* BUSCADOR DE PLACAS */}
                     <div className="mb-4">
                       <label className="block text-sm font-bold text-slate-400 mb-2">
                         Buscar por placa:
@@ -2948,29 +3096,42 @@ export default function BarcoPesadorPage() {
                       </span>
                     </h3>
                     
-                    {/* Barra de búsqueda */}
-                    <div className="relative w-64">
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Buscar por placa..."
-                        className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
-                      />
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      {searchTerm && (
-                        <button
-                          onClick={() => setSearchTerm('')}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
+                    <div className="flex items-center gap-3">
+                      {/* Botón para cambiar orden */}
+                      <button
+                        onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
+                        className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
+                        title={ordenViajes === 'asc' ? 'Orden ascendente (menor a mayor)' : 'Orden descendente (mayor a menor)'}
+                      >
+                        <ArrowUpDown className="w-4 h-4" />
+                        <span className="hidden sm:inline">
+                          {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
+                        </span>
+                      </button>
+                      
+                      {/* Barra de búsqueda */}
+                      <div className="relative w-64">
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          placeholder="Buscar por placa..."
+                          className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        {searchTerm && (
+                          <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                {/* Contenedor con scroll */}
                 <div className="overflow-x-auto">
                   <div className="max-h-[500px] overflow-y-auto relative">
                     <table className="w-full">
@@ -2986,54 +3147,64 @@ export default function BarcoPesadorPage() {
                           <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
                           <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
                           <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Neto ALMAPAC (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
                           <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {viajesFiltrados
-                          .sort((a, b) => a.viaje_numero - b.viaje_numero)
-                          .map((viaje, index, array) => {
-                            const acumulado = array
+                        {viajesFiltrados.map((viaje, index, array) => {
+                          // Calcular acumulado corrido de UPDP basado en el orden actual
+                          let acumuladoCorrido = 0
+                          if (ordenViajes === 'asc') {
+                            acumuladoCorrido = array
                               .slice(0, index + 1)
-                              .reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-                            
-                            return (
-                              <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
-                                <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
-                                <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
-                                <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
-                                <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
-                                <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
-                                <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
-                                <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">{acumulado.toFixed(3)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => handleEditarViaje(viaje)}
-                                      className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                                      title="Editar"
-                                    >
-                                      <Edit2 className="w-4 h-4 text-blue-400" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleEliminarViaje(viaje.id)}
-                                      className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                                      title="Eliminar"
-                                    >
-                                      <Trash2 className="w-4 h-4 text-red-400" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
+                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+                          } else {
+                            // Si es descendente, calcular desde el inicio real
+                            const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
+                            const viajeActualAsc = viajesAsc.find(v => v.id === viaje.id)
+                            const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
+                            acumuladoCorrido = viajesAsc
+                              .slice(0, idxAsc + 1)
+                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+                          }
+                          
+                          return (
+                            <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
+                              <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
+                              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
+                              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
+                              <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleEditarViaje(viaje)}
+                                    className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                                    title="Editar"
+                                  >
+                                    <Edit2 className="w-4 h-4 text-blue-400" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEliminarViaje(viaje.id)}
+                                    className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-400" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                       <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
                         <tr>
@@ -3047,21 +3218,20 @@ export default function BarcoPesadorPage() {
                           <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
                             {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
                           </td>
-                          <td></td>
+                          <td className="px-4 py-3 whitespace-nowrap"></td>
                           <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
                             {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
                           </td>
-                          <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
+                          <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
                           </td>
-                          <td></td>
+                          <td className="px-4 py-3 whitespace-nowrap"></td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                 </div>
                 
-                {/* Indicador de resultados */}
                 {searchTerm && (
                   <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
                     Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
@@ -3080,7 +3250,7 @@ export default function BarcoPesadorPage() {
           </>
         )}
 
-               {/* SECCIÓN DE BANDA */}
+        {/* SECCIÓN DE BANDA */}
         {!vistaGraficos && tipoRegistro === 'banda' && (
           <>
             <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
@@ -3176,9 +3346,9 @@ export default function BarcoPesadorPage() {
                     value={lecturaActual.acumulado_tm}
                     onChange={handleLecturaChange}
                     className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                    placeholder="15.000"
-                    required
+                    placeholder="15.000 (o 15000)"
                   />
+                  <p className="text-[9px] text-slate-500 mt-0.5">💡 Escribe 15000 → 15.000 TM</p>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">
