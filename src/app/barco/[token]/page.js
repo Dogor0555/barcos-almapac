@@ -57,8 +57,8 @@ export default function BarcoPesadorPage() {
   // Estado para el buscador de placas
   const [buscarPlaca, setBuscarPlaca] = useState('')
   
-  // ✅ NUEVO: Estado para orden de la tabla de viajes
-  const [ordenViajes, setOrdenViajes] = useState('asc') // 'asc' o 'desc'
+  // Estado para orden de la tabla de viajes
+  const [ordenViajes, setOrdenViajes] = useState('asc')
   
   // Refs para navegación con Enter
   const inputRefs = useRef({})
@@ -81,6 +81,8 @@ export default function BarcoPesadorPage() {
     destino_id: '',
     peso_destino_tm: '',
     hora_salida_almapac: '',
+    hora_entrada_almapac: '',
+    peso_bruto_almapac_tm: '',
     observaciones_destino: ''
   })
 
@@ -127,35 +129,35 @@ export default function BarcoPesadorPage() {
   }
 
   // ✅ FUNCIÓN PARA AUTO-FORMATEAR NÚMEROS - Solo formatea cuando tiene 5+ dígitos
-const autoFormatearNumero = (valor, campo = '') => {
-  if (!valor) return valor
-  
-  const strValor = String(valor).trim()
-  
-  // Si ya tiene punto decimal, devolver como está
-  if (strValor.includes('.')) return strValor
-  
-  // Limpiar caracteres no numéricos
-  const soloNumeros = strValor.replace(/[^0-9]/g, '')
-  
-  // Si no hay números, devolver vacío
-  if (soloNumeros === '') return ''
-  
-  const numero = parseFloat(soloNumeros)
-  
-  // ✅ NUEVA REGLA: Solo convertir si tiene 5 o más dígitos (mínimo 10,000 kg)
-  if (!isNaN(numero) && soloNumeros.length >= 5) {
-    const convertido = numero / 1000
-    toast.success(`💰 ${campo || 'Peso'}: ${numero.toLocaleString()} kg → ${convertido.toFixed(3)} TM`, {
-      duration: 2000,
-      id: `convert-${campo}-${Date.now()}`
-    })
-    return convertido.toString()
+  const autoFormatearNumero = (valor, campo = '') => {
+    if (!valor) return valor
+    
+    const strValor = String(valor).trim()
+    
+    // Si ya tiene punto decimal, devolver como está
+    if (strValor.includes('.')) return strValor
+    
+    // Limpiar caracteres no numéricos
+    const soloNumeros = strValor.replace(/[^0-9]/g, '')
+    
+    // Si no hay números, devolver vacío
+    if (soloNumeros === '') return ''
+    
+    const numero = parseFloat(soloNumeros)
+    
+    // Solo convertir si tiene 5 o más dígitos (mínimo 10,000 kg)
+    if (!isNaN(numero) && soloNumeros.length >= 5) {
+      const convertido = numero / 1000
+      toast.success(`💰 ${campo || 'Peso'}: ${numero.toLocaleString()} kg → ${convertido.toFixed(3)} TM`, {
+        duration: 2000,
+        id: `convert-${campo}-${Date.now()}`
+      })
+      return convertido.toString()
+    }
+    
+    // Si tiene menos de 5 dígitos, devolver el valor original
+    return strValor
   }
-  
-  // Si tiene menos de 5 dígitos, devolver el valor original (el usuario sigue escribiendo)
-  return strValor
-}
 
   // ✅ FUNCIÓN PARA MANEJAR ENTER COMO TAB
   const handleKeyDownEnter = (e, nextFieldId) => {
@@ -170,19 +172,15 @@ const autoFormatearNumero = (valor, campo = '') => {
   // ✅ FUNCIÓN PARA RECALCULAR ACUMULADO UPDP
   const recalcularAcumuladoUPDP = async (productoId) => {
     try {
-      // Obtener todos los viajes completos del producto
       const viajesCompletos = viajes.filter(v => 
         v.producto_id === productoId && 
         v.estado === 'completo' &&
         v.peso_neto_updp_tm !== null
       )
       
-      // Calcular el total acumulado de peso neto UPDP
       const totalAcumulado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
       
-      // Actualizar cada viaje completo con el nuevo total_acumulado_tm
       for (const viaje of viajesCompletos) {
-        // Solo actualizar si el viaje no tiene ya este acumulado o si cambió
         const acumuladoAnterior = viaje.total_acumulado_tm || 0
         if (Math.abs(acumuladoAnterior - totalAcumulado) > 0.001) {
           await supabase
@@ -203,18 +201,15 @@ const autoFormatearNumero = (valor, campo = '') => {
   // ✅ FUNCIÓN PARA ACTUALIZAR ACUMULADO DESPUÉS DE REGISTRAR/EDITAR VIAJE
   const actualizarAcumuladoUPDP = async (productoId) => {
     try {
-      // Obtener todos los viajes completos del producto ORDENADOS por número de viaje
       const viajesCompletos = viajes
         .filter(v => v.producto_id === productoId && v.estado === 'completo')
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
       
       let acumuladoCorrido = 0
       
-      // Actualizar cada viaje con su acumulado corrido
       for (const viaje of viajesCompletos) {
         acumuladoCorrido += Number(viaje.peso_neto_updp_tm) || 0
         
-        // Solo actualizar si el valor cambió
         if (Math.abs((viaje.total_acumulado_tm || 0) - acumuladoCorrido) > 0.001) {
           await supabase
             .from('viajes')
@@ -229,25 +224,6 @@ const autoFormatearNumero = (valor, campo = '') => {
       console.error('Error actualizando acumulado UPDP:', error)
       return 0
     }
-  }
-
-  // Función para calcular flujo entre lecturas consecutivas del mismo destino
-  const calcularFlujoLectura = (lecturaActual, lecturaAnterior) => {
-    if (!lecturaAnterior) return { flujo: 0, delta: 0, horas: 0 }
-    
-    const tiempoMs = new Date(lecturaActual.fecha_hora) - new Date(lecturaAnterior.fecha_hora)
-    const tiempoHoras = tiempoMs / (1000 * 60 * 60)
-    const delta = Number(lecturaActual.acumulado_tm) - Number(lecturaAnterior.acumulado_tm)
-    
-    if (tiempoHoras > 0 && delta > 0) {
-      return {
-        flujo: delta / tiempoHoras,
-        delta: delta,
-        horas: tiempoHoras
-      }
-    }
-    
-    return { flujo: 0, delta: 0, horas: tiempoHoras }
   }
 
   // Función para limpiar el buscador
@@ -293,9 +269,9 @@ const autoFormatearNumero = (valor, campo = '') => {
     }
   }
 
-  // ✅ FUNCIÓN MEJORADA: Editar viaje desde Paso 2 manteniendo todos los datos
+  // ✅ FUNCIÓN CORREGIDA: Editar viaje desde Paso 2 - SOLO edita datos del Paso 1, conserva datos del Paso 2
   const handleEditarViajeDesdePaso2 = (viaje) => {
-    console.log('✏️ Editando viaje desde paso 2:', {
+    console.log('✏️ Editando viaje desde paso 2 - DATOS DEL PASO 1 a cargar:', {
       id: viaje.id,
       viaje_numero: viaje.viaje_numero,
       peso_neto_updp_tm: viaje.peso_neto_updp_tm,
@@ -305,6 +281,7 @@ const autoFormatearNumero = (valor, campo = '') => {
       hora_entrada_almapac: viaje.hora_entrada_almapac
     })
     
+    // ✅ Cargar el viaje con TODOS los datos del Paso 1 (NO tocar datos del Paso 2)
     setEditandoViaje(viaje)
     setNuevoViaje({
       viaje_numero: viaje.viaje_numero,
@@ -321,10 +298,27 @@ const autoFormatearNumero = (valor, campo = '') => {
     })
     setModoRegistro('editar')
     setViajeSeleccionado(null)
-    toast.success(`✏️ Editando viaje #${viaje.viaje_numero} en Paso 1`)
+    toast.success(`✏️ Editando datos del Paso 1 para viaje #${viaje.viaje_numero}`)
   }
 
-  // Llama esto cuando el usuario termina de escribir el número (onBlur o onChange con debounce)
+  // ✅ FUNCIÓN CORREGIDA: Seleccionar viaje para COMPLETAR - Conserva TODOS los datos existentes
+  const seleccionarViajeParaCompletar = (viaje) => {
+    setViajeSeleccionado(viaje)
+    setModoRegistro('completar')
+    
+    // ✅ Cargar los datos EXISTENTES del Paso 2 si ya los tenía (NO se pierden)
+    setCompletarViaje({
+      destino_id: viaje.destino_id || '',
+      peso_destino_tm: viaje.peso_destino_tm || '',
+      hora_salida_almapac: viaje.hora_salida_almapac || '',
+      hora_entrada_almapac: viaje.hora_entrada_almapac || '',
+      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
+      observaciones_destino: viaje.observaciones_destino || ''
+    })
+    
+    toast.info(`📝 Preparando para completar viaje #${viaje.viaje_numero} - Los datos existentes se han cargado`)
+  }
+
   const handleValidarNumeroViaje = async (numero) => {
     if (!numero || !barco?.id || !productoActivo?.id) return
     setValidando(true)
@@ -352,11 +346,10 @@ const autoFormatearNumero = (valor, campo = '') => {
     toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
   }
 
-  // ✅ HANDLER MEJORADO: Con auto-formato de números y navegación con Enter
+  // ✅ HANDLER MEJORADO: Con auto-formato de números
   const handleNuevoViajeChange = (e) => {
     const { name, value } = e.target
     
-    // Si es un campo de peso, aplicar auto-formato
     if (name === 'peso_neto_updp_tm' || name === 'peso_bruto_almapac_tm' || name === 'peso_bruto_updp_tm') {
       let nombreCampo = ''
       if (name === 'peso_neto_updp_tm') nombreCampo = 'Peso Neto UPDP'
@@ -369,9 +362,29 @@ const autoFormatearNumero = (valor, campo = '') => {
     }
   }
 
+  // ✅ HANDLER PARA COMPLETAR VIAJE - Con auto-formateo de números
   const handleCompletarViajeChange = (e) => {
     const { name, value } = e.target
-    setCompletarViaje(prev => ({ ...prev, [name]: value }))
+    
+    // Auto-formatear para campos numéricos
+    if (name === 'peso_destino_tm' || name === 'peso_bruto_almapac_tm') {
+      let nombreCampo = ''
+      if (name === 'peso_destino_tm') nombreCampo = 'Peso Destino'
+      if (name === 'peso_bruto_almapac_tm') nombreCampo = 'Peso Bruto Almapac'
+      const valorFormateado = autoFormatearNumero(value, nombreCampo)
+      setCompletarViaje(prev => ({ ...prev, [name]: valorFormateado }))
+    } else {
+      // Para campos de hora, verificar formato AM/PM
+      if (name === 'hora_salida_almapac' || name === 'hora_entrada_almapac') {
+        if (detectarFormatoAmPm(value)) {
+          toast.warning('Usa formato 24h (ej: 14:30:45)')
+          const corregida = validateHora24h(value)
+          setCompletarViaje(prev => ({ ...prev, [name]: corregida }))
+          return
+        }
+      }
+      setCompletarViaje(prev => ({ ...prev, [name]: value }))
+    }
   }
 
   const handleLecturaChange = (e) => {
@@ -435,7 +448,6 @@ const autoFormatearNumero = (valor, campo = '') => {
       toast.success('Viaje eliminado correctamente')
       await cargarDatos()
       
-      // ✅ Recalcular acumulado UPDP después de eliminar
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
@@ -630,7 +642,6 @@ const autoFormatearNumero = (valor, campo = '') => {
 
       await cargarDatos()
       
-      // ✅ RECALCULAR ACUMULADO UPDP después de guardar/actualizar
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
@@ -671,11 +682,21 @@ const autoFormatearNumero = (valor, campo = '') => {
       }
 
       let horaSalidaAlmapac = null
+      let horaEntradaAlmapac = null
+
       if (completarViaje.hora_salida_almapac) {
         if (detectarFormatoAmPm(completarViaje.hora_salida_almapac)) {
           toast.warning('Formato AM/PM detectado en Hora Salida Almapac. Convirtiendo a 24h.')
         }
         horaSalidaAlmapac = validateHora24h(completarViaje.hora_salida_almapac)
+      }
+
+      // ✅ Procesar hora entrada almapac del paso 2 si se ingresó
+      if (completarViaje.hora_entrada_almapac) {
+        if (detectarFormatoAmPm(completarViaje.hora_entrada_almapac)) {
+          toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
+        }
+        horaEntradaAlmapac = validateHora24h(completarViaje.hora_entrada_almapac)
       }
 
       const viajesCompletosDelProducto = [...viajes]
@@ -685,6 +706,7 @@ const autoFormatearNumero = (valor, campo = '') => {
       const acumuladoAnterior = viajesCompletosDelProducto.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
       const totalAcumuladoTM = acumuladoAnterior + Number(completarViaje.peso_destino_tm)
 
+      // ✅ Construir objeto de actualización con campos opcionales del paso 2
       const datosActualizar = {
         destino_id: Number(completarViaje.destino_id),
         peso_destino_tm: Number(completarViaje.peso_destino_tm),
@@ -694,6 +716,16 @@ const autoFormatearNumero = (valor, campo = '') => {
         estado: 'completo',
         observaciones_destino: completarViaje.observaciones_destino || null,
         completado_at: new Date().toISOString()
+      }
+
+      // ✅ Si se ingresó hora_entrada_almapac en paso 2, actualizarla
+      if (horaEntradaAlmapac) {
+        datosActualizar.hora_entrada_almapac = horaEntradaAlmapac
+      }
+
+      // ✅ Si se ingresó peso_bruto_almapac_tm en paso 2, actualizarlo
+      if (completarViaje.peso_bruto_almapac_tm) {
+        datosActualizar.peso_bruto_almapac_tm = Number(completarViaje.peso_bruto_almapac_tm)
       }
 
       const { error } = await supabase
@@ -715,12 +747,13 @@ const autoFormatearNumero = (valor, campo = '') => {
         destino_id: '',
         peso_destino_tm: '',
         hora_salida_almapac: '',
+        hora_entrada_almapac: '',
+        peso_bruto_almapac_tm: '',
         observaciones_destino: ''
       })
 
       await cargarDatos()
       
-      // ✅ RECALCULAR ACUMULADO UPDP después de completar
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
@@ -1112,17 +1145,6 @@ const autoFormatearNumero = (valor, campo = '') => {
     }
   }
 
-  const seleccionarViajeParaCompletar = (viaje) => {
-    setViajeSeleccionado(viaje)
-    setModoRegistro('completar')
-    setCompletarViaje({
-      destino_id: viaje.destino_id || '',
-      peso_destino_tm: '',
-      hora_salida_almapac: '',
-      observaciones_destino: ''
-    })
-  }
-
   const cancelarEdicion = () => {
     setEditandoViaje(null)
     setEditandoLectura(null)
@@ -1150,6 +1172,8 @@ const autoFormatearNumero = (valor, campo = '') => {
       destino_id: '',
       peso_destino_tm: '',
       hora_salida_almapac: '',
+      hora_entrada_almapac: '',
+      peso_bruto_almapac_tm: '',
       observaciones_destino: ''
     })
     setLecturaActual({
@@ -1347,7 +1371,7 @@ const autoFormatearNumero = (valor, campo = '') => {
     return resumen
   }, [productos, viajes, lecturasBanda, bitacora, barco])
 
-  // ✅ Viajes completos filtrados por búsqueda CON ORDEN ASC/DESC
+  // Viajes completos filtrados por búsqueda CON ORDEN ASC/DESC
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
     
@@ -1363,7 +1387,6 @@ const autoFormatearNumero = (valor, campo = '') => {
       )
     }
     
-    // ✅ Aplicar orden: asc o desc por número de viaje
     return [...filtrados].sort((a, b) => {
       if (ordenViajes === 'asc') {
         return a.viaje_numero - b.viaje_numero
@@ -2922,7 +2945,7 @@ const autoFormatearNumero = (valor, campo = '') => {
                                 <button
                                   onClick={() => handleEditarViajeDesdePaso2(viaje)}
                                   className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition-all"
-                                  title="Editar este viaje en Paso 1"
+                                  title="Editar datos del Paso 1 (placa, pesos, etc.)"
                                 >
                                   <Pencil className="w-5 h-5 text-blue-400" />
                                 </button>
@@ -2942,10 +2965,10 @@ const autoFormatearNumero = (valor, campo = '') => {
                           <button
                             onClick={() => handleEditarViajeDesdePaso2(viajeSeleccionado)}
                             className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
-                            title="Editar este viaje en Paso 1"
+                            title="Editar datos del Paso 1 (placa, pesos, etc.)"
                           >
                             <Pencil className="w-3 h-3" />
-                            Editar en Paso 1
+                            Editar Paso 1
                           </button>
                           <button
                             onClick={() => setViajeSeleccionado(null)}
@@ -2970,7 +2993,7 @@ const autoFormatearNumero = (valor, campo = '') => {
                         </div>
                         <div>
                           <p className="text-slate-500">Hora Entrada</p>
-                          <p className="font-bold text-white">{formatHora(viajeSeleccionado.hora_entrada_almapac)}</p>
+                          <p className="font-bold text-white">{formatHora(viajeSeleccionado.hora_entrada_almapac) || '—'}</p>
                         </div>
                         {viajeSeleccionado.destino_id && (
                           <div>
@@ -2980,6 +3003,16 @@ const autoFormatearNumero = (valor, campo = '') => {
                             </p>
                           </div>
                         )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm mt-3 pt-3 border-t border-white/10">
+                        <div>
+                          <p className="text-slate-500">Peso Neto UPDP</p>
+                          <p className="font-bold text-green-400">{viajeSeleccionado.peso_neto_updp_tm?.toFixed(3) || '—'} TM</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Peso Bruto Almapac</p>
+                          <p className="font-bold text-amber-400">{viajeSeleccionado.peso_bruto_almapac_tm?.toFixed(3) || '—'} TM</p>
+                        </div>
                       </div>
                     </div>
 
@@ -3018,7 +3051,7 @@ const autoFormatearNumero = (valor, campo = '') => {
                             onChange={(e) => {
                               const value = e.target.value
                               if (detectarFormatoAmPm(value)) {
-                                toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
+                                toast.warning('Usa formato 24h (ej: 14:30:45)')
                                 const corregida = validateHora24h(value)
                                 setCompletarViaje(prev => ({ ...prev, hora_salida_almapac: corregida }))
                               } else {
@@ -3046,19 +3079,67 @@ const autoFormatearNumero = (valor, campo = '') => {
                           Peso en Destino (TM) <span className="text-red-400">*</span>
                         </label>
                         <input
-                          type="number"
-                          step="0.001"
+                          type="text"
                           name="peso_destino_tm"
                           value={completarViaje.peso_destino_tm}
                           onChange={handleCompletarViajeChange}
                           className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                          placeholder="19.815"
-                          required
+                          placeholder="19.815 (o 19815)"
                         />
+                        <p className="text-[9px] text-slate-500 mt-0.5">💡 Escribe 19815 → 19.815 TM</p>
                       </div>
                       <div>
                         <label className="block text-xs text-slate-400 mb-1">
-                          Observaciones
+                          Hora Entrada Almapac
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="time"
+                            name="hora_entrada_almapac"
+                            value={completarViaje.hora_entrada_almapac}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              if (detectarFormatoAmPm(value)) {
+                                toast.warning('Usa formato 24h (ej: 14:30:45)')
+                                const corregida = validateHora24h(value)
+                                setCompletarViaje(prev => ({ ...prev, hora_entrada_almapac: corregida }))
+                              } else {
+                                handleCompletarViajeChange(e)
+                              }
+                            }}
+                            step="1"
+                            className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark] cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCompletarViaje(prev => ({ ...prev, hora_entrada_almapac: getHoraActual24h() }))
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-green-400 transition-colors"
+                            title="Usar hora actual"
+                          >
+                            <Clock className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-slate-500 mt-0.5">Opcional - si no se ingresó en paso 1</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">
+                          Peso Bruto Almapac (TM)
+                        </label>
+                        <input
+                          type="text"
+                          name="peso_bruto_almapac_tm"
+                          value={completarViaje.peso_bruto_almapac_tm}
+                          onChange={handleCompletarViajeChange}
+                          className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                          placeholder="30.865 (o 30865)"
+                        />
+                        <p className="text-[9px] text-slate-500 mt-0.5">Opcional - si no se ingresó en paso 1</p>
+                      </div>
+                      <div className="col-span-4">
+                        <label className="block text-xs text-slate-400 mb-1">
+                          Observaciones Destino
                         </label>
                         <input
                           type="text"
@@ -3097,7 +3178,6 @@ const autoFormatearNumero = (valor, campo = '') => {
                     </h3>
                     
                     <div className="flex items-center gap-3">
-                      {/* Botón para cambiar orden */}
                       <button
                         onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
                         className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
@@ -3109,7 +3189,6 @@ const autoFormatearNumero = (valor, campo = '') => {
                         </span>
                       </button>
                       
-                      {/* Barra de búsqueda */}
                       <div className="relative w-64">
                         <input
                           type="text"
@@ -3154,16 +3233,13 @@ const autoFormatearNumero = (valor, campo = '') => {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {viajesFiltrados.map((viaje, index, array) => {
-                          // Calcular acumulado corrido de UPDP basado en el orden actual
                           let acumuladoCorrido = 0
                           if (ordenViajes === 'asc') {
                             acumuladoCorrido = array
                               .slice(0, index + 1)
                               .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
                           } else {
-                            // Si es descendente, calcular desde el inicio real
                             const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
-                            const viajeActualAsc = viajesAsc.find(v => v.id === viaje.id)
                             const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
                             acumuladoCorrido = viajesAsc
                               .slice(0, idxAsc + 1)
@@ -3340,11 +3416,13 @@ const autoFormatearNumero = (valor, campo = '') => {
                     Acumulado (TM) <span className="text-red-400">*</span>
                   </label>
                   <input
-                    type="number"
-                    step="0.001"
+                    type="text"
                     name="acumulado_tm"
                     value={lecturaActual.acumulado_tm}
-                    onChange={handleLecturaChange}
+                    onChange={(e) => {
+                      const valorFormateado = autoFormatearNumero(e.target.value, 'Acumulado Banda')
+                      setLecturaActual(prev => ({ ...prev, acumulado_tm: valorFormateado }))
+                    }}
                     className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                     placeholder="15.000 (o 15000)"
                   />
