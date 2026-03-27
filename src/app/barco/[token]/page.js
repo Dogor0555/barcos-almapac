@@ -15,7 +15,7 @@ import {
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
   Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox,
-  Download, ArrowUpDown
+  Download, ArrowUpDown, AlertTriangle, TrendingDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -47,6 +47,8 @@ export default function BarcoPesadorPage() {
   const [editandoLectura, setEditandoLectura] = useState(null)
   const [editandoBitacora, setEditandoBitacora] = useState(null)
   const [vistaGraficos, setVistaGraficos] = useState(false)
+  const [modalEdicionAbierto, setModalEdicionAbierto] = useState(false)
+  const [viajeEnEdicion, setViajeEnEdicion] = useState(null)
 
   const [conflicto, setConflicto] = useState(null)
   const [validando, setValidando] = useState(false)
@@ -60,8 +62,13 @@ export default function BarcoPesadorPage() {
   // Estado para orden de la tabla de viajes
   const [ordenViajes, setOrdenViajes] = useState('asc')
 
+  // Estado para el acumulado en tiempo real (INCLUYE TODOS LOS VIAJES - INCOMPLETOS Y COMPLETOS)
+  const [acumuladoPreview, setAcumuladoPreview] = useState(0)
+
   // Refs para navegación con Enter
   const inputRefs = useRef({})
+  const viajesSectionRef = useRef(null)
+  const modalRef = useRef(null)
 
   const [nuevoViaje, setNuevoViaje] = useState({
     viaje_numero: 1,
@@ -169,45 +176,48 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  // ✅ FUNCIÓN PARA RECALCULAR ACUMULADO UPDP
-  const recalcularAcumuladoUPDP = async (productoId) => {
-    try {
-      const viajesCompletos = viajes.filter(v =>
-        v.producto_id === productoId &&
-        v.estado === 'completo' &&
-        v.peso_neto_updp_tm !== null
-      )
-
-      const totalAcumulado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-
-      for (const viaje of viajesCompletos) {
-        const acumuladoAnterior = viaje.total_acumulado_tm || 0
-        if (Math.abs(acumuladoAnterior - totalAcumulado) > 0.001) {
-          await supabase
-            .from('viajes')
-            .update({ total_acumulado_tm: totalAcumulado })
-            .eq('id', viaje.id)
-        }
-      }
-
-      console.log(`✅ Acumulado UPDP recalculado para producto ${productoId}: ${totalAcumulado.toFixed(3)} TM`)
-      return totalAcumulado
-    } catch (error) {
-      console.error('Error recalculando acumulado UPDP:', error)
-      return 0
-    }
+  // ✅ FUNCIÓN PARA CALCULAR ACUMULADO TOTAL (INCLUYE INCOMPLETOS Y COMPLETOS)
+  const calcularAcumuladoTotalUPDP = (productoId) => {
+    if (!productoId) return 0
+    
+    const todosLosViajes = viajes.filter(v => 
+      v.producto_id === productoId && 
+      v.peso_neto_updp_tm !== null &&
+      v.peso_neto_updp_tm !== '' &&
+      Number(v.peso_neto_updp_tm) > 0
+    )
+    
+    const total = todosLosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+    return total
   }
 
-  // ✅ FUNCIÓN PARA ACTUALIZAR ACUMULADO DESPUÉS DE REGISTRAR/EDITAR VIAJE
-  const actualizarAcumuladoUPDP = async (productoId) => {
+  // ✅ FUNCIÓN PARA ACTUALIZAR PREVIEW DEL ACUMULADO EN TIEMPO REAL
+  const actualizarAcumuladoPreview = (pesoNetoIngresado) => {
+    if (!productoActivo) return
+    
+    const acumuladoActual = calcularAcumuladoTotalUPDP(productoActivo.id)
+    
+    let pesoNeto = 0
+    if (pesoNetoIngresado && pesoNetoIngresado !== '') {
+      pesoNeto = parseFloat(pesoNetoIngresado)
+      if (isNaN(pesoNeto)) pesoNeto = 0
+    }
+    
+    const nuevoAcumulado = acumuladoActual + pesoNeto
+    setAcumuladoPreview(nuevoAcumulado)
+    return nuevoAcumulado
+  }
+
+  // ✅ FUNCIÓN PARA ACTUALIZAR ACUMULADO EN BD
+  const actualizarAcumuladoEnBD = async (productoId) => {
     try {
-      const viajesCompletos = viajes
-        .filter(v => v.producto_id === productoId && v.estado === 'completo')
+      const todosLosViajes = viajes
+        .filter(v => v.producto_id === productoId && v.peso_neto_updp_tm !== null)
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
 
       let acumuladoCorrido = 0
 
-      for (const viaje of viajesCompletos) {
+      for (const viaje of todosLosViajes) {
         acumuladoCorrido += Number(viaje.peso_neto_updp_tm) || 0
 
         if (Math.abs((viaje.total_acumulado_tm || 0) - acumuladoCorrido) > 0.001) {
@@ -243,7 +253,7 @@ export default function BarcoPesadorPage() {
     return maxViaje + 1
   }
 
-  // Función para formatear fecha local sin problemas de zona horaria
+  // Función para formatear fecha local
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -269,44 +279,132 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  // ✅ FUNCIÓN CORREGIDA: Editar viaje desde Paso 2 - SOLO edita datos del Paso 1, conserva datos del Paso 2
-  const handleEditarViajeDesdePaso2 = (viaje) => {
-    console.log('✏️ Editando viaje desde paso 2 - DATOS DEL PASO 1 a cargar:', {
-      id: viaje.id,
-      viaje_numero: viaje.viaje_numero,
-      peso_neto_updp_tm: viaje.peso_neto_updp_tm,
-      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm,
-      peso_bruto_updp_tm: viaje.peso_bruto_updp_tm,
-      hora_salida_updp: viaje.hora_salida_updp,
-      hora_entrada_almapac: viaje.hora_entrada_almapac
-    })
-
-    // ✅ Cargar el viaje con TODOS los datos del Paso 1 (NO tocar datos del Paso 2)
-    setEditandoViaje(viaje)
-    setNuevoViaje({
-      viaje_numero: viaje.viaje_numero,
+  // ✅ FUNCIÓN PARA ABRIR MODAL DE EDICIÓN COMPLETA
+  const abrirModalEdicionCompleta = (viaje) => {
+    setViajeEnEdicion({
+      ...viaje,
       fecha: viaje.fecha?.split('T')[0] || getLocalDateString(),
       hora_salida_updp: viaje.hora_salida_updp || '',
       hora_entrada_almapac: viaje.hora_entrada_almapac || '',
-      placa: viaje.placa || 'C-',
+      hora_salida_almapac: viaje.hora_salida_almapac || '',
       peso_neto_updp_tm: viaje.peso_neto_updp_tm || '',
-      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
       peso_bruto_updp_tm: viaje.peso_bruto_updp_tm || '',
-      producto_id: viaje.producto_id,
+      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
+      peso_destino_tm: viaje.peso_destino_tm || '',
       destino_id: viaje.destino_id || '',
-      observaciones: viaje.observaciones || ''
+      observaciones: viaje.observaciones || '',
+      observaciones_destino: viaje.observaciones_destino || ''
     })
-    setModoRegistro('editar')
-    setViajeSeleccionado(null)
-    toast.success(`✏️ Editando datos del Paso 1 para viaje #${viaje.viaje_numero}`)
+    setModalEdicionAbierto(true)
   }
 
-  // ✅ FUNCIÓN CORREGIDA: Seleccionar viaje para COMPLETAR - Conserva TODOS los datos existentes
+  // ✅ FUNCIÓN PARA CERRAR MODAL
+  const cerrarModalEdicion = () => {
+    setModalEdicionAbierto(false)
+    setViajeEnEdicion(null)
+  }
+
+  // ✅ FUNCIÓN PARA GUARDAR EDICIÓN COMPLETA DESDE MODAL
+  const guardarEdicionCompleta = async () => {
+    if (!viajeEnEdicion) return
+
+    try {
+      // Validar campos obligatorios
+      if (!viajeEnEdicion.placa || viajeEnEdicion.placa === 'C-') {
+        toast.error('La placa es obligatoria')
+        return
+      }
+
+      if (!viajeEnEdicion.peso_neto_updp_tm) {
+        toast.error('El Peso Neto UPDP es obligatorio')
+        return
+      }
+
+      if (!viajeEnEdicion.peso_bruto_updp_tm) {
+        toast.error('El Peso Bruto UPDP es obligatorio')
+        return
+      }
+
+      // Procesar horas
+      let horaSalidaUPDP = null
+      let horaEntradaAlmapac = null
+      let horaSalidaAlmapac = null
+
+      if (viajeEnEdicion.hora_salida_updp) {
+        horaSalidaUPDP = validateHora24h(viajeEnEdicion.hora_salida_updp)
+      }
+
+      if (viajeEnEdicion.hora_entrada_almapac) {
+        horaEntradaAlmapac = validateHora24h(viajeEnEdicion.hora_entrada_almapac)
+      }
+
+      if (viajeEnEdicion.hora_salida_almapac) {
+        horaSalidaAlmapac = validateHora24h(viajeEnEdicion.hora_salida_almapac)
+      }
+
+      // Calcular el nuevo acumulado
+      const otrosViajes = viajes.filter(v => 
+        v.producto_id === viajeEnEdicion.producto_id && 
+        v.id !== viajeEnEdicion.id &&
+        v.peso_neto_updp_tm !== null
+      )
+      const acumuladoOtros = otrosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+      const nuevoAcumulado = acumuladoOtros + (Number(viajeEnEdicion.peso_neto_updp_tm) || 0)
+
+      const datosActualizar = {
+        viaje_numero: Number(viajeEnEdicion.viaje_numero),
+        fecha: viajeEnEdicion.fecha,
+        hora_salida_updp: horaSalidaUPDP,
+        hora_entrada_almapac: horaEntradaAlmapac,
+        hora_salida_almapac: horaSalidaAlmapac,
+        placa: viajeEnEdicion.placa,
+        peso_neto_updp_tm: Number(viajeEnEdicion.peso_neto_updp_tm) || null,
+        peso_bruto_updp_tm: Number(viajeEnEdicion.peso_bruto_updp_tm) || null,
+        peso_bruto_almapac_tm: Number(viajeEnEdicion.peso_bruto_almapac_tm) || null,
+        peso_destino_tm: Number(viajeEnEdicion.peso_destino_tm) || null,
+        destino_id: viajeEnEdicion.destino_id ? Number(viajeEnEdicion.destino_id) : null,
+        total_acumulado_tm: nuevoAcumulado,
+        observaciones: viajeEnEdicion.observaciones || null,
+        observaciones_destino: viajeEnEdicion.observaciones_destino || null,
+        estado: viajeEnEdicion.estado
+      }
+
+      const { error } = await supabase
+        .from('viajes')
+        .update(datosActualizar)
+        .eq('id', viajeEnEdicion.id)
+
+      if (error) {
+        console.error('Error:', error)
+        toast.error(`Error: ${error.message}`)
+        return
+      }
+
+      toast.success('✅ Viaje actualizado correctamente')
+      cerrarModalEdicion()
+      await cargarDatos()
+
+      if (productoActivo) {
+        await actualizarAcumuladoEnBD(productoActivo.id)
+        actualizarAcumuladoPreview('')
+      }
+
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al actualizar el viaje')
+    }
+  }
+
+  // ✅ FUNCIÓN PARA EDITAR VIAJE DESDE PENDIENTES
+  const handleEditarViajeDesdePaso2 = (viaje) => {
+    abrirModalEdicionCompleta(viaje)
+  }
+
+  // ✅ FUNCIÓN PARA SELECCIONAR VIAJE PARA COMPLETAR
   const seleccionarViajeParaCompletar = (viaje) => {
     setViajeSeleccionado(viaje)
     setModoRegistro('completar')
 
-    // ✅ Cargar los datos EXISTENTES del Paso 2 si ya los tenía (NO se pierden)
     setCompletarViaje({
       destino_id: viaje.destino_id || '',
       peso_destino_tm: viaje.peso_destino_tm || '',
@@ -346,7 +444,7 @@ export default function BarcoPesadorPage() {
     toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
   }
 
-  // ✅ HANDLER MEJORADO: Con auto-formato de números
+  // ✅ HANDLER MEJORADO
   const handleNuevoViajeChange = (e) => {
     const { name, value } = e.target
 
@@ -357,16 +455,19 @@ export default function BarcoPesadorPage() {
       if (name === 'peso_bruto_updp_tm') nombreCampo = 'Peso Bruto UPDP'
       const valorFormateado = autoFormatearNumero(value, nombreCampo)
       setNuevoViaje(prev => ({ ...prev, [name]: valorFormateado }))
+      
+      if (name === 'peso_neto_updp_tm') {
+        actualizarAcumuladoPreview(valorFormateado)
+      }
     } else {
       setNuevoViaje(prev => ({ ...prev, [name]: value }))
     }
   }
 
-  // ✅ HANDLER PARA COMPLETAR VIAJE - Con auto-formateo de números
+  // ✅ HANDLER PARA COMPLETAR VIAJE
   const handleCompletarViajeChange = (e) => {
     const { name, value } = e.target
 
-    // Auto-formatear para campos numéricos
     if (name === 'peso_destino_tm' || name === 'peso_bruto_almapac_tm') {
       let nombreCampo = ''
       if (name === 'peso_destino_tm') nombreCampo = 'Peso Destino'
@@ -374,7 +475,6 @@ export default function BarcoPesadorPage() {
       const valorFormateado = autoFormatearNumero(value, nombreCampo)
       setCompletarViaje(prev => ({ ...prev, [name]: valorFormateado }))
     } else {
-      // Para campos de hora, verificar formato AM/PM
       if (name === 'hora_salida_almapac' || name === 'hora_entrada_almapac') {
         if (detectarFormatoAmPm(value)) {
           toast.warning('Usa formato 24h (ej: 14:30:45)')
@@ -397,22 +497,9 @@ export default function BarcoPesadorPage() {
     setBitacoraActual(prev => ({ ...prev, [name]: value }))
   }
 
+  // ✅ EDITAR VIAJE DESDE TABLA DE COMPLETOS
   const handleEditarViaje = (viaje) => {
-    setEditandoViaje(viaje)
-    setNuevoViaje({
-      viaje_numero: viaje.viaje_numero,
-      fecha: viaje.fecha?.split('T')[0] || getLocalDateString(),
-      hora_salida_updp: viaje.hora_salida_updp || '',
-      hora_entrada_almapac: viaje.hora_entrada_almapac || '',
-      placa: viaje.placa || 'C-',
-      peso_neto_updp_tm: viaje.peso_neto_updp_tm || '',
-      peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
-      peso_bruto_updp_tm: viaje.peso_bruto_updp_tm || '',
-      producto_id: viaje.producto_id,
-      destino_id: viaje.destino_id || '',
-      observaciones: viaje.observaciones || ''
-    })
-    setModoRegistro('editar')
+    abrirModalEdicionCompleta(viaje)
   }
 
   const handleEditarLectura = (lectura) => {
@@ -449,7 +536,8 @@ export default function BarcoPesadorPage() {
       await cargarDatos()
 
       if (productoActivo) {
-        await actualizarAcumuladoUPDP(productoActivo.id)
+        await actualizarAcumuladoEnBD(productoActivo.id)
+        actualizarAcumuladoPreview('')
       }
 
       if (editandoViaje?.id === id) {
@@ -502,10 +590,49 @@ export default function BarcoPesadorPage() {
     }
   }
 
+  // ✅ FUNCIÓN PARA VALIDAR PESOS OBLIGATORIOS
+  const validarPesosObligatorios = () => {
+    const pesoNeto = nuevoViaje.peso_neto_updp_tm
+    const pesoBruto = nuevoViaje.peso_bruto_updp_tm
+    
+    if (!pesoNeto || pesoNeto === '') {
+      toast.error('❌ El Peso Neto UPDP es obligatorio en el Paso 1')
+      return false
+    }
+    
+    if (!pesoBruto || pesoBruto === '') {
+      toast.error('❌ El Peso Bruto UPDP es obligatorio en el Paso 1')
+      return false
+    }
+    
+    const pesoNetoNum = Number(pesoNeto)
+    const pesoBrutoNum = Number(pesoBruto)
+    
+    if (isNaN(pesoNetoNum) || pesoNetoNum <= 0) {
+      toast.error('❌ El Peso Neto UPDP debe ser un número mayor a 0')
+      return false
+    }
+    
+    if (isNaN(pesoBrutoNum) || pesoBrutoNum <= 0) {
+      toast.error('❌ El Peso Bruto UPDP debe ser un número mayor a 0')
+      return false
+    }
+    
+    if (pesoNetoNum > pesoBrutoNum) {
+      toast.warning('⚠️ El Peso Neto no puede ser mayor al Peso Bruto')
+    }
+    
+    return true
+  }
+
   const handleGuardarIncompleto = async () => {
     try {
       if (barco.estado === 'finalizado') {
         toast.error('La operación está finalizada.')
+        return
+      }
+
+      if (!validarPesosObligatorios()) {
         return
       }
 
@@ -541,6 +668,10 @@ export default function BarcoPesadorPage() {
         horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
       }
 
+      const acumuladoActual = calcularAcumuladoTotalUPDP(nuevoViaje.producto_id)
+      const nuevoPesoNeto = Number(nuevoViaje.peso_neto_updp_tm) || 0
+      const nuevoAcumulado = acumuladoActual + nuevoPesoNeto
+
       const datosInsertar = {
         barco_id: barco.id,
         viaje_numero: Number(nuevoViaje.viaje_numero),
@@ -548,18 +679,29 @@ export default function BarcoPesadorPage() {
         hora_salida_updp: horaSalidaUPDP,
         hora_entrada_almapac: horaEntradaAlmapac,
         placa: nuevoViaje.placa,
-        peso_neto_updp_tm: Number(nuevoViaje.peso_neto_updp_tm) || null,
+        peso_neto_updp_tm: nuevoPesoNeto,
         peso_bruto_almapac_tm: Number(nuevoViaje.peso_bruto_almapac_tm) || null,
         peso_bruto_updp_tm: Number(nuevoViaje.peso_bruto_updp_tm) || null,
         producto_id: Number(nuevoViaje.producto_id),
         destino_id: nuevoViaje.destino_id ? Number(nuevoViaje.destino_id) : null,
         estado: 'incompleto',
+        total_acumulado_tm: nuevoAcumulado,
         observaciones: nuevoViaje.observaciones || null
       }
 
       let result
 
       if (editandoViaje) {
+        const otrosViajes = viajes.filter(v => 
+          v.producto_id === nuevoViaje.producto_id && 
+          v.id !== editandoViaje.id &&
+          v.peso_neto_updp_tm !== null
+        )
+        const acumuladoOtros = otrosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+        const nuevoAcumuladoEditado = acumuladoOtros + nuevoPesoNeto
+        
+        datosInsertar.total_acumulado_tm = nuevoAcumuladoEditado
+        
         result = await supabase
           .from('viajes')
           .update(datosInsertar)
@@ -585,6 +727,7 @@ export default function BarcoPesadorPage() {
             destino_id: '',
             observaciones: ''
           }))
+          actualizarAcumuladoPreview('')
         }
       } else {
         result = await supabase
@@ -614,7 +757,12 @@ export default function BarcoPesadorPage() {
         }
 
         if (!result.error) {
-          toast.success('Viaje registrado exitosamente')
+          toast.success(`✅ Viaje #${nuevoViaje.viaje_numero} registrado - Nuevo acumulado: ${nuevoAcumulado.toFixed(3)} TM`)
+          
+          toast.success(`📊 Acumulado UPDP actualizado: ${nuevoAcumulado.toFixed(3)} TM`, {
+            duration: 4000,
+            icon: '📊'
+          })
 
           const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
 
@@ -631,6 +779,7 @@ export default function BarcoPesadorPage() {
             destino_id: '',
             observaciones: ''
           })
+          actualizarAcumuladoPreview('')
         }
       }
 
@@ -643,10 +792,16 @@ export default function BarcoPesadorPage() {
       await cargarDatos()
 
       if (productoActivo) {
-        await actualizarAcumuladoUPDP(productoActivo.id)
+        await actualizarAcumuladoEnBD(productoActivo.id)
       }
 
       setConflicto(null)
+      
+      setTimeout(() => {
+        if (viajesSectionRef.current) {
+          viajesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
 
     } catch (error) {
       console.error('Error inesperado:', error)
@@ -691,7 +846,6 @@ export default function BarcoPesadorPage() {
         horaSalidaAlmapac = validateHora24h(completarViaje.hora_salida_almapac)
       }
 
-      // ✅ Procesar hora entrada almapac del paso 2 si se ingresó
       if (completarViaje.hora_entrada_almapac) {
         if (detectarFormatoAmPm(completarViaje.hora_entrada_almapac)) {
           toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
@@ -699,31 +853,19 @@ export default function BarcoPesadorPage() {
         horaEntradaAlmapac = validateHora24h(completarViaje.hora_entrada_almapac)
       }
 
-      const viajesCompletosDelProducto = [...viajes]
-        .filter(v => v.producto_id === viajeSeleccionado.producto_id && v.estado === 'completo')
-        .sort((a, b) => a.viaje_numero - b.viaje_numero)
-
-      const acumuladoAnterior = viajesCompletosDelProducto.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-      const totalAcumuladoTM = acumuladoAnterior + Number(completarViaje.peso_destino_tm)
-
-      // ✅ Construir objeto de actualización con campos opcionales del paso 2
       const datosActualizar = {
         destino_id: Number(completarViaje.destino_id),
         peso_destino_tm: Number(completarViaje.peso_destino_tm),
-        fecha: viajeSeleccionado.fecha,
         hora_salida_almapac: horaSalidaAlmapac,
-        total_acumulado_tm: totalAcumuladoTM,
         estado: 'completo',
         observaciones_destino: completarViaje.observaciones_destino || null,
         completado_at: new Date().toISOString()
       }
 
-      // ✅ Si se ingresó hora_entrada_almapac en paso 2, actualizarla
       if (horaEntradaAlmapac) {
         datosActualizar.hora_entrada_almapac = horaEntradaAlmapac
       }
 
-      // ✅ Si se ingresó peso_bruto_almapac_tm en paso 2, actualizarlo
       if (completarViaje.peso_bruto_almapac_tm) {
         datosActualizar.peso_bruto_almapac_tm = Number(completarViaje.peso_bruto_almapac_tm)
       }
@@ -755,7 +897,8 @@ export default function BarcoPesadorPage() {
       await cargarDatos()
 
       if (productoActivo) {
-        await actualizarAcumuladoUPDP(productoActivo.id)
+        await actualizarAcumuladoEnBD(productoActivo.id)
+        actualizarAcumuladoPreview('')
       }
 
     } catch (error) {
@@ -929,7 +1072,7 @@ export default function BarcoPesadorPage() {
       resumenData.push([])
 
       resumenData.push(['RESUMEN POR PRODUCTO'])
-      resumenData.push(['Producto', 'Tipo', 'Meta (TM)', 'Total (TM)', 'Viajes', 'Lecturas Banda', 'Registros Bitácora', '% Completado'])
+      resumenData.push(['Producto', 'Tipo', 'Meta (TM)', 'Total (TM)', 'Viajes Completos', 'Viajes Pendientes', 'Lecturas Banda', 'Registros Bitácora', '% Completado'])
 
       Object.values(resumenProductos).forEach(prod => {
         resumenData.push([
@@ -938,6 +1081,7 @@ export default function BarcoPesadorPage() {
           prod.metaTM?.toFixed(3) || '0.000',
           prod.totalTM?.toFixed(3) || '0.000',
           prod.viajes || 0,
+          prod.incompletos || 0,
           prod.lecturas || 0,
           prod.bitacora || 0,
           prod.porcentaje?.toFixed(1) + '%' || '0%'
@@ -1030,6 +1174,7 @@ export default function BarcoPesadorPage() {
         'Peso Bruto UPDP (TM)',
         'Peso Bruto Almapac (TM)',
         'Destino (pre-asignado)',
+        'Acumulado UPDP (TM)',
         'Observaciones'
       ])
 
@@ -1048,6 +1193,7 @@ export default function BarcoPesadorPage() {
             v.peso_bruto_updp_tm?.toFixed(3) || '0.000',
             v.peso_bruto_almapac_tm?.toFixed(3) || '0.000',
             v.destino?.nombre || '—',
+            v.total_acumulado_tm?.toFixed(3) || '0.000',
             v.observaciones || ''
           ])
         })
@@ -1135,6 +1281,7 @@ export default function BarcoPesadorPage() {
     setEditandoBitacora(null)
     setVistaGraficos(false)
     setBuscarPlaca('')
+    setAcumuladoPreview(0)
 
     if (producto.tipo_registro === 'banda') {
       setTipoRegistro('banda')
@@ -1166,6 +1313,7 @@ export default function BarcoPesadorPage() {
         destino_id: '',
         observaciones: ''
       }))
+      actualizarAcumuladoPreview('')
     }
 
     setCompletarViaje({
@@ -1299,12 +1447,14 @@ export default function BarcoPesadorPage() {
     productos.forEach(prod => {
       const metaTM = barco?.metas_json?.limites?.[prod.codigo] || 0
 
-      const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
-      const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+      const viajesCompletos = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
+      const totalViajesTM = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
 
-      const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-      const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
-      const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
+      const todosLosViajesUPDP = viajes.filter(v => v.producto_id === prod.id && v.peso_neto_updp_tm !== null)
+      const acumuladoUPDP = todosLosViajesUPDP.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+      
+      const acumuladoAlmapac = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
+      const acumuladoSistema = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
 
       const incompletosProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'incompleto')
 
@@ -1350,12 +1500,12 @@ export default function BarcoPesadorPage() {
         acumuladoUPDP: acumuladoUPDP,
         acumuladoAlmapac: acumuladoAlmapac,
         acumuladoSistema: acumuladoSistema,
-        viajes: viajesProd.length,
+        viajes: viajesCompletos.length,
         incompletos: incompletosProd.length,
         lecturas: lecturasProd.length,
         bitacora: bitacoraProd.length,
         ultimaLectura: ultimaLectura,
-        ultimoViaje: viajesProd.length > 0 ? viajesProd[0] : null,
+        ultimoViaje: viajesCompletos.length > 0 ? viajesCompletos[0] : null,
         ultimaBitacora: ultimaBitacora
       }
     })
@@ -1371,7 +1521,19 @@ export default function BarcoPesadorPage() {
     return resumen
   }, [productos, viajes, lecturasBanda, bitacora, barco])
 
-  // Viajes completos filtrados por búsqueda CON ORDEN ASC/DESC
+  // Calcular acumulado actual del producto activo
+  const acumuladoActualProducto = useMemo(() => {
+    if (!productoActivo) return 0
+    
+    const todosLosViajes = viajes.filter(v => 
+      v.producto_id === productoActivo.id && 
+      v.peso_neto_updp_tm !== null
+    )
+    
+    return todosLosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+  }, [viajes, productoActivo])
+
+  // Viajes completos filtrados por búsqueda
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
 
@@ -1387,16 +1549,37 @@ export default function BarcoPesadorPage() {
       )
     }
 
-    return [...filtrados].sort((a, b) => {
+    const ordenados = [...filtrados].sort((a, b) => {
       if (ordenViajes === 'asc') {
         return a.viaje_numero - b.viaje_numero
       } else {
         return b.viaje_numero - a.viaje_numero
       }
     })
+    
+    return ordenados
   }, [viajes, productoActivo, searchTerm, ordenViajes])
 
-  // Resumen por destino del producto activo CON LÍMITES
+  // Detectar saltos de correlativo
+  const saltosCorrelativo = useMemo(() => {
+    if (!viajesFiltrados.length || ordenViajes !== 'asc') return []
+    
+    const saltos = []
+    for (let i = 0; i < viajesFiltrados.length - 1; i++) {
+      const actual = viajesFiltrados[i].viaje_numero
+      const siguiente = viajesFiltrados[i + 1].viaje_numero
+      if (siguiente - actual > 1) {
+        saltos.push({
+          desde: actual,
+          hasta: siguiente,
+          faltantes: siguiente - actual - 1
+        })
+      }
+    }
+    return saltos
+  }, [viajesFiltrados, ordenViajes])
+
+  // Resumen por destino
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
 
@@ -1503,6 +1686,13 @@ export default function BarcoPesadorPage() {
       })
     }
   }, [resumenPorDestino, barco?.estado])
+
+  // Actualizar preview
+  useEffect(() => {
+    if (productoActivo) {
+      actualizarAcumuladoPreview('')
+    }
+  }, [productoActivo, viajes])
 
   const productoSeleccionado = useMemo(() => {
     if (!productoActivo) return null
@@ -1668,6 +1858,21 @@ export default function BarcoPesadorPage() {
     }
   }, [productoActivo, viajes, modoRegistro])
 
+  // Cerrar modal al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        cerrarModalEdicion()
+      }
+    }
+    if (modalEdicionAbierto) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [modalEdicionAbierto])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1692,7 +1897,7 @@ export default function BarcoPesadorPage() {
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header */}
+        {/* Header - mismo código que antes */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-6 text-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -2024,7 +2229,7 @@ export default function BarcoPesadorPage() {
                 </p>
                 <div className="flex gap-3 text-sm text-slate-400">
                   {productoActivo.tipo_registro !== 'banda' && (
-                    <span>🚛 {productoSeleccionado.viajes} viajes</span>
+                    <span>🚛 {productoSeleccionado.viajes} viajes completos</span>
                   )}
                   {productoActivo.tipo_registro !== 'viajes' && (
                     <span>📊 {productoSeleccionado.lecturas} lecturas</span>
@@ -2069,11 +2274,22 @@ export default function BarcoPesadorPage() {
                   </p>
                 </div>
 
-                <div className="bg-slate-900 rounded-xl p-4 border-l-4 border-yellow-500">
-                  <p className="text-xs text-slate-500">Acumulado UPDP</p>
-                  <p className="text-xl font-bold text-yellow-400">
-                    {productoSeleccionado.acumuladoUPDP.toFixed(3)} TM
-                  </p>
+                <div className="bg-gradient-to-r from-yellow-600 to-amber-600 rounded-xl p-4 col-span-2">
+                  <div className="flex items-center gap-3">
+                    <TrendingUp className="w-6 h-6 text-yellow-200" />
+                    <div>
+                      <p className="text-xs text-yellow-200 uppercase font-bold">ACUMULADO UPDP</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-white">
+                          {productoSeleccionado.acumuladoUPDP.toFixed(3)}
+                        </span>
+                        <span className="text-sm text-yellow-200">TM</span>
+                      </div>
+                      <p className="text-[10px] text-yellow-300 mt-1">
+                        Incluye {productoSeleccionado.incompletos} viaje(s) pendiente(s)
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {productoActivo.tipo_registro === 'banda' && (
@@ -2508,7 +2724,7 @@ export default function BarcoPesadorPage() {
         {/* SECCIÓN DE VIAJES */}
         {!vistaGraficos && tipoRegistro === 'viajes' && (
           <>
-            <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-4">
+            <div ref={viajesSectionRef} className="bg-[#0f172a] border border-white/10 rounded-2xl p-4">
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -2522,6 +2738,7 @@ export default function BarcoPesadorPage() {
                         viaje_numero: siguienteNumero,
                         fecha: getLocalDateString()
                       }))
+                      actualizarAcumuladoPreview('')
                     }
                   }}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${modoRegistro === 'nuevo' || modoRegistro === 'editar'
@@ -2573,6 +2790,45 @@ export default function BarcoPesadorPage() {
                   </span>
                 </h2>
 
+                {/* PREVIEW DEL ACUMULADO EN TIEMPO REAL */}
+                <div className="mb-6 bg-gradient-to-r from-yellow-600/20 to-amber-600/20 border border-yellow-500/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-yellow-400 uppercase font-bold">ACUMULADO ACTUAL UPDP</p>
+                      <p className="text-2xl font-black text-yellow-400">
+                        {acumuladoActualProducto.toFixed(3)} TM
+                      </p>
+                      <p className="text-[10px] text-yellow-300/70 mt-0.5">
+                        Incluye {viajesIncompletosProducto.length} viaje(s) pendiente(s)
+                      </p>
+                    </div>
+                    {nuevoViaje.peso_neto_updp_tm && Number(nuevoViaje.peso_neto_updp_tm) > 0 && (
+                      <>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">+ Este viaje</p>
+                          <p className="text-xl font-bold text-green-400">
+                            +{Number(nuevoViaje.peso_neto_updp_tm).toFixed(3)} TM
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-blue-400 uppercase font-bold">NUEVO ACUMULADO</p>
+                          <p className="text-3xl font-black text-blue-400">
+                            {acumuladoPreview.toFixed(3)} TM
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            {((acumuladoPreview / (productoSeleccionado?.metaTM || 1)) * 100).toFixed(1)}% de la meta
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {!nuevoViaje.peso_neto_updp_tm && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      💡 Ingresa el Peso Neto UPDP para ver cómo quedará el acumulado
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs text-slate-400 mb-1"># Viaje</label>
@@ -2610,7 +2866,6 @@ export default function BarcoPesadorPage() {
                     )}
                   </div>
 
-
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Fecha <span className="text-red-400">*</span>
@@ -2627,8 +2882,7 @@ export default function BarcoPesadorPage() {
                     />
                   </div>
 
-
-                   <div>
+                  <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Placa <span className="text-red-400">*</span>
                     </label>
@@ -2645,11 +2899,6 @@ export default function BarcoPesadorPage() {
                     />
                   </div>
 
-
-
-
-
-                  
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Hora Salida UPDP
@@ -2687,14 +2936,9 @@ export default function BarcoPesadorPage() {
                     </div>
                   </div>
 
-
-                
-
-
-                 
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
-                      Peso Bruto UPDP (TM)
+                      Peso Bruto UPDP (TM) <span className="text-red-400">*</span>
                     </label>
                     <input
                       ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
@@ -2706,14 +2950,13 @@ export default function BarcoPesadorPage() {
                       onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="31.500 (o 31500)"
+                      required
                     />
                   </div>
 
-
-
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
-                      Peso Neto UPDP (TM)
+                      Peso Neto UPDP (TM) <span className="text-red-400">*</span>
                     </label>
                     <input
                       ref={(el) => inputRefs.current['peso_neto_updp_tm'] = el}
@@ -2725,12 +2968,11 @@ export default function BarcoPesadorPage() {
                       onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_almapac_tm')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="19.345 (o 19345)"
+                      required
                     />
                   </div>
 
-
-
-                    <div>
+                  <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Hora Entrada Almapac
                     </label>
@@ -2766,9 +3008,6 @@ export default function BarcoPesadorPage() {
                       </button>
                     </div>
                   </div>
-
-
-
 
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
@@ -2924,11 +3163,7 @@ export default function BarcoPesadorPage() {
                                     <span className="text-slate-400">Salida: {formatHora(viaje.hora_salida_updp)}</span>
                                     <span className="text-slate-400">Entrada: {formatHora(viaje.hora_entrada_almapac)}</span>
                                     <span className="text-green-400">Neto: {viaje.peso_neto_updp_tm?.toFixed(3)} TM</span>
-                                    {viaje.destino_id && (
-                                      <span className="text-teal-400">
-                                        Destino: {destinos.find(d => d.id === viaje.destino_id)?.nombre || '—'}
-                                      </span>
-                                    )}
+                                    <span className="text-yellow-400">Acum: {viaje.total_acumulado_tm?.toFixed(3)} TM</span>
                                   </div>
                                 </div>
                               </button>
@@ -2944,7 +3179,7 @@ export default function BarcoPesadorPage() {
                                 <button
                                   onClick={() => handleEditarViajeDesdePaso2(viaje)}
                                   className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition-all"
-                                  title="Editar datos del Paso 1 (placa, pesos, etc.)"
+                                  title="Editar viaje completo"
                                 >
                                   <Pencil className="w-5 h-5 text-blue-400" />
                                 </button>
@@ -2964,10 +3199,10 @@ export default function BarcoPesadorPage() {
                           <button
                             onClick={() => handleEditarViajeDesdePaso2(viajeSeleccionado)}
                             className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
-                            title="Editar datos del Paso 1 (placa, pesos, etc.)"
+                            title="Editar viaje completo"
                           >
                             <Pencil className="w-3 h-3" />
-                            Editar Paso 1
+                            Editar Viaje
                           </button>
                           <button
                             onClick={() => setViajeSeleccionado(null)}
@@ -3003,7 +3238,7 @@ export default function BarcoPesadorPage() {
                           </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm mt-3 pt-3 border-t border-white/10">
+                      <div className="grid grid-cols-3 gap-4 text-sm mt-3 pt-3 border-t border-white/10">
                         <div>
                           <p className="text-slate-500">Peso Neto UPDP</p>
                           <p className="font-bold text-green-400">{viajeSeleccionado.peso_neto_updp_tm?.toFixed(3) || '—'} TM</p>
@@ -3011,6 +3246,10 @@ export default function BarcoPesadorPage() {
                         <div>
                           <p className="text-slate-500">Peso Bruto Almapac</p>
                           <p className="font-bold text-amber-400">{viajeSeleccionado.peso_bruto_almapac_tm?.toFixed(3) || '—'} TM</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Acumulado UPDP</p>
+                          <p className="font-bold text-yellow-400">{viajeSeleccionado.total_acumulado_tm?.toFixed(3) || '—'} TM</p>
                         </div>
                       </div>
                     </div>
@@ -3210,6 +3449,26 @@ export default function BarcoPesadorPage() {
                   </div>
                 </div>
 
+                {/* ALERTA DE SALTOS DE CORRELATIVO */}
+                {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
+                  <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <p className="font-bold text-amber-400">⚠️ Saltos de correlativo detectados</p>
+                        <p className="text-sm text-slate-400">
+                          {saltosCorrelativo.map((salto, idx) => (
+                            <span key={idx}>
+                              Faltan {salto.faltantes} viaje(s) entre #{salto.desde} y #{salto.hasta}
+                              {idx < saltosCorrelativo.length - 1 ? ' • ' : ''}
+                            </span>
+                          ))}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <div className="max-h-[500px] overflow-y-auto relative">
                     <table className="w-full">
@@ -3245,8 +3504,11 @@ export default function BarcoPesadorPage() {
                               .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
                           }
 
+                          const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
+                            array[index + 1].viaje_numero - viaje.viaje_numero > 1
+
                           return (
-                            <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
+                            <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
                               <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
                               <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
                               <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
@@ -3264,7 +3526,7 @@ export default function BarcoPesadorPage() {
                                   <button
                                     onClick={() => handleEditarViaje(viaje)}
                                     className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                                    title="Editar"
+                                    title="Editar viaje completo"
                                   >
                                     <Edit2 className="w-4 h-4 text-blue-400" />
                                   </button>
@@ -3722,6 +3984,277 @@ export default function BarcoPesadorPage() {
           </>
         )}
       </div>
+
+      {/* MODAL DE EDICIÓN COMPLETA DE VIAJE */}
+      {modalEdicionAbierto && viajeEnEdicion && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div 
+            ref={modalRef}
+            className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
+          >
+            {/* Header del Modal */}
+            <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Edit2 className="w-5 h-5 text-blue-400" />
+                  Editar Viaje #{viajeEnEdicion.viaje_numero}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {viajeEnEdicion.producto?.nombre || productoActivo?.nombre} · Placa: {viajeEnEdicion.placa}
+                  {viajeEnEdicion.estado === 'completo' && (
+                    <span className="ml-2 text-green-400">✓ Completado</span>
+                  )}
+                  {viajeEnEdicion.estado === 'incompleto' && (
+                    <span className="ml-2 text-yellow-400">⏳ Pendiente</span>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={cerrarModalEdicion}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="p-6 space-y-6">
+              {/* Sección: Información del Viaje */}
+              <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
+                <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
+                  <Truck className="w-4 h-4" />
+                  DATOS DEL VIAJE
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1"># Viaje</label>
+                    <input
+                      type="number"
+                      value={viajeEnEdicion.viaje_numero}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, viaje_numero: e.target.value })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Fecha</label>
+                    <input
+                      type="date"
+                      value={viajeEnEdicion.fecha}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, fecha: e.target.value })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white [color-scheme:dark]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Placa</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.placa}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, placa: formatPlaca(e.target.value) })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="C-909389"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Destino</label>
+                    <select
+                      value={viajeEnEdicion.destino_id || ''}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, destino_id: e.target.value })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                    >
+                      <option value="">Seleccionar destino</option>
+                      {destinos.map(d => (
+                        <option key={d.id} value={d.id}>{d.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección: Tiempos */}
+              <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
+                <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  TIEMPOS
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Hora Salida UPDP</label>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={viajeEnEdicion.hora_salida_updp}
+                        onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, hora_salida_updp: e.target.value })}
+                        step="1"
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setViajeEnEdicion({ ...viajeEnEdicion, hora_salida_updp: getHoraActual24h() })}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
+                      >
+                        <Clock className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Hora Entrada Almapac</label>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={viajeEnEdicion.hora_entrada_almapac}
+                        onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, hora_entrada_almapac: e.target.value })}
+                        step="1"
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setViajeEnEdicion({ ...viajeEnEdicion, hora_entrada_almapac: getHoraActual24h() })}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
+                      >
+                        <Clock className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Hora Salida Almapac</label>
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={viajeEnEdicion.hora_salida_almapac}
+                        onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, hora_salida_almapac: e.target.value })}
+                        step="1"
+                        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white pr-10 [color-scheme:dark]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setViajeEnEdicion({ ...viajeEnEdicion, hora_salida_almapac: getHoraActual24h() })}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
+                      >
+                        <Clock className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección: Pesos */}
+              <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
+                <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
+                  <Scale className="w-4 h-4" />
+                  PESOS (TM)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Peso Neto UPDP *</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.peso_neto_updp_tm}
+                      onChange={(e) => {
+                        const valor = autoFormatearNumero(e.target.value, 'Peso Neto UPDP')
+                        setViajeEnEdicion({ ...viajeEnEdicion, peso_neto_updp_tm: valor })
+                      }}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="19.345"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Peso Bruto UPDP *</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.peso_bruto_updp_tm}
+                      onChange={(e) => {
+                        const valor = autoFormatearNumero(e.target.value, 'Peso Bruto UPDP')
+                        setViajeEnEdicion({ ...viajeEnEdicion, peso_bruto_updp_tm: valor })
+                      }}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="31.500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Peso Bruto Almapac</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.peso_bruto_almapac_tm}
+                      onChange={(e) => {
+                        const valor = autoFormatearNumero(e.target.value, 'Peso Bruto Almapac')
+                        setViajeEnEdicion({ ...viajeEnEdicion, peso_bruto_almapac_tm: valor })
+                      }}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="30.865"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Peso Destino</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.peso_destino_tm}
+                      onChange={(e) => {
+                        const valor = autoFormatearNumero(e.target.value, 'Peso Destino')
+                        setViajeEnEdicion({ ...viajeEnEdicion, peso_destino_tm: valor })
+                      }}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="19.815"
+                    />
+                  </div>
+                  <div className="bg-yellow-500/10 rounded-lg p-3 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-[10px] text-yellow-400 uppercase">Acumulado UPDP</p>
+                      <p className="text-xl font-bold text-yellow-400">{viajeEnEdicion.total_acumulado_tm?.toFixed(3) || '0.000'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección: Observaciones */}
+              <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
+                <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  OBSERVACIONES
+                </h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Observaciones UPDP</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.observaciones || ''}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, observaciones: e.target.value })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="Notas del viaje"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Observaciones Destino</label>
+                    <input
+                      type="text"
+                      value={viajeEnEdicion.observaciones_destino || ''}
+                      onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, observaciones_destino: e.target.value })}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="Notas del destino"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer del Modal */}
+            <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={cerrarModalEdicion}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarEdicionCompleta}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
