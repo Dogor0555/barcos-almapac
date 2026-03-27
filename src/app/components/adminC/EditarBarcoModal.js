@@ -16,6 +16,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   const [limitesExpandido, setLimitesExpandido] = useState(true)
   const [metasSacosExpandido, setMetasSacosExpandido] = useState(true)
   const [destinos, setDestinos] = useState([])
+  const [productoSeleccionadoParaLimites, setProductoSeleccionadoParaLimites] = useState(null)
   const [formData, setFormData] = useState({
     nombre: '',
     codigo_barco: '',
@@ -27,8 +28,9 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   })
 
   const [bodegas, setBodegas] = useState([])
-  const [limitesDestino, setLimitesDestino] = useState({})
-  // 👇 NUEVO: Estado para metas por bodega (sacos)
+  // 👇 NUEVO: Estado para límites por producto y destino
+  const [limitesProductoDestino, setLimitesProductoDestino] = useState({})
+  // Estado para metas por bodega (sacos)
   const [metasBodegaSacos, setMetasBodegaSacos] = useState({})
 
   // Cargar destinos
@@ -68,11 +70,11 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
       const bodegasBarco = barco.bodegas_json || []
       setBodegas(bodegasBarco.map(b => ({ ...b, activa: true })))
 
-      // Cargar límites por destino
-      const limitesGuardados = barco.metas_json?.limites_destino || {}
-      setLimitesDestino(limitesGuardados)
+      // 👇 NUEVO: Cargar límites por producto y destino
+      const limitesGuardados = barco.metas_json?.limites_por_producto_destino || {}
+      setLimitesProductoDestino(limitesGuardados)
 
-      // 👇 NUEVO: Cargar metas por bodega para sacos
+      // Cargar metas por bodega para sacos
       const metasSacosGuardadas = barco.metas_json?.sacos_bodega || {}
       setMetasBodegaSacos(metasSacosGuardadas)
 
@@ -85,6 +87,20 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
       setFormData(prev => ({ ...prev, productos_seleccionados: seleccionados }))
     }
   }, [barco, productos])
+
+  // Seleccionar primer producto disponible para límites
+  useEffect(() => {
+    if (productos.length > 0 && !productoSeleccionadoParaLimites) {
+      const productosSeleccionadosList = Object.entries(formData.productos_seleccionados)
+        .filter(([_, selected]) => selected)
+        .map(([codigo]) => productos.find(p => p.codigo === codigo))
+        .filter(Boolean)
+      
+      if (productosSeleccionadosList.length > 0) {
+        setProductoSeleccionadoParaLimites(productosSeleccionadosList[0])
+      }
+    }
+  }, [productos, formData.productos_seleccionados])
 
   const toggleProducto = (codigo) => {
     setFormData(prev => ({
@@ -147,15 +163,18 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
     ))
   }
 
-  // Función para manejar límite por destino
-  const handleLimiteDestinoChange = (destinoId, value) => {
-    setLimitesDestino(prev => ({
+  // 👇 NUEVO: Función para manejar límite por producto y destino
+  const handleLimiteProductoDestinoChange = (productoCodigo, destinoId, value) => {
+    setLimitesProductoDestino(prev => ({
       ...prev,
-      [destinoId]: value ? parseFloat(value) : null
+      [productoCodigo]: {
+        ...(prev[productoCodigo] || {}),
+        [destinoId]: value ? parseFloat(value) : null
+      }
     }))
   }
 
-  // 👇 NUEVO: Función para manejar meta por bodega (sacos)
+  // Función para manejar meta por bodega (sacos)
   const handleMetaBodegaSacos = (bodegaNombre, value) => {
     setMetasBodegaSacos(prev => ({
       ...prev,
@@ -170,6 +189,12 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
   const desactivarTodasBodegas = () => {
     setBodegas(bodegas.map(b => ({ ...b, activa: false })))
   }
+
+  // Obtener productos seleccionados
+  const productosSeleccionadosList = Object.entries(formData.productos_seleccionados)
+    .filter(([_, selected]) => selected)
+    .map(([codigo]) => productos.find(p => p.codigo === codigo))
+    .filter(Boolean)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -214,15 +239,21 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         }
       })
 
-      // Filtrar límites de destino válidos
-      const limitesDestinoValidos = {}
-      Object.entries(limitesDestino).forEach(([destinoId, valor]) => {
-        if (valor && !isNaN(valor) && valor > 0) {
-          limitesDestinoValidos[destinoId] = valor
+      // 👇 NUEVO: Filtrar límites por producto y destino válidos
+      const limitesProductoDestinoValidos = {}
+      Object.entries(limitesProductoDestino).forEach(([productoCodigo, destinosMap]) => {
+        const destinosValidos = {}
+        Object.entries(destinosMap).forEach(([destinoId, valor]) => {
+          if (valor && !isNaN(valor) && valor > 0) {
+            destinosValidos[destinoId] = valor
+          }
+        })
+        if (Object.keys(destinosValidos).length > 0) {
+          limitesProductoDestinoValidos[productoCodigo] = destinosValidos
         }
       })
 
-      // 👇 NUEVO: Filtrar metas de bodega para sacos válidas
+      // Filtrar metas de bodega para sacos válidas
       const metasBodegaSacosValidas = {}
       Object.entries(metasBodegaSacos).forEach(([bodegaNombre, valor]) => {
         if (valor && !isNaN(valor) && valor > 0) {
@@ -239,8 +270,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         metas_json: {
           productos: productosSeleccionados,
           limites: metasValidas,
-          limites_destino: limitesDestinoValidos,
-          // 👇 NUEVO: Guardar metas de bodega para sacos
+          limites_por_producto_destino: limitesProductoDestinoValidos,
           sacos_bodega: metasBodegaSacosValidas
         },
         bodegas_json: bodegasActivas.map(b => ({
@@ -298,7 +328,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Datos básicos */}
+          {/* Datos básicos - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
             <h4 className="text-white font-bold mb-4 flex items-center gap-2">
               <Ship className="w-4 h-4 text-blue-400" />
@@ -404,7 +434,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             </div>
           </div>
 
-          {/* SECCIÓN DE BODEGAS */}
+          {/* SECCIÓN DE BODEGAS - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-blue-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -497,7 +527,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             )}
           </div>
 
-          {/* LÍMITES POR DESTINO */}
+          {/* 👇 NUEVA SECCIÓN: LÍMITES POR PRODUCTO Y DESTINO */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-amber-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -506,10 +536,11 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
               <div className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-amber-400" />
                 <h4 className="text-white font-bold">
-                  Límites por Destino (opcional)
+                  Límites por Producto y Destino (opcional)
                 </h4>
                 <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs">
-                  {Object.keys(limitesDestino).length} configurados
+                  {Object.keys(limitesProductoDestino).reduce((count, prod) => 
+                    count + Object.keys(limitesProductoDestino[prod] || {}).length, 0)} configurados
                 </span>
               </div>
               <button type="button" className="text-slate-400 hover:text-white">
@@ -520,40 +551,84 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             {limitesExpandido && (
               <>
                 <p className="text-xs text-slate-400 mb-3 mt-2">
-                  Define límites de tonelaje para destinos específicos.
+                  Define límites de tonelaje por combinación de producto y destino.
                 </p>
                 
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                  {destinos.map(destino => (
-                    <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-white">{destino.nombre}</p>
-                          <p className="text-xs text-slate-500">{destino.codigo}</p>
-                        </div>
-                        <div className="relative w-48">
-                          <input
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            value={limitesDestino[destino.id] || ''}
-                            onChange={(e) => handleLimiteDestinoChange(destino.id, e.target.value)}
-                            className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
-                            placeholder="Límite en TM"
-                          />
-                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
-                            TM
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                {/* Selector de producto para límites */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-400 mb-2">
+                    Seleccionar Producto:
+                  </label>
+                  <select
+                    value={productoSeleccionadoParaLimites?.codigo || ''}
+                    onChange={(e) => {
+                      const prod = productos.find(p => p.codigo === e.target.value)
+                      setProductoSeleccionadoParaLimites(prod)
+                    }}
+                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="">Seleccionar producto</option>
+                    {productosSeleccionadosList.map(prod => (
+                      <option key={prod.codigo} value={prod.codigo}>
+                        {prod.nombre} ({prod.codigo})
+                      </option>
+                    ))}
+                  </select>
+                  {productosSeleccionadosList.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠️ Primero selecciona productos en la sección de productos
+                    </p>
+                  )}
                 </div>
+                
+                {productoSeleccionadoParaLimites && (
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                    {destinos.map(destino => {
+                      const valor = limitesProductoDestino[productoSeleccionadoParaLimites.codigo]?.[destino.id] || ''
+                      return (
+                        <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-bold text-white">{destino.nombre}</p>
+                              <p className="text-xs text-slate-500">{destino.codigo}</p>
+                              <p className="text-[10px] text-amber-400/70 mt-0.5">
+                                Producto: {productoSeleccionadoParaLimites.nombre}
+                              </p>
+                            </div>
+                            <div className="relative w-48">
+                              <input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                value={valor}
+                                onChange={(e) => handleLimiteProductoDestinoChange(
+                                  productoSeleccionadoParaLimites.codigo, 
+                                  destino.id, 
+                                  e.target.value
+                                )}
+                                className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
+                                placeholder="Límite en TM"
+                              />
+                              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
+                                TM
+                              </span>
+                            </div>
+                          </div>
+                          {valor > 0 && (
+                            <p className="text-[10px] text-amber-400/70 mt-2">
+                              ⚠️ Límite de {productoSeleccionadoParaLimites.nombre} para {destino.nombre}: {valor} TM
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          {/* 👇 NUEVA SECCIÓN: METAS POR BODEGA PARA SACOS */}
+          {/* METAS POR BODEGA PARA SACOS - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-green-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -614,7 +689,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             )}
           </div>
 
-          {/* Selección de Productos */}
+          {/* Selección de Productos - sin cambios */}
           {productos && productos.length > 0 && (
             <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
               <div 
@@ -715,20 +790,35 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             </div>
           )}
 
-          {/* Resumen de límites */}
-          {Object.keys(limitesDestino).length > 0 && (
+          {/* Resumen de límites - actualizado */}
+          {Object.keys(limitesProductoDestino).reduce((count, prod) => 
+            count + Object.keys(limitesProductoDestino[prod] || {}).length, 0) > 0 && (
             <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
               <h4 className="font-bold text-amber-400 mb-2 flex items-center gap-2">
                 <Target className="w-4 h-4" />
-                Límites configurados por destino
+                Límites configurados por producto y destino
               </h4>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                {Object.entries(limitesDestino).map(([id, valor]) => {
-                  const destino = destinos.find(d => d.id === parseInt(id))
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {Object.entries(limitesProductoDestino).map(([productoCodigo, destinosMap]) => {
+                  const producto = productos.find(p => p.codigo === productoCodigo)
+                  if (!producto || Object.keys(destinosMap).length === 0) return null
+                  
                   return (
-                    <div key={id} className="flex justify-between items-center bg-slate-800 rounded-lg px-3 py-2">
-                      <span className="text-slate-300">{destino?.nombre || `Destino ${id}`}</span>
-                      <span className="font-bold text-amber-400">{valor.toFixed(3)} TM</span>
+                    <div key={productoCodigo} className="bg-slate-800 rounded-lg p-3">
+                      <p className="text-sm font-bold text-amber-400 mb-2">
+                        {producto?.nombre} ({productoCodigo})
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {Object.entries(destinosMap).map(([id, valor]) => {
+                          const destino = destinos.find(d => d.id === parseInt(id))
+                          return (
+                            <div key={id} className="flex justify-between items-center bg-slate-900 rounded-lg px-3 py-2">
+                              <span className="text-slate-300">{destino?.nombre || `Destino ${id}`}</span>
+                              <span className="font-bold text-amber-400">{Number(valor).toFixed(3)} TM</span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )
                 })}
@@ -736,7 +826,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
             </div>
           )}
 
-          {/* 👇 NUEVO: Resumen de metas por bodega */}
+          {/* Resumen de metas por bodega */}
           {Object.keys(metasBodegaSacos).length > 0 && (
             <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4">
               <h4 className="font-bold text-green-400 mb-2 flex items-center gap-2">
@@ -747,7 +837,7 @@ export default function EditarBarcoModal({ barco, pesadores, productos, onClose,
                 {Object.entries(metasBodegaSacos).map(([bodegaNombre, valor]) => (
                   <div key={bodegaNombre} className="flex justify-between items-center bg-slate-800 rounded-lg px-3 py-2">
                     <span className="text-slate-300">{bodegaNombre}</span>
-                    <span className="font-bold text-green-400">{valor.toFixed(3)} TM</span>
+                    <span className="font-bold text-green-400">{Number(valor).toFixed(3)} TM</span>
                   </div>
                 ))}
               </div>

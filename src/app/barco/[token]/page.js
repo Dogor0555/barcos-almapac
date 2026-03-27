@@ -105,6 +105,29 @@ export default function BarcoPesadorPage() {
   })
 
   // =====================================================
+  // FUNCIONES PARA PRESERVAR POSICIÓN DE SCROLL
+  // =====================================================
+
+  // Guarda la posición actual del scroll
+  const guardarPosicionScroll = () => {
+    return {
+      x: window.scrollX,
+      y: window.scrollY
+    }
+  }
+
+  // Restaura una posición de scroll guardada
+  const restaurarPosicionScroll = (posicion) => {
+    if (posicion) {
+      window.scrollTo({
+        top: posicion.y,
+        left: posicion.x,
+        behavior: 'auto'
+      })
+    }
+  }
+
+  // =====================================================
   // CONFIGURACIÓN DE HORARIO EL SALVADOR (GMT-6)
   // =====================================================
   const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
@@ -308,6 +331,8 @@ export default function BarcoPesadorPage() {
   const guardarEdicionCompleta = async () => {
     if (!viajeEnEdicion) return
 
+    const posicionActual = guardarPosicionScroll()
+
     try {
       // Validar campos obligatorios
       if (!viajeEnEdicion.placa || viajeEnEdicion.placa === 'C-') {
@@ -389,9 +414,12 @@ export default function BarcoPesadorPage() {
         actualizarAcumuladoPreview('')
       }
 
+      restaurarPosicionScroll(posicionActual)
+
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al actualizar el viaje')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
@@ -477,7 +505,7 @@ export default function BarcoPesadorPage() {
     } else {
       if (name === 'hora_salida_almapac' || name === 'hora_entrada_almapac') {
         if (detectarFormatoAmPm(value)) {
-          toast.warning('Usa formato 24h (ej: 14:30:45)')
+          toast.error('Usa formato 24h (ej: 14:30:45)')
           const corregida = validateHora24h(value)
           setCompletarViaje(prev => ({ ...prev, [name]: corregida }))
           return
@@ -524,6 +552,8 @@ export default function BarcoPesadorPage() {
       return
     }
 
+    const posicionActual = guardarPosicionScroll()
+
     try {
       const { error } = await supabase
         .from('viajes')
@@ -544,14 +574,19 @@ export default function BarcoPesadorPage() {
         setEditandoViaje(null)
         setModoRegistro('nuevo')
       }
+
+      restaurarPosicionScroll(posicionActual)
     } catch (error) {
       console.error('Error eliminando viaje:', error)
       toast.error('Error al eliminar el viaje')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
   const handleEliminarLectura = async (id) => {
     if (!confirm('¿Estás seguro de eliminar esta lectura?')) return
+
+    const posicionActual = guardarPosicionScroll()
 
     try {
       const { error } = await supabase
@@ -564,14 +599,18 @@ export default function BarcoPesadorPage() {
       toast.success('Lectura eliminada correctamente')
       await cargarDatos()
       setEditandoLectura(null)
+      restaurarPosicionScroll(posicionActual)
     } catch (error) {
       console.error('Error eliminando lectura:', error)
       toast.error('Error al eliminar la lectura')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
   const handleEliminarBitacora = async (id) => {
     if (!confirm('¿Estás seguro de eliminar este registro?')) return
+
+    const posicionActual = guardarPosicionScroll()
 
     try {
       const { error } = await supabase
@@ -584,9 +623,11 @@ export default function BarcoPesadorPage() {
       toast.success('Registro eliminado correctamente')
       await cargarDatos()
       setEditandoBitacora(null)
+      restaurarPosicionScroll(posicionActual)
     } catch (error) {
       console.error('Error eliminando registro:', error)
       toast.error('Error al eliminar el registro')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
@@ -619,13 +660,15 @@ export default function BarcoPesadorPage() {
     }
     
     if (pesoNetoNum > pesoBrutoNum) {
-      toast.warning('⚠️ El Peso Neto no puede ser mayor al Peso Bruto')
+      toast.error('⚠️ El Peso Neto no puede ser mayor al Peso Bruto')
     }
     
     return true
   }
 
   const handleGuardarIncompleto = async () => {
+    const posicionActual = guardarPosicionScroll()
+
     try {
       if (barco.estado === 'finalizado') {
         toast.error('La operación está finalizada.')
@@ -656,14 +699,14 @@ export default function BarcoPesadorPage() {
 
       if (nuevoViaje.hora_salida_updp) {
         if (detectarFormatoAmPm(nuevoViaje.hora_salida_updp)) {
-          toast.warning('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
+          toast.error('Formato AM/PM detectado en Hora Salida UPDP. Convirtiendo a 24h.')
         }
         horaSalidaUPDP = validateHora24h(nuevoViaje.hora_salida_updp)
       }
 
       if (nuevoViaje.hora_entrada_almapac) {
         if (detectarFormatoAmPm(nuevoViaje.hora_entrada_almapac)) {
-          toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
+          toast.error('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
         }
         horaEntradaAlmapac = validateHora24h(nuevoViaje.hora_entrada_almapac)
       }
@@ -803,13 +846,18 @@ export default function BarcoPesadorPage() {
         }
       }, 100)
 
+      restaurarPosicionScroll(posicionActual)
+
     } catch (error) {
       console.error('Error inesperado:', error)
       toast.error('Error inesperado al guardar')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
   const handleCompletarViaje = async () => {
+    const posicionActual = guardarPosicionScroll()
+
     try {
       if (barco.estado === 'finalizado') {
         toast.error('La operación está finalizada.')
@@ -841,14 +889,14 @@ export default function BarcoPesadorPage() {
 
       if (completarViaje.hora_salida_almapac) {
         if (detectarFormatoAmPm(completarViaje.hora_salida_almapac)) {
-          toast.warning('Formato AM/PM detectado en Hora Salida Almapac. Convirtiendo a 24h.')
+          toast.error('Formato AM/PM detectado en Hora Salida Almapac. Convirtiendo a 24h.')
         }
         horaSalidaAlmapac = validateHora24h(completarViaje.hora_salida_almapac)
       }
 
       if (completarViaje.hora_entrada_almapac) {
         if (detectarFormatoAmPm(completarViaje.hora_entrada_almapac)) {
-          toast.warning('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
+          toast.error('Formato AM/PM detectado en Hora Entrada Almapac. Convirtiendo a 24h.')
         }
         horaEntradaAlmapac = validateHora24h(completarViaje.hora_entrada_almapac)
       }
@@ -901,13 +949,18 @@ export default function BarcoPesadorPage() {
         actualizarAcumuladoPreview('')
       }
 
+      restaurarPosicionScroll(posicionActual)
+
     } catch (error) {
       console.error('Error inesperado:', error)
       toast.error('Error inesperado al completar')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
   const handleGuardarLectura = async () => {
+    const posicionActual = guardarPosicionScroll()
+
     try {
       if (barco.estado === 'finalizado') {
         toast.error('La operación está finalizada.')
@@ -980,13 +1033,18 @@ export default function BarcoPesadorPage() {
 
       await cargarDatos()
 
+      restaurarPosicionScroll(posicionActual)
+
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error inesperado')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
   const handleGuardarBitacora = async () => {
+    const posicionActual = guardarPosicionScroll()
+
     try {
       if (barco.estado === 'finalizado') {
         toast.error('La operación está finalizada.')
@@ -1044,9 +1102,12 @@ export default function BarcoPesadorPage() {
 
       await cargarDatos()
 
+      restaurarPosicionScroll(posicionActual)
+
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error inesperado')
+      restaurarPosicionScroll(posicionActual)
     }
   }
 
@@ -1579,11 +1640,19 @@ export default function BarcoPesadorPage() {
     return saltos
   }, [viajesFiltrados, ordenViajes])
 
-  // Resumen por destino
+  // =====================================================
+  // 🔥 NUEVA VERSIÓN: Resumen por destino con límites por producto
+  // =====================================================
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
 
-    const limitesDestino = barco?.metas_json?.limites_destino || {}
+    // Obtener límites por producto-destino (nueva estructura)
+    const limitesProductoDestino = barco?.metas_json?.limites_por_producto_destino || {}
+    // Obtener límites para el producto activo
+    const limitesProductoActivo = limitesProductoDestino[productoActivo.codigo] || {}
+    
+    // FALLBACK: Si no hay límites en la nueva estructura, usar la antigua (compatibilidad)
+    const limitesDestinoAntiguo = barco?.metas_json?.limites_destino || {}
 
     const mapa = {}
 
@@ -1595,7 +1664,8 @@ export default function BarcoPesadorPage() {
           mapa[key] = {
             destino_id: key,
             nombre: v.destino?.nombre || `Destino ${key}`,
-            limite_tm: limitesDestino[key] || 0,
+            // Priorizar el límite específico del producto, fallback al antiguo
+            limite_tm: limitesProductoActivo[key] || limitesDestinoAntiguo[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
             banda_count: 0,
@@ -1618,7 +1688,8 @@ export default function BarcoPesadorPage() {
           mapa[key] = {
             destino_id: key,
             nombre: l.destino?.nombre || `Destino ${key}`,
-            limite_tm: limitesDestino[key] || 0,
+            // Priorizar el límite específico del producto, fallback al antiguo
+            limite_tm: limitesProductoActivo[key] || limitesDestinoAntiguo[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
             banda_count: 0,
@@ -1654,11 +1725,11 @@ export default function BarcoPesadorPage() {
     if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
       resumenPorDestino.forEach(dest => {
         if (dest.limite_tm > 0 && dest.cerca_limite) {
-          const toastId = `limite-${dest.destino_id}`
+          const toastId = `limite-${dest.destino_id}-${productoActivo?.id}`
           if (!window[toastId]) {
             window[toastId] = true
             toast(
-              `⚠️ ${dest.nombre} está al ${dest.porcentaje.toFixed(1)}% de su límite (${dest.limite_tm.toFixed(3)} TM)`,
+              `⚠️ ${productoActivo?.nombre} - ${dest.nombre} está al ${dest.porcentaje.toFixed(1)}% de su límite (${dest.limite_tm.toFixed(3)} TM)`,
               {
                 id: toastId,
                 duration: 8000,
@@ -1671,11 +1742,11 @@ export default function BarcoPesadorPage() {
             )
           }
         } else if (dest.limite_tm > 0 && dest.completado) {
-          const toastId = `completo-${dest.destino_id}`
+          const toastId = `completo-${dest.destino_id}-${productoActivo?.id}`
           if (!window[toastId]) {
             window[toastId] = true
             toast.success(
-              `✅ ${dest.nombre} ha alcanzado su límite de ${dest.limite_tm.toFixed(3)} TM`,
+              `✅ ${productoActivo?.nombre} - ${dest.nombre} ha alcanzado su límite de ${dest.limite_tm.toFixed(3)} TM`,
               {
                 id: toastId,
                 duration: 8000,
@@ -1685,7 +1756,7 @@ export default function BarcoPesadorPage() {
         }
       })
     }
-  }, [resumenPorDestino, barco?.estado])
+  }, [resumenPorDestino, barco?.estado, productoActivo])
 
   // Actualizar preview
   useEffect(() => {
@@ -1897,7 +1968,7 @@ export default function BarcoPesadorPage() {
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header - mismo código que antes */}
+        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-6 text-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -2325,6 +2396,33 @@ export default function BarcoPesadorPage() {
               </div>
             )}
 
+            {/* 👇 NUEVO: Mostrar límites configurados para este producto 
+            {(() => {
+              const limitesProductoDestino = barco?.metas_json?.limites_por_producto_destino || {}
+              const limitesProductoActivo = limitesProductoDestino[productoActivo?.codigo] || {}
+              const limitesActivos = Object.entries(limitesProductoActivo).filter(([_, limite]) => limite > 0)
+              
+              if (limitesActivos.length > 0) {
+                return (
+                  <div className="mt-4 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                    <p className="text-xs text-amber-400 font-bold mb-2">📊 Límites configurados para {productoActivo.nombre}:</p>
+                    <div className="flex flex-wrap gap-3">
+                      {limitesActivos.map(([destinoId, limite]) => {
+                        const destino = destinos.find(d => d.id === parseInt(destinoId))
+                        return (
+                          <div key={destinoId} className="bg-slate-800 rounded-lg px-3 py-1">
+                            <span className="text-xs text-slate-400">{destino?.nombre || `Destino ${destinoId}`}:</span>
+                            <span className="text-sm font-bold text-amber-400 ml-2">{Number(limite).toFixed(3)} TM</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              }
+              return null
+            })()} */}
+
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setVistaGraficos(!vistaGraficos)}
@@ -2436,7 +2534,7 @@ export default function BarcoPesadorPage() {
           </div>
         )}
 
-        {/* RESUMEN POR DESTINO CON LÍMITES */}
+        {/* RESUMEN POR DESTINO CON LÍMITES (AHORA CON LÍMITES POR PRODUCTO) */}
         {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
@@ -2912,7 +3010,7 @@ export default function BarcoPesadorPage() {
                         onChange={(e) => {
                           const value = e.target.value
                           if (detectarFormatoAmPm(value)) {
-                            toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
+                            toast.error('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
                             const corregida = validateHora24h(value)
                             setNuevoViaje(prev => ({ ...prev, hora_salida_updp: corregida }))
                           } else {
@@ -2985,7 +3083,7 @@ export default function BarcoPesadorPage() {
                         onChange={(e) => {
                           const value = e.target.value
                           if (detectarFormatoAmPm(value)) {
-                            toast.warning('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
+                            toast.error('Usa formato 24h (ej: 14:30:45 en lugar de 2:30:45 PM)')
                             const corregida = validateHora24h(value)
                             setNuevoViaje(prev => ({ ...prev, hora_entrada_almapac: corregida }))
                           } else {
@@ -3289,7 +3387,7 @@ export default function BarcoPesadorPage() {
                             onChange={(e) => {
                               const value = e.target.value
                               if (detectarFormatoAmPm(value)) {
-                                toast.warning('Usa formato 24h (ej: 14:30:45)')
+                                toast.error('Usa formato 24h (ej: 14:30:45)')
                                 const corregida = validateHora24h(value)
                                 setCompletarViaje(prev => ({ ...prev, hora_salida_almapac: corregida }))
                               } else {
@@ -3338,7 +3436,7 @@ export default function BarcoPesadorPage() {
                             onChange={(e) => {
                               const value = e.target.value
                               if (detectarFormatoAmPm(value)) {
-                                toast.warning('Usa formato 24h (ej: 14:30:45)')
+                                toast.error('Usa formato 24h (ej: 14:30:45)')
                                 const corregida = validateHora24h(value)
                                 setCompletarViaje(prev => ({ ...prev, hora_entrada_almapac: corregida }))
                               } else {
@@ -3783,7 +3881,7 @@ export default function BarcoPesadorPage() {
                               ) : (
                                 <span className="text-slate-600">—</span>
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3 text-slate-300">{lectura.destino?.nombre}</td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex gap-2">
@@ -3802,8 +3900,8 @@ export default function BarcoPesadorPage() {
                                   <Trash2 className="w-4 h-4 text-red-400" />
                                 </button>
                               </div>
-                            </td>
-                          </tr>
+                             </td>
+                           </tr>
                         )
                       })}
                     </tbody>

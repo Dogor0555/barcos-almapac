@@ -16,6 +16,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
   const [limitesExpandido, setLimitesExpandido] = useState(true)
   const [metasSacosExpandido, setMetasSacosExpandido] = useState(true)
   const [destinos, setDestinos] = useState([])
+  const [productoSeleccionadoParaLimites, setProductoSeleccionadoParaLimites] = useState(null)
   const [formData, setFormData] = useState({
     nombre: '',
     codigo_barco: '',
@@ -38,10 +39,10 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     { id: 9, nombre: 'Bodega 9', codigo: 'BDG-09', activa: true },
   ])
 
-  // Estado para límites por destino
-  const [limitesDestino, setLimitesDestino] = useState({})
+  // 👇 NUEVO: Estado para límites por producto y destino
+  const [limitesProductoDestino, setLimitesProductoDestino] = useState({})
   
-  // 👇 NUEVO: Estado para metas por bodega (sacos)
+  // Estado para metas por bodega (sacos)
   const [metasBodegaSacos, setMetasBodegaSacos] = useState({})
 
   // Cargar destinos
@@ -63,6 +64,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     }
   }
 
+  // Inicializar productos seleccionados
   useEffect(() => {
     if (productos && productos.length > 0) {
       const seleccionados = {}
@@ -76,8 +78,23 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         productos_seleccionados: seleccionados,
         metas: metas 
       }))
+
+      // Seleccionar primer producto para límites por defecto
+      if (productos[0] && !productoSeleccionadoParaLimites) {
+        setProductoSeleccionadoParaLimites(productos[0])
+      }
     }
   }, [productos])
+
+  // Inicializar límites cuando cambia el producto seleccionado
+  useEffect(() => {
+    if (productoSeleccionadoParaLimites && !limitesProductoDestino[productoSeleccionadoParaLimites.codigo]) {
+      setLimitesProductoDestino(prev => ({
+        ...prev,
+        [productoSeleccionadoParaLimites.codigo]: {}
+      }))
+    }
+  }, [productoSeleccionadoParaLimites])
 
   const generarCodigo = () => {
     if (formData.nombre) {
@@ -159,15 +176,18 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
     ))
   }
 
-  // Función para manejar límite por destino
-  const handleLimiteDestinoChange = (destinoId, value) => {
-    setLimitesDestino(prev => ({
+  // 👇 NUEVO: Función para manejar límite por producto y destino
+  const handleLimiteProductoDestinoChange = (productoCodigo, destinoId, value) => {
+    setLimitesProductoDestino(prev => ({
       ...prev,
-      [destinoId]: value ? parseFloat(value) : null
+      [productoCodigo]: {
+        ...(prev[productoCodigo] || {}),
+        [destinoId]: value ? parseFloat(value) : null
+      }
     }))
   }
 
-  // 👇 NUEVO: Función para manejar meta por bodega (sacos)
+  // Función para manejar meta por bodega (sacos)
   const handleMetaBodegaSacos = (bodegaNombre, value) => {
     setMetasBodegaSacos(prev => ({
       ...prev,
@@ -182,6 +202,12 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
   const desactivarTodasBodegas = () => {
     setBodegas(bodegas.map(b => ({ ...b, activa: false })))
   }
+
+  // Obtener productos seleccionados para mostrar en la tabla de límites
+  const productosSeleccionadosList = Object.entries(formData.productos_seleccionados)
+    .filter(([_, selected]) => selected)
+    .map(([codigo]) => productos.find(p => p.codigo === codigo))
+    .filter(Boolean)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -231,15 +257,21 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         }
       })
 
-      // Filtrar límites de destino válidos
-      const limitesDestinoValidos = {}
-      Object.entries(limitesDestino).forEach(([destinoId, valor]) => {
-        if (valor && !isNaN(valor) && valor > 0) {
-          limitesDestinoValidos[destinoId] = valor
+      // 👇 NUEVO: Filtrar límites por producto y destino válidos
+      const limitesProductoDestinoValidos = {}
+      Object.entries(limitesProductoDestino).forEach(([productoCodigo, destinosMap]) => {
+        const destinosValidos = {}
+        Object.entries(destinosMap).forEach(([destinoId, valor]) => {
+          if (valor && !isNaN(valor) && valor > 0) {
+            destinosValidos[destinoId] = valor
+          }
+        })
+        if (Object.keys(destinosValidos).length > 0) {
+          limitesProductoDestinoValidos[productoCodigo] = destinosValidos
         }
       })
 
-      // 👇 NUEVO: Filtrar metas de bodega para sacos válidas
+      // Filtrar metas de bodega para sacos válidas
       const metasBodegaSacosValidas = {}
       Object.entries(metasBodegaSacos).forEach(([bodegaNombre, valor]) => {
         if (valor && !isNaN(valor) && valor > 0) {
@@ -256,8 +288,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         metas_json: {
           productos: productosSeleccionados,
           limites: metasValidas,
-          limites_destino: limitesDestinoValidos,
-          // 👇 NUEVO: Guardar metas de bodega para sacos
+          limites_por_producto_destino: limitesProductoDestinoValidos,
           sacos_bodega: metasBodegaSacosValidas
         },
         bodegas_json: bodegasActivas.map(b => ({
@@ -346,7 +377,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Datos básicos */}
+          {/* Datos básicos - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
             <h4 className="text-white font-bold mb-4 flex items-center gap-2">
               <Ship className="w-4 h-4 text-blue-400" />
@@ -474,7 +505,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             </div>
           </div>
 
-          {/* SECCIÓN DE BODEGAS */}
+          {/* SECCIÓN DE BODEGAS - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-blue-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -567,7 +598,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             )}
           </div>
 
-          {/* LÍMITES POR DESTINO */}
+          {/* 👇 NUEVA SECCIÓN: LÍMITES POR PRODUCTO Y DESTINO */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-amber-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -576,10 +607,11 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
               <div className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-amber-400" />
                 <h4 className="text-white font-bold">
-                  Límites por Destino (opcional)
+                  Límites por Producto y Destino (opcional)
                 </h4>
                 <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs">
-                  {Object.keys(limitesDestino).length} configurados
+                  {Object.keys(limitesProductoDestino).reduce((count, prod) => 
+                    count + Object.keys(limitesProductoDestino[prod] || {}).length, 0)} configurados
                 </span>
               </div>
               <button type="button" className="text-slate-400 hover:text-white">
@@ -590,45 +622,84 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             {limitesExpandido && (
               <>
                 <p className="text-xs text-slate-400 mb-3 mt-2">
-                  Define límites de tonelaje para destinos específicos. El pesador verá cuánto falta para llegar al límite.
+                  Define límites de tonelaje por combinación de producto y destino.
                 </p>
                 
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                  {destinos.map(destino => (
-                    <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-white">{destino.nombre}</p>
-                          <p className="text-xs text-slate-500">{destino.codigo}</p>
-                        </div>
-                        <div className="relative w-48">
-                          <input
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            value={limitesDestino[destino.id] || ''}
-                            onChange={(e) => handleLimiteDestinoChange(destino.id, e.target.value)}
-                            className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
-                            placeholder="Límite en TM"
-                          />
-                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
-                            TM
-                          </span>
-                        </div>
-                      </div>
-                      {limitesDestino[destino.id] > 0 && (
-                        <p className="text-[10px] text-amber-400/70 mt-2">
-                          ⚠️ El pesador verá alerta al acercarse a {limitesDestino[destino.id]} TM
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                {/* Selector de producto para límites */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-400 mb-2">
+                    Seleccionar Producto:
+                  </label>
+                  <select
+                    value={productoSeleccionadoParaLimites?.codigo || ''}
+                    onChange={(e) => {
+                      const prod = productos.find(p => p.codigo === e.target.value)
+                      setProductoSeleccionadoParaLimites(prod)
+                    }}
+                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white"
+                  >
+                    <option value="">Seleccionar producto</option>
+                    {productosSeleccionadosList.map(prod => (
+                      <option key={prod.codigo} value={prod.codigo}>
+                        {prod.nombre} ({prod.codigo})
+                      </option>
+                    ))}
+                  </select>
+                  {productosSeleccionadosList.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠️ Primero selecciona productos en la sección de productos
+                    </p>
+                  )}
                 </div>
+                
+                {productoSeleccionadoParaLimites && (
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                    {destinos.map(destino => {
+                      const valor = limitesProductoDestino[productoSeleccionadoParaLimites.codigo]?.[destino.id] || ''
+                      return (
+                        <div key={destino.id} className="bg-slate-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-bold text-white">{destino.nombre}</p>
+                              <p className="text-xs text-slate-500">{destino.codigo}</p>
+                              <p className="text-[10px] text-amber-400/70 mt-0.5">
+                                Producto: {productoSeleccionadoParaLimites.nombre}
+                              </p>
+                            </div>
+                            <div className="relative w-48">
+                              <input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                value={valor}
+                                onChange={(e) => handleLimiteProductoDestinoChange(
+                                  productoSeleccionadoParaLimites.codigo, 
+                                  destino.id, 
+                                  e.target.value
+                                )}
+                                className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white pr-12"
+                                placeholder="Límite en TM"
+                              />
+                              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-amber-400 text-xs font-bold">
+                                TM
+                              </span>
+                            </div>
+                          </div>
+                          {valor > 0 && (
+                            <p className="text-[10px] text-amber-400/70 mt-2">
+                              ⚠️ Límite de {productoSeleccionadoParaLimites.nombre} para {destino.nombre}: {valor} TM
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          {/* 👇 NUEVA SECCIÓN: METAS POR BODEGA PARA SACOS */}
+          {/* METAS POR BODEGA PARA SACOS - sin cambios */}
           <div className="bg-slate-900/50 rounded-xl p-5 border border-green-500/20">
             <div 
               className="flex items-center justify-between cursor-pointer"
@@ -652,7 +723,6 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
               <>
                 <p className="text-xs text-slate-400 mb-3 mt-2">
                   Define la cantidad estimada de toneladas que se espera recibir en cada bodega para el registro de sacos.
-                  Estas metas se mostrarán en el dashboard de sacos.
                 </p>
                 
                 <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
@@ -695,7 +765,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             )}
           </div>
 
-          {/* Selección de Productos */}
+          {/* Selección de Productos - sin cambios */}
           {productos && productos.length > 0 && (
             <div className="bg-slate-900/50 rounded-xl p-5 border border-white/5">
               <div 
@@ -806,7 +876,7 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
             </div>
           )}
 
-          {/* Resumen */}
+          {/* Resumen - actualizado */}
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
             <h4 className="font-bold text-blue-400 mb-3 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
@@ -847,10 +917,14 @@ export default function BarcoForm({ pesadores, productos, onClose, onSuccess }) 
                 <p className="text-slate-500 text-xs">Bodegas:</p>
                 <p className="font-bold text-white">{bodegasActivasCount} activas</p>
               </div>
-              {Object.keys(limitesDestino).length > 0 && (
+              {Object.keys(limitesProductoDestino).reduce((count, prod) => 
+                count + Object.keys(limitesProductoDestino[prod] || {}).length, 0) > 0 && (
                 <div className="col-span-2">
-                  <p className="text-slate-500 text-xs">Límites por destino:</p>
-                  <p className="font-bold text-amber-400">{Object.keys(limitesDestino).length} destino(s) con límite</p>
+                  <p className="text-slate-500 text-xs">Límites por producto/destino:</p>
+                  <p className="font-bold text-amber-400">
+                    {Object.keys(limitesProductoDestino).reduce((count, prod) => 
+                      count + Object.keys(limitesProductoDestino[prod] || {}).length, 0)} configuración(es)
+                  </p>
                 </div>
               )}
               {Object.keys(metasBodegaSacos).length > 0 && (
