@@ -316,7 +316,7 @@ export default function BarcoPesadorPage() {
       observaciones_destino: viaje.observaciones_destino || ''
     })
     
-    toast.info(`📝 Preparando para completar viaje #${viaje.viaje_numero} - Los datos existentes se han cargado`)
+  toast.success(`📝 Preparando para completar viaje #${viaje.viaje_numero}`)
   }
 
   const handleValidarNumeroViaje = async (numero) => {
