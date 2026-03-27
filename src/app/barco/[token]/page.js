@@ -2739,6 +2739,26 @@ export default function BarcoPesadorPage() {
                       required
                     />
                   </div>
+
+<div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Peso Bruto UPDP (TM)
+                    </label>
+                    <input
+                      ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
+                      type="number"
+                      step="0.001"
+                      name="peso_bruto_updp_tm"
+                      value={nuevoViaje.peso_bruto_updp_tm}
+                      onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
+                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="31.500 (o 31500)"
+                    />
+                  </div>
+                  
+
+
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Peso Neto UPDP (TM)
@@ -2769,22 +2789,6 @@ export default function BarcoPesadorPage() {
                       onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_updp_tm')}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
                       placeholder="30.865 (o 30865)"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Peso Bruto UPDP (TM)
-                    </label>
-                    <input
-                      ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
-                      type="number"
-                      step="0.001"
-                      name="peso_bruto_updp_tm"
-                      value={nuevoViaje.peso_bruto_updp_tm}
-                      onChange={handleNuevoViajeChange}
-                      onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
-                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="31.500 (o 31500)"
                     />
                   </div>
                   
