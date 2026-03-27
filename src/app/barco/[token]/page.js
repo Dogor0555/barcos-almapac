@@ -4,13 +4,13 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from './../../lib/supabase'
-import { 
-  formatTM, formatHora, formatFechaHora, formatFecha, 
-  validateHora24h, detectarFormatoAmPm 
+import {
+  formatTM, formatHora, formatFechaHora, formatFecha,
+  validateHora24h, detectarFormatoAmPm
 } from './../../lib/utils'
-import { 
-  Save, Plus, RefreshCw, Truck, Target, CheckCircle, 
-  Package, Table, Scale, Activity, BookOpen, 
+import {
+  Save, Plus, RefreshCw, Truck, Target, CheckCircle,
+  Package, Table, Scale, Activity, BookOpen,
   Clock, AlertCircle, Play, CheckSquare, XCircle,
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
@@ -53,16 +53,16 @@ export default function BarcoPesadorPage() {
 
   // Estado para el buscador de la tabla de viajes completos
   const [searchTerm, setSearchTerm] = useState('')
-  
+
   // Estado para el buscador de placas
   const [buscarPlaca, setBuscarPlaca] = useState('')
-  
+
   // Estado para orden de la tabla de viajes
   const [ordenViajes, setOrdenViajes] = useState('asc')
-  
+
   // Refs para navegación con Enter
   const inputRefs = useRef({})
-  
+
   const [nuevoViaje, setNuevoViaje] = useState({
     viaje_numero: 1,
     fecha: new Date().toISOString().split('T')[0],
@@ -131,20 +131,20 @@ export default function BarcoPesadorPage() {
   // ✅ FUNCIÓN PARA AUTO-FORMATEAR NÚMEROS - Solo formatea cuando tiene 5+ dígitos
   const autoFormatearNumero = (valor, campo = '') => {
     if (!valor) return valor
-    
+
     const strValor = String(valor).trim()
-    
+
     // Si ya tiene punto decimal, devolver como está
     if (strValor.includes('.')) return strValor
-    
+
     // Limpiar caracteres no numéricos
     const soloNumeros = strValor.replace(/[^0-9]/g, '')
-    
+
     // Si no hay números, devolver vacío
     if (soloNumeros === '') return ''
-    
+
     const numero = parseFloat(soloNumeros)
-    
+
     // Solo convertir si tiene 5 o más dígitos (mínimo 10,000 kg)
     if (!isNaN(numero) && soloNumeros.length >= 5) {
       const convertido = numero / 1000
@@ -154,7 +154,7 @@ export default function BarcoPesadorPage() {
       })
       return convertido.toString()
     }
-    
+
     // Si tiene menos de 5 dígitos, devolver el valor original
     return strValor
   }
@@ -172,14 +172,14 @@ export default function BarcoPesadorPage() {
   // ✅ FUNCIÓN PARA RECALCULAR ACUMULADO UPDP
   const recalcularAcumuladoUPDP = async (productoId) => {
     try {
-      const viajesCompletos = viajes.filter(v => 
-        v.producto_id === productoId && 
+      const viajesCompletos = viajes.filter(v =>
+        v.producto_id === productoId &&
         v.estado === 'completo' &&
         v.peso_neto_updp_tm !== null
       )
-      
+
       const totalAcumulado = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-      
+
       for (const viaje of viajesCompletos) {
         const acumuladoAnterior = viaje.total_acumulado_tm || 0
         if (Math.abs(acumuladoAnterior - totalAcumulado) > 0.001) {
@@ -189,7 +189,7 @@ export default function BarcoPesadorPage() {
             .eq('id', viaje.id)
         }
       }
-      
+
       console.log(`✅ Acumulado UPDP recalculado para producto ${productoId}: ${totalAcumulado.toFixed(3)} TM`)
       return totalAcumulado
     } catch (error) {
@@ -204,12 +204,12 @@ export default function BarcoPesadorPage() {
       const viajesCompletos = viajes
         .filter(v => v.producto_id === productoId && v.estado === 'completo')
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
-      
+
       let acumuladoCorrido = 0
-      
+
       for (const viaje of viajesCompletos) {
         acumuladoCorrido += Number(viaje.peso_neto_updp_tm) || 0
-        
+
         if (Math.abs((viaje.total_acumulado_tm || 0) - acumuladoCorrido) > 0.001) {
           await supabase
             .from('viajes')
@@ -217,7 +217,7 @@ export default function BarcoPesadorPage() {
             .eq('id', viaje.id)
         }
       }
-      
+
       console.log(`✅ Acumulado UPDP actualizado para producto ${productoId}: ${acumuladoCorrido.toFixed(3)} TM`)
       return acumuladoCorrido
     } catch (error) {
@@ -234,11 +234,11 @@ export default function BarcoPesadorPage() {
   // Función para obtener el siguiente número de viaje para un producto específico
   const getSiguienteNumeroViaje = (productoId) => {
     if (!viajes.length || !productoId) return 1
-    
+
     const viajesProducto = viajes.filter(v => v.producto_id === productoId)
-    
+
     if (viajesProducto.length === 0) return 1
-    
+
     const maxViaje = Math.max(...viajesProducto.map(v => v.viaje_numero))
     return maxViaje + 1
   }
@@ -280,7 +280,7 @@ export default function BarcoPesadorPage() {
       hora_salida_updp: viaje.hora_salida_updp,
       hora_entrada_almapac: viaje.hora_entrada_almapac
     })
-    
+
     // ✅ Cargar el viaje con TODOS los datos del Paso 1 (NO tocar datos del Paso 2)
     setEditandoViaje(viaje)
     setNuevoViaje({
@@ -305,7 +305,7 @@ export default function BarcoPesadorPage() {
   const seleccionarViajeParaCompletar = (viaje) => {
     setViajeSeleccionado(viaje)
     setModoRegistro('completar')
-    
+
     // ✅ Cargar los datos EXISTENTES del Paso 2 si ya los tenía (NO se pierden)
     setCompletarViaje({
       destino_id: viaje.destino_id || '',
@@ -315,8 +315,8 @@ export default function BarcoPesadorPage() {
       peso_bruto_almapac_tm: viaje.peso_bruto_almapac_tm || '',
       observaciones_destino: viaje.observaciones_destino || ''
     })
-    
-  toast.success(`📝 Preparando para completar viaje #${viaje.viaje_numero}`)
+
+    toast.success(`📝 Preparando para completar viaje #${viaje.viaje_numero}`)
   }
 
   const handleValidarNumeroViaje = async (numero) => {
@@ -349,7 +349,7 @@ export default function BarcoPesadorPage() {
   // ✅ HANDLER MEJORADO: Con auto-formato de números
   const handleNuevoViajeChange = (e) => {
     const { name, value } = e.target
-    
+
     if (name === 'peso_neto_updp_tm' || name === 'peso_bruto_almapac_tm' || name === 'peso_bruto_updp_tm') {
       let nombreCampo = ''
       if (name === 'peso_neto_updp_tm') nombreCampo = 'Peso Neto UPDP'
@@ -365,7 +365,7 @@ export default function BarcoPesadorPage() {
   // ✅ HANDLER PARA COMPLETAR VIAJE - Con auto-formateo de números
   const handleCompletarViajeChange = (e) => {
     const { name, value } = e.target
-    
+
     // Auto-formatear para campos numéricos
     if (name === 'peso_destino_tm' || name === 'peso_bruto_almapac_tm') {
       let nombreCampo = ''
@@ -447,11 +447,11 @@ export default function BarcoPesadorPage() {
 
       toast.success('Viaje eliminado correctamente')
       await cargarDatos()
-      
+
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
-      
+
       if (editandoViaje?.id === id) {
         setEditandoViaje(null)
         setModoRegistro('nuevo')
@@ -558,19 +558,19 @@ export default function BarcoPesadorPage() {
       }
 
       let result
-      
+
       if (editandoViaje) {
         result = await supabase
           .from('viajes')
           .update(datosInsertar)
           .eq('id', editandoViaje.id)
           .select()
-        
+
         if (!result.error) {
           toast.success('Viaje actualizado correctamente')
           setEditandoViaje(null)
           setModoRegistro('nuevo')
-          
+
           const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
           setNuevoViaje(prev => ({
             ...prev,
@@ -591,33 +591,33 @@ export default function BarcoPesadorPage() {
           .from('viajes')
           .insert([datosInsertar])
           .select()
-        
+
         if (result.error) {
           if (result.error.code === '23505' && result.error.message.includes('viajes_barco_id_producto_id_viaje_numero')) {
             const siguienteLibre = await getSiguienteNumeroViaje(nuevoViaje.producto_id)
-            
+
             setConflicto({
               ocupado: nuevoViaje.viaje_numero,
               sugerido: siguienteLibre
             })
-            
+
             toast.error(`⚠️ El viaje #${nuevoViaje.viaje_numero} fue tomado por otro usuario justo ahora. Intenta con el #${siguienteLibre}`, {
               duration: 6000,
               id: 'viaje-conflicto-insert'
             })
             return
           }
-          
+
           console.error('Error:', result.error)
           toast.error(`Error: ${result.error.message}`)
           return
         }
-        
+
         if (!result.error) {
           toast.success('Viaje registrado exitosamente')
-          
+
           const siguienteNumero = getSiguienteNumeroViaje(nuevoViaje.producto_id)
-          
+
           setNuevoViaje({
             viaje_numero: siguienteNumero,
             fecha: getLocalDateString(),
@@ -641,11 +641,11 @@ export default function BarcoPesadorPage() {
       }
 
       await cargarDatos()
-      
+
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
-      
+
       setConflicto(null)
 
     } catch (error) {
@@ -702,7 +702,7 @@ export default function BarcoPesadorPage() {
       const viajesCompletosDelProducto = [...viajes]
         .filter(v => v.producto_id === viajeSeleccionado.producto_id && v.estado === 'completo')
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
-      
+
       const acumuladoAnterior = viajesCompletosDelProducto.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
       const totalAcumuladoTM = acumuladoAnterior + Number(completarViaje.peso_destino_tm)
 
@@ -740,7 +740,7 @@ export default function BarcoPesadorPage() {
       }
 
       toast.success('Viaje completado exitosamente')
-      
+
       setModoRegistro('nuevo')
       setViajeSeleccionado(null)
       setCompletarViaje({
@@ -753,7 +753,7 @@ export default function BarcoPesadorPage() {
       })
 
       await cargarDatos()
-      
+
       if (productoActivo) {
         await actualizarAcumuladoUPDP(productoActivo.id)
       }
@@ -789,9 +789,9 @@ export default function BarcoPesadorPage() {
       }
 
       const acumuladoTM = Number(lecturaActual.acumulado_tm)
-      
+
       const fechaUTC = svToUTC(lecturaActual.fecha_hora)
-      
+
       const datosInsertar = {
         barco_id: barco.id,
         fecha_hora: fechaUTC,
@@ -802,13 +802,13 @@ export default function BarcoPesadorPage() {
       }
 
       let result
-      
+
       if (editandoLectura) {
         result = await supabase
           .from('lecturas_banda')
           .update(datosInsertar)
           .eq('id', editandoLectura.id)
-        
+
         if (!result.error) {
           toast.success('Lectura actualizada correctamente')
           setEditandoLectura(null)
@@ -817,7 +817,7 @@ export default function BarcoPesadorPage() {
         result = await supabase
           .from('lecturas_banda')
           .insert([datosInsertar])
-        
+
         if (!result.error) {
           toast.success('Lectura de banda guardada')
         }
@@ -867,13 +867,13 @@ export default function BarcoPesadorPage() {
       }
 
       let result
-      
+
       if (editandoBitacora) {
         result = await supabase
           .from('bitacora_flujos')
           .update(datosInsertar)
           .eq('id', editandoBitacora.id)
-        
+
         if (!result.error) {
           toast.success('Registro actualizado correctamente')
           setEditandoBitacora(null)
@@ -882,7 +882,7 @@ export default function BarcoPesadorPage() {
         result = await supabase
           .from('bitacora_flujos')
           .insert([datosInsertar])
-        
+
         if (!result.error) {
           toast.success('Entrada de bitácora guardada')
         }
@@ -910,16 +910,16 @@ export default function BarcoPesadorPage() {
   const exportarTodoAExcel = () => {
     try {
       const wb = XLSX.utils.book_new()
-      
+
       const resumenData = []
-      
+
       resumenData.push(['RESUMEN DE OPERACIONES'])
       resumenData.push(['Barco:', barco.nombre])
       resumenData.push(['Código:', barco.codigo_barco || 'N/A'])
       resumenData.push(['Fecha de exportación:', new Date().toLocaleString('es-ES')])
       resumenData.push(['Estado:', barco.estado?.toUpperCase()])
       resumenData.push([])
-      
+
       resumenData.push(['TIEMPOS DE OPERACIÓN'])
       resumenData.push(['Arribo:', barco.tiempo_arribo ? new Date(barco.tiempo_arribo).toLocaleString('es-ES') : 'N/A'])
       resumenData.push(['Ataque:', barco.tiempo_ataque ? new Date(barco.tiempo_ataque).toLocaleString('es-ES') : 'N/A'])
@@ -927,10 +927,10 @@ export default function BarcoPesadorPage() {
       resumenData.push(['Inicio descarga:', barco.operacion_iniciada_at ? new Date(barco.operacion_iniciada_at).toLocaleString('es-ES') : 'N/A'])
       resumenData.push(['Fin descarga:', barco.operacion_finalizada_at ? new Date(barco.operacion_finalizada_at).toLocaleString('es-ES') : 'N/A'])
       resumenData.push([])
-      
+
       resumenData.push(['RESUMEN POR PRODUCTO'])
       resumenData.push(['Producto', 'Tipo', 'Meta (TM)', 'Total (TM)', 'Viajes', 'Lecturas Banda', 'Registros Bitácora', '% Completado'])
-      
+
       Object.values(resumenProductos).forEach(prod => {
         resumenData.push([
           `${prod.nombre} (${prod.codigo})`,
@@ -943,13 +943,13 @@ export default function BarcoPesadorPage() {
           prod.porcentaje?.toFixed(1) + '%' || '0%'
         ])
       })
-      
+
       resumenData.push([])
-      
+
       if (productoActivo && resumenPorDestino.length > 0) {
         resumenData.push([`RESUMEN POR DESTINO - ${productoActivo.nombre}`])
         resumenData.push(['Destino', 'Límite (TM)', 'Total Viajes (TM)', 'Total Banda (TM)', 'Total (TM)', '% Límite'])
-        
+
         resumenPorDestino.forEach(dest => {
           resumenData.push([
             dest.nombre,
@@ -960,13 +960,13 @@ export default function BarcoPesadorPage() {
             dest.porcentaje?.toFixed(1) + '%' || '0%'
           ])
         })
-        
+
         resumenData.push([])
       }
-      
+
       const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
       XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
-      
+
       const viajesData = []
       viajesData.push(['VIAJES COMPLETOS'])
       viajesData.push(['Barco:', barco.nombre])
@@ -988,7 +988,7 @@ export default function BarcoPesadorPage() {
         'Observaciones',
         'Observaciones Destino'
       ])
-      
+
       viajes
         .filter(v => v.estado === 'completo')
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
@@ -1011,10 +1011,10 @@ export default function BarcoPesadorPage() {
             v.observaciones_destino || ''
           ])
         })
-      
+
       const wsViajes = XLSX.utils.aoa_to_sheet(viajesData)
       XLSX.utils.book_append_sheet(wb, wsViajes, 'Viajes Completos')
-      
+
       const incompletosData = []
       incompletosData.push(['VIAJES INCOMPLETOS / PENDIENTES'])
       incompletosData.push(['Barco:', barco.nombre])
@@ -1032,7 +1032,7 @@ export default function BarcoPesadorPage() {
         'Destino (pre-asignado)',
         'Observaciones'
       ])
-      
+
       viajes
         .filter(v => v.estado === 'incompleto')
         .sort((a, b) => a.viaje_numero - b.viaje_numero)
@@ -1051,10 +1051,10 @@ export default function BarcoPesadorPage() {
             v.observaciones || ''
           ])
         })
-      
+
       const wsIncompletos = XLSX.utils.aoa_to_sheet(incompletosData)
       XLSX.utils.book_append_sheet(wb, wsIncompletos, 'Viajes Pendientes')
-      
+
       const bandaData = []
       bandaData.push(['LECTURAS DE BANDA'])
       bandaData.push(['Barco:', barco.nombre])
@@ -1066,7 +1066,7 @@ export default function BarcoPesadorPage() {
         'Acumulado (KG)',
         'Destino'
       ])
-      
+
       lecturasBanda
         .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
         .forEach(l => {
@@ -1078,10 +1078,10 @@ export default function BarcoPesadorPage() {
             l.destino?.nombre || '—'
           ])
         })
-      
+
       const wsBanda = XLSX.utils.aoa_to_sheet(bandaData)
       XLSX.utils.book_append_sheet(wb, wsBanda, 'Lecturas Banda')
-      
+
       const bitacoraData = []
       bitacoraData.push(['BITÁCORA DE OPERACIONES'])
       bitacoraData.push(['Barco:', barco.nombre])
@@ -1091,7 +1091,7 @@ export default function BarcoPesadorPage() {
         'Producto',
         'Comentarios'
       ])
-      
+
       bitacora
         .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
         .forEach(b => {
@@ -1101,15 +1101,15 @@ export default function BarcoPesadorPage() {
             b.comentarios || ''
           ])
         })
-      
+
       const wsBitacora = XLSX.utils.aoa_to_sheet(bitacoraData)
       XLSX.utils.book_append_sheet(wb, wsBitacora, 'Bitácora')
-      
+
       const fechaStr = new Date().toISOString().split('T')[0]
       const nombreArchivo = `${barco.nombre.replace(/\s+/g, '_')}_${fechaStr}_completo.xlsx`
-      
+
       XLSX.writeFile(wb, nombreArchivo)
-      
+
       toast.success('✅ Archivo Excel generado correctamente')
     } catch (error) {
       console.error('Error exportando a Excel:', error)
@@ -1119,11 +1119,11 @@ export default function BarcoPesadorPage() {
 
   const cambiarProducto = (producto) => {
     setProductoActivo(producto)
-    
+
     const siguienteNumero = getSiguienteNumeroViaje(producto.id)
-    
-    setNuevoViaje(prev => ({ 
-      ...prev, 
+
+    setNuevoViaje(prev => ({
+      ...prev,
       producto_id: producto.id,
       viaje_numero: siguienteNumero,
       fecha: getLocalDateString()
@@ -1135,7 +1135,7 @@ export default function BarcoPesadorPage() {
     setEditandoBitacora(null)
     setVistaGraficos(false)
     setBuscarPlaca('')
-    
+
     if (producto.tipo_registro === 'banda') {
       setTipoRegistro('banda')
     } else if (producto.tipo_registro === 'viajes') {
@@ -1150,7 +1150,7 @@ export default function BarcoPesadorPage() {
     setEditandoLectura(null)
     setEditandoBitacora(null)
     setModoRegistro('nuevo')
-    
+
     if (productoActivo) {
       const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
       setNuevoViaje(prev => ({
@@ -1167,7 +1167,7 @@ export default function BarcoPesadorPage() {
         observaciones: ''
       }))
     }
-    
+
     setCompletarViaje({
       destino_id: '',
       peso_destino_tm: '',
@@ -1191,14 +1191,14 @@ export default function BarcoPesadorPage() {
   const datosGraficoFlujo = useMemo(() => {
     if (!productoActivo || !barco) return []
 
-    const viajesProd = viajes.filter(v => 
-      v.producto_id === productoActivo.id && 
+    const viajesProd = viajes.filter(v =>
+      v.producto_id === productoActivo.id &&
       v.estado === 'completo' &&
       v.peso_destino_tm > 0 &&
       v.hora_salida_almapac
     )
 
-    const lecturasProd = lecturasBanda.filter(l => 
+    const lecturasProd = lecturasBanda.filter(l =>
       l.producto_id === productoActivo.id
     )
 
@@ -1239,7 +1239,7 @@ export default function BarcoPesadorPage() {
 
     eventos.forEach(evento => {
       const horaKey = `${evento.fecha} ${evento.hora.substring(0, 5)}`
-      
+
       if (evento.tipo === 'viaje') {
         acumuladoViajes += evento.peso
       } else {
@@ -1247,8 +1247,8 @@ export default function BarcoPesadorPage() {
       }
 
       const total = productoActivo.tipo_registro === 'banda' ? ultimoValorBanda :
-                    productoActivo.tipo_registro === 'viajes' ? acumuladoViajes :
-                    acumuladoViajes + ultimoValorBanda
+        productoActivo.tipo_registro === 'viajes' ? acumuladoViajes :
+          acumuladoViajes + ultimoValorBanda
 
       acumuladoPorHora.push({
         hora: horaKey,
@@ -1295,19 +1295,19 @@ export default function BarcoPesadorPage() {
     if (!productos.length) return {}
 
     const resumen = {}
-    
+
     productos.forEach(prod => {
       const metaTM = barco?.metas_json?.limites?.[prod.codigo] || 0
-      
+
       const viajesProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'completo')
       const totalViajesTM = viajesProd.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-      
+
       const acumuladoUPDP = viajesProd.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
       const acumuladoAlmapac = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
       const acumuladoSistema = viajesProd.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
-      
+
       const incompletosProd = viajes.filter(v => v.producto_id === prod.id && v.estado === 'incompleto')
-      
+
       const lecturasProd = lecturasBanda.filter(l => l.producto_id === prod.id)
 
       const ultimaLecturaPorDestino = {}
@@ -1324,18 +1324,18 @@ export default function BarcoPesadorPage() {
       const totalBandaTM = Object.values(ultimaLecturaPorDestino)
         .reduce((sum, l) => sum + (Number(l.acumulado_tm) || 0), 0)
 
-      const ultimaLectura = lecturasProd.length > 0 
+      const ultimaLectura = lecturasProd.length > 0
         ? [...lecturasProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
         : null
-      
+
       const bitacoraProd = bitacora.filter(b => b.producto_id === prod.id)
       const ultimaBitacora = bitacoraProd.length > 0
         ? [...bitacoraProd].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))[0]
         : null
-      
-      const totalTM = prod.tipo_registro === 'banda' ? totalBandaTM : 
-                      prod.tipo_registro === 'viajes' ? totalViajesTM :
-                      totalViajesTM + totalBandaTM
+
+      const totalTM = prod.tipo_registro === 'banda' ? totalBandaTM :
+        prod.tipo_registro === 'viajes' ? totalViajesTM :
+          totalViajesTM + totalBandaTM
 
       resumen[prod.id] = {
         id: prod.id,
@@ -1374,19 +1374,19 @@ export default function BarcoPesadorPage() {
   // Viajes completos filtrados por búsqueda CON ORDEN ASC/DESC
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
-    
-    const completos = viajes.filter(v => 
+
+    const completos = viajes.filter(v =>
       v.producto_id === productoActivo.id && v.estado === 'completo'
     )
-    
+
     let filtrados = completos
     if (searchTerm.trim()) {
       const termino = searchTerm.trim().toLowerCase()
-      filtrados = completos.filter(viaje => 
+      filtrados = completos.filter(viaje =>
         viaje.placa.toLowerCase().includes(termino)
       )
     }
-    
+
     return [...filtrados].sort((a, b) => {
       if (ordenViajes === 'asc') {
         return a.viaje_numero - b.viaje_numero
@@ -1455,7 +1455,7 @@ export default function BarcoPesadorPage() {
         d.banda_tm = Number(ultima.acumulado_tm) || 0
       }
       d.total_tm = d.viajes_tm + d.banda_tm
-      
+
       d.porcentaje = d.limite_tm > 0 ? (d.total_tm / d.limite_tm) * 100 : 0
       d.faltante_tm = Math.max(0, d.limite_tm - d.total_tm)
       d.excedente_tm = Math.max(0, d.total_tm - d.limite_tm)
@@ -1525,11 +1525,11 @@ export default function BarcoPesadorPage() {
 
   const viajesIncompletosFiltrados = useMemo(() => {
     if (!viajesIncompletosProducto.length) return []
-    
+
     if (!buscarPlaca.trim()) return viajesIncompletosProducto
-    
+
     const terminoBusqueda = buscarPlaca.trim().toLowerCase()
-    return viajesIncompletosProducto.filter(viaje => 
+    return viajesIncompletosProducto.filter(viaje =>
       viaje.placa.toLowerCase().includes(terminoBusqueda)
     )
   }, [viajesIncompletosProducto, buscarPlaca])
@@ -1551,7 +1551,7 @@ export default function BarcoPesadorPage() {
   const cargarDatos = async () => {
     try {
       setLoading(true)
-      
+
       const { data: barcoData, error: barcoError } = await supabase
         .from('barcos')
         .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
@@ -1566,7 +1566,7 @@ export default function BarcoPesadorPage() {
       setBarco(barcoData)
 
       const productosBarco = barcoData.metas_json?.productos || []
-      
+
       if (productosBarco.length === 0) {
         toast.error('Este barco no tiene productos configurados')
         setProductos([])
@@ -1598,7 +1598,7 @@ export default function BarcoPesadorPage() {
         .order('viaje_numero', { ascending: true })
 
       setViajes(viajesData || [])
-      
+
       const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
       setViajesIncompletos(incompletos)
 
@@ -1640,16 +1640,16 @@ export default function BarcoPesadorPage() {
   useEffect(() => {
     if (productos.length > 0 && !productoActivo) {
       setProductoActivo(productos[0])
-      
+
       const siguienteNumero = getSiguienteNumeroViaje(productos[0].id)
-      
-      setNuevoViaje(prev => ({ 
-        ...prev, 
+
+      setNuevoViaje(prev => ({
+        ...prev,
         producto_id: productos[0].id,
         viaje_numero: siguienteNumero,
         fecha: getLocalDateString()
       }))
-      
+
       if (productos[0].tipo_registro === 'banda') {
         setTipoRegistro('banda')
       }
@@ -1659,8 +1659,8 @@ export default function BarcoPesadorPage() {
   useEffect(() => {
     if (productoActivo && modoRegistro === 'nuevo' && !editandoViaje) {
       const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
-      setNuevoViaje(prev => ({ 
-        ...prev, 
+      setNuevoViaje(prev => ({
+        ...prev,
         producto_id: productoActivo.id,
         viaje_numero: siguienteNumero,
         fecha: getLocalDateString()
@@ -1691,7 +1691,7 @@ export default function BarcoPesadorPage() {
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-6 text-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1706,13 +1706,12 @@ export default function BarcoPesadorPage() {
                     {barco.codigo_barco}
                   </span>
                 )}
-                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-                  barco.estado === 'activo' 
-                    ? 'bg-green-500/20 text-green-400' 
+                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${barco.estado === 'activo'
+                    ? 'bg-green-500/20 text-green-400'
                     : barco.estado === 'finalizado'
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'bg-yellow-500/20 text-yellow-400'
-                }`}>
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'bg-yellow-500/20 text-yellow-400'
+                  }`}>
                   {barco.estado === 'activo' && <Play className="w-3 h-3" />}
                   {barco.estado === 'finalizado' && <Lock className="w-3 h-3" />}
                   {barco.estado === 'planeado' && <Clock className="w-3 h-3" />}
@@ -1730,7 +1729,7 @@ export default function BarcoPesadorPage() {
                   {viajesIncompletos.length} pendientes
                 </div>
               )}
-              
+
               <button
                 onClick={exportarTodoAExcel}
                 className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg"
@@ -1739,7 +1738,7 @@ export default function BarcoPesadorPage() {
                 <Download className="w-4 h-4" />
                 Exportar Todo a Excel
               </button>
-              
+
               <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -1752,22 +1751,19 @@ export default function BarcoPesadorPage() {
 
           {/* Indicadores de inicio/fin de descarga */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className={`rounded-xl p-4 ${
-              barco.operacion_iniciada_at 
-                ? 'bg-green-500/20 border border-green-500/30' 
+            <div className={`rounded-xl p-4 ${barco.operacion_iniciada_at
+                ? 'bg-green-500/20 border border-green-500/30'
                 : 'bg-yellow-500/20 border border-yellow-500/30'
-            }`}>
+              }`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${
-                  barco.operacion_iniciada_at 
-                    ? 'bg-green-500/30' 
+                <div className={`p-2 rounded-lg ${barco.operacion_iniciada_at
+                    ? 'bg-green-500/30'
                     : 'bg-yellow-500/30'
-                }`}>
-                  <Play className={`w-5 h-5 ${
-                    barco.operacion_iniciada_at 
-                      ? 'text-green-400' 
+                  }`}>
+                  <Play className={`w-5 h-5 ${barco.operacion_iniciada_at
+                      ? 'text-green-400'
                       : 'text-yellow-400'
-                  }`} />
+                    }`} />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
@@ -1804,28 +1800,25 @@ export default function BarcoPesadorPage() {
               </div>
             </div>
 
-            <div className={`rounded-xl p-4 ${
-              barco.operacion_finalizada_at 
-                ? 'bg-red-500/20 border border-red-500/30' 
+            <div className={`rounded-xl p-4 ${barco.operacion_finalizada_at
+                ? 'bg-red-500/20 border border-red-500/30'
                 : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                ? 'bg-blue-500/20 border border-blue-500/30'
-                : 'bg-slate-700/50 border border-white/10'
-            }`}>
+                  ? 'bg-blue-500/20 border border-blue-500/30'
+                  : 'bg-slate-700/50 border border-white/10'
+              }`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${
-                  barco.operacion_finalizada_at 
-                    ? 'bg-red-500/30' 
+                <div className={`p-2 rounded-lg ${barco.operacion_finalizada_at
+                    ? 'bg-red-500/30'
                     : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                    ? 'bg-blue-500/30'
-                    : 'bg-slate-600'
-                }`}>
-                  <StopCircle className={`w-5 h-5 ${
-                    barco.operacion_finalizada_at 
-                      ? 'text-red-400' 
+                      ? 'bg-blue-500/30'
+                      : 'bg-slate-600'
+                  }`}>
+                  <StopCircle className={`w-5 h-5 ${barco.operacion_finalizada_at
+                      ? 'text-red-400'
                       : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                      ? 'text-blue-400'
-                      : 'text-slate-400'
-                  }`} />
+                        ? 'text-blue-400'
+                        : 'text-slate-400'
+                    }`} />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
@@ -1895,7 +1888,7 @@ export default function BarcoPesadorPage() {
                   </p>
                 </div>
               )}
-              
+
               {barco.tiempo_ataque && (
                 <div className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
                   <div className="flex items-center gap-2 mb-1">
@@ -1916,7 +1909,7 @@ export default function BarcoPesadorPage() {
                   </p>
                 </div>
               )}
-              
+
               {barco.tiempo_recibido && (
                 <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
                   <div className="flex items-center gap-2 mb-1">
@@ -1958,21 +1951,20 @@ export default function BarcoPesadorPage() {
             {productos.map(prod => {
               const resumen = resumenProductos[prod.id]
               const activo = productoActivo?.id === prod.id
-              
+
               let colorClass = 'blue'
               if (prod.codigo === 'MA-001') colorClass = 'amber'
               else if (prod.codigo === 'HS-001') colorClass = 'green'
               else if (prod.codigo === 'DDGS') colorClass = 'orange'
-              
+
               return (
                 <button
                   key={prod.id}
                   onClick={() => cambiarProducto(prod)}
-                  className={`flex-1 min-w-[200px] px-6 py-4 border-b-2 transition-all ${
-                    activo 
-                      ? `border-${colorClass}-500 bg-${colorClass}-500/10` 
+                  className={`flex-1 min-w-[200px] px-6 py-4 border-b-2 transition-all ${activo
+                      ? `border-${colorClass}-500 bg-${colorClass}-500/10`
                       : 'border-transparent hover:bg-white/5'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{prod.icono}</span>
@@ -1982,11 +1974,10 @@ export default function BarcoPesadorPage() {
                       </p>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="text-slate-500">{prod.codigo}</span>
-                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] ${
-                          prod.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
-                          prod.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-green-500/20 text-green-400'
-                        }`}>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] ${prod.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
+                            prod.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
+                              'bg-green-500/20 text-green-400'
+                          }`}>
                           {prod.tipo_registro}
                         </span>
                       </div>
@@ -2015,11 +2006,10 @@ export default function BarcoPesadorPage() {
                   <h2 className="text-2xl font-bold text-white">{productoActivo.nombre}</h2>
                   <p className="text-slate-400 flex items-center gap-2">
                     {productoActivo.codigo}
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      productoActivo.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
-                      productoActivo.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${productoActivo.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
+                        productoActivo.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-green-500/20 text-green-400'
+                      }`}>
                       {productoActivo.tipo_registro}
                     </span>
                   </p>
@@ -2062,19 +2052,17 @@ export default function BarcoPesadorPage() {
                   </p>
                 </div>
 
-                <div className={`bg-slate-900 rounded-xl p-4 ${
-                  productoSeleccionado.faltanteTM > 0 
-                    ? 'border-l-4 border-amber-500' 
+                <div className={`bg-slate-900 rounded-xl p-4 ${productoSeleccionado.faltanteTM > 0
+                    ? 'border-l-4 border-amber-500'
                     : 'border-l-4 border-green-500'
-                }`}>
+                  }`}>
                   <p className="text-xs text-slate-500">
                     {productoSeleccionado.faltanteTM > 0 ? 'Faltante' : 'Excedente'}
                   </p>
-                  <p className={`text-xl font-bold ${
-                    productoSeleccionado.faltanteTM > 0 
-                      ? 'text-amber-400' 
+                  <p className={`text-xl font-bold ${productoSeleccionado.faltanteTM > 0
+                      ? 'text-amber-400'
                       : 'text-green-400'
-                  }`}>
+                    }`}>
                     {productoSeleccionado.faltanteTM > 0
                       ? productoSeleccionado.faltanteTM.toFixed(3)
                       : '+' + productoSeleccionado.excedenteTM.toFixed(3)} TM
@@ -2124,11 +2112,10 @@ export default function BarcoPesadorPage() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setVistaGraficos(!vistaGraficos)}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                  vistaGraficos 
-                    ? 'bg-indigo-600 text-white' 
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${vistaGraficos
+                    ? 'bg-indigo-600 text-white'
                     : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30'
-                }`}
+                  }`}
               >
                 <LineChart className="w-4 h-4" />
                 {vistaGraficos ? 'Ver Datos' : 'Ver Gráfica de Tendencia'}
@@ -2147,55 +2134,55 @@ export default function BarcoPesadorPage() {
                 {barco.nombre}
               </span>
             </h3>
-            
+
             {datosGraficoFlujo.length > 0 ? (
               <>
                 <div className="h-96 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ReLineChart data={datosGraficoFlujo} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis 
-                        dataKey="hora" 
+                      <XAxis
+                        dataKey="hora"
                         stroke="#94a3b8"
                         tick={{ fill: '#94a3b8', fontSize: 12 }}
                         interval="preserveStartEnd"
                       />
-                      <YAxis 
+                      <YAxis
                         stroke="#94a3b8"
                         tick={{ fill: '#94a3b8', fontSize: 12 }}
                         label={{ value: 'TM', angle: -90, position: 'insideLeft', fill: '#94a3b8' }}
                       />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff' }}
                         labelStyle={{ color: '#94a3b8' }}
                       />
                       <Legend />
                       {productoActivo.tipo_registro !== 'banda' && (
-                        <Line 
-                          type="monotone" 
-                          dataKey="viajes" 
-                          stroke="#22c55e" 
-                          name="Viajes (TM)" 
+                        <Line
+                          type="monotone"
+                          dataKey="viajes"
+                          stroke="#22c55e"
+                          name="Viajes (TM)"
                           dot={false}
                           strokeWidth={2}
                         />
                       )}
                       {productoActivo.tipo_registro !== 'viajes' && (
-                        <Line 
-                          type="monotone" 
-                          dataKey="banda" 
-                          stroke="#3b82f6" 
-                          name="Banda (TM)" 
+                        <Line
+                          type="monotone"
+                          dataKey="banda"
+                          stroke="#3b82f6"
+                          name="Banda (TM)"
                           dot={false}
                           strokeWidth={2}
                         />
                       )}
-                      <Line 
-                        type="monotone" 
-                        dataKey="total" 
-                        stroke="#a855f7" 
-                        name="Total Acumulado (TM)" 
-                        dot={false} 
+                      <Line
+                        type="monotone"
+                        dataKey="total"
+                        stroke="#a855f7"
+                        name="Total Acumulado (TM)"
+                        dot={false}
                         strokeWidth={3}
                       />
                     </ReLineChart>
@@ -2258,7 +2245,7 @@ export default function BarcoPesadorPage() {
               {resumenPorDestino.map((dest) => {
                 const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
                 const pct = totalGeneral > 0 ? (dest.total_tm / totalGeneral) * 100 : 0
-                
+
                 let limiteColor = 'teal'
                 let limiteMensaje = ''
                 if (dest.limite_tm > 0) {
@@ -2277,38 +2264,34 @@ export default function BarcoPesadorPage() {
                 return (
                   <div
                     key={dest.destino_id}
-                    className={`bg-slate-900 border rounded-xl overflow-hidden transition-all ${
-                      dest.limite_tm > 0 && dest.completado 
-                        ? 'border-green-500/30 ring-1 ring-green-500/20' 
+                    className={`bg-slate-900 border rounded-xl overflow-hidden transition-all ${dest.limite_tm > 0 && dest.completado
+                        ? 'border-green-500/30 ring-1 ring-green-500/20'
                         : dest.limite_tm > 0 && dest.cerca_limite
-                        ? 'border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
-                        : 'border-white/5'
-                    }`}
+                          ? 'border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
+                          : 'border-white/5'
+                      }`}
                   >
-                    <div className={`flex items-center justify-between px-4 py-3 border-b ${
-                      dest.limite_tm > 0 && dest.completado
+                    <div className={`flex items-center justify-between px-4 py-3 border-b ${dest.limite_tm > 0 && dest.completado
                         ? 'border-green-500/20 bg-green-500/5'
                         : dest.limite_tm > 0 && dest.cerca_limite
-                        ? 'border-amber-500/20 bg-amber-500/5'
-                        : 'border-white/5'
-                    }`}>
+                          ? 'border-amber-500/20 bg-amber-500/5'
+                          : 'border-white/5'
+                      }`}>
                       <div className="flex items-center gap-2">
-                        <MapPin className={`w-4 h-4 ${
-                          dest.limite_tm > 0 && dest.completado
+                        <MapPin className={`w-4 h-4 ${dest.limite_tm > 0 && dest.completado
                             ? 'text-green-400'
                             : dest.limite_tm > 0 && dest.cerca_limite
-                            ? 'text-amber-400'
-                            : 'text-teal-400'
-                        }`} />
+                              ? 'text-amber-400'
+                              : 'text-teal-400'
+                          }`} />
                         <span className="font-bold text-white">{dest.nombre}</span>
                         {dest.limite_tm > 0 && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            dest.completado
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${dest.completado
                               ? 'bg-green-500/20 text-green-400'
                               : dest.cerca_limite
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : 'bg-blue-500/20 text-blue-400'
-                          }`}>
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'bg-blue-500/20 text-blue-400'
+                            }`}>
                             {dest.completado ? 'COMPLETO' : `${dest.porcentaje.toFixed(0)}%`}
                           </span>
                         )}
@@ -2321,13 +2304,12 @@ export default function BarcoPesadorPage() {
                     <div className="px-4 pt-3">
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${
-                            dest.limite_tm > 0 && dest.completado
+                          className={`h-full rounded-full transition-all ${dest.limite_tm > 0 && dest.completado
                               ? 'bg-green-500'
                               : dest.limite_tm > 0 && dest.cerca_limite
-                              ? 'bg-amber-500'
-                              : 'bg-teal-500'
-                          }`}
+                                ? 'bg-amber-500'
+                                : 'bg-teal-500'
+                            }`}
                           style={{ width: `${Math.min(pct, 100)}%` }}
                         />
                       </div>
@@ -2336,13 +2318,12 @@ export default function BarcoPesadorPage() {
                     <div className="px-4 py-3">
                       <div className="flex justify-between items-end">
                         <div>
-                          <p className={`text-2xl font-black ${
-                            dest.limite_tm > 0 && dest.completado
+                          <p className={`text-2xl font-black ${dest.limite_tm > 0 && dest.completado
                               ? 'text-green-400'
                               : dest.limite_tm > 0 && dest.cerca_limite
-                              ? 'text-amber-400'
-                              : 'text-teal-400'
-                          }`}>
+                                ? 'text-amber-400'
+                                : 'text-teal-400'
+                            }`}>
                             {dest.total_tm.toFixed(3)} TM
                           </p>
                           {dest.limite_tm > 0 && (
@@ -2351,15 +2332,14 @@ export default function BarcoPesadorPage() {
                             </p>
                           )}
                         </div>
-                        
+
                         {limiteMensaje && (
-                          <div className={`text-right ${
-                            dest.completado
+                          <div className={`text-right ${dest.completado
                               ? 'text-green-400'
                               : dest.cerca_limite
-                              ? 'text-amber-400'
-                              : 'text-blue-400'
-                          }`}>
+                                ? 'text-amber-400'
+                                : 'text-blue-400'
+                            }`}>
                             <p className="text-xs font-bold">{limiteMensaje}</p>
                           </div>
                         )}
@@ -2376,13 +2356,12 @@ export default function BarcoPesadorPage() {
                         </div>
                         <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${
-                              dest.completado
+                            className={`h-full rounded-full transition-all ${dest.completado
                                 ? 'bg-green-500'
                                 : dest.cerca_limite
-                                ? 'bg-amber-500'
-                                : 'bg-blue-500'
-                            }`}
+                                  ? 'bg-amber-500'
+                                  : 'bg-blue-500'
+                              }`}
                             style={{ width: `${Math.min(dest.porcentaje, 100)}%` }}
                           />
                         </div>
@@ -2490,11 +2469,10 @@ export default function BarcoPesadorPage() {
               {productoActivo?.tipo_registro !== 'banda' && (
                 <button
                   onClick={() => setTipoRegistro('viajes')}
-                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                    tipoRegistro === 'viajes'
+                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'viajes'
                       ? 'bg-green-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   <Truck className="w-4 h-4" />
                   Viajes
@@ -2503,11 +2481,10 @@ export default function BarcoPesadorPage() {
               {productoActivo?.tipo_registro !== 'viajes' && (
                 <button
                   onClick={() => setTipoRegistro('banda')}
-                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                    tipoRegistro === 'banda'
+                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'banda'
                       ? 'bg-blue-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   <Scale className="w-4 h-4" />
                   Banda
@@ -2515,17 +2492,16 @@ export default function BarcoPesadorPage() {
               )}
               <button
                 onClick={() => setTipoRegistro('bitacora')}
-                className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                  tipoRegistro === 'bitacora'
+                className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'bitacora'
                     ? 'bg-purple-500 text-white'
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 <BookOpen className="w-4 h-4" />
                 Bitácora
               </button>
             </div>
-            
+
           </div>
         )}
 
@@ -2541,30 +2517,28 @@ export default function BarcoPesadorPage() {
                     setEditandoViaje(null)
                     if (productoActivo) {
                       const siguienteNumero = getSiguienteNumeroViaje(productoActivo.id)
-                      setNuevoViaje(prev => ({ 
-                        ...prev, 
+                      setNuevoViaje(prev => ({
+                        ...prev,
                         viaje_numero: siguienteNumero,
                         fecha: getLocalDateString()
                       }))
                     }
                   }}
-                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                    modoRegistro === 'nuevo' || modoRegistro === 'editar'
+                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${modoRegistro === 'nuevo' || modoRegistro === 'editar'
                       ? 'bg-blue-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                  }`}
+                    }`}
                 >
                   <ArrowRight className="w-4 h-4" />
                   {editandoViaje ? 'Editando Viaje' : 'Paso 1: Registrar Viaje'}
                 </button>
                 <button
                   onClick={() => setModoRegistro('completar')}
-                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                    modoRegistro === 'completar'
+                  className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${modoRegistro === 'completar'
                       ? 'bg-green-500 text-white'
                       : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                  }`}
-                  disabled={viajesIncompletosProducto.length === 0 }
+                    }`}
+                  disabled={viajesIncompletosProducto.length === 0}
                 >
                   <MapPin className="w-4 h-4" />
                   Paso 2: Asignar Destino
@@ -2610,9 +2584,8 @@ export default function BarcoPesadorPage() {
                       onChange={handleNuevoViajeChange}
                       onBlur={(e) => !editandoViaje && handleValidarNumeroViaje(e.target.value)}
                       onKeyDown={(e) => handleKeyDownEnter(e, 'fecha')}
-                      className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${
-                        conflicto ? 'border-red-500 bg-red-500/10' : 'border-white/10'
-                      }`}
+                      className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${conflicto ? 'border-red-500 bg-red-500/10' : 'border-white/10'
+                        }`}
                     />
                     {validando && (
                       <p className="text-xs text-slate-400 mt-1">⏳ Verificando disponibilidad...</p>
@@ -2622,7 +2595,7 @@ export default function BarcoPesadorPage() {
                         <div className="flex items-center gap-2 text-sm text-red-400">
                           <AlertCircle className="w-4 h-4 flex-shrink-0" />
                           <span>
-                            Viaje <strong>#{nuevoViaje.viaje_numero}</strong> ya ocupado. 
+                            Viaje <strong>#{nuevoViaje.viaje_numero}</strong> ya ocupado.
                             Siguiente libre: <strong>#{conflicto.sugerido}</strong>
                           </span>
                         </div>
@@ -2636,6 +2609,8 @@ export default function BarcoPesadorPage() {
                       </div>
                     )}
                   </div>
+
+
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Fecha <span className="text-red-400">*</span>
@@ -2651,6 +2626,30 @@ export default function BarcoPesadorPage() {
                       required
                     />
                   </div>
+
+
+                   <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Placa <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      ref={(el) => inputRefs.current['placa'] = el}
+                      type="text"
+                      name="placa"
+                      value={nuevoViaje.placa}
+                      onChange={handlePlacaChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_neto_updp_tm')}
+                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="C-909389"
+                      required
+                    />
+                  </div>
+
+
+
+
+
+                  
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Hora Salida UPDP
@@ -2687,7 +2686,51 @@ export default function BarcoPesadorPage() {
                       </button>
                     </div>
                   </div>
+
+
+                
+
+
+                 
                   <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Peso Bruto UPDP (TM)
+                    </label>
+                    <input
+                      ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
+                      type="number"
+                      step="0.001"
+                      name="peso_bruto_updp_tm"
+                      value={nuevoViaje.peso_bruto_updp_tm}
+                      onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
+                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="31.500 (o 31500)"
+                    />
+                  </div>
+
+
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Peso Neto UPDP (TM)
+                    </label>
+                    <input
+                      ref={(el) => inputRefs.current['peso_neto_updp_tm'] = el}
+                      type="number"
+                      step="0.001"
+                      name="peso_neto_updp_tm"
+                      value={nuevoViaje.peso_neto_updp_tm}
+                      onChange={handleNuevoViajeChange}
+                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_almapac_tm')}
+                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                      placeholder="19.345 (o 19345)"
+                    />
+                  </div>
+
+
+
+                    <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Hora Entrada Almapac
                     </label>
@@ -2723,58 +2766,10 @@ export default function BarcoPesadorPage() {
                       </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Placa <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      ref={(el) => inputRefs.current['placa'] = el}
-                      type="text"
-                      name="placa"
-                      value={nuevoViaje.placa}
-                      onChange={handlePlacaChange}
-                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_neto_updp_tm')}
-                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="C-909389"
-                      required
-                    />
-                  </div>
-
-<div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Peso Bruto UPDP (TM)
-                    </label>
-                    <input
-                      ref={(el) => inputRefs.current['peso_bruto_updp_tm'] = el}
-                      type="number"
-                      step="0.001"
-                      name="peso_bruto_updp_tm"
-                      value={nuevoViaje.peso_bruto_updp_tm}
-                      onChange={handleNuevoViajeChange}
-                      onKeyDown={(e) => handleKeyDownEnter(e, 'destino_id')}
-                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="31.500 (o 31500)"
-                    />
-                  </div>
-                  
 
 
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Peso Neto UPDP (TM)
-                    </label>
-                    <input
-                      ref={(el) => inputRefs.current['peso_neto_updp_tm'] = el}
-                      type="number"
-                      step="0.001"
-                      name="peso_neto_updp_tm"
-                      value={nuevoViaje.peso_neto_updp_tm}
-                      onChange={handleNuevoViajeChange}
-                      onKeyDown={(e) => handleKeyDownEnter(e, 'peso_bruto_almapac_tm')}
-                      className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                      placeholder="19.345 (o 19345)"
-                    />
-                  </div>
+
+
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Peso Bruto Almapac (TM)
@@ -2791,7 +2786,7 @@ export default function BarcoPesadorPage() {
                       placeholder="30.865 (o 30865)"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Destino (opcional en paso 1)
@@ -2898,7 +2893,7 @@ export default function BarcoPesadorPage() {
                     <label className="block text-sm font-bold text-slate-400 mb-3">
                       Selecciona el viaje para asignar destino:
                     </label>
-                    
+
                     {viajesIncompletosFiltrados.length === 0 ? (
                       <div className="bg-slate-900 rounded-lg p-8 text-center border border-white/10">
                         <Search className="w-12 h-12 text-slate-700 mx-auto mb-3" />
@@ -2937,7 +2932,7 @@ export default function BarcoPesadorPage() {
                                   </div>
                                 </div>
                               </button>
-                              
+
                               <div className="flex gap-2 ml-4">
                                 <button
                                   onClick={() => seleccionarViajeParaCompletar(viaje)}
@@ -3180,7 +3175,7 @@ export default function BarcoPesadorPage() {
                         Barco: {barco.nombre}
                       </span>
                     </h3>
-                    
+
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
@@ -3192,7 +3187,7 @@ export default function BarcoPesadorPage() {
                           {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
                         </span>
                       </button>
-                      
+
                       <div className="relative w-64">
                         <input
                           type="text"
@@ -3214,7 +3209,7 @@ export default function BarcoPesadorPage() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <div className="max-h-[500px] overflow-y-auto relative">
                     <table className="w-full">
@@ -3249,7 +3244,7 @@ export default function BarcoPesadorPage() {
                               .slice(0, idxAsc + 1)
                               .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
                           }
-                          
+
                           return (
                             <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
                               <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
@@ -3311,7 +3306,7 @@ export default function BarcoPesadorPage() {
                     </table>
                   </div>
                 </div>
-                
+
                 {searchTerm && (
                   <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
                     Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
@@ -3342,7 +3337,7 @@ export default function BarcoPesadorPage() {
                     Barco: {barco.nombre}
                   </span>
                 </h2>
-                
+
                 <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl px-6 py-3">
                   <p className="text-xs text-blue-200 uppercase font-bold">FLUJO PROMEDIO POR HORA</p>
                   <div className="flex items-baseline gap-2">
@@ -3392,18 +3387,18 @@ export default function BarcoPesadorPage() {
                       type="datetime-local"
                       name="fecha_hora"
                       value={lecturaActual.fecha_hora}
-                      onChange={(e) => setLecturaActual(prev => ({ 
-                        ...prev, 
-                        fecha_hora: e.target.value 
+                      onChange={(e) => setLecturaActual(prev => ({
+                        ...prev,
+                        fecha_hora: e.target.value
                       }))}
                       className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white pr-10"
                       step="1"
                     />
                     <button
                       type="button"
-                      onClick={() => setLecturaActual(prev => ({ 
-                        ...prev, 
-                        fecha_hora: getCurrentSVTimeForInput() 
+                      onClick={() => setLecturaActual(prev => ({
+                        ...prev,
+                        fecha_hora: getCurrentSVTimeForInput()
                       }))}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400"
                       title="Usar fecha y hora actual de El Salvador"
@@ -3496,13 +3491,13 @@ export default function BarcoPesadorPage() {
                         const lecturasMismoDestino = lecturasFiltradas
                           .filter(l => l.destino_id === lectura.destino_id)
                           .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-                        
+
                         const indiceEnDestino = lecturasMismoDestino.findIndex(l => l.id === lectura.id)
                         const lecturaAnteriorMismoDestino = indiceEnDestino > 0 ? lecturasMismoDestino[indiceEnDestino - 1] : null
-                        
+
                         let flujo = 0
                         let delta = 0
-                        
+
                         if (lecturaAnteriorMismoDestino) {
                           const tiempoMs = new Date(lectura.fecha_hora) - new Date(lecturaAnteriorMismoDestino.fecha_hora)
                           const tiempoHoras = tiempoMs / (1000 * 60 * 60)
@@ -3511,7 +3506,7 @@ export default function BarcoPesadorPage() {
                             flujo = delta / tiempoHoras
                           }
                         }
-                        
+
                         return (
                           <tr key={lectura.id} className="hover:bg-white/5">
                             <td className="px-4 py-3 whitespace-nowrap text-slate-300">
@@ -3600,8 +3595,8 @@ export default function BarcoPesadorPage() {
                       onChange={(e) => {
                         const fecha = e.target.value
                         const horaActual = bitacoraActual.fecha_hora?.split('T')[1] || '00:00:00'
-                        setBitacoraActual(prev => ({ 
-                          ...prev, 
+                        setBitacoraActual(prev => ({
+                          ...prev,
                           fecha_hora: `${fecha}T${horaActual}`
                         }))
                       }}
@@ -3614,8 +3609,8 @@ export default function BarcoPesadorPage() {
                         onChange={(e) => {
                           const hora = e.target.value
                           const fechaActual = bitacoraActual.fecha_hora?.split('T')[0] || getLocalDateString()
-                          setBitacoraActual(prev => ({ 
-                            ...prev, 
+                          setBitacoraActual(prev => ({
+                            ...prev,
                             fecha_hora: `${fechaActual}T${hora}`
                           }))
                         }}
@@ -3628,8 +3623,8 @@ export default function BarcoPesadorPage() {
                           const ahora = new Date()
                           const fecha = getLocalDateString(ahora)
                           const hora = getHoraActual24h()
-                          setBitacoraActual(prev => ({ 
-                            ...prev, 
+                          setBitacoraActual(prev => ({
+                            ...prev,
                             fecha_hora: `${fecha}T${hora}`
                           }))
                         }}
