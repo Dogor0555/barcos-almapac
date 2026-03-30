@@ -7,6 +7,7 @@
  *  ⚡ CORREGIDO: Cálculos correctos para importación y exportación
  *  ⚡ CORREGIDO: Vista general muestra valores correctos
  *  ⚡ CORREGIDO: Panel de producto muestra valores correctos
+ *  ⚡ MEJORADO: Primer producto seleccionado por defecto al cargar
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -1997,7 +1998,7 @@ function TablaBanda({ lecturas, producto }) {
                 <th className="alm-th-num">Acumulado (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Destino</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {lecturas.map((l, i) => {
@@ -2009,7 +2010,6 @@ function TablaBanda({ lecturas, producto }) {
                     <td>
                       {fechaHoraSV.format("DD/MM/YY HH:mm")}
                       {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
-                     
                     </td>
                     <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
                       {fmtTM(l.acumulado_tm)}
@@ -2208,13 +2208,22 @@ export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
   const { barco, productos, viajes, lecturasBanda, lecturasExportacion, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
 
+  // 🔥 NUEVO: Seleccionar automáticamente el primer producto cuando los datos están cargados
+  useEffect(() => {
+    if (!loading && productos.length > 0 && productoSeleccionado === "general") {
+      console.log("✅ Seleccionando primer producto automáticamente:", productos[0].nombre);
+      setProductoSeleccionado(productos[0].id);
+    }
+  }, [loading, productos, productoSeleccionado]);
+
   console.log("📊 Dashboard - datos cargados:", {
     barco: barco?.codigo_barco,
     tipo: barco?.tipo_operacion,
     productos: productos.length,
     viajes: viajes.length,
     lecturasBanda: lecturasBanda.length,
-    lecturasExportacion: lecturasExportacion.length
+    lecturasExportacion: lecturasExportacion.length,
+    productoSeleccionado: productoSeleccionado === "general" ? "Vista General" : "Producto específico"
   });
 
   const viajesFiltrados = useMemo(() => {
