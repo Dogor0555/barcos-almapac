@@ -2143,16 +2143,37 @@ export default function ExportacionPage() {
             onCancel={() => {}}
           />
           
-          {/* Aquí podrías poner algún otro componente si lo deseas */}
-          <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/20 rounded-2xl p-6 flex items-center justify-center text-center">
-            <div>
-              <Clock className="w-12 h-12 text-orange-400 mx-auto mb-3 opacity-50" />
-              <p className="text-slate-400 text-sm">
-                Registra paros de forma rápida con el panel superior<br/>
-                o utiliza el formulario detallado para mayor control
-              </p>
+          {/* LISTADO DE PAROS REGISTRADOS - AHORA AL MISMO NIVEL QUE EL FORMULARIO */}
+        {registrosParos.length > 0 && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <PauseCircle className="w-5 h-5 text-red-400" />
+                Visualizar Paros Registrados ({registrosParos.length})
+              </h2>
+              <button
+                onClick={handleNuevoParo}
+                className="bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                Nuevo Paro
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {registrosParos.map(paro => (
+                <ParoCard
+                  key={paro.id}
+                  paro={paro}
+                  catalogosParos={catalogosParos}
+                  onEditar={handleEditarParo}
+                  onEliminar={handleEliminarParo}
+                />
+              ))}
             </div>
           </div>
+        )}
+         
         </div>
 
         {/* Advertencia de operación finalizada (solo informativa) */}
@@ -2804,36 +2825,7 @@ export default function ExportacionPage() {
           )}
         </div>
 
-        {/* LISTADO DE PAROS REGISTRADOS - AHORA AL MISMO NIVEL QUE EL FORMULARIO */}
-        {registrosParos.length > 0 && (
-          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <PauseCircle className="w-5 h-5 text-red-400" />
-                Visualizar Paros Registrados ({registrosParos.length})
-              </h2>
-              <button
-                onClick={handleNuevoParo}
-                className="bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
-              >
-                <Plus className="w-4 h-4" />
-                Nuevo Paro
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {registrosParos.map(paro => (
-                <ParoCard
-                  key={paro.id}
-                  paro={paro}
-                  catalogosParos={catalogosParos}
-                  onEditar={handleEditarParo}
-                  onEliminar={handleEliminarParo}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        
       </div>
 
       {showParoModal && barco && (
