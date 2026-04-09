@@ -1,4 +1,4 @@
-// app/barco/[token]/exportacion/page.js - Versión CORREGIDA (sin FormularioParo duplicado)
+// app/barco/[token]/exportacion/page.js - Versión CON FORMULARIO SIMPLE (sin cronómetro)
 
 'use client'
 
@@ -27,7 +27,7 @@ dayjs.extend(utc)
 dayjs.extend(timezone)
 
 // =====================================================
-// CONFIGURACIÓN DE HORARIO EL SALVADOR (GMT-6) - VERSIÓN FINAL CORREGIDA
+// CONFIGURACIÓN DE HORARIO EL SALVADOR (GMT-6)
 // =====================================================
 const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
 
@@ -49,7 +49,7 @@ const getCurrentSVTimeForInput = () => {
 }
 
 // =====================================================
-// CONFIGURACIÓN DE BODEGAS DEL BARCO (SIN CAPACIDAD)
+// CONFIGURACIÓN DE BODEGAS DEL BARCO
 // =====================================================
 const BODEGAS_BARCO = [
   { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01' },
@@ -63,7 +63,7 @@ const BODEGAS_BARCO = [
 ]
 
 // =====================================================
-// CONFIGURACIÓN DE TIPOS DE PARO (VERSIÓN COMPLETA)
+// CONFIGURACIÓN DE TIPOS DE PARO
 // =====================================================
 const getTiposParoConfig = () => ({
   // PAROS ALMAPAC
@@ -120,25 +120,17 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
   try {
     toast.loading('Preparando archivo Excel...', { id: 'excel' })
 
-    // Crear libro de Excel
     const wb = XLSX.utils.book_new()
     
-    // Hoja 1: Resumen General
     const resumenData = []
-    
-    // Información del barco
     resumenData.push(['INFORME DE EXPORTACIÓN - BARCO', barco.nombre])
     resumenData.push(['Código', barco.codigo_barco || '—'])
     resumenData.push(['Estado', barco.estado])
     resumenData.push(['Fecha del reporte', formatUTCToSV(new Date(), 'DD/MM/YYYY HH:mm')])
     resumenData.push([])
-    
-    // Inicio y fin de carga
     resumenData.push(['INICIO DE CARGA', barco.operacion_iniciada_at ? formatUTCToSV(barco.operacion_iniciada_at, 'DD/MM/YY HH:mm') : 'PENDIENTE'])
     resumenData.push(['FIN DE CARGA', barco.operacion_finalizada_at ? formatUTCToSV(barco.operacion_finalizada_at, 'DD/MM/YY HH:mm') : 'EN CURSO'])
     resumenData.push([])
-    
-    // Totales por producto
     resumenData.push(['RESUMEN POR PRODUCTO'])
     resumenData.push(['Producto', 'Total Cargado (TM)', 'Meta (TM)', '% Cumplimiento', 'Flujo Promedio (TM/h)'])
     
@@ -151,7 +143,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
       const meta = barco.metas_json?.limites?.[producto.codigo] || 0
       const cumplimiento = meta > 0 ? ((totalGeneral / meta) * 100).toFixed(1) : 'N/A'
       
-      // Calcular flujo promedio
       let flujoPromedio = 0
       if (ordenadas.length >= 2) {
         const primera = ordenadas[0]
@@ -172,8 +163,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
     })
     
     resumenData.push([])
-    
-    // Totales de paros
     const totalParos = registrosParos.length
     const totalMinutosParos = registrosParos.reduce((sum, r) => sum + (r.duracion_minutos || 0), 0)
     resumenData.push(['RESUMEN DE PAROS'])
@@ -184,7 +173,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
     const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
     
-    // Hoja 2: Registros de Carga por Producto
     productos.forEach(producto => {
       const exportacionesProd = exportaciones
         .filter(e => e.producto_id === producto.id)
@@ -202,7 +190,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
         const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
         const horaNum = parseInt(horaSV.split(':')[0])
         
-        // Determinar turno (6-18 o 18-6)
         let turno = '—'
         if (horaNum >= 6 && horaNum < 18) {
           turno = '6:00 - 18:00'
@@ -212,7 +199,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
         
         const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
         
-        // Calcular flujo y delta
         let flujo = 0
         let delta = 0
         if (index > 0) {
@@ -237,30 +223,10 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
         ])
       })
       
-      // Agregar totales
-      cargaData.push([])
-      const totalGeneral = exportacionesProd.length > 0 ? exportacionesProd[exportacionesProd.length - 1].acumulado_tm : 0
-      const primeraLectura = exportacionesProd[0]
-      const ultimaLectura = exportacionesProd[exportacionesProd.length - 1]
-      const horasTranscurridas = (new Date(ultimaLectura.fecha_hora) - new Date(primeraLectura.fecha_hora)) / (1000 * 60 * 60)
-      const flujoPromedio = horasTranscurridas > 0 ? totalGeneral / horasTranscurridas : 0
-      
-      cargaData.push(['TOTAL GENERAL', '', '', '', totalGeneral.toFixed(3)])
-      cargaData.push(['FLUJO PROMEDIO', '', '', '', '', '', flujoPromedio.toFixed(3)])
-      
-      // Meta y faltante
-      const meta = barco.metas_json?.limites?.[producto.codigo]
-      if (meta) {
-        const falta = Math.max(0, meta - totalGeneral)
-        cargaData.push(['META', '', '', '', meta.toFixed(3)])
-        cargaData.push(['FALTA POR CARGAR', '', '', '', falta.toFixed(3)])
-      }
-      
       const wsCarga = XLSX.utils.aoa_to_sheet(cargaData)
       XLSX.utils.book_append_sheet(wb, wsCarga, `Carga ${producto.codigo}`)
     })
     
-    // Hoja 3: Paros
     if (registrosParos.length > 0) {
       const parosData = []
       parosData.push(['REGISTRO DE PAROS'])
@@ -299,74 +265,6 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
       XLSX.utils.book_append_sheet(wb, wsParos, 'Paros')
     }
     
-    // Hoja 4: Resumen por Turno
-    const turnosData = []
-    turnosData.push(['RESUMEN POR TURNO'])
-    turnosData.push([])
-    turnosData.push(['Producto', 'Turno', 'Total Cargado (TM)', 'N° Lecturas', 'Flujo Promedio (TM/h)'])
-    
-    productos.forEach(producto => {
-      const exportacionesProd = exportaciones
-        .filter(e => e.producto_id === producto.id)
-        .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-      
-      if (exportacionesProd.length === 0) return
-      
-      // Separar por turno
-      const turnoDia = exportacionesProd.filter(e => {
-        const hora = parseInt(formatUTCToSV(e.fecha_hora, 'HH'))
-        return hora >= 6 && hora < 18
-      })
-      
-      const turnoNoche = exportacionesProd.filter(e => {
-        const hora = parseInt(formatUTCToSV(e.fecha_hora, 'HH'))
-        return hora < 6 || hora >= 18
-      })
-      
-      const calcularResumenTurno = (registros, nombreTurno) => {
-        if (registros.length === 0) return null
-        
-        const ordenados = registros.sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-        const total = Number(ordenados[ordenados.length - 1].acumulado_tm) - Number(ordenados[0].acumulado_tm)
-        const horas = (new Date(ordenados[ordenados.length - 1].fecha_hora) - new Date(ordenados[0].fecha_hora)) / (1000 * 60 * 60)
-        const flujo = horas > 0 ? total / horas : 0
-        
-        return {
-          turno: nombreTurno,
-          total: Math.max(0, total),
-          lecturas: registros.length,
-          flujo
-        }
-      }
-      
-      const resumenDia = calcularResumenTurno(turnoDia, '6:00 - 18:00')
-      const resumenNoche = calcularResumenTurno(turnoNoche, '18:00 - 6:00')
-      
-      if (resumenDia) {
-        turnosData.push([
-          `${producto.nombre} (${producto.codigo})`,
-          resumenDia.turno,
-          resumenDia.total.toFixed(3),
-          resumenDia.lecturas,
-          resumenDia.flujo.toFixed(3)
-        ])
-      }
-      
-      if (resumenNoche) {
-        turnosData.push([
-          `${producto.nombre} (${producto.codigo})`,
-          resumenNoche.turno,
-          resumenNoche.total.toFixed(3),
-          resumenNoche.lecturas,
-          resumenNoche.flujo.toFixed(3)
-        ])
-      }
-    })
-    
-    const wsTurnos = XLSX.utils.aoa_to_sheet(turnosData)
-    XLSX.utils.book_append_sheet(wb, wsTurnos, 'Resumen por Turno')
-    
-    // Descargar archivo
     const fileName = `Exportacion_${barco.nombre}_${dayjs().format('YYYY-MM-DD_HHmm')}.xlsx`
     XLSX.writeFile(wb, fileName)
     
@@ -378,334 +276,13 @@ const exportToExcel = (barco, exportaciones, productos, registrosParos, catalogo
 }
 
 // =====================================================
-// PANEL DE REGISTRO RÁPIDO DE PAROS (CON CRONÓMETRO)
+// FORMULARIO DE PAROS SIMPLE (SIN CRONÓMETRO)
 // =====================================================
-const PanelParosRapido = ({ barco, catalogosParos, onParoRegistrado, paroActivo, setParoActivo }) => {
-  const [mostrarSelector, setMostrarSelector] = useState(false)
-  const [grupoSeleccionado, setGrupoSeleccionado] = useState(null)
-  const [tipoSeleccionado, setTipoSeleccionado] = useState(null)
-  const [observaciones, setObservaciones] = useState('')
-  const [guardando, setGuardando] = useState(false)
-  const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0)
-  const [intervalId, setIntervalId] = useState(null)
-  
-  const TIPOS_PARO_CONFIG = getTiposParoConfig()
-  
-  // Tipos agrupados
-  const tiposPorGrupo = {
-    ALMAPAC: [],
-    UPDP: [],
-    OTRAS: []
-  }
-  
-  catalogosParos.forEach(tipo => {
-    const grupo = TIPOS_PARO_CONFIG[tipo.nombre]?.grupo || 'ALMAPAC'
-    if (grupo === 'UPDP') {
-      tiposPorGrupo.UPDP.push(tipo)
-    } else if (grupo === 'OTRAS') {
-      tiposPorGrupo.OTRAS.push(tipo)
-    } else {
-      tiposPorGrupo.ALMAPAC.push(tipo)
-    }
-  })
-  
-  // Limpiar intervalo al desmontar
-  useEffect(() => {
-    return () => {
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [intervalId])
-  
-  // Actualizar contador cuando hay un paro activo
-  useEffect(() => {
-    if (paroActivo) {
-      const inicio = new Date(paroActivo.hora_inicio_original)
-      const actualizarTiempo = () => {
-        const ahora = new Date()
-        const diffMs = ahora - inicio
-        setTiempoTranscurrido(Math.floor(diffMs / 60000))
-      }
-      actualizarTiempo()
-      const id = setInterval(actualizarTiempo, 60000)
-      setIntervalId(id)
-      return () => clearInterval(id)
-    } else {
-      if (intervalId) clearInterval(intervalId)
-      setIntervalId(null)
-      setTiempoTranscurrido(0)
-    }
-  }, [paroActivo])
-  
-  const iniciarParo = async () => {
-    if (!tipoSeleccionado) {
-      toast.error('Selecciona un tipo de paro')
-      return
-    }
-    
-    setGuardando(true)
-    try {
-      const user = getCurrentUser()
-      if (!user) throw new Error('No autenticado')
-      
-      const ahora = new Date()
-      const fecha = dayjs(ahora).tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD')
-      const hora_inicio = dayjs(ahora).tz(TIMEZONE_EL_SALVADOR).format('HH:mm')
-      
-      const datos = {
-        barco_id: barco.id,
-        tipo_paro_id: tipoSeleccionado.id,
-        fecha: fecha,
-        hora_inicio: hora_inicio,
-        hora_fin: null,
-        duracion_minutos: null,
-        observaciones: observaciones || null,
-        created_by: user.id,
-        updated_by: user.id
-      }
-      
-      const { data, error } = await supabase
-        .from('registro_paros')
-        .insert([datos])
-        .select()
-      
-      if (error) throw error
-      
-      setParoActivo({
-        ...datos,
-        id: data?.[0]?.id,
-        hora_inicio_original: ahora
-      })
-      
-      toast.success(`Paro iniciado: ${tipoSeleccionado.nombre}`)
-      setMostrarSelector(false)
-      setGrupoSeleccionado(null)
-      setTipoSeleccionado(null)
-      setObservaciones('')
-      
-      if (onParoRegistrado) onParoRegistrado()
-      
-    } catch (error) {
-      console.error('Error iniciando paro:', error)
-      toast.error('Error al iniciar paro')
-    } finally {
-      setGuardando(false)
-    }
-  }
-  
-  const finalizarParo = async () => {
-    if (!paroActivo) return
-    
-    setGuardando(true)
-    try {
-      const ahora = new Date()
-      const hora_fin = dayjs(ahora).tz(TIMEZONE_EL_SALVADOR).format('HH:mm')
-      
-      // Calcular duración en minutos
-      const inicio = new Date(paroActivo.hora_inicio_original)
-      const diffMs = ahora - inicio
-      const duracion_minutos = Math.floor(diffMs / 60000)
-      
-      const { error } = await supabase
-        .from('registro_paros')
-        .update({
-          hora_fin: hora_fin,
-          duracion_minutos: duracion_minutos,
-          updated_by: getCurrentUser()?.id
-        })
-        .eq('id', paroActivo.id)
-      
-      if (error) throw error
-      
-      toast.success(`Paro finalizado - Duración: ${Math.floor(duracion_minutos / 60)}h ${duracion_minutos % 60}m`)
-      setParoActivo(null)
-      
-      if (onParoRegistrado) onParoRegistrado()
-      
-    } catch (error) {
-      console.error('Error finalizando paro:', error)
-      toast.error('Error al finalizar paro')
-    } finally {
-      setGuardando(false)
-    }
-  }
-  
-  const coloresGrupo = {
-    ALMAPAC: { bg: 'bg-blue-500/20', border: 'border-blue-500/30', text: 'text-blue-400', icono: '📦' },
-    UPDP: { bg: 'bg-green-500/20', border: 'border-green-500/30', text: 'text-green-400', icono: '⚡' },
-    OTRAS: { bg: 'bg-purple-500/20', border: 'border-purple-500/30', text: 'text-purple-400', icono: '🌊' }
-  }
-  
-  return (
-    <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-      {/* Cabecera del panel */}
-      <div className="bg-gradient-to-r from-orange-600 to-red-600 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <PauseCircle className="w-5 h-5 text-white" />
-            <h3 className="font-bold text-white">Registro Rápido de Paros</h3>
-          </div>
-          {paroActivo && (
-            <div className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold text-white animate-pulse">
-              ⏱️ {Math.floor(tiempoTranscurrido / 60)}h {tiempoTranscurrido % 60}m
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <div className="p-4">
-        {paroActivo ? (
-          // Mostrar paro activo
-          <div className="space-y-3">
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-xs font-bold text-red-400">PARO ACTIVO</span>
-              </div>
-              <p className="text-white font-bold text-sm">
-                {catalogosParos.find(t => t.id === paroActivo.tipo_paro_id)?.nombre || 'Desconocido'}
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Inicio: {paroActivo.hora_inicio}
-              </p>
-              {paroActivo.observaciones && (
-                <p className="text-xs text-slate-400 mt-1 italic">
-                  {paroActivo.observaciones}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={finalizarParo}
-              disabled={guardando}
-              className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-            >
-              {guardando ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <CheckCircle className="w-4 h-4" />
-              )}
-              Finalizar Paro
-            </button>
-          </div>
-        ) : mostrarSelector ? (
-          // Selector de tipos de paro
-          <div className="space-y-3">
-            <button
-              onClick={() => setMostrarSelector(false)}
-              className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1"
-            >
-              ← Cancelar
-            </button>
-            
-            {!grupoSeleccionado ? (
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase">Selecciona el tipo de paro:</p>
-                {Object.keys(tiposPorGrupo).map(grupo => {
-                  const colores = coloresGrupo[grupo] || coloresGrupo.ALMAPAC
-                  if (tiposPorGrupo[grupo].length === 0) return null
-                  return (
-                    <button
-                      key={grupo}
-                      onClick={() => setGrupoSeleccionado(grupo)}
-                      className={`w-full p-3 rounded-xl border ${colores.border} ${colores.bg} text-left hover:scale-[1.02] transition-all`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{colores.icono}</span>
-                        <span className={`font-bold ${colores.text}`}>
-                          {grupo === 'ALMAPAC' ? 'PAROS ALMAPAC' : grupo === 'UPDP' ? 'PAROS UPDP' : 'PAROS POR OTRAS CAUSAS'}
-                        </span>
-                        <span className="ml-auto text-xs text-slate-500">
-                          {tiposPorGrupo[grupo].length}
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-slate-500" />
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <div>
-                <button
-                  onClick={() => setGrupoSeleccionado(null)}
-                  className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1 mb-3"
-                >
-                  ← Volver a grupos
-                </button>
-                
-                <p className="text-xs font-bold text-slate-400 mb-2">
-                  {grupoSeleccionado === 'ALMAPAC' ? '📦 PAROS ALMAPAC' : 
-                   grupoSeleccionado === 'UPDP' ? '⚡ PAROS UPDP' : '🌊 PAROS POR OTRAS CAUSAS'}
-                </p>
-                
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                  {tiposPorGrupo[grupoSeleccionado].map(tipo => {
-                    const config = TIPOS_PARO_CONFIG[tipo.nombre] || {}
-                    return (
-                      <button
-                        key={tipo.id}
-                        onClick={() => setTipoSeleccionado(tipo)}
-                        className={`w-full p-3 rounded-xl border transition-all text-left ${
-                          tipoSeleccionado?.id === tipo.id
-                            ? 'border-orange-500 bg-orange-500/20'
-                            : 'border-white/10 bg-slate-900 hover:border-orange-500/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={config.text || 'text-slate-400'}>
-                            {config.icono || <AlertTriangle className="w-4 h-4" />}
-                          </span>
-                          <span className="text-white text-sm">{tipo.nombre}</span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-                
-                {tipoSeleccionado && (
-                  <div className="mt-4 space-y-3">
-                    <textarea
-                      value={observaciones}
-                      onChange={(e) => setObservaciones(e.target.value)}
-                      placeholder="Observaciones (opcional)"
-                      className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white text-sm resize-none"
-                      rows="2"
-                    />
-                    <button
-                      onClick={iniciarParo}
-                      disabled={guardando}
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
-                    >
-                      {guardando ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <Play className="w-4 h-4" />
-                      )}
-                      Iniciar Paro
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          // Botón para iniciar nuevo paro
-          <button
-            onClick={() => setMostrarSelector(true)}
-            className="w-full bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-400 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Registrar Nuevo Paro
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// =====================================================
-// FORMULARIO DE PAROS (SOLO PARA EDICIÓN - VERSIÓN COMPACTA)
-// =====================================================
-const FormularioParoEdicion = ({ barco, catalogosParos, paroEditando, onSave, onCancel }) => {
+const FormularioParoSimple = ({ barco, catalogosParos, onSave, onCancel, paroEditando }) => {
   const [loading, setLoading] = useState(false)
+  const [paso, setPaso] = useState(1)
+  const [tipoSeleccionado, setTipoSeleccionado] = useState(null)
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState(null)
   const [formData, setFormData] = useState({
     tipo_paro_id: paroEditando?.tipo_paro_id || '',
     fecha: paroEditando?.fecha || dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
@@ -715,7 +292,33 @@ const FormularioParoEdicion = ({ barco, catalogosParos, paroEditando, onSave, on
   })
 
   const TIPOS_PARO_CONFIG = getTiposParoConfig()
-  const tipoActual = catalogosParos.find(t => t.id === formData.tipo_paro_id)
+
+  useEffect(() => {
+    if (paroEditando) {
+      const tipo = catalogosParos.find(t => t.id === paroEditando.tipo_paro_id)
+      setTipoSeleccionado(tipo)
+      
+      if (tipo) {
+        const grupo = TIPOS_PARO_CONFIG[tipo.nombre]?.grupo || 'ALMAPAC'
+        setGrupoSeleccionado(grupo)
+      }
+      setPaso(2)
+    }
+  }, [paroEditando, catalogosParos, TIPOS_PARO_CONFIG])
+
+  const seleccionarGrupo = (grupo) => {
+    setGrupoSeleccionado(grupo)
+  }
+
+  const seleccionarTipo = (tipo) => {
+    setTipoSeleccionado(tipo)
+    setFormData(prev => ({ ...prev, tipo_paro_id: tipo.id }))
+    setPaso(2)
+  }
+
+  const volverAGrupos = () => {
+    setGrupoSeleccionado(null)
+  }
 
   const calcularDuracion = (inicio, fin) => {
     if (!inicio || !fin) return null
@@ -748,10 +351,16 @@ const FormularioParoEdicion = ({ barco, catalogosParos, paroEditando, onSave, on
         updated_by: user.id
       }
 
-      const result = await supabase.from('registro_paros').update(datos).eq('id', paroEditando.id)
+      let result
+      if (paroEditando) {
+        result = await supabase.from('registro_paros').update(datos).eq('id', paroEditando.id)
+        if (!result.error) toast.success('Paro actualizado')
+      } else {
+        result = await supabase.from('registro_paros').insert([datos])
+        if (!result.error) toast.success('Paro registrado')
+      }
       
       if (result.error) throw result.error
-      toast.success('Paro actualizado')
       onSave()
     } catch (error) { 
       console.error('❌ Error:', error)
@@ -759,84 +368,241 @@ const FormularioParoEdicion = ({ barco, catalogosParos, paroEditando, onSave, on
     } finally { setLoading(false) }
   }
 
+  const tiposPorGrupo = {
+    ALMAPAC: [],
+    UPDP: [],
+    OTRAS: []
+  }
+
+  catalogosParos.forEach(tipo => {
+    const grupo = TIPOS_PARO_CONFIG[tipo.nombre]?.grupo || 'ALMAPAC'
+    if (grupo === 'UPDP') {
+      tiposPorGrupo.UPDP.push(tipo)
+    } else if (grupo === 'OTRAS') {
+      tiposPorGrupo.OTRAS.push(tipo)
+    } else {
+      tiposPorGrupo.ALMAPAC.push(tipo)
+    }
+  })
+
+  const coloresGrupo = {
+    ALMAPAC: { bg: 'bg-blue-500/20', border: 'border-blue-500/30', text: 'text-blue-400', icono: '📦' },
+    UPDP: { bg: 'bg-green-500/20', border: 'border-green-500/30', text: 'text-green-400', icono: '⚡' },
+    OTRAS: { bg: 'bg-purple-500/20', border: 'border-purple-500/30', text: 'text-purple-400', icono: '🌊' }
+  }
+
   return (
     <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <PauseCircle className="w-5 h-5 text-red-400" />
-          Editar Paro
+          {paroEditando ? 'Editar Paro' : 'Registrar Nuevo Paro'}
         </h2>
-        <button
-          onClick={onCancel}
-          className="text-sm text-slate-400 hover:text-white"
-        >
-          Cancelar edición
-        </button>
+        {paroEditando && onCancel && (
+          <button onClick={onCancel} className="text-sm text-slate-400 hover:text-white">
+            Cancelar edición
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-slate-900 rounded-xl p-3 border border-orange-500/20">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Tipo seleccionado</p>
-          <div className="flex items-center gap-2 flex-wrap">
-            {tipoActual && (
-              <>
-                {TIPOS_PARO_CONFIG[tipoActual.nombre] && (
-                  <span className={TIPOS_PARO_CONFIG[tipoActual.nombre].text}>
-                    {TIPOS_PARO_CONFIG[tipoActual.nombre].icono}
-                  </span>
-                )}
-                <span className="font-bold text-white text-sm">{tipoActual.nombre}</span>
-              </>
-            )}
-          </div>
-        </div>
+      {paso === 1 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">SELECCIONA EL TIPO DE PARO</p>
+          
+          {!grupoSeleccionado ? (
+            <div className="space-y-2">
+              <button 
+                onClick={() => seleccionarGrupo('ALMAPAC')}
+                className="w-full p-4 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <span className="text-blue-400 text-lg">📦</span>
+                  </div>
+                  <span className="font-bold text-white">PAROS ALMAPAC</span>
+                  {tiposPorGrupo.ALMAPAC.length > 0 && (
+                    <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                      {tiposPorGrupo.ALMAPAC.length}
+                    </span>
+                  )}
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-orange-400 transition-colors" />
+              </button>
 
-        <div>
-          <label className="block text-xs text-slate-400 mb-1.5 font-medium">Fecha</label>
-          <input type="date" value={formData.fecha}
-            onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-            className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" required />
-        </div>
+              <button 
+                onClick={() => seleccionarGrupo('UPDP')}
+                className="w-full p-4 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                    <span className="text-green-400 text-lg">⚡</span>
+                  </div>
+                  <span className="font-bold text-white">PAROS UPDP</span>
+                  {tiposPorGrupo.UPDP.length > 0 && (
+                    <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                      {tiposPorGrupo.UPDP.length}
+                    </span>
+                  )}
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-orange-400 transition-colors" />
+              </button>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
-            <input type="time" value={formData.hora_inicio}
-              onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
-              className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Fin</label>
-            <input type="time" value={formData.hora_fin}
-              onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
-              className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" />
-          </div>
-        </div>
+              <button 
+                onClick={() => seleccionarGrupo('OTRAS')}
+                className="w-full p-4 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <span className="text-purple-400 text-lg">🌊</span>
+                  </div>
+                  <span className="font-bold text-white">PAROS POR OTRAS CAUSAS</span>
+                  {tiposPorGrupo.OTRAS.length > 0 && (
+                    <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">
+                      {tiposPorGrupo.OTRAS.length}
+                    </span>
+                  )}
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-orange-400 transition-colors" />
+              </button>
+            </div>
+          ) : (
+            <div>
+              <button 
+                onClick={volverAGrupos}
+                className="text-xs text-orange-500 hover:text-orange-400 flex items-center gap-1 font-medium mb-4"
+              >
+                ← Volver a grupos
+              </button>
 
-        <div>
-          <label className="block text-xs text-slate-400 mb-1.5 font-medium">Observaciones</label>
-          <textarea value={formData.observaciones}
-            onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-            rows="2"
-            className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
-            placeholder="Detalles adicionales (opcional)" />
-        </div>
+              <h3 className="text-sm font-bold mb-3 px-1" style={{
+                color: grupoSeleccionado === 'ALMAPAC' ? '#60a5fa' : grupoSeleccionado === 'UPDP' ? '#4ade80' : '#c084fc'
+              }}>
+                {grupoSeleccionado === 'ALMAPAC' ? '📦 PAROS ALMAPAC' : grupoSeleccionado === 'UPDP' ? '⚡ PAROS UPDP' : '🌊 PAROS POR OTRAS CAUSAS'}
+              </h3>
 
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={onCancel}
-            className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-sm">
-            Cancelar
+              {tiposPorGrupo[grupoSeleccionado].length > 0 ? (
+                <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto pr-1">
+                  {tiposPorGrupo[grupoSeleccionado].map(tipo => {
+                    const config = TIPOS_PARO_CONFIG[tipo.nombre] || {
+                      bg: 'bg-gray-500/10', 
+                      icono: <AlertTriangle className="w-4 h-4 text-gray-400" />,
+                      text: 'text-gray-400'
+                    }
+                    return (
+                      <button key={tipo.id} onClick={() => seleccionarTipo(tipo)}
+                        className="p-3 rounded-xl border border-white/10 bg-slate-900 text-left hover:border-orange-500/40 flex items-center gap-3 transition-all"
+                      >
+                        <div className={`p-2 rounded-lg flex-shrink-0 ${config.bg}`}>
+                          <span className={config.text}>{config.icono}</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-white text-sm">{tipo.nombre}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="bg-slate-800/50 rounded-xl p-8 text-center">
+                  <AlertCircle className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">No hay tipos de paro en este grupo</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <button type="button" onClick={() => { setPaso(1); setTipoSeleccionado(null); setGrupoSeleccionado(null); }}
+            className="text-xs text-orange-500 hover:text-orange-400 flex items-center gap-1 font-medium">
+            ← Volver a tipos
           </button>
-          <button type="submit" disabled={loading}
-            className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
-            {loading
-              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : <CheckCircle className="w-4 h-4" />
-            }
-            Actualizar
-          </button>
-        </div>
-      </form>
+
+          <div className="bg-slate-900 rounded-xl p-3 border border-orange-500/20">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Tipo seleccionado</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {tipoSeleccionado && (
+                <>
+                  {TIPOS_PARO_CONFIG[tipoSeleccionado.nombre] && (
+                    <span className={TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].text}>
+                      {TIPOS_PARO_CONFIG[tipoSeleccionado.nombre].icono}
+                    </span>
+                  )}
+                  <span className="font-bold text-white text-sm">{tipoSeleccionado.nombre}</span>
+                </>
+              )}
+              {grupoSeleccionado && (
+                <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-slate-300 ml-auto">
+                  {grupoSeleccionado}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Fecha</label>
+            <input type="date" value={formData.fecha}
+              onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" required />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
+              <div className="flex gap-2">
+                <input type="time" value={formData.hora_inicio}
+                  onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+                  className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
+                <button type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, hora_inicio: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') }))}
+                  className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-green-500/20 hover:bg-green-500/30 text-green-400"
+                  title="Ahora">
+                  <Play className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Fin</label>
+              <div className="flex gap-2">
+                <input type="time" value={formData.hora_fin}
+                  onChange={(e) => setFormData({ ...formData, hora_fin: e.target.value })}
+                  className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" />
+                <button type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, hora_fin: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') }))}
+                  className="px-2.5 py-2.5 rounded-xl flex-shrink-0 bg-red-500/20 hover:bg-red-500/30 text-red-400"
+                  title="Ahora">
+                  <StopCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5 font-medium">Observaciones</label>
+            <textarea value={formData.observaciones}
+              onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+              rows="2"
+              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white resize-none text-sm"
+              placeholder="Detalles adicionales (opcional)" />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onCancel || (() => { setPaso(1); setTipoSeleccionado(null); setGrupoSeleccionado(null); })}
+              className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-sm">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+              {loading
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <CheckCircle className="w-4 h-4" />
+              }
+              {paroEditando ? 'Actualizar' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
@@ -1079,9 +845,6 @@ export default function ExportacionPage() {
   const [showParosDashboard, setShowParosDashboard] = useState(false)
   const [paroEditando, setParoEditando] = useState(null)
   
-  // Estado para el paro activo (desde el panel rápido)
-  const [paroActivo, setParoActivo] = useState(null)
-  
   const [nuevaExportacion, setNuevaExportacion] = useState({
     fecha_hora: '',
     acumulado_tm: '',
@@ -1112,24 +875,6 @@ export default function ExportacionPage() {
       }))
     }
   }, [productos])
-
-  // Verificar si hay un paro activo al cargar datos
-  useEffect(() => {
-    if (registrosParos.length > 0 && !paroActivo) {
-      const activo = registrosParos.find(r => !r.hora_fin)
-      if (activo) {
-        setParoActivo({
-          ...activo,
-          hora_inicio_original: (() => {
-            const [h, m] = activo.hora_inicio.split(':')
-            const fecha = new Date()
-            fecha.setHours(parseInt(h), parseInt(m), 0, 0)
-            return fecha
-          })()
-        })
-      }
-    }
-  }, [registrosParos])
 
   const cargarDatos = async () => {
     try {
@@ -1333,7 +1078,6 @@ export default function ExportacionPage() {
 
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
     
-    // Ordenar todas las exportaciones por fecha
     const todasOrdenadas = [...exportacionesProd].sort(
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
@@ -1343,18 +1087,15 @@ export default function ExportacionPage() {
     const resultado = []
     const bodegasMap = new Map()
     
-    // Variable para rastrear el período actual
     let bodegaActual = null
     let inicioPeriodo = null
     let acumuladoInicio = 0
     let lecturasPeriodo = []
     
-    // Recorrer todas las lecturas en orden
     todasOrdenadas.forEach((exp, index) => {
       const bodegaId = exp.bodega_id
       
       if (bodegaId !== bodegaActual) {
-        // Si hay una bodega anterior, guardar su período
         if (bodegaActual !== null && inicioPeriodo !== null) {
           const expAnterior = todasOrdenadas[index - 1]
           if (expAnterior) {
@@ -1376,18 +1117,15 @@ export default function ExportacionPage() {
           }
         }
         
-        // Iniciar nuevo período
         bodegaActual = bodegaId
         inicioPeriodo = exp.fecha_hora
         acumuladoInicio = Number(exp.acumulado_tm)
         lecturasPeriodo = [exp]
       } else {
-        // Misma bodega, agregar lectura al período actual
         lecturasPeriodo.push(exp)
       }
     })
     
-    // Procesar el último período
     if (bodegaActual !== null && inicioPeriodo !== null && lecturasPeriodo.length > 0) {
       const ultimaExp = lecturasPeriodo[lecturasPeriodo.length - 1]
       const totalPeriodo = Number(ultimaExp.acumulado_tm) - acumuladoInicio
@@ -1407,7 +1145,6 @@ export default function ExportacionPage() {
       bodegaData.totalCargado += totalPeriodo
     }
     
-    // Convertir Map a array
     bodegasMap.forEach((data, bodegaId) => {
       resultado.push({
         bodega_id: parseInt(bodegaId),
@@ -1440,7 +1177,6 @@ export default function ExportacionPage() {
     return Number(ultimoRegistro.acumulado_tm) || 0
   }, [exportaciones, productoActivo])
 
-  // NUEVO: Calcular cuánto falta por cargar
   const faltaPorCargar = useMemo(() => {
     if (!productoActivo || !barco?.metas_json?.limites?.[productoActivo.codigo]) return 0
     
@@ -1498,7 +1234,6 @@ export default function ExportacionPage() {
         return
       }
 
-      // Convertir hora de El Salvador a UTC antes de guardar
       const fechaUTC = svToUTC(nuevaExportacion.fecha_hora)
 
       const datos = {
@@ -1566,7 +1301,6 @@ export default function ExportacionPage() {
         return
       }
 
-      // Convertir hora de El Salvador a UTC antes de guardar
       const fechaUTC = svToUTC(bitacoraActual.fecha_hora)
 
       const datos = {
@@ -1620,7 +1354,6 @@ export default function ExportacionPage() {
 
   const handleEditarExportacion = (exp) => {
     setEditandoExportacion(exp)
-    // Para editar, convertimos UTC de vuelta a El Salvador
     setNuevaExportacion({
       fecha_hora: formatUTCToSV(exp.fecha_hora, 'YYYY-MM-DDTHH:mm'),
       acumulado_tm: exp.acumulado_tm,
@@ -1905,9 +1638,7 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* ============================================================ */}
-        {/* SELECTOR DE PRODUCTOS */}
-        {/* ============================================================ */}
+        {/* Selector de productos */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
           <div className="flex overflow-x-auto">
             {productos.map(prod => {
@@ -1940,20 +1671,16 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* ============================================================ */}
-        {/* PANEL DE PAROS RÁPIDO - EL ÚNICO QUE SE MUESTRA PARA REGISTRO */}
-        {/* ============================================================ */}
-        <PanelParosRapido 
+        {/* FORMULARIO DE PAROS SIMPLE - SIN CRONÓMETRO */}
+        <FormularioParoSimple 
           barco={barco}
           catalogosParos={catalogosParos}
-          onParoRegistrado={handleParoRegistrado}
-          paroActivo={paroActivo}
-          setParoActivo={setParoActivo}
+          onSave={handleParoRegistrado}
+          onCancel={() => {}}
+          paroEditando={null}
         />
 
-        {/* ============================================================ */}
-        {/* LISTADO DE PAROS REGISTRADOS - CON BOTÓN PARA AGREGAR MANUALMENTE */}
-        {/* ============================================================ */}
+        {/* LISTADO DE PAROS REGISTRADOS */}
         {registrosParos.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1961,13 +1688,6 @@ export default function ExportacionPage() {
                 <PauseCircle className="w-5 h-5 text-red-400" />
                 Paros Registrados ({registrosParos.length})
               </h2>
-              <button
-                onClick={handleNuevoParo}
-                className="bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
-              >
-                <Plus className="w-4 h-4" />
-                Nuevo Paro Manual
-              </button>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1984,24 +1704,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* ============================================================ */}
-        {/* SI NO HAY PAROS, MOSTRAR BOTÓN PARA AGREGAR */}
-        {/* ============================================================ */}
-        {registrosParos.length === 0 && (
-          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6 text-center">
-            <PauseCircle className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 mb-4">No hay paros registrados aún</p>
-            <button
-              onClick={handleNuevoParo}
-              className="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 mx-auto"
-            >
-              <Plus className="w-4 h-4" />
-              Registrar Primer Paro
-            </button>
-          </div>
-        )}
-
-        {/* Advertencia de operación finalizada (solo informativa) */}
+        {/* Advertencia de operación finalizada */}
         {barco.estado === 'finalizado' && (
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-3">
@@ -2013,7 +1716,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* El resto de la página continúa igual */}
+        {/* El resto de la página continúa igual... */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -2651,54 +2354,20 @@ export default function ExportacionPage() {
         </div>
       </div>
 
-      {/* Modal para editar paro (solo edición) */}
+      {/* Modal para editar paro */}
       {showParoModal && barco && paroEditando && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
-            <FormularioParoEdicion
+            <FormularioParoSimple
               barco={barco}
               catalogosParos={catalogosParos}
-              paroEditando={paroEditando}
               onSave={handleGuardarParo}
               onCancel={() => {
                 setShowParoModal(false)
                 setParoEditando(null)
               }}
+              paroEditando={paroEditando}
             />
-          </div>
-        </div>
-      )}
-
-      {/* Modal para nuevo paro manual (usando el mismo PanelParosRapido pero en modal) */}
-      {showParoModal && barco && !paroEditando && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg">
-            <div className="p-4 border-b border-white/10 flex justify-between items-center">
-              <h2 className="font-bold text-white">Registrar Nuevo Paro Manual</h2>
-              <button
-                onClick={() => setShowParoModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4">
-              <PanelParosRapido 
-                barco={barco}
-                catalogosParos={catalogosParos}
-                onParoRegistrado={() => {
-                  handleGuardarParo()
-                  setShowParoModal(false)
-                }}
-                paroActivo={null}
-                setParoActivo={(nuevoParo) => {
-                  if (nuevoParo) {
-                    setParoActivo(nuevoParo)
-                    setShowParoModal(false)
-                  }
-                }}
-              />
-            </div>
           </div>
         </div>
       )}
