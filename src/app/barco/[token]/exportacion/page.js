@@ -583,7 +583,7 @@ const PanelParosRapido = ({ barco, catalogosParos, onParoRegistrado, paroActivo,
               ) : (
                 <CheckCircle className="w-4 h-4" />
               )}
-              Finalizar Paro
+              Finalizar 
             </button>
           </div>
         ) : mostrarSelector ? (
@@ -676,7 +676,7 @@ const PanelParosRapido = ({ barco, catalogosParos, onParoRegistrado, paroActivo,
                       ) : (
                         <Play className="w-4 h-4" />
                       )}
-                      Iniciar Paro
+                      Iniciar 
                     </button>
                   </div>
                 )}
