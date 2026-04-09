@@ -1,3 +1,5 @@
+// src/app/lib/auth.js
+
 import { supabase } from './supabase'
 import Cookies from 'js-cookie'
 import bcrypt from 'bcryptjs'

@@ -27,7 +27,7 @@ export default function LoginPage() {
       } else if (result.user.rol === 'pesador') {
         router.push('/admin')
       } else if (result.user.rol === 'electricista') {
-        router.push('/admin')
+        router.push('/electricista')
       } else if (result.user.rol === 'chequero') {
         router.push('/chequero')
       } else {
