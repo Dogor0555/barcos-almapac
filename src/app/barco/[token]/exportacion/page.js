@@ -1,4 +1,4 @@
-// app/barco/[token]/exportacion/page.js - Versión CON FORMULARIO SIMPLE (sin cronómetro)
+// app/barco/[token]/exportacion/page.js - Versión CORREGIDA - Resumen por Bodega funcionando correctamente
 
 'use client'
 
@@ -384,12 +384,6 @@ const FormularioParoSimple = ({ barco, catalogosParos, onSave, onCancel, paroEdi
       tiposPorGrupo.ALMAPAC.push(tipo)
     }
   })
-
-  const coloresGrupo = {
-    ALMAPAC: { bg: 'bg-blue-500/20', border: 'border-blue-500/30', text: 'text-blue-400', icono: '📦' },
-    UPDP: { bg: 'bg-green-500/20', border: 'border-green-500/30', text: 'text-green-400', icono: '⚡' },
-    OTRAS: { bg: 'bg-purple-500/20', border: 'border-purple-500/30', text: 'text-purple-400', icono: '🌊' }
-  }
 
   return (
     <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
@@ -1073,89 +1067,85 @@ export default function ExportacionPage() {
     return puntos
   }, [exportaciones, productoActivo])
 
+  // =====================================================
+  // LÓGICA CORREGIDA PARA RESUMEN POR BODEGA - VERSIÓN SIMPLIFICADA Y CORRECTA
+  // =====================================================
   const resumenPorBodega = useMemo(() => {
     if (!productoActivo) return []
 
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
     
+    // Ordenar cronológicamente de MÁS ANTIGUO a MÁS RECIENTE
     const todasOrdenadas = [...exportacionesProd].sort(
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
     
     if (todasOrdenadas.length === 0) return []
     
-    const resultado = []
+    // Mapa para acumular por bodega
     const bodegasMap = new Map()
     
-    let bodegaActual = null
-    let inicioPeriodo = null
-    let acumuladoInicio = 0
-    let lecturasPeriodo = []
-    
-    todasOrdenadas.forEach((exp, index) => {
-      const bodegaId = exp.bodega_id
+    // Recorremos de la PRIMERA a la ÚLTIMA lectura
+    for (let i = 0; i < todasOrdenadas.length; i++) {
+      const lecturaActual = todasOrdenadas[i]
+      const bodegaActual = lecturaActual.bodega_id
+      const acumuladoActual = Number(lecturaActual.acumulado_tm) || 0
       
-      if (bodegaId !== bodegaActual) {
-        if (bodegaActual !== null && inicioPeriodo !== null) {
-          const expAnterior = todasOrdenadas[index - 1]
-          if (expAnterior) {
-            const totalPeriodo = Number(expAnterior.acumulado_tm) - acumuladoInicio
-            
-            if (!bodegasMap.has(bodegaActual)) {
-              bodegasMap.set(bodegaActual, {
-                bodega_id: bodegaActual,
-                lecturas: [],
-                totalCargado: 0,
-                fechaInicio: inicioPeriodo,
-                fechaFin: expAnterior.fecha_hora
-              })
-            }
-            
-            const bodegaData = bodegasMap.get(bodegaActual)
-            bodegaData.lecturas.push(...lecturasPeriodo)
-            bodegaData.totalCargado += totalPeriodo
-          }
-        }
-        
-        bodegaActual = bodegaId
-        inicioPeriodo = exp.fecha_hora
-        acumuladoInicio = Number(exp.acumulado_tm)
-        lecturasPeriodo = [exp]
-      } else {
-        lecturasPeriodo.push(exp)
+      // Buscar la lectura anterior (si existe)
+      let acumuladoAnterior = 0
+      if (i > 0) {
+        const lecturaAnterior = todasOrdenadas[i - 1]
+        acumuladoAnterior = Number(lecturaAnterior.acumulado_tm) || 0
       }
-    })
-    
-    if (bodegaActual !== null && inicioPeriodo !== null && lecturasPeriodo.length > 0) {
-      const ultimaExp = lecturasPeriodo[lecturasPeriodo.length - 1]
-      const totalPeriodo = Number(ultimaExp.acumulado_tm) - acumuladoInicio
       
+      // Lo que se cargó en ESTE registro es la diferencia
+      // Si es el primer registro (i === 0), la carga es el acumulado actual
+      const cargaReal = i === 0 ? acumuladoActual : acumuladoActual - acumuladoAnterior
+      
+      // Inicializar la bodega en el mapa si no existe
       if (!bodegasMap.has(bodegaActual)) {
         bodegasMap.set(bodegaActual, {
           bodega_id: bodegaActual,
-          lecturas: [],
+          nombre: BODEGAS_BARCO.find(b => b.id === bodegaActual)?.nombre || `Bodega ${bodegaActual}`,
+          codigo: BODEGAS_BARCO.find(b => b.id === bodegaActual)?.codigo || `BDG-${bodegaActual}`,
           totalCargado: 0,
-          fechaInicio: inicioPeriodo,
-          fechaFin: ultimaExp.fecha_hora
+          lecturas: [],
+          primeraFecha: lecturaActual.fecha_hora,
+          ultimaFecha: lecturaActual.fecha_hora,
+          primerAcumulado: acumuladoActual,
+          ultimoAcumulado: acumuladoActual
         })
       }
       
+      // Actualizar la bodega
       const bodegaData = bodegasMap.get(bodegaActual)
-      bodegaData.lecturas.push(...lecturasPeriodo)
-      bodegaData.totalCargado += totalPeriodo
+      bodegaData.totalCargado += cargaReal
+      bodegaData.lecturas.push(lecturaActual)
+      
+      // Actualizar fechas
+      if (new Date(lecturaActual.fecha_hora) < new Date(bodegaData.primeraFecha)) {
+        bodegaData.primeraFecha = lecturaActual.fecha_hora
+        bodegaData.primerAcumulado = acumuladoActual
+      }
+      if (new Date(lecturaActual.fecha_hora) > new Date(bodegaData.ultimaFecha)) {
+        bodegaData.ultimaFecha = lecturaActual.fecha_hora
+        bodegaData.ultimoAcumulado = acumuladoActual
+      }
     }
     
-    bodegasMap.forEach((data, bodegaId) => {
+    // Convertir mapa a array y ordenar por total cargado
+    const resultado = []
+    bodegasMap.forEach((data) => {
       resultado.push({
-        bodega_id: parseInt(bodegaId),
-        nombre: BODEGAS_BARCO.find(b => b.id === parseInt(bodegaId))?.nombre || `Bodega ${bodegaId}`,
-        codigo: BODEGAS_BARCO.find(b => b.id === parseInt(bodegaId))?.codigo || `BDG-${bodegaId}`,
+        bodega_id: data.bodega_id,
+        nombre: data.nombre,
+        codigo: data.codigo,
         totalCargado: data.totalCargado,
         lecturas: data.lecturas.length,
         primeraLectura: data.lecturas[0],
         ultimaLectura: data.lecturas[data.lecturas.length - 1],
-        fechaInicio: data.fechaInicio,
-        fechaFin: data.fechaFin
+        fechaInicio: data.primeraFecha,
+        fechaFin: data.ultimaFecha
       })
     })
     
@@ -1716,7 +1706,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* El resto de la página continúa igual... */}
+        {/* Estadísticas del producto */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -1846,6 +1836,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
+        {/* Gráfico de tendencia */}
         {productoActivo && datosGraficoFlujo.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1921,6 +1912,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
+        {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA */}
         {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -1968,9 +1960,32 @@ export default function ExportacionPage() {
                 </div>
               ))}
             </div>
+            
+            {/* VERIFICACIÓN DE CONSISTENCIA */}
+            <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
+              <p className="text-xs text-slate-400 mb-2">🔍 Verificación de datos:</p>
+              <div className="flex justify-between text-sm">
+                <span>Suma por bodegas:</span>
+                <span className="font-bold text-yellow-400">
+                  {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Total acumulado general:</span>
+                <span className="font-bold text-blue-400">
+                  {totalGeneral.toFixed(3)} TM
+                </span>
+              </div>
+              {Math.abs(resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0) - totalGeneral) < 0.01 && totalGeneral > 0 ? (
+                <p className="text-green-400 text-xs mt-1">✅ Los datos coinciden correctamente</p>
+              ) : (
+                <p className="text-orange-400 text-xs mt-1">⚠️ Los datos no coinciden, revisar lógica</p>
+              )}
+            </div>
           </div>
         )}
 
+        {/* Formulario de registro de carga */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -2067,6 +2082,7 @@ export default function ExportacionPage() {
           </div>
         </div>
 
+        {/* Historial de carga */}
         {exportacionesFiltradas.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
@@ -2223,6 +2239,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
+        {/* Bitácora */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -2372,6 +2389,7 @@ export default function ExportacionPage() {
         </div>
       )}
 
+      {/* Dashboard de paros */}
       {showParosDashboard && barco && (
         <DashboardParos
           barco={barco}
