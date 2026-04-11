@@ -100,7 +100,7 @@ const getTiposParoConfig = () => ({
   'LIMPIEZA DEL APILADOR': { icono: <Wrench className="w-4 h-4" />, bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20', grupo: 'UPDP' },
   'MOVIMIENTO DEL APILADOR': { icono: <Truck className="w-4 h-4" />, bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', grupo: 'UPDP' },
   'CAMBIO DE BODEGA EN EL BARCO': { icono: <Layers className="w-4 h-4" />, bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', grupo: 'UPDP' },
-  'CORTE DE ENERGÍA ELÉCTRICA UPDP ': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', grupo: 'UPDP' },
+  'CORTE DE ENERGÍA ELÉCTRICA UPDP': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', grupo: 'UPDP' },
   
   // PAROS POR OTRAS CAUSAS
   'VERIFICACIÓN DE CALIDAD DEL AZÚCAR A BORDO': { icono: <ClipboardList className="w-4 h-4" />, bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20', grupo: 'OTRAS' },
