@@ -1425,14 +1425,21 @@ export default function RegistroAtrasosPage() {
         .from('barcos').select('*').order('created_at', { ascending: false })
       if (barcosError) { toast.error('Error al cargar barcos'); return }
       setBarcos(barcosData || [])
-      if (barcosData?.length > 0 && !barcoSeleccionado) {
-        setBarcoSeleccionado(barcosData[0])
-        cargarBodegas(barcosData[0])
-        await cargarRegistros(barcosData[0].id)
-        await cargarDescargas(barcosData[0].id)
-        await cargarOperacionInfo(barcosData[0].id)
+      // 🔧 CORREGIDO: Ya no selecciona automáticamente el primer barco
+      // Si ya hay un barco seleccionado, lo mantenemos
+      if (barcoSeleccionado && barcosData?.some(b => b.id === barcoSeleccionado.id)) {
+        // El barco seleccionado sigue existiendo, recargamos sus datos
+        await cargarBodegas(barcoSeleccionado)
+        await cargarRegistros(barcoSeleccionado.id)
+        await cargarDescargas(barcoSeleccionado.id)
+        await cargarOperacionInfo(barcoSeleccionado.id)
         setShowShipSelector(false)
-      } else if (barcosData?.length === 0) { toast.error('No hay barcos disponibles') }
+      } else if (barcosData?.length > 0 && !barcoSeleccionado) {
+        // Solo si no hay barco seleccionado, mostramos el selector
+        setShowShipSelector(true)
+      } else if (barcosData?.length === 0) { 
+        toast.error('No hay barcos disponibles')
+      }
     } catch (error) { toast.error('Error al cargar datos') } finally { setLoading(false) }
   }
 
@@ -1499,27 +1506,29 @@ export default function RegistroAtrasosPage() {
     } catch (error) { toast.error('Error al cargar registros') }
   }
 
+  // 🔧 CORREGIDA: Función handleSeleccionarBarco mejorada
   const handleSeleccionarBarco = async (barco) => {
-    setBarcoSeleccionado(barco); cargarBodegas(barco)
-    await cargarRegistros(barco.id); await cargarDescargas(barco.id)
+    setBarcoSeleccionado(barco)
+    setBodegasBarco(barco.bodegas_json || [])
+    await cargarRegistros(barco.id)
+    await cargarDescargas(barco.id)
     await cargarOperacionInfo(barco.id)
-    setFiltrosLista({ bodegas: [], soloGenerales: false }); setShowShipSelector(false)
+    setFiltrosLista({ bodegas: [], soloGenerales: false })
+    setShowShipSelector(false) // Cierra el selector después de seleccionar
+    toast.success(`Barco seleccionado: ${barco.nombre}`)
   }
 
   const handleNuevoAtraso = () => {
-    // ✅ CORREGIDO: Siempre permitir registrar, incluso si está finalizado
-    setAtrasoEditando(null); 
+    setAtrasoEditando(null)
     setShowAtrasoModal(true)
   }
 
   const handleEditarAtraso = (atraso) => {
-    // ✅ CORREGIDO: Siempre permitir editar, incluso si está finalizado
-    setAtrasoEditando(atraso); 
+    setAtrasoEditando(atraso)
     setShowAtrasoModal(true)
   }
 
   const handleEliminarAtraso = async (id) => {
-    // ✅ CORREGIDO: Siempre permitir eliminar, incluso si está finalizado
     if (!confirm('¿Eliminar este registro?')) return
     try {
       const { error } = await supabase.from('registro_atrasos').delete().eq('id', id)
@@ -1552,7 +1561,6 @@ export default function RegistroAtrasosPage() {
   const barcosFiltrados = barcos.filter(b => b.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
   const formatFechaHora = (ts) => ts ? dayjs(ts).format('DD/MM/YY HH:mm') : '—'
 
-  // ✅ CORREGIDO: Ahora siempre se puede registrar (solo se usa para UI, no para bloquear)
   const puedeRegistrar = true
 
   const estadoOperacion = !barcoSeleccionado ? null
@@ -1950,12 +1958,9 @@ export default function RegistroAtrasosPage() {
                     </div>
                   )}
 
-                  {/* ✅ Mensaje informativo actualizado */}
-                  {estadoOperacion === 'finalizado' && (
-                    <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`}>
-                      <Info className="w-3.5 h-3.5" /> Operación finalizada — aún puedes editar y agregar demoras
-                    </p>
-                  )}
+                  <p className={`text-xs mt-2 flex items-center gap-1.5 ${theme === 'dark' ? 'text-orange-400' : 'text-orange-600'}`}>
+                    <Info className="w-3.5 h-3.5" /> Operación finalizada — aún puedes editar y agregar demoras
+                  </p>
                 </div>
 
                 <div className={`${cardBg} border ${borderColor} rounded-2xl overflow-hidden`}>
@@ -2018,7 +2023,7 @@ export default function RegistroAtrasosPage() {
         )}
       </div>
 
-      {puedeRegistrar && vista === 'lista' && (
+      {puedeRegistrar && vista === 'lista' && barcoSeleccionado && (
         <button onClick={handleNuevoAtraso}
           className="sm:hidden fixed bottom-6 right-4 z-40 bg-gradient-to-r from-orange-500 to-red-600 text-white w-14 h-14 rounded-2xl shadow-2xl shadow-orange-900/50 flex items-center justify-center active:scale-95 transition-transform">
           <Plus className="w-7 h-7" />
