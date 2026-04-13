@@ -8,6 +8,7 @@
  *  ⚡ CORREGIDO: Vista general muestra valores correctos
  *  ⚡ CORREGIDO: Panel de producto muestra valores correctos
  *  ⚡ MEJORADO: Primer producto seleccionado por defecto al cargar
+ *  ⚡ NUEVO: Resumen de tiempos de paros para exportación
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -291,6 +292,312 @@ const pct = (v, t) => (t > 0 ? Math.min(100, (v / t) * 100) : 0);
 function getMetaProducto(metas_json, producto) {
   if (!metas_json?.limites) return 0;
   return Number(metas_json.limites[producto.codigo]) || 0;
+}
+
+// ============================================================================
+// COMPONENTE: Resumen de Paros para Dashboard de Exportación
+// ============================================================================
+function ResumenParosDashboard({ barcoId }) {
+  const [resumenParos, setResumenParos] = useState({
+    almapac: { minutos: 0, cantidad: 0, loading: true },
+    updp: { minutos: 0, cantidad: 0, loading: true },
+    otras: { minutos: 0, cantidad: 0, loading: true },
+    total: { minutos: 0, cantidad: 0, loading: true }
+  });
+
+  // Configuración de tipos de paro
+  const TIPOS_PARO_CONFIG = {
+    // PAROS ALMAPAC
+    'BANDA 7': { grupo: 'ALMAPAC' },
+    'MOVIMIENTO DEL CARRO DE BANDA 7': { grupo: 'ALMAPAC' },
+    'ELEVADOR 23': { grupo: 'ALMAPAC' },
+    'ELEVADOR 13': { grupo: 'ALMAPAC' },
+    'BÁSCULA DE EXPORTACIÓN': { grupo: 'ALMAPAC' },
+    'COMPUERTA DE LLENADO': { grupo: 'ALMAPAC' },
+    'COMPUERTA DE DESCARGA': { grupo: 'ALMAPAC' },
+    'HEL ALTO': { grupo: 'ALMAPAC' },
+    'DRAFT MASTER': { grupo: 'ALMAPAC' },
+    'COMPRESOR A': { grupo: 'ALMAPAC' },
+    'COMPRESOR B': { grupo: 'ALMAPAC' },
+    'BANDA 15': { grupo: 'ALMAPAC' },
+    'BANDA 19': { grupo: 'ALMAPAC' },
+    'BANDA 72': { grupo: 'ALMAPAC' },
+    'BANDA 73': { grupo: 'ALMAPAC' },
+    'FALLA DE PAYD LOADER': { grupo: 'ALMAPAC' },
+    'PLC': { grupo: 'ALMAPAC' },
+    'FALTA DE AZÚCAR': { grupo: 'ALMAPAC' },
+    'BANDA 21': { grupo: 'ALMAPAC' },
+    'BANDA 2': { grupo: 'ALMAPAC' },
+    'BANDA 1': { grupo: 'ALMAPAC' },
+    'DESATORANDO ELEVADOR 23.': { grupo: 'ALMAPAC' },
+    'OTROS': { grupo: 'ALMAPAC' },
+    
+    // PAROS UPDP (NO IMPUTABLES ALMAPAC)
+    'TRANSPORTADOR No:': { grupo: 'UPDP' },
+    'REBALSE EN EL BUM': { grupo: 'UPDP' },
+    'FALLAS EN UNIDAD DE CARGA': { grupo: 'UPDP' },
+    'FALLAS EN EL APILADOR': { grupo: 'UPDP' },
+    'MANTENIMINETO DEL APILADOR': { grupo: 'UPDP' },
+    'LIMPIEZA DEL APILADOR': { grupo: 'UPDP' },
+    'MOVIMIENTO DEL APILADOR': { grupo: 'UPDP' },
+    'CAMBIO DE BODEGA EN EL BARCO': { grupo: 'UPDP' },
+    'CORTE DE ENERGÍA ELÉCTRICA UPDP': { grupo: 'UPDP' },
+    
+    // PAROS POR OTRAS CAUSAS
+    'VERIFICACIÓN DE CALIDAD DEL AZÚCAR A BORDO': { grupo: 'OTRAS' },
+    'VERIFICACIÓN DE CALADO (INICIAL)': { grupo: 'OTRAS' },
+    'VERIFICACIÓN DE CALADO (FINAL)': { grupo: 'OTRAS' },
+    'MAREA FUERTE': { grupo: 'OTRAS' },
+    'MOVIMIENTO DEL BARCO': { grupo: 'OTRAS' },
+    'AMENAZA DE LLUVIA': { grupo: 'OTRAS' },
+    'PARO POR LLUVIA': { grupo: 'OTRAS' },
+    'CORTE DE ENERGÍA ELÉCTRICA': { grupo: 'OTRAS' },
+  };
+
+  const formatearTiempo = (minutos) => {
+    if (minutos === 0) return '0m';
+    const horas = Math.floor(minutos / 60);
+    const mins = minutos % 60;
+    if (horas > 0 && mins > 0) return `${horas}h ${mins}m`;
+    if (horas > 0) return `${horas}h`;
+    return `${mins}m`;
+  };
+
+  const cargarResumenParos = useCallback(async () => {
+    if (!barcoId) return;
+
+    try {
+      // 1. Obtener catálogo de tipos de paro
+      const { data: catalogos, error: errorCat } = await supabase
+        .from('catalogos_paros')
+        .select('*')
+        .eq('activo', true);
+
+      if (errorCat) throw errorCat;
+
+      // Crear mapa de tipo_paro_id -> grupo
+      const tipoAGrupo = {};
+      catalogos.forEach(catalogo => {
+        const config = TIPOS_PARO_CONFIG[catalogo.nombre];
+        if (config) {
+          tipoAGrupo[catalogo.id] = config.grupo;
+        } else {
+          // Por defecto, ALMAPAC
+          tipoAGrupo[catalogo.id] = 'ALMAPAC';
+        }
+      });
+
+      // 2. Obtener registros de paros del barco
+      const { data: paros, error: errorParos } = await supabase
+        .from('registro_paros')
+        .select('*')
+        .eq('barco_id', barcoId);
+
+      if (errorParos) throw errorParos;
+
+      // 3. Calcular resumen por grupo
+      const resumen = {
+        ALMAPAC: { minutos: 0, cantidad: 0 },
+        UPDP: { minutos: 0, cantidad: 0 },
+        OTRAS: { minutos: 0, cantidad: 0 }
+      };
+
+      paros.forEach(paro => {
+        const grupo = tipoAGrupo[paro.tipo_paro_id] || 'ALMAPAC';
+        const duracion = paro.duracion_minutos || 0;
+        
+        if (resumen[grupo]) {
+          resumen[grupo].minutos += duracion;
+          resumen[grupo].cantidad++;
+        } else {
+          resumen.ALMAPAC.minutos += duracion;
+          resumen.ALMAPAC.cantidad++;
+        }
+      });
+
+      const totalMinutos = resumen.ALMAPAC.minutos + resumen.UPDP.minutos + resumen.OTRAS.minutos;
+      const totalCantidad = resumen.ALMAPAC.cantidad + resumen.UPDP.cantidad + resumen.OTRAS.cantidad;
+
+      setResumenParos({
+        almapac: { 
+          minutos: resumen.ALMAPAC.minutos, 
+          cantidad: resumen.ALMAPAC.cantidad, 
+          loading: false 
+        },
+        updp: { 
+          minutos: resumen.UPDP.minutos, 
+          cantidad: resumen.UPDP.cantidad, 
+          loading: false 
+        },
+        otras: { 
+          minutos: resumen.OTRAS.minutos, 
+          cantidad: resumen.OTRAS.cantidad, 
+          loading: false 
+        },
+        total: { 
+          minutos: totalMinutos, 
+          cantidad: totalCantidad, 
+          loading: false 
+        }
+      });
+
+    } catch (error) {
+      console.error('Error cargando resumen de paros:', error);
+      setResumenParos({
+        almapac: { minutos: 0, cantidad: 0, loading: false },
+        updp: { minutos: 0, cantidad: 0, loading: false },
+        otras: { minutos: 0, cantidad: 0, loading: false },
+        total: { minutos: 0, cantidad: 0, loading: false }
+      });
+    }
+  }, [barcoId]);
+
+  useEffect(() => {
+    cargarResumenParos();
+  }, [cargarResumenParos]);
+
+  if (resumenParos.almapac.loading) {
+    return (
+      <div style={{ 
+        background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+        borderRadius: '16px',
+        padding: '20px',
+        marginBottom: '20px',
+        border: '1px solid #334155'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="alm-loader" style={{ width: '24px', height: '24px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#3b82f6' }}></div>
+          <span style={{ color: '#94a3b8' }}>Cargando resumen de paros...</span>
+        </div>
+      </div>
+    );
+  }
+
+  const tieneDatos = resumenParos.total.minutos > 0 || resumenParos.total.cantidad > 0;
+
+  if (!tieneDatos) {
+    return null;
+  }
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #475569, #1e293b)',
+      borderRadius: '16px',
+      padding: '20px',
+      marginBottom: '20px',
+      border: '1px solid #334155'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        marginBottom: '16px',
+        paddingBottom: '12px',
+        borderBottom: '1px solid #334155'
+      }}>
+        <span style={{ fontSize: '24px' }}>⏱️</span>
+        <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fff', margin: 0 }}>
+          RESUMEN DE TIEMPOS DE PAROS
+        </h3>
+        <span style={{ 
+          marginLeft: 'auto',
+          fontSize: '12px',
+          color: '#64748b',
+          fontFamily: 'monospace'
+        }}>
+          {resumenParos.total.cantidad} paro{resumenParos.total.cantidad !== 1 ? 's' : ''} registrados
+        </span>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px'
+      }}>
+        {/* IMPUTABLES ALMAPAC */}
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.1)',
+          borderRadius: '12px',
+          padding: '16px',
+          borderLeft: `3px solid #3b82f6`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '20px' }}>📦</span>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              IMPUTABLES ALMAPAC
+            </span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
+            {formatearTiempo(resumenParos.almapac.minutos)}
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+            {resumenParos.almapac.cantidad} paro{resumenParos.almapac.cantidad !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        {/* NO IMPUTABLES ALMAPAC (UPDP) */}
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.1)',
+          borderRadius: '12px',
+          padding: '16px',
+          borderLeft: `3px solid #10b981`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '20px' }}>⚡</span>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: '#6ee7b7', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              IMPUTABLES UPDP
+            </span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
+            {formatearTiempo(resumenParos.updp.minutos)}
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+            {resumenParos.updp.cantidad} paro{resumenParos.updp.cantidad !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        {/* OTRAS CAUSAS */}
+        <div style={{
+          background: 'rgba(139, 92, 246, 0.1)',
+          borderRadius: '12px',
+          padding: '16px',
+          borderLeft: `3px solid #8b5cf6`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '20px' }}>🌊</span>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: '#c084fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              OTRAS CAUSAS
+            </span>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
+            {formatearTiempo(resumenParos.otras.minutos)}
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+            {resumenParos.otras.cantidad} paro{resumenParos.otras.cantidad !== 1 ? 's' : ''}
+          </div>
+        </div>
+      </div>
+
+      {/* Total general */}
+      {resumenParos.total.minutos > 0 && (
+        <div style={{
+          marginTop: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid #334155',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '16px',
+          fontSize: '12px'
+        }}>
+          <span style={{ color: '#64748b' }}>TIEMPO TOTAL EN PAROS:</span>
+          <span style={{ fontWeight: '700', color: '#f59e0b', fontFamily: 'monospace', fontSize: '16px' }}>
+            {formatearTiempo(resumenParos.total.minutos)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ============================================================================
@@ -1204,7 +1511,7 @@ function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, totalExpor
 }
 
 // ============================================================================
-// COMPONENTE: Finalización General
+// COMPONENTE: Finalización General - GRANDE, HORIZONTAL, ABARCA TODO
 // ============================================================================
 function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, lecturasExportacion, tipoOperacion }) {
   if (!metaGlobal || metaGlobal === 0) return null;
@@ -1213,26 +1520,39 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
   const faltante = Math.max(0, metaGlobal - totalGlobal);
   if (faltante <= 0) return null;
 
-  const ahora = dayjs();
-  const hace2Horas = ahora.subtract(2, 'hour');
-
   let flujoTotal = 0;
+  let flujoTexto = '';
+  let flujoDetalle = '';
 
   if (tipoOperacion === 'exportacion') {
-    let flujoExportacion = 0;
-    const exportacionesRecientes = lecturasExportacion
-      .filter(e => e.fecha_hora && dayjs.utc(e.fecha_hora).isAfter(hace2Horas))
-      .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
-
-    if (exportacionesRecientes.length >= 2) {
-      const primera = exportacionesRecientes[0];
-      const ultima = exportacionesRecientes[exportacionesRecientes.length - 1];
-      const difTon = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
-      const difHoras = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
-      if (difHoras > 0) flujoExportacion = difTon / difHoras;
+    const exportacionesOrdenadas = [...lecturasExportacion].sort(
+      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+    );
+    
+    if (exportacionesOrdenadas.length >= 2) {
+      const primeraExportacion = exportacionesOrdenadas[0];
+      const ultimaExportacion = exportacionesOrdenadas[exportacionesOrdenadas.length - 1];
+      
+      const acumuladoInicial = primeraExportacion.acumulado_tm || 0;
+      const acumuladoFinal = ultimaExportacion.acumulado_tm || 0;
+      const diferenciaTotal = acumuladoFinal - acumuladoInicial;
+      
+      if (diferenciaTotal > 0) {
+        const horaInicial = dayjs.utc(primeraExportacion.fecha_hora);
+        const horaFinal = dayjs.utc(ultimaExportacion.fecha_hora);
+        const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+        
+        if (horasTranscurridas > 0) {
+          flujoTotal = diferenciaTotal / horasTranscurridas;
+          flujoTexto = `📊 Promedio Global`;
+          flujoDetalle = `${diferenciaTotal.toFixed(1)} TM en ${horasTranscurridas.toFixed(1)}h`;
+        }
+      }
     }
-    flujoTotal = flujoExportacion;
   } else {
+    const ahora = dayjs();
+    const hace2Horas = ahora.subtract(2, 'hour');
+    
     let flujoBanda = 0;
     const lecturasRecientes = lecturasBanda
       .filter(l => l.fecha_hora && dayjs.utc(l.fecha_hora).isAfter(hace2Horas))
@@ -1256,6 +1576,8 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
     }
 
     flujoTotal = flujoBanda + flujoViajes;
+    flujoTexto = `⚡ Flujo Reciente`;
+    flujoDetalle = `Últimas 2 horas`;
   }
 
   if (flujoTotal <= 0) return null;
@@ -1264,47 +1586,175 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
   const fechaEstimada = dayjs().add(horas, 'hour');
 
   let tiempoTexto = '';
+  let tiempoUnidad = '';
+  
   if (horas < 1) {
-    tiempoTexto = `${Math.round(horas * 60)} min`;
+    tiempoTexto = `${Math.round(horas * 60)}`;
+    tiempoUnidad = 'minutos';
   } else if (horas < 24) {
-    tiempoTexto = `${Math.round(horas * 10) / 10} h`;
+    tiempoTexto = `${horas.toFixed(1)}`;
+    tiempoUnidad = 'horas';
   } else {
-    const dias = Math.floor(horas / 24);
-    const h = Math.round(horas % 24);
-    tiempoTexto = `${dias}d ${h}h`;
+    tiempoTexto = `${(horas / 24).toFixed(1)}`;
+    tiempoUnidad = 'días';
   }
+
+  const porcentajeCompletado = ((totalGlobal / metaGlobal) * 100).toFixed(0);
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-      borderRadius: '12px',
-      padding: '12px 16px',
       display: 'flex',
-      alignItems: 'center',
+      flexWrap: 'wrap',
+      alignItems: 'stretch',
       justifyContent: 'space-between',
-      border: '1px solid #3b82f6',
-      marginTop: '12px'
+      gap: '20px',
+      width: '100%'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{ fontSize: '20px' }}>⚓</span>
-        <div>
-          <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>
-            FINALIZACIÓN DE {textoAccion}
+      
+      {/* PROGRESO CIRCULAR */}
+      <div style={{
+        flex: 1,
+        minWidth: '140px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px 12px',
+        background: 'rgba(59, 130, 246, 0.05)',
+        borderRadius: '16px',
+        border: '1px solid rgba(59, 130, 246, 0.15)'
+      }}>
+        <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#334155" strokeWidth="6" />
+            <circle 
+              cx="50" cy="50" r="42" fill="none" 
+              stroke="#3b82f6" strokeWidth="6" 
+              strokeDasharray={`${2 * Math.PI * 42 * (porcentajeCompletado / 100)} ${2 * Math.PI * 42}`}
+              strokeLinecap="round"
+              transform="rotate(-90 50 50)"
+              style={{ transition: 'stroke-dasharray 0.5s ease' }}
+            />
+            <text x="50" y="57" textAnchor="middle" fill="#60a5fa" fontSize="26" fontWeight="800" fontFamily="monospace">
+              {porcentajeCompletado}
+            </text>
+            <text x="50" y="70" textAnchor="middle" fill="#64748b" fontSize="11" fontWeight="600">%</text>
+          </svg>
+        </div>
+        <div style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8', marginTop: '12px' }}>Progreso</div>
+        <div style={{ fontSize: '11px', color: '#64748b' }}>{fmtTM(totalGlobal, 1)} / {fmtTM(metaGlobal, 1)} TM</div>
+      </div>
+
+      {/* FLUJO */}
+      <div style={{
+        flex: 1.2,
+        minWidth: '200px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '16px 20px',
+        background: 'rgba(16, 185, 129, 0.05)',
+        borderRadius: '16px',
+        border: '1px solid rgba(16, 185, 129, 0.15)'
+      }}>
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.15)',
+          borderRadius: '14px',
+          width: '55px',
+          height: '55px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <span style={{ fontSize: '28px' }}>⚡</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#6ee7b7', letterSpacing: '1.5px', marginBottom: '6px' }}>
+            FLUJO DE {textoAccion}
           </div>
-          <div style={{ fontSize: '16px', fontWeight: '700', color: '#fff' }}>
-            {fechaEstimada.format("DD/MM/YYYY")} <span style={{ color: '#3b82f6' }}>{fechaEstimada.format("HH:mm")}</span>
+          <div style={{ fontSize: '32px', fontWeight: '900', color: '#34d399', fontFamily: 'monospace', lineHeight: 1, marginBottom: '6px' }}>
+            {flujoTotal.toFixed(2)}
+            <span style={{ fontSize: '14px', fontWeight: '500', color: '#6ee7b7', marginLeft: '6px' }}>TM/h</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>{flujoTexto}</div>
+          <div style={{ fontSize: '10px', color: '#475569' }}>{flujoDetalle}</div>
+        </div>
+      </div>
+
+      {/* TIEMPO ESTIMADO */}
+      <div style={{
+        flex: 1.3,
+        minWidth: '220px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '16px 20px',
+        background: 'rgba(59, 130, 246, 0.05)',
+        borderRadius: '16px',
+        border: '1px solid rgba(59, 130, 246, 0.15)'
+      }}>
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.15)',
+          borderRadius: '14px',
+          width: '55px',
+          height: '55px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <span style={{ fontSize: '28px' }}>🎯</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#93c5fd', letterSpacing: '1.5px', marginBottom: '6px' }}>
+            TIEMPO ESTIMADO
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+            <span style={{ fontSize: '32px', fontWeight: '900', color: '#60a5fa', fontFamily: 'monospace', lineHeight: 1 }}>
+              {tiempoTexto}
+            </span>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#93c5fd' }}>{tiempoUnidad}</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>
+            📅 {fechaEstimada.format("DD/MM/YYYY")} ⏰ {fechaEstimada.format("HH:mm")} hs
           </div>
         </div>
       </div>
+
+      {/* FALTANTE */}
       <div style={{
-        background: '#3b82f620',
-        padding: '6px 14px',
-        borderRadius: '999px',
-        border: '1px solid #3b82f6'
+        flex: 0.9,
+        minWidth: '150px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '16px 20px',
+        background: 'rgba(239, 68, 68, 0.05)',
+        borderRadius: '16px',
+        border: '1px solid rgba(239, 68, 68, 0.15)'
       }}>
-        <span style={{ fontSize: '15px', fontWeight: '800', color: '#3b82f6' }}>
-          {tiempoTexto}
-        </span>
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.15)',
+          borderRadius: '14px',
+          width: '55px',
+          height: '55px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <span style={{ fontSize: '28px' }}>⚠️</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#fca5a5', letterSpacing: '1.5px', marginBottom: '6px' }}>
+            FALTANTE
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '800', color: '#f87171', fontFamily: 'monospace', lineHeight: 1, marginBottom: '6px' }}>
+            {faltante.toFixed(1)}
+            <span style={{ fontSize: '14px', fontWeight: '500', color: '#fca5a5', marginLeft: '6px' }}>TM</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>
+            {((faltante / metaGlobal) * 100).toFixed(0)}% restante
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1448,64 +1898,56 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       </div>
 
       {metaGlobal > 0 && faltanteGlobal > 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-          borderRadius: '16px',
-          padding: '20px 24px',
-          marginBottom: '20px',
-          border: '1px solid #3b82f6',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                background: '#3b82f620',
-                borderRadius: '50%',
-                width: '48px',
-                height: '48px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <span style={{ fontSize: '24px' }}>⏱️</span>
-              </div>
-              <div>
-                <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
-                  FINALIZACIÓN ESTIMADA
-                </div>
-                <FinalizacionGeneral
-                  metaGlobal={metaGlobal}
-                  totalGlobal={totalGlobal}
-                  viajes={viajes}
-                  lecturasBanda={lecturasBanda}
-                  lecturasExportacion={lecturasExportacion}
-                  tipoOperacion={tipoOperacion}
-                />
-              </div>
-            </div>
-
-            <div style={{
-              background: '#1e293b',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              border: '1px solid #334155'
-            }}>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                {textoFaltante.toUpperCase()}
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>
-                {fmtTM(faltanteGlobal, 2)} TM
-              </div>
-            </div>
-          </div>
+  <div style={{
+    background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+    borderRadius: '20px',
+    padding: '24px 28px',
+    marginBottom: '24px',
+    border: '1px solid #3b82f6',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    width: '100%'
+  }}>
+    {/* Header centrado */}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '16px',
+      marginBottom: '24px',
+      paddingBottom: '16px',
+      borderBottom: '1px solid rgba(59, 130, 246, 0.2)'
+    }}>
+      <div style={{
+        background: '#3b82f620',
+        borderRadius: '50%',
+        width: '56px',
+        height: '56px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <span style={{ fontSize: '28px' }}>⏱️</span>
+      </div>
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: '600', color: '#94a3b8', letterSpacing: '1.5px' }}>
+          FINALIZACIÓN ESTIMADA
         </div>
-      )}
+        <div style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa' }}>
+          {((totalGlobal / metaGlobal) * 100).toFixed(1)}% completado
+        </div>
+      </div>
+    </div>
+    
+    <FinalizacionGeneral
+      metaGlobal={metaGlobal}
+      totalGlobal={totalGlobal}
+      viajes={viajes}
+      lecturasBanda={lecturasBanda}
+      lecturasExportacion={lecturasExportacion}
+      tipoOperacion={tipoOperacion}
+    />
+  </div>
+)}
       
       <div className="alm-charts-row">
 
@@ -1998,7 +2440,7 @@ function TablaBanda({ lecturas, producto }) {
                 <th className="alm-th-num">Acumulado (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Destino</th>
-               </tr>
+              </tr>
             </thead>
             <tbody>
               {lecturas.map((l, i) => {
@@ -2201,6 +2643,7 @@ function TablaExportacion({ lecturas, producto }) {
     </div>
   );
 }
+
 // ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
@@ -2208,13 +2651,7 @@ export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
   const { barco, productos, viajes, lecturasBanda, lecturasExportacion, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
 
-  // 🔥 NUEVO: Seleccionar automáticamente el primer producto cuando los datos están cargados
-  useEffect(() => {
-    if (!loading && productos.length > 0 && productoSeleccionado === "general") {
-      console.log("✅ Seleccionando primer producto automáticamente:", productos[0].nombre);
-      setProductoSeleccionado(productos[0].id);
-    }
-  }, [loading, productos, productoSeleccionado]);
+ 
 
   console.log("📊 Dashboard - datos cargados:", {
     barco: barco?.codigo_barco,
@@ -3266,14 +3703,14 @@ export default function DashboardCompartido({ codigoBarco }) {
           border-width: 2px;
         }
         
-       .alm-pred-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #333333;
-  display: block;
-  margin-bottom: 4px;
-}
+        .alm-pred-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          color: #333333;
+          display: block;
+          margin-bottom: 4px;
+        }
         
         .alm-pred-valor {
           font-size: 20px;
@@ -3741,14 +4178,20 @@ export default function DashboardCompartido({ codigoBarco }) {
           )}
 
           {productoSeleccionado === "general" ? (
-            <VistaGeneral
-              barco={barco}
-              productos={productos}
-              viajes={viajes}
-              lecturasBanda={lecturasBanda}
-              lecturasExportacion={lecturasExportacion}
-              onSelectProducto={(id) => setProductoSeleccionado(id)}
-            />
+            <>
+              {/* SOLO PARA EXPORTACIÓN: MOSTRAR RESUMEN DE PAROS */}
+              {barco.tipo_operacion === 'exportacion' && (
+                <ResumenParosDashboard barcoId={barco.id} />
+              )}
+              <VistaGeneral
+                barco={barco}
+                productos={productos}
+                viajes={viajes}
+                lecturasBanda={lecturasBanda}
+                lecturasExportacion={lecturasExportacion}
+                onSelectProducto={(id) => setProductoSeleccionado(id)}
+              />
+            </>
           ) : productoActivo ? (
             <div className="alm-space-y">
               <div
