@@ -480,123 +480,126 @@ function ResumenParosDashboard({ barcoId }) {
   }
 
   return (
-    <div style={{
-      background: 'linear-gradient(135deg, #475569, #1e293b)',
-      borderRadius: '16px',
-      padding: '20px',
-      marginBottom: '20px',
-      border: '1px solid #334155'
+   <div style={{
+  background: '#ffffff',
+  borderRadius: '16px',
+  padding: '20px',
+  marginBottom: '20px',
+  border: '1px solid #e5e7eb',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+}}>
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid #e5e7eb'
+  }}>
+    <span style={{ fontSize: '24px' }}>⏱️</span>
+    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1d4ed8', margin: 0 }}>
+      RESUMEN DE TIEMPOS DE PAROS
+    </h3>
+    <span style={{ 
+      marginLeft: 'auto',
+      fontSize: '12px',
+      color: '#6b7280',
+      fontFamily: 'monospace'
     }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        marginBottom: '16px',
-        paddingBottom: '12px',
-        borderBottom: '1px solid #334155'
-      }}>
-        <span style={{ fontSize: '24px' }}>⏱️</span>
-        <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fff', margin: 0 }}>
-          RESUMEN DE TIEMPOS DE PAROS
-        </h3>
-        <span style={{ 
-          marginLeft: 'auto',
-          fontSize: '12px',
-          color: '#64748b',
-          fontFamily: 'monospace'
-        }}>
-          {resumenParos.total.cantidad} paro{resumenParos.total.cantidad !== 1 ? 's' : ''} registrados
+      {resumenParos.total.cantidad} paro{resumenParos.total.cantidad !== 1 ? 's' : ''} registrados
+    </span>
+  </div>
+
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px'
+  }}>
+    
+    {/* ALMAPAC */}
+    <div style={{
+      background: '#f8fafc',
+      borderRadius: '12px',
+      padding: '16px',
+      borderLeft: '4px solid #f97316'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '20px' }}>📦</span>
+        <span style={{ fontSize: '12px', fontWeight: '700', color: '#1d4ed8', textTransform: 'uppercase' }}>
+          IMPUTABLES ALMAPAC
         </span>
       </div>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px'
-      }}>
-        {/* IMPUTABLES ALMAPAC */}
-        <div style={{
-          background: 'rgba(59, 130, 246, 0.1)',
-          borderRadius: '12px',
-          padding: '16px',
-          borderLeft: `3px solid #3b82f6`
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '20px' }}>📦</span>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              IMPUTABLES ALMAPAC
-            </span>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
-            {formatearTiempo(resumenParos.almapac.minutos)}
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-            {resumenParos.almapac.cantidad} paro{resumenParos.almapac.cantidad !== 1 ? 's' : ''}
-          </div>
-        </div>
-
-        {/* NO IMPUTABLES ALMAPAC (UPDP) */}
-        <div style={{
-          background: 'rgba(16, 185, 129, 0.1)',
-          borderRadius: '12px',
-          padding: '16px',
-          borderLeft: `3px solid #10b981`
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '20px' }}>⚡</span>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: '#6ee7b7', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              IMPUTABLES UPDP
-            </span>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
-            {formatearTiempo(resumenParos.updp.minutos)}
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-            {resumenParos.updp.cantidad} paro{resumenParos.updp.cantidad !== 1 ? 's' : ''}
-          </div>
-        </div>
-
-        {/* OTRAS CAUSAS */}
-        <div style={{
-          background: 'rgba(139, 92, 246, 0.1)',
-          borderRadius: '12px',
-          padding: '16px',
-          borderLeft: `3px solid #8b5cf6`
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '20px' }}>🌊</span>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: '#c084fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              OTRAS CAUSAS
-            </span>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: '#fff', fontFamily: 'monospace' }}>
-            {formatearTiempo(resumenParos.otras.minutos)}
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-            {resumenParos.otras.cantidad} paro{resumenParos.otras.cantidad !== 1 ? 's' : ''}
-          </div>
-        </div>
+      <div style={{ fontSize: '28px', fontWeight: '800', color: '#1e293b', fontFamily: 'monospace' }}>
+        {formatearTiempo(resumenParos.almapac.minutos)}
       </div>
-
-      {/* Total general */}
-      {resumenParos.total.minutos > 0 && (
-        <div style={{
-          marginTop: '12px',
-          paddingTop: '12px',
-          borderTop: '1px solid #334155',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: '16px',
-          fontSize: '12px'
-        }}>
-          <span style={{ color: '#64748b' }}>TIEMPO TOTAL EN PAROS:</span>
-          <span style={{ fontWeight: '700', color: '#f59e0b', fontFamily: 'monospace', fontSize: '16px' }}>
-            {formatearTiempo(resumenParos.total.minutos)}
-          </span>
-        </div>
-      )}
+      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+        {resumenParos.almapac.cantidad} paro{resumenParos.almapac.cantidad !== 1 ? 's' : ''}
+      </div>
     </div>
+
+    {/* UPDP */}
+    <div style={{
+      background: '#f8fafc',
+      borderRadius: '12px',
+      padding: '16px',
+      borderLeft: '4px solid #1d4ed8'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '20px' }}>⚡</span>
+        <span style={{ fontSize: '12px', fontWeight: '700', color: '#1d4ed8', textTransform: 'uppercase' }}>
+          IMPUTABLES UPDP
+        </span>
+      </div>
+      <div style={{ fontSize: '28px', fontWeight: '800', color: '#1e293b', fontFamily: 'monospace' }}>
+        {formatearTiempo(resumenParos.updp.minutos)}
+      </div>
+      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+        {resumenParos.updp.cantidad} paro{resumenParos.updp.cantidad !== 1 ? 's' : ''}
+      </div>
+    </div>
+
+    {/* OTRAS */}
+    <div style={{
+      background: '#f8fafc',
+      borderRadius: '12px',
+      padding: '16px',
+      borderLeft: '4px solid #fb923c'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '20px' }}>🌊</span>
+        <span style={{ fontSize: '12px', fontWeight: '700', color: '#1d4ed8', textTransform: 'uppercase' }}>
+          OTRAS CAUSAS
+        </span>
+      </div>
+      <div style={{ fontSize: '28px', fontWeight: '800', color: '#1e293b', fontFamily: 'monospace' }}>
+        {formatearTiempo(resumenParos.otras.minutos)}
+      </div>
+      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+        {resumenParos.otras.cantidad} paro{resumenParos.otras.cantidad !== 1 ? 's' : ''}
+      </div>
+    </div>
+
+  </div>
+
+  {/* TOTAL */}
+  {resumenParos.total.minutos > 0 && (
+    <div style={{
+      marginTop: '12px',
+      paddingTop: '12px',
+      borderTop: '1px solid #e5e7eb',
+      display: 'flex',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: '16px',
+      fontSize: '12px'
+    }}>
+      <span style={{ color: '#6b7280' }}>TIEMPO TOTAL EN PAROS:</span>
+      <span style={{ fontWeight: '800', color: '#f97316', fontFamily: 'monospace', fontSize: '16px' }}>
+        {formatearTiempo(resumenParos.total.minutos)}
+      </span>
+    </div>
+  )}
+</div>
   );
 }
 
