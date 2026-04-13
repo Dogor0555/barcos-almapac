@@ -17,6 +17,21 @@ import 'dayjs/locale/es'
 dayjs.extend(duration)
 dayjs.locale('es')
 
+// ─── Lista de clientes (ÚNICA - sin repetidos) ───
+const CLIENTES_UNICOS = [
+  "AGROINDUSTRIAS BUENAVISTA, S.A. DE C.V.",
+  "AVICOLA DEL SUR, S.A. DE C.V.",
+  "AVICULTORES Y PORCINOCULTORES, S. A. DE C. V.",
+  "BORIS EDGARDO MELGAR JOYA",
+  "COOPERATIVA GANADERA DE SONSONATE DE R.L. DE C.V.",
+  "IMPORTADORES AGROPECUARIOS, S.A. DE C.V.",
+  "JOSE MIGUEL PILOÑA ARAUJO",
+  "MONICA MARIA A. GROSS DE RUFFATI",
+  "OSCAR ALBERTO FLORES MENJIVAR",
+  "VICTOR MANUEL MIRA HERRERA",
+  "WILIAN YOBANY REYES SOTO"
+].sort() // Ordenados alfabéticamente
+
 // ─── Helpers ────────────────────────────────────────────────
 const timeToSec = (t) => {
   if (!t) return 0
@@ -34,7 +49,7 @@ const secToHMS = (sec) => {
 
 const secToMin = (sec) => sec ? (sec / 60).toFixed(2) : '0.00'
 
-// ─── Modal de registro / edición (AHORA CON AUTO-REGISTRO DEL USUARIO) ───
+// ─── Modal de registro / edición ────────────────────────────
 const RegistroModal = ({ registro, periodoActual, nextNumero, onClose, onSave, usuarioActual }) => {
   const esEdicion = !!registro
 
@@ -119,8 +134,8 @@ const RegistroModal = ({ registro, periodoActual, nextNumero, onClose, onSave, u
         rendimiento_estandar: form.rendimiento_estandar ? Number(form.rendimiento_estandar) : null,
         diferencia_rendimiento: difRendimiento !== '—' ? Number(difRendimiento) : null,
         observaciones: form.observaciones || null,
-        creado_por: usuarioActual.id,  // 👈 AUTO-REGISTRO DEL USUARIO
-        creado_por_nombre: usuarioActual.nombre, // 👈 Guardamos el nombre para referencia rápida
+        creado_por: usuarioActual.id,
+        creado_por_nombre: usuarioActual.nombre,
       }
 
       if (esEdicion) {
@@ -156,6 +171,7 @@ const RegistroModal = ({ registro, periodoActual, nextNumero, onClose, onSave, u
   )
 
   const inputCls = "w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-slate-600"
+  const selectCls = "w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer"
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 overflow-y-auto">
@@ -206,9 +222,26 @@ const RegistroModal = ({ registro, periodoActual, nextNumero, onClose, onSave, u
               <Field label="Placa *">
                 <input type="text" value={form.placa} onChange={e => set('placa', e.target.value.toUpperCase())} placeholder="ej: P123ABC" className={inputCls} />
               </Field>
-              <Field label="Cliente" span2>
-                <input type="text" value={form.cliente} onChange={e => set('cliente', e.target.value)} placeholder="Nombre del cliente" className={inputCls} />
+              
+              {/* Campo Cliente con SELECT bonito */}
+              <Field label="Cliente *" span2>
+                <div className="relative">
+                  <select
+                    value={form.cliente}
+                    onChange={e => set('cliente', e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="">Seleccione un cliente...</option>
+                    {CLIENTES_UNICOS.map(cliente => (
+                      <option key={cliente} value={cliente}>
+                        {cliente}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
               </Field>
+              
               <Field label="Punto de Carga" span2>
                 <input type="text" value={form.punto_carga} onChange={e => set('punto_carga', e.target.value)} placeholder="Bodega / Muelle..." className={inputCls} />
               </Field>
@@ -498,7 +531,7 @@ export default function EnvasadorPage() {
                         <td className="px-2 py-2 text-slate-300">{r.numero_orden || '—'}</td>
                         <td className="px-2 py-2 text-slate-300">{r.grupo_envasado || '—'}</td>
                         <td className="px-2 py-2 font-mono text-blue-400 font-bold">{r.placa}</td>
-                        <td className="px-2 py-2 text-slate-300 max-w-[100px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-2 py-2 text-slate-300 max-w-[150px] truncate" title={r.cliente}>{r.cliente || '—'}</td>
                         <td className="px-2 py-2 text-slate-300 max-w-[100px] truncate">{r.producto || '—'}</td>
                         <td className="px-2 py-2 font-bold text-white">{r.cantidad_sacos?.toLocaleString() || '—'}</td>
                         <td className="px-2 py-2 text-white">{r.peso_toneladas ? Number(r.peso_toneladas).toFixed(2) : '—'}</td>
@@ -568,7 +601,7 @@ export default function EnvasadorPage() {
                       </div>
                       <div>
                         <p className="text-slate-500 text-[10px] uppercase">Cliente</p>
-                        <p className="text-white truncate">{r.cliente || '—'}</p>
+                        <p className="text-white text-xs truncate">{r.cliente || '—'}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 text-[10px] uppercase">Sacos</p>
@@ -580,7 +613,7 @@ export default function EnvasadorPage() {
                       </div>
                       <div>
                         <p className="text-slate-500 text-[10px] uppercase">T. Efectivo</p>
-                        <p className="text-emerald-400 font-mono">{secToHMS(r.tiempo_efectivo_seg)}</p>
+                        <p className="text-emerald-400 font-mono text-xs">{secToHMS(r.tiempo_efectivo_seg)}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 text-[10px] uppercase">Sacos/Min</p>
