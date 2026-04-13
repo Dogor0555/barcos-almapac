@@ -140,6 +140,12 @@ export const isChequeroTraslado = () => {
   return user?.rol === 'chequerotraslado'
 }
 
+
+export const isEnvasador = () => {
+  const user = getCurrentUser()
+  return user?.rol === 'envasador'
+}
+
 // ACTUALIZADA
 export const isPesadorOrAdmin = () => {
   const user = getCurrentUser()

@@ -1673,6 +1673,14 @@ export default function AdminPage() {
                 Traslados Azúcar
               </Link>
 
+               <Link
+                href="/admin/envasado"
+                className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                <Truck className="w-4 h-4" />
+                Envasados
+              </Link>
+
               
               
               <button

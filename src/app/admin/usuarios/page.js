@@ -165,6 +165,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
               <option value="electricista">Electricista</option>
               <option value="chequero">Chequero (Atrasos)</option>
               <option value="chequerotraslado">Chequero Traslados</option>
+              <option value="envasador">Envasador</option>
             </select>
           </div>
 
