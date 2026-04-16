@@ -1,10 +1,9 @@
 // app/compartido-sacos/[token]/page.js
-import * as React from 'react'
 import ClientPage from './page-client'
 
-export default function Page({ params }) {
-  // Para componentes cliente, usamos React.use()
-  const { token } = React.use(params)
+export default async function Page({ params }) {
+  // En Next.js 15+, params es una Promise que debe ser await
+  const { token } = await params
   
   return <ClientPage token={token} />
 }
