@@ -1,7 +1,7 @@
 // app/compartido-sacos/[token]/DashboardSacosCompleto.js
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { createClient } from '@supabase/supabase-js';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,7 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCw, Calendar, Clock, TrendingUp, Truck, Filter, Eye, EyeOff, Search } from 'lucide-react';
+import { RefreshCw, Calendar, Clock, TrendingUp, Truck, Filter, Eye, EyeOff, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -297,14 +297,12 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
 
       {expandido && (
         <div style={{ padding: '16px 20px' }}>
-          {/* Grid de información principal */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: 16,
             marginBottom: 20
           }}>
-            {/* Columna 1 - Información del vehículo */}
             <div style={{
               background: 'white',
               borderRadius: 10,
@@ -315,11 +313,10 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
                 🚛 VEHÍCULO
               </div>
               <div><strong>Placa:</strong> {viaje.placa_camion || '—'}</div>
-              <div><strong>Remolque:</strong> {viaje.remolque || '—'}</div>
+              <div><strong>Remolque:</strong> {viaje.placa_remolque || '—'}</div>
               <div><strong>Conductor:</strong> {viaje.conductor || '—'}</div>
             </div>
 
-            {/* Columna 2 - Información de carga */}
             <div style={{
               background: 'white',
               borderRadius: 10,
@@ -335,7 +332,6 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
               <div><strong>Sacos buenos:</strong> {(viaje.cantidad_paquetes || 0) - (viaje.paquetes_danados || 0)} uds</div>
             </div>
 
-            {/* Columna 3 - Pesos */}
             <div style={{
               background: 'white',
               borderRadius: 10,
@@ -355,7 +351,6 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
               </div>
             </div>
 
-            {/* Columna 4 - Tiempos */}
             <div style={{
               background: 'white',
               borderRadius: 10,
@@ -371,7 +366,6 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
             </div>
           </div>
 
-          {/* Observaciones si existen */}
           {viaje.observaciones && (
             <div style={{
               background: '#fef3c7',
@@ -384,7 +378,6 @@ function ViajeDetalleExpandido({ viaje, onClose }) {
             </div>
           )}
 
-          {/* Ticket URL si existe */}
           {viaje.ticket_url && (
             <div style={{ marginTop: 12, textAlign: 'right' }}>
               <a
@@ -1643,23 +1636,18 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
         </div>
       </div>
 
-
-
-            {/* Bodegas activas en últimas 3 horas */}
       {(() => {
-        // Filtrar bodegas que han tenido actividad en las últimas 3 horas
         const hace3Horas = dayjs().subtract(3, 'hour');
         
         const bodegasActivas = datosPorBodegaCompleto
           .filter(b => {
-            // Verificar si hay registros en las últimas 3 horas para esta bodega
             const registrosRecientes = registrosFiltrados.filter(r => 
               r.bodega === b.bodega && 
               dayjs(r.fecha_hora).isAfter(hace3Horas)
             );
             return registrosRecientes.length > 0;
           })
-          .slice(0, 3); // Máximo 3 bodegas
+          .slice(0, 3);
         
         if (bodegasActivas.length === 0) return null;
         
@@ -1692,13 +1680,12 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
             </div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               {bodegasActivas.map((b, i) => {
-                // Calcular TM en últimas 3 horas para esta bodega
                 const registrosRecientes = registrosFiltrados.filter(r => 
                   r.bodega === b.bodega && 
                   dayjs(r.fecha_hora).isAfter(hace3Horas)
                 );
                 const tmUltimas3Horas = registrosRecientes.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
-                const flujoPromedio3h = tmUltimas3Horas / 3; // TM/h promedio en últimas 3 horas
+                const flujoPromedio3h = tmUltimas3Horas / 3;
                 
                 return (
                   <div key={b.bodega} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1739,7 +1726,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
         );
       })()}
 
-            {flujoUltimasHoras.length > 1 && (
+      {flujoUltimasHoras.length > 1 && (
         <div style={{
           marginTop: 20,
           height: 60,
@@ -1748,7 +1735,6 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
           gap: 4
         }}>
           {flujoUltimasHoras.map((h, i) => {
-            // Solo mostrar si hay actividad en esa hora
             if (h.tm === 0) return null;
             
             const max = Math.max(...flujoUltimasHoras.map(h => h.tm));
@@ -1803,6 +1789,10 @@ export default function DashboardSacosCompartido({ barco }) {
   // Estado para mostrar/ocultar panel de filtros
   const [mostrarFiltrosAvanzados, setMostrarFiltrosAvanzados] = useState(false);
 
+  // ========== PAGINACIÓN ==========
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [registrosPorPagina, setRegistrosPorPagina] = useState(20);
+
   // Obtener valores únicos para filtros
   const placasUnicas = useMemo(() => {
     const s = new Set(registros.map(r => r.placa_camion).filter(Boolean));
@@ -1810,7 +1800,7 @@ export default function DashboardSacosCompartido({ barco }) {
   }, [registros]);
 
   const remolquesUnicos = useMemo(() => {
-    const s = new Set(registros.map(r => r.remolque).filter(Boolean));
+    const s = new Set(registros.map(r => r.placa_remolque).filter(Boolean));
     return Array.from(s).sort();
   }, [registros]);
 
@@ -1827,22 +1817,18 @@ export default function DashboardSacosCompartido({ barco }) {
   const registrosFiltrados = useMemo(() => {
     let filtrados = registros;
     
-    // Filtro por bodega
     if (filtroBodegaGlobal !== 'todas') {
       filtrados = filtrados.filter(r => r.bodega === filtroBodegaGlobal);
     }
     
-    // Filtro por placa
     if (filtroPlaca) {
       filtrados = filtrados.filter(r => r.placa_camion === filtroPlaca);
     }
     
-    // Filtro por remolque
     if (filtroRemolque) {
-      filtrados = filtrados.filter(r => r.remolque === filtroRemolque);
+      filtrados = filtrados.filter(r => r.placa_remolque === filtroRemolque);
     }
     
-    // Filtro por rango de fechas
     if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
       filtrados = filtrados.filter(r => {
         const fechaHora = dayjs(r.fecha_hora);
@@ -1852,6 +1838,33 @@ export default function DashboardSacosCompartido({ barco }) {
     
     return filtrados;
   }, [registros, filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha]);
+
+  // ========== PAGINACIÓN: Calcular total de páginas y registros paginados ==========
+  const totalPaginas = useMemo(() => {
+    return Math.ceil(registrosFiltrados.length / registrosPorPagina);
+  }, [registrosFiltrados, registrosPorPagina]);
+
+  const registrosPaginados = useMemo(() => {
+    const inicio = (paginaActual - 1) * registrosPorPagina;
+    const fin = inicio + registrosPorPagina;
+    return registrosFiltrados.slice(inicio, fin);
+  }, [registrosFiltrados, paginaActual, registrosPorPagina]);
+
+  // Resetear a página 1 cuando cambian los filtros
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha]);
+
+  // Función para cambiar de página
+  const irPagina = (nuevaPagina) => {
+    setPaginaActual(Math.max(1, Math.min(nuevaPagina, totalPaginas)));
+  };
+
+  // Función para cambiar registros por página
+  const cambiarRegistrosPorPagina = (cantidad) => {
+    setRegistrosPorPagina(cantidad);
+    setPaginaActual(1);
+  };
 
   // Limpiar todos los filtros
   const limpiarFiltros = () => {
@@ -1876,13 +1889,12 @@ export default function DashboardSacosCompartido({ barco }) {
     const totalTM      = registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
     const totalDanados = registrosFiltrados.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
     
-    // Estadísticas por placa
     const placasMap = {};
     registrosFiltrados.forEach(r => {
       if (!placasMap[r.placa_camion]) {
         placasMap[r.placa_camion] = { 
           placa: r.placa_camion, 
-          remolque: r.remolque,
+          remolque: r.placa_remolque,
           viajes: 0, 
           sacos: 0, 
           tm: 0,
@@ -1895,21 +1907,20 @@ export default function DashboardSacosCompartido({ barco }) {
       placasMap[r.placa_camion].danados += (r.paquetes_danados || 0);
     });
     
-    // Estadísticas por remolque
     const remolquesMap = {};
     registrosFiltrados.forEach(r => {
-      if (r.remolque) {
-        if (!remolquesMap[r.remolque]) {
-          remolquesMap[r.remolque] = { 
-            remolque: r.remolque, 
+      if (r.placa_remolque) {
+        if (!remolquesMap[r.placa_remolque]) {
+          remolquesMap[r.placa_remolque] = { 
+            remolque: r.placa_remolque, 
             viajes: 0, 
             sacos: 0, 
             tm: 0
           };
         }
-        remolquesMap[r.remolque].viajes++;
-        remolquesMap[r.remolque].sacos += (r.cantidad_paquetes_buenos || 0);
-        remolquesMap[r.remolque].tm    += r.peso_total_calculado_tm;
+        remolquesMap[r.placa_remolque].viajes++;
+        remolquesMap[r.placa_remolque].sacos += (r.cantidad_paquetes_buenos || 0);
+        remolquesMap[r.placa_remolque].tm    += r.peso_total_calculado_tm;
       }
     });
     
@@ -1925,9 +1936,6 @@ export default function DashboardSacosCompartido({ barco }) {
     };
   }, [registrosFiltrados]);
 
-  // ============================================================================
-  // FLUJO POR HORA — FIX DEDUPLICACIÓN: usar timestamp completo como key del eje X
-  // ============================================================================
   const flujoPorHora = useMemo(() => {
     if (registrosFiltrados.length === 0) return [];
 
@@ -2070,9 +2078,6 @@ export default function DashboardSacosCompartido({ barco }) {
       });
   }, [registrosFiltrados, metasBodega, barco.bodegas_json, filtroBodegaGlobal]);
 
-  // ============================================================================
-  // FLUJO POR HORA POR BODEGA — también fix deduplicación
-  // ============================================================================
   const flujoPorHoraBodega = useMemo(() => {
     if (registrosFiltrados.length === 0) return [];
 
@@ -2270,7 +2275,6 @@ export default function DashboardSacosCompartido({ barco }) {
         }
         .alm-pulse-num { animation: count-up .6s ease; }
         
-        /* PROGRESO CONTAINER — rediseñado */
         .alm-progress-container {
           background: var(--surface); border: 1px solid var(--border);
           border-radius: var(--radius); padding: 24px;
@@ -2475,7 +2479,6 @@ export default function DashboardSacosCompartido({ barco }) {
             marginBottom: 20,
             overflow: 'hidden'
           }}>
-            {/* Header del panel de filtros */}
             <div
               onClick={() => setMostrarFiltrosAvanzados(!mostrarFiltrosAvanzados)}
               style={{
@@ -2535,7 +2538,6 @@ export default function DashboardSacosCompartido({ barco }) {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: 16
                 }}>
-                  {/* Filtro por Bodega */}
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
                       📦 BODEGA
@@ -2561,7 +2563,6 @@ export default function DashboardSacosCompartido({ barco }) {
                     </select>
                   </div>
 
-                  {/* Filtro por Placa */}
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
                       🚛 PLACA CAMIÓN
@@ -2586,7 +2587,6 @@ export default function DashboardSacosCompartido({ barco }) {
                     </select>
                   </div>
 
-                  {/* Filtro por Remolque */}
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
                       🔗 REMOLQUE
@@ -2611,7 +2611,6 @@ export default function DashboardSacosCompartido({ barco }) {
                     </select>
                   </div>
 
-                  {/* Filtro por Fechas */}
                   <div style={{ position: 'relative' }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
                       📅 RANGO DE FECHAS
@@ -2648,7 +2647,6 @@ export default function DashboardSacosCompartido({ barco }) {
                   </div>
                 </div>
 
-                {/* Resumen de filtros activos */}
                 {hayFiltrosActivos && (
                   <div style={{
                     marginTop: 16,
@@ -2689,7 +2687,6 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* Indicador de resultados */}
           <div style={{
             marginBottom: 16,
             padding: '10px 16px',
@@ -2739,118 +2736,6 @@ export default function DashboardSacosCompartido({ barco }) {
               sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / (statsGenerales.totalSacos + statsGenerales.totalDanados)) * 100).toFixed(1) : 0}% del total`} />
           </div>
 
-          {/* Resumen de vehículos */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 16,
-            marginBottom: 20
-          }}>
-            {/* Top 5 Placas */}
-            <div style={{
-              background: '#fff',
-              borderRadius: 16,
-              border: '1px solid #e2e8f0',
-              padding: 16,
-              boxShadow: '0 1px 3px rgba(0,0,0,.06)'
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Truck size={14} /> TOP 5 PLACAS POR VIAJES
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {statsGenerales.topPlacas.map((p, i) => (
-                  <div key={p.placa} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 0',
-                    borderBottom: i < statsGenerales.topPlacas.length - 1 ? '1px solid #f1f5f9' : 'none'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{
-                        width: 24,
-                        height: 24,
-                        background: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#e2e8f0',
-                        borderRadius: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: i < 3 ? 'white' : '#64748b'
-                      }}>
-                        {i + 1}
-                      </span>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>{p.placa}</div>
-                        {p.remolque && (
-                          <div style={{ fontSize: 10, color: '#94a3b8' }}>Rem: {p.remolque}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{p.viajes} viajes</div>
-                      <div style={{ fontSize: 10, color: '#10b981' }}>{fmtTM(p.tm, 1)} TM</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-                Total vehículos: {statsGenerales.totalPlacas} placas distintas
-              </div>
-            </div>
-
-            {/* Top 5 Remolques */}
-            <div style={{
-              background: '#fff',
-              borderRadius: 16,
-              border: '1px solid #e2e8f0',
-              padding: 16,
-              boxShadow: '0 1px 3px rgba(0,0,0,.06)'
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                🔗 TOP 5 REMOLQUES POR VIAJES
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {statsGenerales.topRemolques.map((r, i) => (
-                  <div key={r.remolque} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 0',
-                    borderBottom: i < statsGenerales.topRemolques.length - 1 ? '1px solid #f1f5f9' : 'none'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{
-                        width: 24,
-                        height: 24,
-                        background: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#e2e8f0',
-                        borderRadius: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: i < 3 ? 'white' : '#64748b'
-                      }}>
-                        {i + 1}
-                      </span>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{r.remolque}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{r.viajes} viajes</div>
-                      <div style={{ fontSize: 10, color: '#10b981' }}>{fmtTM(r.tm, 1)} TM</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-                Total remolques: {statsGenerales.totalRemolques} distintos
-              </div>
-            </div>
-          </div>
-
-          {/* FLUJO GLOBAL DE DESCARGA */}
           <FlujoGlobalCard 
             flujoPromedioGeneral={flujoPromedioGeneral}
             flujoUltimaHora={flujoUltimaHora}
@@ -2858,7 +2743,6 @@ export default function DashboardSacosCompartido({ barco }) {
             datosPorBodegaCompleto={datosPorBodegaCompleto}
           />
 
-          {/* PROGRESO GENERAL */}
           <div className="alm-progress-container">
             <div className="alm-progress-header">
               <div className="alm-progress-title">
@@ -2891,7 +2775,6 @@ export default function DashboardSacosCompartido({ barco }) {
             />
           </div>
 
-          {/* FLUJO POR HORA */}
           <div className="alm-chart-card">
             <h4 className="alm-chart-title">
               ⏱️ FLUJO POR HORA (TM/h)
@@ -2932,7 +2815,6 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* BARCO SVG */}
           <div className="alm-ship-layout">
             <div className="alm-ship-title">
               <span>⚓ DISTRIBUCIÓN DE CARGA POR BODEGA</span>
@@ -3063,7 +2945,6 @@ export default function DashboardSacosCompartido({ barco }) {
             </div>
           </div>
 
-          {/* FLUJO POR HORA POR BODEGA */}
           <div className="alm-chart-card">
             <h4 className="alm-chart-title">
               📈 FLUJO POR HORA POR BODEGA (TM/h)
@@ -3107,17 +2988,16 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* ATRASOS */}
           <AtrasosBarco barcoId={barco.id} />
 
-          {/* TABLA DE VIAJES CON DETALLE EXPANDIBLE */}
+          {/* TABLA DE VIAJES CON DETALLE EXPANDIBLE Y PAGINACIÓN */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <h3 className="alm-section-title">
                 🚛 LISTADO DE VIAJES
                 <span className="alm-badge">{registrosFiltrados.length} registros</span>
               </h3>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {viajeExpandidoId && (
                   <button
                     onClick={() => setViajeExpandidoId(null)}
@@ -3153,7 +3033,7 @@ export default function DashboardSacosCompartido({ barco }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {registrosFiltrados.length > 0 ? registrosFiltrados.map((viaje, idx) => {
+                  {registrosPaginados.length > 0 ? registrosPaginados.map((viaje, idx) => {
                     const diferenciaPorcentaje = ((viaje.diferencia_kg || 0) / (viaje.peso_ingenio_kg || 1) * 100).toFixed(1);
                     const esDiferenciaAlta = viaje.diferencia_kg > 50;
                     const estaExpandido = viajeExpandidoId === viaje.id;
@@ -3166,7 +3046,7 @@ export default function DashboardSacosCompartido({ barco }) {
                             {dayjs(viaje.fecha_hora).format('DD/MM HH:mm')}
                           </td>
                           <td style={{ fontWeight: 600 }}>{viaje.placa_camion || '—'}</td>
-                          <td>{viaje.remolque || '—'}</td>
+                          <td>{viaje.placa_remolque || '—'}</td>
                           <td>{viaje.bodega || '—'}</td>
                           <td className="alm-td-num">{viaje.cantidad_paquetes || 0}</td>
                           <td className="alm-td-num alm-green">{fmtTM(viaje.peso_total_calculado_tm, 2)}</td>
@@ -3232,9 +3112,130 @@ export default function DashboardSacosCompartido({ barco }) {
                 </tfoot>
               </table>
             </div>
+
+            {/* CONTROLES DE PAGINACIÓN */}
+            {registrosFiltrados.length > 0 && (
+              <div style={{
+                padding: '16px 20px',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                    Mostrando {(paginaActual - 1) * registrosPorPagina + 1} - {Math.min(paginaActual * registrosPorPagina, registrosFiltrados.length)} de {registrosFiltrados.length}
+                  </span>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>Ver:</span>
+                    <select
+                      value={registrosPorPagina}
+                      onChange={(e) => cambiarRegistrosPorPagina(Number(e.target.value))}
+                      style={{
+                        background: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => irPagina(1)}
+                    disabled={paginaActual === 1}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      cursor: paginaActual === 1 ? 'not-allowed' : 'pointer',
+                      opacity: paginaActual === 1 ? 0.5 : 1,
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <ChevronLeft size={14} /> Primera
+                  </button>
+                  <button
+                    onClick={() => irPagina(paginaActual - 1)}
+                    disabled={paginaActual === 1}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      cursor: paginaActual === 1 ? 'not-allowed' : 'pointer',
+                      opacity: paginaActual === 1 ? 0.5 : 1,
+                      fontSize: 12
+                    }}
+                  >
+                    ←
+                  </button>
+                  
+                  <span style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    background: '#0f172a',
+                    color: 'white',
+                    fontSize: 13,
+                    fontWeight: 600
+                  }}>
+                    {paginaActual} / {totalPaginas}
+                  </span>
+                  
+                  <button
+                    onClick={() => irPagina(paginaActual + 1)}
+                    disabled={paginaActual === totalPaginas}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      cursor: paginaActual === totalPaginas ? 'not-allowed' : 'pointer',
+                      opacity: paginaActual === totalPaginas ? 0.5 : 1,
+                      fontSize: 12
+                    }}
+                  >
+                    →
+                  </button>
+                  <button
+                    onClick={() => irPagina(totalPaginas)}
+                    disabled={paginaActual === totalPaginas}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #e2e8f0',
+                      background: 'white',
+                      cursor: paginaActual === totalPaginas ? 'not-allowed' : 'pointer',
+                      opacity: paginaActual === totalPaginas ? 0.5 : 1,
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    Última <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* TABLA RESUMEN POR BODEGA */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <h3 className="alm-section-title">📊 RESUMEN POR BODEGA CON CANTIDADES MANIFESTADAS</h3>
