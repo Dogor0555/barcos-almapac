@@ -13,7 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCw, Calendar, Clock, TrendingUp } from 'lucide-react';
+import { RefreshCw, Calendar, Clock, TrendingUp, Truck, Filter, Eye, EyeOff, Search } from 'lucide-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -221,6 +221,191 @@ function DateRangeSelector({ fechaInicio, fechaFin, onChange, onClose }) {
           Cancelar
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTE DE VIAJE EXPANDIDO - MUESTRA TODOS LOS DETALLES DEL VIAJE
+// ============================================================================
+function ViajeDetalleExpandido({ viaje, onClose }) {
+  const [expandido, setExpandido] = useState(true);
+  
+  const formatFechaHora = (fecha, hora) => {
+    if (!fecha) return '—';
+    if (hora) return dayjs(`${fecha} ${hora}`).format('DD/MM/YYYY HH:mm');
+    return dayjs(fecha).format('DD/MM/YYYY');
+  };
+
+  const diferenciaPorcentaje = ((viaje.diferencia_kg || 0) / (viaje.peso_ingenio_kg || 1) * 100).toFixed(2);
+  const esDiferenciaAlta = viaje.diferencia_kg > 50;
+
+  return (
+    <div style={{
+      marginTop: 12,
+      marginBottom: 12,
+      background: '#f8fafc',
+      borderRadius: 12,
+      border: '1px solid #e2e8f0',
+      overflow: 'hidden'
+    }}>
+      <div
+        onClick={() => setExpandido(!expandido)}
+        style={{
+          padding: '12px 16px',
+          background: '#f1f5f9',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: expandido ? '1px solid #e2e8f0' : 'none'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 20 }}>📋</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>
+            Detalles del Viaje #{viaje.viaje_numero || viaje.id}
+          </span>
+          <span style={{
+            fontSize: 11,
+            background: '#e2e8f0',
+            padding: '2px 8px',
+            borderRadius: 999,
+            color: '#475569'
+          }}>
+            {formatFechaHora(viaje.fecha, viaje.hora_inicio)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            {expandido ? '▼' : '▶'}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 16,
+              color: '#94a3b8'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {expandido && (
+        <div style={{ padding: '16px 20px' }}>
+          {/* Grid de información principal */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16,
+            marginBottom: 20
+          }}>
+            {/* Columna 1 - Información del vehículo */}
+            <div style={{
+              background: 'white',
+              borderRadius: 10,
+              padding: 12,
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
+                🚛 VEHÍCULO
+              </div>
+              <div><strong>Placa:</strong> {viaje.placa_camion || '—'}</div>
+              <div><strong>Remolque:</strong> {viaje.remolque || '—'}</div>
+              <div><strong>Conductor:</strong> {viaje.conductor || '—'}</div>
+            </div>
+
+            {/* Columna 2 - Información de carga */}
+            <div style={{
+              background: 'white',
+              borderRadius: 10,
+              padding: 12,
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
+                📦 CARGA
+              </div>
+              <div><strong>Bodega:</strong> {viaje.bodega || '—'}</div>
+              <div><strong>Sacos:</strong> {viaje.cantidad_paquetes || 0} uds</div>
+              <div><strong>Sacos dañados:</strong> {viaje.paquetes_danados || 0} uds</div>
+              <div><strong>Sacos buenos:</strong> {(viaje.cantidad_paquetes || 0) - (viaje.paquetes_danados || 0)} uds</div>
+            </div>
+
+            {/* Columna 3 - Pesos */}
+            <div style={{
+              background: 'white',
+              borderRadius: 10,
+              padding: 12,
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
+                ⚖️ PESOS
+              </div>
+              <div><strong>Peso/saco:</strong> {viaje.peso_saco_kg || 0} kg</div>
+              <div><strong>Peso ingenio:</strong> {((viaje.peso_ingenio_kg || 0) / 1000).toFixed(2)} TM</div>
+              <div><strong>Peso calculado:</strong> {((viaje.peso_saco_kg || 0) * ((viaje.cantidad_paquetes || 0) - (viaje.paquetes_danados || 0)) / 1000).toFixed(2)} TM</div>
+              <div><strong>Diferencia:</strong> 
+                <span style={{ color: esDiferenciaAlta ? '#ef4444' : '#10b981', fontWeight: 600 }}>
+                  {viaje.diferencia_kg?.toFixed(2) || 0} kg ({diferenciaPorcentaje}%)
+                </span>
+              </div>
+            </div>
+
+            {/* Columna 4 - Tiempos */}
+            <div style={{
+              background: 'white',
+              borderRadius: 10,
+              padding: 12,
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
+                ⏰ TIEMPOS
+              </div>
+              <div><strong>Inicio:</strong> {viaje.hora_inicio || '—'}</div>
+              <div><strong>Fin:</strong> {viaje.hora_fin || '—'}</div>
+              <div><strong>Fecha:</strong> {dayjs(viaje.fecha).format('DD/MM/YYYY')}</div>
+            </div>
+          </div>
+
+          {/* Observaciones si existen */}
+          {viaje.observaciones && (
+            <div style={{
+              background: '#fef3c7',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 12,
+              color: '#92400e'
+            }}>
+              <strong>📝 Observaciones:</strong> {viaje.observaciones}
+            </div>
+          )}
+
+          {/* Ticket URL si existe */}
+          {viaje.ticket_url && (
+            <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <a
+                href={viaje.ticket_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: 12,
+                  color: '#3b82f6',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                🎫 Ver ticket →
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -756,14 +941,12 @@ function useSacosData(barcoId) {
         .select('*')
         .eq('barco_id', barcoId)
         .order('fecha', { ascending: false })
-        .order('viaje_numero', { ascending: false });
+        .order('hora_inicio', { ascending: false });
 
       if (error) throw error;
 
       const registrosEnriquecidos = (registros || []).map(r => ({
         ...r,
-        // CORRECCIÓN: restamos los paquetes dañados del cálculo del peso total
-        // Esto asegura que el acumulado solo considere sacos buenos
         cantidad_paquetes_buenos: Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0)),
         peso_total_calculado_kg: r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0)),
         peso_total_calculado_tm: (r.peso_saco_kg * Math.max(0, r.cantidad_paquetes - (r.paquetes_danados || 0))) / 1000,
@@ -1607,9 +1790,29 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
 export default function DashboardSacosCompartido({ barco }) {
   const { registros, loading, error, lastUpdate, refetch } = useSacosData(barco.id);
 
+  // FILTROS NUEVOS
   const [filtroBodegaGlobal, setFiltroBodegaGlobal] = useState('todas');
+  const [filtroPlaca, setFiltroPlaca] = useState('');
+  const [filtroRemolque, setFiltroRemolque] = useState('');
   const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null });
   const [showDatePickerSacos, setShowDatePickerSacos] = useState(false);
+  
+  // Estado para el detalle expandido de cada viaje
+  const [viajeExpandidoId, setViajeExpandidoId] = useState(null);
+  
+  // Estado para mostrar/ocultar panel de filtros
+  const [mostrarFiltrosAvanzados, setMostrarFiltrosAvanzados] = useState(false);
+
+  // Obtener valores únicos para filtros
+  const placasUnicas = useMemo(() => {
+    const s = new Set(registros.map(r => r.placa_camion).filter(Boolean));
+    return Array.from(s).sort();
+  }, [registros]);
+
+  const remolquesUnicos = useMemo(() => {
+    const s = new Set(registros.map(r => r.remolque).filter(Boolean));
+    return Array.from(s).sort();
+  }, [registros]);
 
   const bodegasDisponibles = useMemo(() => {
     const s = new Set(registros.map(r => r.bodega).filter(Boolean));
@@ -1620,19 +1823,48 @@ export default function DashboardSacosCompartido({ barco }) {
     })];
   }, [registros]);
 
+  // Aplicar todos los filtros a los registros
   const registrosFiltrados = useMemo(() => {
     let filtrados = registros;
+    
+    // Filtro por bodega
     if (filtroBodegaGlobal !== 'todas') {
       filtrados = filtrados.filter(r => r.bodega === filtroBodegaGlobal);
     }
+    
+    // Filtro por placa
+    if (filtroPlaca) {
+      filtrados = filtrados.filter(r => r.placa_camion === filtroPlaca);
+    }
+    
+    // Filtro por remolque
+    if (filtroRemolque) {
+      filtrados = filtrados.filter(r => r.remolque === filtroRemolque);
+    }
+    
+    // Filtro por rango de fechas
     if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
       filtrados = filtrados.filter(r => {
         const fechaHora = dayjs(r.fecha_hora);
         return fechaHora.isAfter(filtroFecha.inicio) && fechaHora.isBefore(filtroFecha.fin);
       });
     }
+    
     return filtrados;
-  }, [registros, filtroBodegaGlobal, filtroFecha]);
+  }, [registros, filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha]);
+
+  // Limpiar todos los filtros
+  const limpiarFiltros = () => {
+    setFiltroBodegaGlobal('todas');
+    setFiltroPlaca('');
+    setFiltroRemolque('');
+    setFiltroFecha({ activo: false, inicio: null, fin: null });
+  };
+
+  // Verificar si hay filtros activos
+  const hayFiltrosActivos = useMemo(() => {
+    return filtroBodegaGlobal !== 'todas' || filtroPlaca || filtroRemolque || filtroFecha.activo;
+  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha.activo]);
 
   const metasBodega = useMemo(() => {
     return parsearMetasJson(barco.metas_json);
@@ -1640,26 +1872,56 @@ export default function DashboardSacosCompartido({ barco }) {
 
   const statsGenerales = useMemo(() => {
     const totalViajes  = registrosFiltrados.length;
-    // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
     const totalSacos   = registrosFiltrados.reduce((sum, r) => sum + (r.cantidad_paquetes_buenos || 0), 0);
     const totalTM      = registrosFiltrados.reduce((sum, r) => sum + r.peso_total_calculado_tm, 0);
     const totalDanados = registrosFiltrados.reduce((sum, r) => sum + (r.paquetes_danados || 0), 0);
+    
+    // Estadísticas por placa
     const placasMap = {};
     registrosFiltrados.forEach(r => {
       if (!placasMap[r.placa_camion]) {
-        placasMap[r.placa_camion] = { placa: r.placa_camion, viajes: 0, sacos: 0, tm: 0 };
+        placasMap[r.placa_camion] = { 
+          placa: r.placa_camion, 
+          remolque: r.remolque,
+          viajes: 0, 
+          sacos: 0, 
+          tm: 0,
+          danados: 0
+        };
       }
       placasMap[r.placa_camion].viajes++;
-      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
       placasMap[r.placa_camion].sacos += (r.cantidad_paquetes_buenos || 0);
       placasMap[r.placa_camion].tm    += r.peso_total_calculado_tm;
+      placasMap[r.placa_camion].danados += (r.paquetes_danados || 0);
     });
+    
+    // Estadísticas por remolque
+    const remolquesMap = {};
+    registrosFiltrados.forEach(r => {
+      if (r.remolque) {
+        if (!remolquesMap[r.remolque]) {
+          remolquesMap[r.remolque] = { 
+            remolque: r.remolque, 
+            viajes: 0, 
+            sacos: 0, 
+            tm: 0
+          };
+        }
+        remolquesMap[r.remolque].viajes++;
+        remolquesMap[r.remolque].sacos += (r.cantidad_paquetes_buenos || 0);
+        remolquesMap[r.remolque].tm    += r.peso_total_calculado_tm;
+      }
+    });
+    
     return {
       totalViajes,
       totalSacos,
       totalTM,
       totalDanados,
-      topPlacas: Object.values(placasMap).sort((a, b) => b.viajes - a.viajes).slice(0, 5)
+      topPlacas: Object.values(placasMap).sort((a, b) => b.viajes - a.viajes).slice(0, 5),
+      topRemolques: Object.values(remolquesMap).sort((a, b) => b.viajes - a.viajes).slice(0, 5),
+      totalPlacas: Object.keys(placasMap).length,
+      totalRemolques: Object.keys(remolquesMap).length
     };
   }, [registrosFiltrados]);
 
@@ -1694,7 +1956,6 @@ export default function DashboardSacosCompartido({ barco }) {
       const data = mapPorHora.get(key);
       data.toneladas += reg.peso_total_calculado_tm;
       data.viajes += 1;
-      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
       data.sacos += (reg.cantidad_paquetes_buenos || 0);
     });
 
@@ -1762,7 +2023,6 @@ export default function DashboardSacosCompartido({ barco }) {
         };
       }
       bodegasMap[r.bodega].viajes++;
-      // CORRECCIÓN: usar cantidad_paquetes_buenos en lugar de cantidad_paquetes
       bodegasMap[r.bodega].sacos += (r.cantidad_paquetes_buenos || 0);
       bodegasMap[r.bodega].tm    += r.peso_total_calculado_tm;
     });
@@ -2207,92 +2467,269 @@ export default function DashboardSacosCompartido({ barco }) {
 
         <div className="alm-body">
 
-          {/* FILTRO GLOBAL POR BODEGA Y FECHA */}
+          {/* PANEL DE FILTROS AVANZADOS */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
-            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
-            padding: '10px 16px', flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            marginBottom: 20,
+            overflow: 'hidden'
           }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
-              📦 Bodega
-            </span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-              {bodegasDisponibles.map(b => (
-                <button
-                  key={b}
-                  onClick={() => setFiltroBodegaGlobal(b)}
-                  style={{
-                    padding: '5px 14px', borderRadius: 999,
-                    border: filtroBodegaGlobal === b ? 'none' : '1px solid #e2e8f0',
-                    cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                    fontFamily: "'Sora', sans-serif", transition: 'all .15s',
-                    background: filtroBodegaGlobal === b ? '#0f172a' : '#f8fafc',
-                    color: filtroBodegaGlobal === b ? '#fff' : '#64748b',
-                  }}
-                >
-                  {b === 'todas' ? 'Todas' : b}
-                </button>
-              ))}
+            {/* Header del panel de filtros */}
+            <div
+              onClick={() => setMostrarFiltrosAvanzados(!mostrarFiltrosAvanzados)}
+              style={{
+                padding: '14px 20px',
+                background: '#f8fafc',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: mostrarFiltrosAvanzados ? '1px solid #e2e8f0' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Filter size={16} color="#64748b" />
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                  FILTROS AVANZADOS
+                </span>
+                {hayFiltrosActivos && (
+                  <span style={{
+                    background: '#3b82f6',
+                    color: 'white',
+                    fontSize: 10,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    fontWeight: 600
+                  }}>
+                    Activos
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {hayFiltrosActivos && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); limpiarFiltros(); }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: 11,
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    ✕ Limpiar todo
+                  </button>
+                )}
+                <span style={{ fontSize: 16, color: '#64748b' }}>
+                  {mostrarFiltrosAvanzados ? '▲' : '▼'}
+                </span>
+              </div>
             </div>
 
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowDatePickerSacos(!showDatePickerSacos)}
-                style={{
-                  padding: '5px 14px', borderRadius: 999,
-                  border: filtroFecha.activo ? 'none' : '1px solid #e2e8f0',
-                  background: filtroFecha.activo ? '#0f172a' : '#f8fafc',
-                  color: filtroFecha.activo ? '#fff' : '#64748b',
-                  cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                  fontFamily: "'Sora', sans-serif",
-                  display: 'flex', alignItems: 'center', gap: 4
-                }}
-              >
-                <Calendar size={12} />
-                {filtroFecha.activo ? 'Rango activo' : 'Filtrar fechas'}
-              </button>
-              {showDatePickerSacos && (
-                <DateRangeSelector
-                  fechaInicio={filtroFecha.inicio}
-                  fechaFin={filtroFecha.fin}
-                  onChange={handleRangoFechaSacos}
-                  onClose={() => setShowDatePickerSacos(false)}
-                />
-              )}
-            </div>
+            {mostrarFiltrosAvanzados && (
+              <div style={{ padding: '20px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 16
+                }}>
+                  {/* Filtro por Bodega */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                      📦 BODEGA
+                    </label>
+                    <select
+                      value={filtroBodegaGlobal}
+                      onChange={(e) => setFiltroBodegaGlobal(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontFamily: "'Sora', sans-serif",
+                        background: '#fff'
+                      }}
+                    >
+                      {bodegasDisponibles.map(b => (
+                        <option key={b} value={b}>
+                          {b === 'todas' ? '📋 Todas las bodegas' : b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            {filtroBodegaGlobal !== 'todas' && (
-              <button
-                onClick={() => setFiltroBodegaGlobal('todas')}
-                style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
-              >
-                ✕ Limpiar bodega
-              </button>
-            )}
-            {filtroFecha.activo && (
-              <button
-                onClick={() => setFiltroFecha({ activo: false, inicio: null, fin: null })}
-                style={{ fontSize: 11, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora', sans-serif", flexShrink: 0 }}
-              >
-                ✕ Limpiar fechas
-              </button>
+                  {/* Filtro por Placa */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                      🚛 PLACA CAMIÓN
+                    </label>
+                    <select
+                      value={filtroPlaca}
+                      onChange={(e) => setFiltroPlaca(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontFamily: "'Sora', sans-serif",
+                        background: '#fff'
+                      }}
+                    >
+                      <option value="">🔍 Todas las placas</option>
+                      {placasUnicas.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filtro por Remolque */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                      🔗 REMOLQUE
+                    </label>
+                    <select
+                      value={filtroRemolque}
+                      onChange={(e) => setFiltroRemolque(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontFamily: "'Sora', sans-serif",
+                        background: '#fff'
+                      }}
+                    >
+                      <option value="">🔍 Todos los remolques</option>
+                      {remolquesUnicos.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filtro por Fechas */}
+                  <div style={{ position: 'relative' }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                      📅 RANGO DE FECHAS
+                    </label>
+                    <button
+                      onClick={() => setShowDatePickerSacos(!showDatePickerSacos)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        background: '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontFamily: "'Sora', sans-serif"
+                      }}
+                    >
+                      <Calendar size={14} />
+                      {filtroFecha.activo 
+                        ? `${dayjs(filtroFecha.inicio).format('DD/MM HH:mm')} - ${dayjs(filtroFecha.fin).format('DD/MM HH:mm')}`
+                        : 'Seleccionar rango'}
+                    </button>
+                    {showDatePickerSacos && (
+                      <DateRangeSelector
+                        fechaInicio={filtroFecha.inicio}
+                        fechaFin={filtroFecha.fin}
+                        onChange={handleRangoFechaSacos}
+                        onClose={() => setShowDatePickerSacos(false)}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Resumen de filtros activos */}
+                {hayFiltrosActivos && (
+                  <div style={{
+                    marginTop: 16,
+                    padding: '10px 14px',
+                    background: '#eff6ff',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    color: '#1d4ed8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap'
+                  }}>
+                    <span>🔍 Filtros aplicados:</span>
+                    {filtroBodegaGlobal !== 'todas' && (
+                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
+                        Bodega: {filtroBodegaGlobal}
+                      </span>
+                    )}
+                    {filtroPlaca && (
+                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
+                        Placa: {filtroPlaca}
+                      </span>
+                    )}
+                    {filtroRemolque && (
+                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
+                        Remolque: {filtroRemolque}
+                      </span>
+                    )}
+                    {filtroFecha.activo && (
+                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
+                        {dayjs(filtroFecha.inicio).format('DD/MM HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM HH:mm')}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Indicador de rango de fecha activo */}
-          {filtroFecha.activo && (
-            <div style={{
-              marginBottom: 16, padding: '8px 16px',
-              background: '#e0f2fe', border: '1px solid #7dd3fc',
-              borderRadius: 8, fontSize: 12, color: '#0369a1',
-              display: 'flex', alignItems: 'center', gap: 8
-            }}>
-              <Calendar size={14} />
-              <span>
-                Mostrando datos desde <strong>{dayjs(filtroFecha.inicio).format('DD/MM/YYYY HH:mm')}</strong> hasta <strong>{dayjs(filtroFecha.fin).format('DD/MM/YYYY HH:mm')}</strong>
+          {/* Indicador de resultados */}
+          <div style={{
+            marginBottom: 16,
+            padding: '10px 16px',
+            background: '#f1f5f9',
+            borderRadius: 12,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                📊 Resultados:
               </span>
+              <span style={{
+                background: '#0f172a',
+                color: 'white',
+                padding: '2px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600
+              }}>
+                {registrosFiltrados.length} viajes
+              </span>
+              {filtroPlaca && (
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  🚛 {filtroPlaca}
+                </span>
+              )}
+              {filtroRemolque && (
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  🔗 {filtroRemolque}
+                </span>
+              )}
             </div>
-          )}
+            <div style={{ fontSize: 11, color: '#64748b' }}>
+              {statsGenerales.totalTM.toFixed(2)} TM · {statsGenerales.totalSacos} sacos
+            </div>
+          </div>
 
           <div className="alm-kpis-row">
             <KpiCard label="Total Viajes"    value={statsGenerales.totalViajes}                icon="🚛" accent="#10b981" animate />
@@ -2302,7 +2739,118 @@ export default function DashboardSacosCompartido({ barco }) {
               sub={`${statsGenerales.totalDanados > 0 ? ((statsGenerales.totalDanados / (statsGenerales.totalSacos + statsGenerales.totalDanados)) * 100).toFixed(1) : 0}% del total`} />
           </div>
 
-          {/* FLUJO GLOBAL DE DESCARGA - NUEVO COMPONENTE */}
+          {/* Resumen de vehículos */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16,
+            marginBottom: 20
+          }}>
+            {/* Top 5 Placas */}
+            <div style={{
+              background: '#fff',
+              borderRadius: 16,
+              border: '1px solid #e2e8f0',
+              padding: 16,
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)'
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Truck size={14} /> TOP 5 PLACAS POR VIAJES
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {statsGenerales.topPlacas.map((p, i) => (
+                  <div key={p.placa} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                    borderBottom: i < statsGenerales.topPlacas.length - 1 ? '1px solid #f1f5f9' : 'none'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        width: 24,
+                        height: 24,
+                        background: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#e2e8f0',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: i < 3 ? 'white' : '#64748b'
+                      }}>
+                        {i + 1}
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>{p.placa}</div>
+                        {p.remolque && (
+                          <div style={{ fontSize: 10, color: '#94a3b8' }}>Rem: {p.remolque}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{p.viajes} viajes</div>
+                      <div style={{ fontSize: 10, color: '#10b981' }}>{fmtTM(p.tm, 1)} TM</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
+                Total vehículos: {statsGenerales.totalPlacas} placas distintas
+              </div>
+            </div>
+
+            {/* Top 5 Remolques */}
+            <div style={{
+              background: '#fff',
+              borderRadius: 16,
+              border: '1px solid #e2e8f0',
+              padding: 16,
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)'
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🔗 TOP 5 REMOLQUES POR VIAJES
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {statsGenerales.topRemolques.map((r, i) => (
+                  <div key={r.remolque} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                    borderBottom: i < statsGenerales.topRemolques.length - 1 ? '1px solid #f1f5f9' : 'none'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        width: 24,
+                        height: 24,
+                        background: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#e2e8f0',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: i < 3 ? 'white' : '#64748b'
+                      }}>
+                        {i + 1}
+                      </span>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{r.remolque}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{r.viajes} viajes</div>
+                      <div style={{ fontSize: 10, color: '#10b981' }}>{fmtTM(r.tm, 1)} TM</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
+                Total remolques: {statsGenerales.totalRemolques} distintos
+              </div>
+            </div>
+          </div>
+
+          {/* FLUJO GLOBAL DE DESCARGA */}
           <FlujoGlobalCard 
             flujoPromedioGeneral={flujoPromedioGeneral}
             flujoUltimaHora={flujoUltimaHora}
@@ -2310,7 +2858,7 @@ export default function DashboardSacosCompartido({ barco }) {
             datosPorBodegaCompleto={datosPorBodegaCompleto}
           />
 
-          {/* ── PROGRESO GENERAL REDISEÑADO ── */}
+          {/* PROGRESO GENERAL */}
           <div className="alm-progress-container">
             <div className="alm-progress-header">
               <div className="alm-progress-title">
@@ -2343,7 +2891,7 @@ export default function DashboardSacosCompartido({ barco }) {
             />
           </div>
 
-          {/* FLUJO POR HORA — eje X usa hora con fecha para evitar duplicados */}
+          {/* FLUJO POR HORA */}
           <div className="alm-chart-card">
             <h4 className="alm-chart-title">
               ⏱️ FLUJO POR HORA (TM/h)
@@ -2384,7 +2932,7 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
           </div>
 
-          {/* BARCO SVG — con flujo/h de última hora por bodega */}
+          {/* BARCO SVG */}
           <div className="alm-ship-layout">
             <div className="alm-ship-title">
               <span>⚓ DISTRIBUCIÓN DE CARGA POR BODEGA</span>
@@ -2408,30 +2956,25 @@ export default function DashboardSacosCompartido({ barco }) {
                     </pattern>
                   </defs>
 
-                  {/* Océano */}
                   <rect x="0" y="390" width="1400" height="200" fill="url(#oceanWater)" />
                   <path d="M0 410 Q150 390, 300 410 T600 410 T900 410 T1200 410 T1400 410" stroke="#60a5fa" strokeWidth="3" fill="none" opacity="0.3" />
                   <path d="M0 450 Q200 430, 400 450 T800 450 T1200 450" stroke="#3b82f6" strokeWidth="2" fill="none" opacity="0.2" />
 
-                  {/* Casco */}
                   <path d="M150 390 L200 220 L1200 220 L1250 390 Z" fill="url(#hullMetal)" stroke="#94a3b8" strokeWidth="6" />
                   <line x1="170" y1="340" x2="1230" y2="340" stroke="#fbbf24" strokeWidth="2" strokeDasharray="10 10" opacity="0.6" />
                   <rect x="200" y="200" width="1000" height="30" fill="url(#deckWood)" stroke="#b45309" strokeWidth="2" rx="4" />
 
-                  {/* Barandas */}
                   <line x1="220" y1="170" x2="1180" y2="170" stroke="#cbd5e0" strokeWidth="3" />
                   <line x1="220" y1="160" x2="1180" y2="160" stroke="#cbd5e0" strokeWidth="2" />
                   {[250,350,450,550,650,750,850,950,1050,1150].map(x => (
                     <rect key={x} x={x-2} y="150" width="4" height="30" fill="#94a3b8" rx="2" />
                   ))}
 
-                  {/* Mástiles */}
                   <rect x="400" y="40" width="12" height="120" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
                   <circle cx="406" cy="30" r="18" fill="#fbbf24" stroke="#d97706" strokeWidth="3" />
                   <rect x="1000" y="60" width="8" height="100" fill="#8b5a2b" stroke="#5f3e1f" strokeWidth="2" />
                   <circle cx="1004" cy="50" r="12" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
 
-                  {/* Superestructura */}
                   <rect x="650" y="60" width="70" height="140" fill="#475569" stroke="#334155" strokeWidth="3" rx="6" />
                   <ellipse cx="685" cy="60" rx="35" ry="12" fill="#334155" stroke="#1f2937" strokeWidth="2" />
                   <circle cx="685" cy="44" r="12" fill="#94a3b8" opacity="0.4">
@@ -2439,24 +2982,21 @@ export default function DashboardSacosCompartido({ barco }) {
                     <animate attributeName="opacity" values="0.4;0.6;0.4" dur="3s" repeatCount="indefinite" />
                   </circle>
 
-                  {/* Ventanas */}
                   <rect x="500" y="120" width="200" height="60" fill="#1f2937" stroke="#4b5563" strokeWidth="3" rx="8" />
                   <circle cx="540" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
                   <circle cx="600" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
                   <circle cx="660" cy="150" r="10" fill="#60a5fa" stroke="#93c5fd" strokeWidth="2" />
 
-                  {/* Proa y popa */}
                   <path d="M150 390 L130 330 L180 220 L200 220 L150 390" fill="#4a5568" stroke="#718096" strokeWidth="3" />
                   <circle cx="140" cy="315" r="8" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
                   <path d="M1250 390 L1270 330 L1220 220 L1200 220 L1250 390" fill="#4a5568" stroke="#718096" strokeWidth="3" />
 
-                  {/* ── BODEGAS con flujo/h de última hora ── */}
                   {datosPorBodegaCompleto.map((bodega, index) => {
                     const total = datosPorBodegaCompleto.length;
                     const aw = 700 / total;
                     const ix = 300 + (index * aw) + (aw * 0.1);
                     const w  = aw * 0.8;
-                    const am = 170; // altura máxima del contenedor
+                    const am = 170;
                     const pct = Math.min(100, bodega.porcentaje || 0);
                     const ar  = (am * pct) / 100;
                     let cb = "#3b82f6", cbr = "#2563eb";
@@ -2472,37 +3012,29 @@ export default function DashboardSacosCompartido({ barco }) {
 
                     return (
                       <g key={bodega.bodega}>
-                        {/* Contenedor */}
                         <rect x={ix} y={210} width={w} height={am} fill="#1e293b" stroke={cbr} strokeWidth="4" rx="12" />
-                        {/* Fill animado */}
                         <rect x={ix+4} y={210+(am-ar)} width={w-8} height={Math.max(0,ar-4)} fill={cb} opacity="0.9" rx="8">
                           <animate attributeName="height" from="0" to={Math.max(0,ar-4)} dur="1s" fill="freeze" />
                         </rect>
-                        {/* Rivets */}
                         <rect x={ix} y={210} width={w} height={am} fill="url(#rivets)" opacity="0.5" rx="12" />
 
-                        {/* Etiqueta bodega */}
                         <rect x={ix+w/2-25} y="185" width="50" height="25" fill="#0f172a" rx="12" stroke={cbr} strokeWidth="2" />
                         <text x={ix+w/2} y="203" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
                           {bodega.bodega.replace('Bodega ','B')}
                         </text>
 
-                        {/* TM actual */}
                         <text x={ix+w/2} y={255} textAnchor="middle" fill="white" fontSize="15" fontWeight="800" fontFamily="DM Mono, monospace">
                           {fmtTM(bodega.tm,1)}
                         </text>
                         <text x={ix+w/2} y={272} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10" fontWeight="600">TM</text>
 
-                        {/* Porcentaje */}
                         <text x={ix+w/2} y={305} textAnchor="middle" fill="white" fontSize="18" fontWeight="900">{pct.toFixed(0)}%</text>
 
-                        {/* Barra de progreso interna */}
                         <rect x={ix+10} y={320} width={w-20} height="8" fill="#334155" rx="4" />
                         <rect x={ix+10} y={320} width={(w-20)*(pct/100)} height="8" fill={cb} rx="4">
                           <animate attributeName="width" from="0" to={(w-20)*(pct/100)} dur="1s" fill="freeze" />
                         </rect>
 
-                        {/* ── FLUJO DEL ÚLTIMO BUCKET DE HORA ── */}
                         <rect x={ix+4} y={334} width={w-8} height={32} fill="rgba(0,0,0,0.35)" rx="6" />
                         <text x={ix+w/2} y={345} textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize="7.5" fontWeight="700" letterSpacing="0.5">
                           {bucketLabel || 'ÚLT. BUCKET'}
@@ -2514,7 +3046,6 @@ export default function DashboardSacosCompartido({ barco }) {
                     );
                   })}
 
-                  {/* Etiquetas proa/popa */}
                   <text x="150"  y="420" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">⚓ PROA</text>
                   <text x="1250" y="420" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="18" fontWeight="600" fontFamily="DM Mono, monospace">POPA ⚓</text>
                   <text x="700"  y="310" textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize="28" fontWeight="800" fontFamily="DM Mono, monospace">
@@ -2532,7 +3063,7 @@ export default function DashboardSacosCompartido({ barco }) {
             </div>
           </div>
 
-          {/* FLUJO POR HORA POR BODEGA — también fix */}
+          {/* FLUJO POR HORA POR BODEGA */}
           <div className="alm-chart-card">
             <h4 className="alm-chart-title">
               📈 FLUJO POR HORA POR BODEGA (TM/h)
@@ -2578,6 +3109,130 @@ export default function DashboardSacosCompartido({ barco }) {
 
           {/* ATRASOS */}
           <AtrasosBarco barcoId={barco.id} />
+
+          {/* TABLA DE VIAJES CON DETALLE EXPANDIBLE */}
+          <div className="alm-table-card">
+            <div className="alm-table-header">
+              <h3 className="alm-section-title">
+                🚛 LISTADO DE VIAJES
+                <span className="alm-badge">{registrosFiltrados.length} registros</span>
+              </h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {viajeExpandidoId && (
+                  <button
+                    onClick={() => setViajeExpandidoId(null)}
+                    style={{
+                      fontSize: 11,
+                      background: '#f1f5f9',
+                      border: 'none',
+                      padding: '4px 12px',
+                      borderRadius: 999,
+                      cursor: 'pointer',
+                      color: '#64748b'
+                    }}
+                  >
+                    Cerrar todos
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="alm-table-scroll">
+              <table className="alm-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Fecha/Hora</th>
+                    <th>Placa</th>
+                    <th>Remolque</th>
+                    <th>Bodega</th>
+                    <th className="alm-th-num">Sacos</th>
+                    <th className="alm-th-num">TM</th>
+                    <th className="alm-th-num">Dañados</th>
+                    <th>Diferencia</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registrosFiltrados.length > 0 ? registrosFiltrados.map((viaje, idx) => {
+                    const diferenciaPorcentaje = ((viaje.diferencia_kg || 0) / (viaje.peso_ingenio_kg || 1) * 100).toFixed(1);
+                    const esDiferenciaAlta = viaje.diferencia_kg > 50;
+                    const estaExpandido = viajeExpandidoId === viaje.id;
+                    
+                    return (
+                      <React.Fragment key={viaje.id}>
+                        <tr className={idx < 5 ? 'alm-tr-latest' : ''}>
+                          <td style={{ fontSize: 11, color: '#94a3b8' }}>{viaje.viaje_numero || idx + 1}</td>
+                          <td className="alm-mono" style={{ fontSize: 12 }}>
+                            {dayjs(viaje.fecha_hora).format('DD/MM HH:mm')}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{viaje.placa_camion || '—'}</td>
+                          <td>{viaje.remolque || '—'}</td>
+                          <td>{viaje.bodega || '—'}</td>
+                          <td className="alm-td-num">{viaje.cantidad_paquetes || 0}</td>
+                          <td className="alm-td-num alm-green">{fmtTM(viaje.peso_total_calculado_tm, 2)}</td>
+                          <td className="alm-td-num" style={{ color: (viaje.paquetes_danados || 0) > 0 ? '#ef4444' : '#94a3b8' }}>
+                            {viaje.paquetes_danados || 0}
+                          </td>
+                          <td className="alm-td-num">
+                            <span style={{ 
+                              color: esDiferenciaAlta ? '#ef4444' : '#10b981',
+                              fontSize: 11,
+                              fontWeight: esDiferenciaAlta ? 700 : 400
+                            }}>
+                              {viaje.diferencia_kg?.toFixed(0) || 0} kg ({diferenciaPorcentaje}%)
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              onClick={() => setViajeExpandidoId(estaExpandido ? null : viaje.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                color: '#3b82f6',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              {estaExpandido ? <EyeOff size={14} /> : <Eye size={14} />}
+                              {estaExpandido ? 'Ocultar' : 'Ver'}
+                            </button>
+                          </td>
+                        </tr>
+                        {estaExpandido && (
+                          <tr>
+                            <td colSpan={10} style={{ padding: 0 }}>
+                              <ViajeDetalleExpandido 
+                                viaje={viaje} 
+                                onClose={() => setViajeExpandidoId(null)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={10} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                        No hay viajes registrados con los filtros seleccionados
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#f1f5f9', fontWeight: 'bold' }}>
+                    <td colSpan={5} className="alm-bold">TOTALES</td>
+                    <td className="alm-td-num alm-bold">{fmtNumber(statsGenerales.totalSacos)}</td>
+                    <td className="alm-td-num alm-bold alm-green">{fmtTM(statsGenerales.totalTM, 2)}</td>
+                    <td className="alm-td-num alm-bold">{fmtNumber(statsGenerales.totalDanados)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
 
           {/* TABLA RESUMEN POR BODEGA */}
           <div className="alm-table-card">
@@ -2668,6 +3323,8 @@ export default function DashboardSacosCompartido({ barco }) {
             {filtroFecha.activo && (
               <> &nbsp;·&nbsp; Rango: {dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}</>
             )}
+            {filtroPlaca && <> &nbsp;·&nbsp; Placa: {filtroPlaca}</>}
+            {filtroRemolque && <> &nbsp;·&nbsp; Remolque: {filtroRemolque}</>}
           </div>
         </div>
       </div>
