@@ -1,4 +1,4 @@
-// compartido/[token]/DashboardCompartido.js - Componente principal del dashboard compartido
+//src/app/compartido/[token]/DashboardCompartido.js
 "use client";
 
 /**
