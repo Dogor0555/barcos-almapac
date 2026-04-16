@@ -1,4 +1,3 @@
-// app/compartido-sacos/[token]/page-client.js
 "use client";
 
 import { useEffect, useState } from 'react'
@@ -24,7 +23,6 @@ export default function ClientPage({ token }) {
         const { data: barcos, error } = await supabase
           .from('barcos')
           .select('id, nombre, codigo_barco, token_compartido, bodegas_json, metas_json, created_at')
-          //                                                                   ^^^^^^^^^^^ FIX
           .eq('token_compartido', token)
 
         if (error) throw error
