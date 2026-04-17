@@ -9,21 +9,39 @@ export async function POST(request) {
   
   try {
     const body = await request.json()
-    const { endpoint, method = 'GET', data, headers = {} } = body
+    let { endpoint, method = 'GET', data, originalUrl, headers = {} } = body
     
-    // Construir URL completa de Supabase
-    let supabaseEndpoint = `${SUPABASE_URL}/rest/v1/${endpoint}`
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('📡 PROXY RECIBIENDO PETICIÓN')
+    console.log('  Método:', method)
+    console.log('  Endpoint:', endpoint)
     
-    console.log('📡 Proxy recibiendo petición:')
-    console.log('  - Endpoint:', endpoint)
-    console.log('  - Método:', method)
-    console.log('  - Tiene data:', !!data)
+    let supabaseEndpoint
+    
+    // Determinar la URL completa de Supabase
+    if (endpoint && (endpoint.startsWith('http://') || endpoint.startsWith('https://'))) {
+      // Es una URL completa (para auth)
+      supabaseEndpoint = endpoint
+    } else if (endpoint && endpoint.includes('/rest/v1/')) {
+      // Ya incluye la URL base
+      supabaseEndpoint = endpoint
+    } else if (endpoint) {
+      // Es solo el endpoint, construir URL completa
+      supabaseEndpoint = `${SUPABASE_URL}/rest/v1/${endpoint}`
+    } else if (originalUrl) {
+      // Usar la URL original
+      supabaseEndpoint = originalUrl
+    } else {
+      throw new Error('No se pudo determinar el endpoint')
+    }
+    
+    console.log('  URL:', supabaseEndpoint)
     
     // Configurar headers
     const requestHeaders = {
-      'Content-Type': 'application/json',
       'apikey': SUPABASE_ANON_KEY,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
       ...headers
     }
     
@@ -35,10 +53,11 @@ export async function POST(request) {
     
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
       fetchOptions.body = JSON.stringify(data)
+      console.log('  Body:', JSON.stringify(data).substring(0, 200))
     }
     
     // Hacer la petición a Supabase
-    console.log('🔄 Proxy llamando a Supabase...')
+    console.log('🔄 Llamando a Supabase...')
     const response = await fetch(supabaseEndpoint, fetchOptions)
     
     // Leer la respuesta
@@ -53,6 +72,7 @@ export async function POST(request) {
     
     const elapsed = Date.now() - startTime
     console.log(`✅ Proxy respondió en ${elapsed}ms - Status: ${response.status}`)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     
     // Devolver la respuesta
     return NextResponse.json(responseData, {
@@ -66,7 +86,6 @@ export async function POST(request) {
     })
     
   } catch (error) {
-    const elapsed = Date.now() - startTime
     console.error('❌ Error en proxy:', error)
     
     return NextResponse.json(
@@ -84,7 +103,6 @@ export async function POST(request) {
   }
 }
 
-// Manejar OPTIONS para CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,

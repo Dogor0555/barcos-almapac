@@ -4,191 +4,102 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Cache de IP
-let ipCache = null
-let lastIpFetch = 0
-
-const obtenerIP = async () => {
-  if (ipCache && (Date.now() - lastIpFetch) < 300000) return ipCache
-  
-  const domain = supabaseUrl.replace('https://', '')
-  
-  try {
-    const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`)
-    const data = await response.json()
+// Cliente personalizado que USA EL PROXY SIEMPRE
+const createProxyClient = () => {
+  // Crear un fetch personalizado que siempre usa el proxy
+  const customFetch = async (url, options = {}) => {
+    console.log('🔄 Usando proxy para:', url)
     
-    if (data.Answer && data.Answer.length > 0) {
-      ipCache = data.Answer[0].data
-      lastIpFetch = Date.now()
-      console.log('✅ IP obtenida:', ipCache)
-      return ipCache
-    }
-  } catch (error) {
-    console.error('Error obteniendo IP:', error)
-  }
-  return null
-}
-
-// Función para usar proxy
-const usarProxy = async (url, options = {}) => {
-  try {
-    // Extraer el endpoint y el método de la URL
-    const urlObj = new URL(url)
-    const pathMatch = urlObj.pathname.match(/\/rest\/v1\/(.+)/)
-    
-    if (!pathMatch) {
-      throw new Error('No se pudo extraer el endpoint de la URL')
-    }
-    
-    const endpoint = pathMatch[1]
-    let body = null
-    
-    if (options.body) {
-      try {
-        body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body
-      } catch (e) {
-        body = options.body
-      }
-    }
-    
-    console.log('🔄 Usando proxy para:', endpoint)
-    
-    const response = await fetch('/api/supabase-proxy', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        endpoint: endpoint,
-        method: options.method || 'GET',
-        data: body,
-        headers: options.headers || {}
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Proxy respondió con status ${response.status}`)
-    }
-    
-    // El proxy devuelve los datos directamente
-    const data = await response.json()
-    
-    // Crear una respuesta simulada que fetch pueda entender
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-  } catch (error) {
-    console.error('❌ Error en proxy:', error)
-    throw error
-  }
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined
-  },
-  global: {
-    fetch: async (url, options = {}) => {
-      const timeout = 20000
-      let controller = new AbortController()
-      let timeoutId = setTimeout(() => controller.abort(), timeout)
+    try {
+      // Extraer el endpoint de la URL de Supabase
+      let endpoint = ''
+      let method = options.method || 'GET'
+      let body = null
       
-      const intentos = [
-        {
-          name: 'Directo',
-          fn: async () => {
-            console.log('🌐 Intento 1: Conexión directa a Supabase...')
-            const response = await fetch(url, {
-              ...options,
-              signal: controller.signal,
-              cache: 'no-store',
-              headers: {
-                ...options.headers,
-                'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${supabaseAnonKey}`,
-              }
-            })
-            return response
-          }
-        },
-        {
-          name: 'IP Directa',
-          fn: async () => {
-            console.log('🔧 Intento 2: Usando IP directa...')
-            const ip = await obtenerIP()
-            if (!ip) throw new Error('No se pudo obtener IP')
-            const ipUrl = url.replace(supabaseUrl, `https://${ip}`)
-            console.log('📍 IP:', ip)
-            return await fetch(ipUrl, {
-              ...options,
-              signal: controller.signal,
-              headers: {
-                ...options.headers,
-                'Host': supabaseUrl.replace('https://', ''),
-                'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${supabaseAnonKey}`,
-              }
-            })
-          }
-        },
-        {
-          name: 'Proxy',
-          fn: async () => {
-            console.log('🔄 Intento 3: Usando proxy...')
-            return await usarProxy(url, options)
-          }
+      // Parsear la URL para obtener el endpoint
+      if (url.includes('/rest/v1/')) {
+        endpoint = url.split('/rest/v1/')[1]
+        // Limpiar query parameters si existen
+        if (endpoint.includes('?')) {
+          endpoint = endpoint.split('?')[0]
         }
-      ]
+      } else if (url.includes('/auth/v1/')) {
+        // Para auth, pasar la URL completa
+        endpoint = url
+      } else {
+        endpoint = url
+      }
       
-      for (let i = 0; i < intentos.length; i++) {
+      // Extraer body si existe
+      if (options.body) {
         try {
-          // Crear nuevo controller para cada intento
-          controller = new AbortController()
-          clearTimeout(timeoutId)
-          timeoutId = setTimeout(() => controller.abort(), timeout)
-          
-          const response = await intentos[i].fn()
-          clearTimeout(timeoutId)
-          
-          if (response.ok) {
-            console.log(`✅ ${intentos[i].name} - ÉXITO!`)
-            return response
-          } else {
-            console.log(`⚠️ ${intentos[i].name} - Status ${response.status}`)
-            const text = await response.text()
-            console.log(`   Response: ${text.substring(0, 200)}`)
-            
-            if (i === intentos.length - 1) {
-              return response
-            }
-          }
-        } catch (error) {
-          clearTimeout(timeoutId)
-          console.log(`❌ ${intentos[i].name} - FALLÓ:`, error.message)
-          
-          if (i === intentos.length - 1) {
-            throw error
-          }
-          
-          await new Promise(r => setTimeout(r, 1000))
+          body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body
+        } catch (e) {
+          body = options.body
         }
       }
       
-      throw new Error('Todos los intentos fallaron')
+      console.log('📡 Proxy request:', { endpoint, method, hasBody: !!body })
+      
+      // Llamar al proxy
+      const proxyResponse = await fetch('/api/supabase-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: endpoint,
+          method: method,
+          data: body,
+          originalUrl: url,
+          headers: options.headers || {}
+        })
+      })
+      
+      if (!proxyResponse.ok) {
+        const errorText = await proxyResponse.text()
+        throw new Error(`Proxy error ${proxyResponse.status}: ${errorText}`)
+      }
+      
+      const data = await proxyResponse.json()
+      
+      // Crear una respuesta simulada que Supabase pueda entender
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+    } catch (error) {
+      console.error('❌ Proxy fetch falló:', error)
+      throw error
     }
   }
-})
+  
+  // Crear cliente de Supabase con nuestro fetch personalizado
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined
+    },
+    global: {
+      fetch: customFetch
+    }
+  })
+  
+  return supabase
+}
+
+// Exportar el cliente que siempre usa proxy
+export const supabase = createProxyClient()
 
 // Función para probar la conexión
 export const testConnection = async () => {
   try {
-    console.log('🔍 Probando conexión a Supabase...')
+    console.log('🔍 Probando conexión vía proxy...')
     const { data, error } = await supabase
       .from('barcos')
       .select('id')
@@ -199,7 +110,7 @@ export const testConnection = async () => {
       return { success: false, error: error.message }
     }
     
-    console.log('✅ Conexión exitosa!')
+    console.log('✅ Conexión exitosa vía proxy!')
     return { success: true, data }
   } catch (error) {
     console.error('❌ Excepción en test:', error)
