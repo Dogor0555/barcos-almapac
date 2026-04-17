@@ -13,7 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCw, Calendar, Clock, TrendingUp, Truck, Filter, Eye, EyeOff, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, Calendar, Clock, TrendingUp, Filter, Eye, EyeOff, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -566,341 +566,7 @@ function AtrasosBarco({ barcoId }) {
   const pctImputable = s.totalMinutos > 0 ? (s.imputables / s.totalMinutos * 100).toFixed(1) : '0.0';
   const pctNoImputable = s.totalMinutos > 0 ? (s.noImputables / s.totalMinutos * 100).toFixed(1) : '0.0';
 
-  return (
-    <div className="alm-table-card" style={{ marginBottom: 20 }}>
-      <div
-        className="alm-table-header"
-        onClick={() => setExpandido(!expandido)}
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-      >
-        <h3 className="alm-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>⏱️</span>
-          ATRASOS Y DEMORAS
-          <span className="alm-badge">{atrasos.length} registros</span>
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>
-            Tiempo real: <strong style={{ color: 'var(--text)' }}>{formatTiempo(s.totalMinutos)}</strong>
-          </span>
-          {s.imputables > 0 && (
-            <>
-              <span style={{ fontSize: 12 }}>
-                <span style={{ color: 'var(--text-3)' }}>ALMAPAC: </span>
-                <strong style={{ color: '#d97706', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.imputables)}</strong>
-              </span>
-              <span style={{ fontSize: 12 }}>
-                <span style={{ color: 'var(--text-3)' }}>Otros: </span>
-                <strong style={{ color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.noImputables)}</strong>
-              </span>
-            </>
-          )}
-          <span style={{ fontSize: 20, color: 'var(--text-3)', lineHeight: 1 }}>{expandido ? '∧' : '∨'}</span>
-        </div>
-      </div>
-
-      {expandido && (
-        <div style={{ padding: '20px 20px 24px' }}>
-          <div style={{
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            borderRadius: 8,
-            padding: '8px 14px',
-            marginBottom: 16,
-            fontSize: 12,
-            color: '#1d4ed8',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}>
-            <span>ℹ️</span>
-            <span>El <strong>tiempo real</strong> de paro no duplica atrasos simultáneos en distintas bodegas — se cuentan una sola vez por solapamiento.</span>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 }}>
-              {[
-                { key: 'hoy',    label: 'Hoy'     },
-                { key: 'semana', label: '7 días'  },
-                { key: 'mes',    label: '30 días' },
-                { key: 'todo',   label: 'Todo'    },
-              ].map(p => (
-                <button
-                  key={p.key}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPeriodoActivo(p.key);
-                    setRangoPersonalizado({ activo: false, fechaInicio: null, fechaFin: null });
-                  }}
-                  style={{
-                    padding: '5px 13px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    fontSize: 12, fontWeight: 700, fontFamily: "'Sora', sans-serif", transition: 'all .15s',
-                    background: periodoActivo === p.key && !rangoPersonalizado.activo ? '#0f172a' : 'transparent',
-                    color: periodoActivo === p.key && !rangoPersonalizado.activo ? '#fff' : '#64748b',
-                  }}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowDatePicker(!showDatePicker); }}
-                  style={{
-                    padding: '5px 13px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    fontSize: 12, fontWeight: 700, fontFamily: "'Sora', sans-serif",
-                    background: rangoPersonalizado.activo ? '#0f172a' : 'transparent',
-                    color: rangoPersonalizado.activo ? '#fff' : '#64748b',
-                    display: 'flex', alignItems: 'center', gap: 4
-                  }}
-                >
-                  <Calendar size={12} />
-                  Rango
-                </button>
-                {showDatePicker && (
-                  <DateRangeSelector
-                    fechaInicio={rangoPersonalizado.fechaInicio}
-                    fechaFin={rangoPersonalizado.fechaFin}
-                    onChange={handleRangoPersonalizado}
-                    onClose={() => setShowDatePicker(false)}
-                  />
-                )}
-              </div>
-            </div>
-
-            <select
-              value={filtroBodega}
-              onClick={e => e.stopPropagation()}
-              onChange={e => setFiltroBodega(e.target.value)}
-              style={{
-                background: '#f1f5f9',
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                padding: '6px 12px',
-                fontSize: 13,
-                color: '#0f172a',
-                cursor: 'pointer',
-                fontFamily: "'Sora', sans-serif"
-              }}
-            >
-              {bodegasUnicas.map(b => (
-                <option key={b} value={b}>
-                  {b === 'todas' ? '📋 Todas las bodegas' :
-                   b === 'generales' ? '⚡ Solo generales' : `📦 ${b}`}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={filtroTipo}
-              onClick={e => e.stopPropagation()}
-              onChange={e => setFiltroTipo(e.target.value)}
-              style={{
-                background: '#f1f5f9',
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                padding: '6px 12px',
-                fontSize: 13,
-                color: '#0f172a',
-                cursor: 'pointer',
-                fontFamily: "'Sora', sans-serif",
-                minWidth: 180
-              }}
-            >
-              {tiposOpciones.map(op => (
-                <option key={op.value} value={op.value}>
-                  {op.value === 'todos' || op.value === 'imputables' || op.value === 'no-imputables' 
-                    ? op.label 
-                    : `🔸 ${op.label}`}
-                </option>
-              ))}
-            </select>
-
-            {rangoPersonalizado.activo && (
-              <span style={{
-                fontSize: 11,
-                background: '#e2e8f0',
-                padding: '4px 10px',
-                borderRadius: 999,
-                color: '#475569',
-                fontFamily: "'DM Mono', monospace"
-              }}>
-                {dayjs(rangoPersonalizado.fechaInicio).format('DD/MM/YY HH:mm')} - {dayjs(rangoPersonalizado.fechaFin).format('DD/MM/YY HH:mm')}
-              </span>
-            )}
-
-            <button
-              onClick={(e) => { e.stopPropagation(); cargarDatos(); }}
-              style={{
-                marginLeft: 'auto',
-                background: '#f1f5f9',
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                padding: '6px 14px',
-                cursor: 'pointer',
-                fontSize: 12,
-                color: '#475569',
-                fontFamily: "'Sora', sans-serif",
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5
-              }}
-            >
-              <RefreshCw size={13} /> Actualizar
-            </button>
-          </div>
-
-          {(filtroBodega !== 'todas' || filtroTipo !== 'todos' || rangoPersonalizado.activo) && (
-            <div style={{
-              marginBottom: 16,
-              padding: '8px 12px',
-              background: '#f1f5f9',
-              borderRadius: 8,
-              fontSize: 11,
-              color: '#475569',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              flexWrap: 'wrap'
-            }}>
-              <span>🔍 Filtros activos:</span>
-              {filtroBodega !== 'todas' && (
-                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
-                  Bodega: {filtroBodega === 'generales' ? 'Generales' : filtroBodega}
-                </span>
-              )}
-              {filtroTipo !== 'todos' && (
-                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
-                  Tipo: {tiposOpciones.find(o => o.value === filtroTipo)?.label || filtroTipo}
-                </span>
-              )}
-              {rangoPersonalizado.activo && (
-                <span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: 999 }}>
-                  Rango personalizado
-                </span>
-              )}
-              <span style={{ marginLeft: 'auto', fontWeight: 600 }}>
-                {atrasosFiltrados.length} registros mostrados
-              </span>
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
-            {[
-              { label: 'Tiempo real de paro', value: formatTiempo(s.totalMinutos),    sub: `${atrasosFiltrados.length} registros`,  accent: '#0f172a' },
-              { label: 'Imputables ALMAPAC',  value: formatTiempo(s.imputables),      sub: `${pctImputable}% del total`,            accent: '#d97706' },
-              { label: 'Otros atrasos',       value: formatTiempo(s.noImputables),    sub: `${pctNoImputable}% del total`,          accent: '#dc2626' },
-              { label: 'Bodegas afectadas',   value: Object.keys(s.porBodega).length, sub: 'incluyendo generales',                  accent: '#2563eb' },
-            ].map(k => (
-              <div key={k.label} style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '16px 18px',
-                position: 'relative',
-                overflow: 'hidden'
-              }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: k.accent, borderRadius: '2px 0 0 2px' }} />
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', marginBottom: 6 }}>{k.label}</p>
-                <p style={{ fontSize: 22, fontWeight: 900, color: k.accent, fontFamily: "'DM Mono', monospace", lineHeight: 1.1 }}>{k.value}</p>
-                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{k.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="alm-table-scroll">
-            <table className="alm-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Hora</th>
-                  <th>Tipo</th>
-                  <th>Bodega</th>
-                  <th>Inicio</th>
-                  <th>Fin</th>
-                  <th className="alm-th-num">Duración</th>
-                  <th>Observaciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {atrasosFiltrados.length > 0 ? atrasosFiltrados.map((atraso, idx) => {
-                  const tipo  = tiposParo.find(t => t.id === atraso.tipo_paro_id);
-                  const color = getTipoColor(tipo?.nombre);
-                  return (
-                    <tr key={atraso.id} className={idx < 5 ? 'alm-tr-latest' : ''}>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>
-                        {dayjs(atraso.fecha).format('DD/MM/YY')}
-                      </td>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>
-                        {atraso.hora_inicio?.slice(0, 5)}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0, display: 'inline-block' }} />
-                          <span style={{ fontSize: 13, color: '#334155' }}>{tipo?.nombre ?? '—'}</span>
-                          {tipo?.es_imputable_almapac && (
-                            <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 999, fontWeight: 700 }}>A</span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ fontSize: 13 }}>
-                        {atraso.es_general ? (
-                          <span style={{ color: '#7c3aed', fontWeight: 700, fontSize: 12 }}>TODAS</span>
-                        ) : (
-                          <span style={{ color: '#475569' }}>{atraso.bodega_nombre || '—'}</span>
-                        )}
-                      </td>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>
-                        {atraso.hora_inicio?.slice(0, 5)}
-                      </td>
-                      <td className="alm-mono" style={{ fontSize: 13 }}>
-                        {atraso.hora_fin ? atraso.hora_fin.slice(0, 5) : (
-                          <span style={{ color: '#f97316', fontWeight: 700 }}>En curso</span>
-                        )}
-                      </td>
-                      <td className="alm-td-num alm-bold alm-mono">
-                        {formatTiempo(atraso.duracion_minutos)}
-                      </td>
-                      <td style={{ fontSize: 12, color: '#94a3b8', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {atraso.observaciones || '—'}
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                      No hay registros de atrasos para este período y filtros seleccionados
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between',
-            gap: 12, marginTop: 16, padding: '14px 18px', background: '#f8fafc',
-            border: '1px solid #e2e8f0', borderRadius: 10
-          }}>
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13 }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#f59e0b', marginRight: 6, verticalAlign: 'middle' }} />
-                <span style={{ color: '#64748b' }}>Imputable ALMAPAC: </span>
-                <strong style={{ color: '#d97706', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.imputables)}</strong>
-              </span>
-              <span style={{ fontSize: 13 }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#ef4444', marginRight: 6, verticalAlign: 'middle' }} />
-                <span style={{ color: '#64748b' }}>No imputable: </span>
-                <strong style={{ color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>{formatTiempo(s.noImputables)}</strong>
-              </span>
-            </div>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
-              Tiempo real · sin doble conteo de solapamientos
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  
 }
 
 // ============================================================================
@@ -1783,6 +1449,9 @@ export default function DashboardSacosCompartido({ barco }) {
   const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null });
   const [showDatePickerSacos, setShowDatePickerSacos] = useState(false);
   
+  // BUSCADOR GLOBAL para la tabla de viajes
+  const [busquedaGlobal, setBusquedaGlobal] = useState('');
+  
   // Estado para el detalle expandido de cada viaje
   const [viajeExpandidoId, setViajeExpandidoId] = useState(null);
   
@@ -1813,22 +1482,26 @@ export default function DashboardSacosCompartido({ barco }) {
     })];
   }, [registros]);
 
-  // Aplicar todos los filtros a los registros
+  // Aplicar todos los filtros a los registros (incluyendo el buscador global)
   const registrosFiltrados = useMemo(() => {
     let filtrados = registros;
     
+    // Filtro por bodega
     if (filtroBodegaGlobal !== 'todas') {
       filtrados = filtrados.filter(r => r.bodega === filtroBodegaGlobal);
     }
     
+    // Filtro por placa
     if (filtroPlaca) {
       filtrados = filtrados.filter(r => r.placa_camion === filtroPlaca);
     }
     
+    // Filtro por remolque
     if (filtroRemolque) {
       filtrados = filtrados.filter(r => r.placa_remolque === filtroRemolque);
     }
     
+    // Filtro por rango de fechas
     if (filtroFecha.activo && filtroFecha.inicio && filtroFecha.fin) {
       filtrados = filtrados.filter(r => {
         const fechaHora = dayjs(r.fecha_hora);
@@ -1836,8 +1509,21 @@ export default function DashboardSacosCompartido({ barco }) {
       });
     }
     
+    // BUSCADOR GLOBAL - busca por # viaje, placa, remolque o bodega
+    if (busquedaGlobal.trim() !== '') {
+      const termino = busquedaGlobal.toLowerCase().trim();
+      filtrados = filtrados.filter(r => {
+        return (
+          (r.viaje_numero && r.viaje_numero.toString().toLowerCase().includes(termino)) ||
+          (r.placa_camion && r.placa_camion.toLowerCase().includes(termino)) ||
+          (r.placa_remolque && r.placa_remolque.toLowerCase().includes(termino)) ||
+          (r.bodega && r.bodega.toLowerCase().includes(termino))
+        );
+      });
+    }
+    
     return filtrados;
-  }, [registros, filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha]);
+  }, [registros, filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha, busquedaGlobal]);
 
   // ========== PAGINACIÓN: Calcular total de páginas y registros paginados ==========
   const totalPaginas = useMemo(() => {
@@ -1850,10 +1536,10 @@ export default function DashboardSacosCompartido({ barco }) {
     return registrosFiltrados.slice(inicio, fin);
   }, [registrosFiltrados, paginaActual, registrosPorPagina]);
 
-  // Resetear a página 1 cuando cambian los filtros
+  // Resetear a página 1 cuando cambian los filtros o el buscador
   useEffect(() => {
     setPaginaActual(1);
-  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha]);
+  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha, busquedaGlobal]);
 
   // Función para cambiar de página
   const irPagina = (nuevaPagina) => {
@@ -1866,18 +1552,19 @@ export default function DashboardSacosCompartido({ barco }) {
     setPaginaActual(1);
   };
 
-  // Limpiar todos los filtros
+  // Limpiar todos los filtros (incluyendo buscador global)
   const limpiarFiltros = () => {
     setFiltroBodegaGlobal('todas');
     setFiltroPlaca('');
     setFiltroRemolque('');
     setFiltroFecha({ activo: false, inicio: null, fin: null });
+    setBusquedaGlobal('');
   };
 
-  // Verificar si hay filtros activos
+  // Verificar si hay filtros activos (incluyendo buscador)
   const hayFiltrosActivos = useMemo(() => {
-    return filtroBodegaGlobal !== 'todas' || filtroPlaca || filtroRemolque || filtroFecha.activo;
-  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha.activo]);
+    return filtroBodegaGlobal !== 'todas' || filtroPlaca || filtroRemolque || filtroFecha.activo || busquedaGlobal.trim() !== '';
+  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha.activo, busquedaGlobal]);
 
   const metasBodega = useMemo(() => {
     return parsearMetasJson(barco.metas_json);
@@ -2494,7 +2181,7 @@ export default function DashboardSacosCompartido({ barco }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Filter size={16} color="#64748b" />
                 <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
-                  FILTROS AVANZADOS
+                  FILTROS Y BÚSQUEDA
                 </span>
                 {hayFiltrosActivos && (
                   <span style={{
@@ -2647,6 +2334,52 @@ export default function DashboardSacosCompartido({ barco }) {
                   </div>
                 </div>
 
+                {/* BUSCADOR GLOBAL dentro del panel de filtros */}
+                <div style={{ marginTop: 16 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                    🔍 BUSCADOR GLOBAL
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type="text"
+                      placeholder="Buscar por #viaje, placa, remolque o bodega..."
+                      value={busquedaGlobal}
+                      onChange={(e) => setBusquedaGlobal(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px 10px 38px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontFamily: "'Sora', sans-serif",
+                        background: '#fff'
+                      }}
+                    />
+                    {busquedaGlobal && (
+                      <button
+                        onClick={() => setBusquedaGlobal('')}
+                        style={{
+                          position: 'absolute',
+                          right: 12,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#94a3b8',
+                          fontSize: 14
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                    Busca coincidencias en número de viaje, placa de camión, placa de remolque o bodega
+                  </p>
+                </div>
+
                 {hayFiltrosActivos && (
                   <div style={{
                     marginTop: 16,
@@ -2679,6 +2412,11 @@ export default function DashboardSacosCompartido({ barco }) {
                     {filtroFecha.activo && (
                       <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
                         {dayjs(filtroFecha.inicio).format('DD/MM HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM HH:mm')}
+                      </span>
+                    )}
+                    {busquedaGlobal && (
+                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
+                        Buscar: "{busquedaGlobal}"
                       </span>
                     )}
                   </div>
@@ -2720,6 +2458,11 @@ export default function DashboardSacosCompartido({ barco }) {
               {filtroRemolque && (
                 <span style={{ fontSize: 12, color: '#64748b' }}>
                   🔗 {filtroRemolque}
+                </span>
+              )}
+              {busquedaGlobal && (
+                <span style={{ fontSize: 12, color: '#3b82f6' }}>
+                  🔍 "{busquedaGlobal}"
                 </span>
               )}
             </div>
@@ -3326,6 +3069,7 @@ export default function DashboardSacosCompartido({ barco }) {
             )}
             {filtroPlaca && <> &nbsp;·&nbsp; Placa: {filtroPlaca}</>}
             {filtroRemolque && <> &nbsp;·&nbsp; Remolque: {filtroRemolque}</>}
+            {busquedaGlobal && <> &nbsp;·&nbsp; Buscando: "{busquedaGlobal}"</>}
           </div>
         </div>
       </div>
