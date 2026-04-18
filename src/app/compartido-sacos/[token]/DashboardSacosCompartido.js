@@ -2771,7 +2771,6 @@ export default function DashboardSacosCompartido({ barco }) {
                     <th className="alm-th-num">Sacos</th>
                     <th className="alm-th-num">TM</th>
                     <th className="alm-th-num">Dañados</th>
-                    <th>Diferencia</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -2796,15 +2795,7 @@ export default function DashboardSacosCompartido({ barco }) {
                           <td className="alm-td-num" style={{ color: (viaje.paquetes_danados || 0) > 0 ? '#ef4444' : '#94a3b8' }}>
                             {viaje.paquetes_danados || 0}
                           </td>
-                          <td className="alm-td-num">
-                            <span style={{ 
-                              color: esDiferenciaAlta ? '#ef4444' : '#10b981',
-                              fontSize: 11,
-                              fontWeight: esDiferenciaAlta ? 700 : 400
-                            }}>
-                              {viaje.diferencia_kg?.toFixed(0) || 0} kg ({diferenciaPorcentaje}%)
-                            </span>
-                          </td>
+                         
                           <td>
                             <button
                               onClick={() => setViajeExpandidoId(estaExpandido ? null : viaje.id)}
