@@ -566,7 +566,145 @@ function AtrasosBarco({ barcoId }) {
   const pctImputable = s.totalMinutos > 0 ? (s.imputables / s.totalMinutos * 100).toFixed(1) : '0.0';
   const pctNoImputable = s.totalMinutos > 0 ? (s.noImputables / s.totalMinutos * 100).toFixed(1) : '0.0';
 
-  
+  if (loading) {
+    return (
+      <div className="alm-chart-card">
+        <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+          Cargando datos de atrasos...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="alm-chart-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <h4 className="alm-chart-title" style={{ marginBottom: 0 }}>
+          ⏱️ REGISTRO DE ATRASOS / PAROS
+          <span style={{ fontSize: 11, fontWeight: 'normal', marginLeft: 8 }}>{atrasos.length} registros</span>
+        </h4>
+        <button
+          onClick={() => setExpandido(!expandido)}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: 12,
+            color: '#3b82f6',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
+          }}
+        >
+          {expandido ? <EyeOff size={14} /> : <Eye size={14} />}
+          {expandido ? 'Ocultar' : 'Ver detalles'}
+        </button>
+      </div>
+
+      {expandido && (
+        <>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+            marginBottom: 20
+          }}>
+            <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12 }}>
+              <div style={{ fontSize: 11, color: '#64748b' }}>TOTAL PAROS</div>
+              <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'DM Mono', monospace" }}>
+                {formatTiempo(s.totalMinutos)}
+              </div>
+            </div>
+            <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12 }}>
+              <div style={{ fontSize: 11, color: '#64748b' }}>IMPUTABLES ALMAPAC</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>
+                {formatTiempo(s.imputables)} <span style={{ fontSize: 12 }}>({pctImputable}%)</span>
+              </div>
+            </div>
+            <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12 }}>
+              <div style={{ fontSize: 11, color: '#64748b' }}>NO IMPUTABLES</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b', fontFamily: "'DM Mono', monospace" }}>
+                {formatTiempo(s.noImputables)} <span style={{ fontSize: 12 }}>({pctNoImputable}%)</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>📦 Filtrar por bodega</label>
+              <select
+                value={filtroBodega}
+                onChange={(e) => setFiltroBodega(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #e2e8f0', marginTop: 4 }}
+              >
+                {bodegasUnicas.map(b => (
+                  <option key={b} value={b}>
+                    {b === 'todas' ? '📋 Todas las bodegas' : b === 'generales' ? '📋 Generales (sin bodega)' : b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 2, minWidth: 220 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>🔍 Filtrar por tipo de paro</label>
+              <select
+                value={filtroTipo}
+                onChange={(e) => setFiltroTipo(e.target.value)}
+                style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #e2e8f0', marginTop: 4 }}
+              >
+                {tiposOpciones.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="alm-table-scroll">
+            <table className="alm-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Duración</th>
+                  <th>Tipo</th>
+                  <th>Bodega</th>
+                  <th>Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {atrasosFiltrados.length > 0 ? atrasosFiltrados.map((atraso, idx) => (
+                  <tr key={idx}>
+                    <td>{dayjs(atraso.fecha).format('DD/MM/YYYY')}</td>
+                    <td>{atraso.hora_inicio || '—'}</td>
+                    <td>{atraso.duracion_minutos ? `${atraso.duracion_minutos} min` : '—'}</td>
+                    <td>
+                      <span style={{
+                        background: getTipoColor(atraso.tipo_paro?.nombre),
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        fontSize: 10,
+                        fontWeight: 600
+                      }}>
+                        {atraso.tipo_paro?.nombre || '—'}
+                      </span>
+                    </td>
+                    <td>{atraso.bodega_nombre || (atraso.es_general ? 'General' : '—')}</td>
+                    <td style={{ maxWidth: 250, whiteSpace: 'normal' }}>{atraso.observaciones || '—'}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                      No hay registros de atrasos en el período seleccionado
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ============================================================================
@@ -1442,15 +1580,13 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
 export default function DashboardSacosCompartido({ barco }) {
   const { registros, loading, error, lastUpdate, refetch } = useSacosData(barco.id);
 
-  // FILTROS NUEVOS
+  // FILTROS: Solo bodega y rango de fechas (sin filtro de placa independiente)
   const [filtroBodegaGlobal, setFiltroBodegaGlobal] = useState('todas');
-  const [filtroPlaca, setFiltroPlaca] = useState('');
-  const [filtroRemolque, setFiltroRemolque] = useState('');
   const [filtroFecha, setFiltroFecha] = useState({ activo: false, inicio: null, fin: null });
   const [showDatePickerSacos, setShowDatePickerSacos] = useState(false);
   
-  // BUSCADOR GLOBAL para la tabla de viajes
-  const [busquedaGlobal, setBusquedaGlobal] = useState('');
+  // BUSCADOR GLOBAL para la tabla de viajes (busca por placa, #viaje, remolque, bodega)
+  const [busquedaTabla, setBusquedaTabla] = useState('');
   
   // Estado para el detalle expandido de cada viaje
   const [viajeExpandidoId, setViajeExpandidoId] = useState(null);
@@ -1462,43 +1598,23 @@ export default function DashboardSacosCompartido({ barco }) {
   const [paginaActual, setPaginaActual] = useState(1);
   const [registrosPorPagina, setRegistrosPorPagina] = useState(20);
 
-  // Obtener valores únicos para filtros
-  const placasUnicas = useMemo(() => {
-    const s = new Set(registros.map(r => r.placa_camion).filter(Boolean));
-    return Array.from(s).sort();
-  }, [registros]);
-
-  const remolquesUnicos = useMemo(() => {
-    const s = new Set(registros.map(r => r.placa_remolque).filter(Boolean));
-    return Array.from(s).sort();
-  }, [registros]);
-
+  // Obtener bodegas disponibles para las tarjetas
   const bodegasDisponibles = useMemo(() => {
     const s = new Set(registros.map(r => r.bodega).filter(Boolean));
-    return ['todas', ...Array.from(s).sort((a, b) => {
+    return Array.from(s).sort((a, b) => {
       const na = parseInt(a.match(/\d+/)?.[0] || '0');
       const nb = parseInt(b.match(/\d+/)?.[0] || '0');
       return na - nb;
-    })];
+    });
   }, [registros]);
 
-  // Aplicar todos los filtros a los registros (incluyendo el buscador global)
+  // Aplicar todos los filtros a los registros
   const registrosFiltrados = useMemo(() => {
     let filtrados = registros;
     
     // Filtro por bodega
     if (filtroBodegaGlobal !== 'todas') {
       filtrados = filtrados.filter(r => r.bodega === filtroBodegaGlobal);
-    }
-    
-    // Filtro por placa
-    if (filtroPlaca) {
-      filtrados = filtrados.filter(r => r.placa_camion === filtroPlaca);
-    }
-    
-    // Filtro por remolque
-    if (filtroRemolque) {
-      filtrados = filtrados.filter(r => r.placa_remolque === filtroRemolque);
     }
     
     // Filtro por rango de fechas
@@ -1509,13 +1625,13 @@ export default function DashboardSacosCompartido({ barco }) {
       });
     }
     
-    // BUSCADOR GLOBAL - busca por # viaje, placa, remolque o bodega
-    if (busquedaGlobal.trim() !== '') {
-      const termino = busquedaGlobal.toLowerCase().trim();
+    // BUSCADOR EN LA TABLA - busca por placa, #viaje, remolque o bodega
+    if (busquedaTabla.trim() !== '') {
+      const termino = busquedaTabla.toLowerCase().trim();
       filtrados = filtrados.filter(r => {
         return (
-          (r.viaje_numero && r.viaje_numero.toString().toLowerCase().includes(termino)) ||
           (r.placa_camion && r.placa_camion.toLowerCase().includes(termino)) ||
+          (r.viaje_numero && r.viaje_numero.toString().toLowerCase().includes(termino)) ||
           (r.placa_remolque && r.placa_remolque.toLowerCase().includes(termino)) ||
           (r.bodega && r.bodega.toLowerCase().includes(termino))
         );
@@ -1523,9 +1639,9 @@ export default function DashboardSacosCompartido({ barco }) {
     }
     
     return filtrados;
-  }, [registros, filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha, busquedaGlobal]);
+  }, [registros, filtroBodegaGlobal, filtroFecha, busquedaTabla]);
 
-  // ========== PAGINACIÓN: Calcular total de páginas y registros paginados ==========
+  // ========== PAGINACIÓN ==========
   const totalPaginas = useMemo(() => {
     return Math.ceil(registrosFiltrados.length / registrosPorPagina);
   }, [registrosFiltrados, registrosPorPagina]);
@@ -1536,35 +1652,31 @@ export default function DashboardSacosCompartido({ barco }) {
     return registrosFiltrados.slice(inicio, fin);
   }, [registrosFiltrados, paginaActual, registrosPorPagina]);
 
-  // Resetear a página 1 cuando cambian los filtros o el buscador
+  // Resetear a página 1 cuando cambian los filtros
   useEffect(() => {
     setPaginaActual(1);
-  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha, busquedaGlobal]);
+  }, [filtroBodegaGlobal, filtroFecha, busquedaTabla]);
 
-  // Función para cambiar de página
   const irPagina = (nuevaPagina) => {
     setPaginaActual(Math.max(1, Math.min(nuevaPagina, totalPaginas)));
   };
 
-  // Función para cambiar registros por página
   const cambiarRegistrosPorPagina = (cantidad) => {
     setRegistrosPorPagina(cantidad);
     setPaginaActual(1);
   };
 
-  // Limpiar todos los filtros (incluyendo buscador global)
+  // Limpiar todos los filtros
   const limpiarFiltros = () => {
     setFiltroBodegaGlobal('todas');
-    setFiltroPlaca('');
-    setFiltroRemolque('');
     setFiltroFecha({ activo: false, inicio: null, fin: null });
-    setBusquedaGlobal('');
+    setBusquedaTabla('');
   };
 
-  // Verificar si hay filtros activos (incluyendo buscador)
+  // Verificar si hay filtros activos
   const hayFiltrosActivos = useMemo(() => {
-    return filtroBodegaGlobal !== 'todas' || filtroPlaca || filtroRemolque || filtroFecha.activo || busquedaGlobal.trim() !== '';
-  }, [filtroBodegaGlobal, filtroPlaca, filtroRemolque, filtroFecha.activo, busquedaGlobal]);
+    return filtroBodegaGlobal !== 'todas' || filtroFecha.activo || busquedaTabla.trim() !== '';
+  }, [filtroBodegaGlobal, filtroFecha.activo, busquedaTabla]);
 
   const metasBodega = useMemo(() => {
     return parsearMetasJson(barco.metas_json);
@@ -2106,6 +2218,35 @@ export default function DashboardSacosCompartido({ barco }) {
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
+        /* Estilos para las tarjetas de bodega */
+        .bodega-card {
+          background: white;
+          border: 2px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 12px 16px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: center;
+          min-width: 100px;
+        }
+        .bodega-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .bodega-card-active {
+          border-color: #3b82f6;
+          background: #eff6ff;
+          box-shadow: 0 2px 8px rgba(59,130,246,0.2);
+        }
+        .bodega-card-completada {
+          border-color: #10b981;
+          background: #f0fdf4;
+        }
+        .bodega-card-active.bodega-card-completada {
+          border-color: #10b981;
+          background: #f0fdf4;
+        }
+        
         @media (max-width: 768px) {
           .alm-body { padding: 16px 12px 40px; }
           .alm-kpis-row { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -2119,6 +2260,9 @@ export default function DashboardSacosCompartido({ barco }) {
           .alm-ship-legend { gap: 8px; padding: 10px 12px; border-radius: 20px; flex-wrap: wrap; justify-content: flex-start; }
           .alm-legend-item { font-size: 10px; gap: 4px; }
           .alm-legend-dot { width: 8px; height: 8px; }
+          .bodega-card { padding: 8px 12px; min-width: 80px; }
+          .bodega-card .bodega-nombre { font-size: 12px; }
+          .bodega-card .bodega-tm { font-size: 14px; }
         }
         @media (max-width: 480px) {
           .alm-kpis-row { grid-template-columns: 1fr 1fr; }
@@ -2127,6 +2271,9 @@ export default function DashboardSacosCompartido({ barco }) {
           .alm-ship-svg { min-width: 900px; }
           .alm-ship-legend { flex-direction: row; align-items: flex-start; border-radius: 12px; gap: 6px; }
           .alm-legend-item { font-size: 9px; }
+          .bodega-card { padding: 6px 10px; min-width: 70px; }
+          .bodega-card .bodega-nombre { font-size: 11px; }
+          .bodega-card .bodega-tm { font-size: 12px; }
         }
       `}</style>
 
@@ -2158,7 +2305,75 @@ export default function DashboardSacosCompartido({ barco }) {
 
         <div className="alm-body">
 
-          {/* PANEL DE FILTROS AVANZADOS */}
+          {/* TARJETAS DE BODEGA - Filtro táctil */}
+          <div style={{
+            marginBottom: 20,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: 8
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              minWidth: 'min-content'
+            }}>
+              {/* Tarjeta "Todas" */}
+              <div
+                onClick={() => setFiltroBodegaGlobal('todas')}
+                className={`bodega-card ${filtroBodegaGlobal === 'todas' ? 'bodega-card-active' : ''}`}
+                style={{ cursor: 'pointer' }}
+              >
+                <div style={{ fontSize: 24, marginBottom: 4 }}>📋</div>
+                <div className="bodega-nombre" style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>TODAS</div>
+                <div className="bodega-tm" style={{ fontSize: 16, fontWeight: 800, color: '#3b82f6' }}>
+                  {fmtTM(statsGenerales.totalTM, 1)}
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8' }}>{statsGenerales.totalViajes} viajes</div>
+              </div>
+
+              {/* Tarjetas por cada bodega */}
+              {datosPorBodegaCompleto.map(bodega => {
+                const estaActiva = filtroBodegaGlobal === bodega.bodega;
+                const estaCompletada = bodega.completado;
+                return (
+                  <div
+                    key={bodega.bodega}
+                    onClick={() => setFiltroBodegaGlobal(estaActiva ? 'todas' : bodega.bodega)}
+                    className={`bodega-card ${estaActiva ? 'bodega-card-active' : ''} ${estaCompletada ? 'bodega-card-completada' : ''}`}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>
+                      {estaCompletada ? '✅' : '📦'}
+                    </div>
+                    <div className="bodega-nombre" style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                      {bodega.bodega}
+                    </div>
+                    <div className="bodega-tm" style={{ 
+                      fontSize: 16, 
+                      fontWeight: 800, 
+                      color: estaCompletada ? '#10b981' : estaActiva ? '#3b82f6' : '#475569'
+                    }}>
+                      {fmtTM(bodega.tm, 1)}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                      {bodega.porcentaje.toFixed(0)}% · {bodega.viajes} viajes
+                    </div>
+                    {bodega.meta > 0 && (
+                      <div style={{ 
+                        fontSize: 9, 
+                        color: estaCompletada ? '#10b981' : '#94a3b8',
+                        marginTop: 4
+                      }}>
+                        Meta: {fmtTM(bodega.meta, 1)} TM
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* PANEL DE FILTROS AVANZADOS (solo rango de fechas y buscador de tabla) */}
           <div style={{
             background: '#fff',
             border: '1px solid #e2e8f0',
@@ -2222,82 +2437,9 @@ export default function DashboardSacosCompartido({ barco }) {
               <div style={{ padding: '20px' }}>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                   gap: 16
                 }}>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
-                      📦 BODEGA
-                    </label>
-                    <select
-                      value={filtroBodegaGlobal}
-                      onChange={(e) => setFiltroBodegaGlobal(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontFamily: "'Sora', sans-serif",
-                        background: '#fff'
-                      }}
-                    >
-                      {bodegasDisponibles.map(b => (
-                        <option key={b} value={b}>
-                          {b === 'todas' ? '📋 Todas las bodegas' : b}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
-                      🚛 PLACA CAMIÓN
-                    </label>
-                    <select
-                      value={filtroPlaca}
-                      onChange={(e) => setFiltroPlaca(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontFamily: "'Sora', sans-serif",
-                        background: '#fff'
-                      }}
-                    >
-                      <option value="">🔍 Todas las placas</option>
-                      {placasUnicas.map(p => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
-                      🔗 REMOLQUE
-                    </label>
-                    <select
-                      value={filtroRemolque}
-                      onChange={(e) => setFiltroRemolque(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontFamily: "'Sora', sans-serif",
-                        background: '#fff'
-                      }}
-                    >
-                      <option value="">🔍 Todos los remolques</option>
-                      {remolquesUnicos.map(r => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div style={{ position: 'relative' }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
                       📅 RANGO DE FECHAS
@@ -2334,52 +2476,6 @@ export default function DashboardSacosCompartido({ barco }) {
                   </div>
                 </div>
 
-                {/* BUSCADOR GLOBAL dentro del panel de filtros */}
-                <div style={{ marginTop: 16 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>
-                    🔍 BUSCADOR GLOBAL
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input
-                      type="text"
-                      placeholder="Buscar por #viaje, placa, remolque o bodega..."
-                      value={busquedaGlobal}
-                      onChange={(e) => setBusquedaGlobal(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px 10px 38px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontFamily: "'Sora', sans-serif",
-                        background: '#fff'
-                      }}
-                    />
-                    {busquedaGlobal && (
-                      <button
-                        onClick={() => setBusquedaGlobal('')}
-                        style={{
-                          position: 'absolute',
-                          right: 12,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: '#94a3b8',
-                          fontSize: 14
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
-                    Busca coincidencias en número de viaje, placa de camión, placa de remolque o bodega
-                  </p>
-                </div>
-
                 {hayFiltrosActivos && (
                   <div style={{
                     marginTop: 16,
@@ -2399,24 +2495,14 @@ export default function DashboardSacosCompartido({ barco }) {
                         Bodega: {filtroBodegaGlobal}
                       </span>
                     )}
-                    {filtroPlaca && (
-                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
-                        Placa: {filtroPlaca}
-                      </span>
-                    )}
-                    {filtroRemolque && (
-                      <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
-                        Remolque: {filtroRemolque}
-                      </span>
-                    )}
                     {filtroFecha.activo && (
                       <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
                         {dayjs(filtroFecha.inicio).format('DD/MM HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM HH:mm')}
                       </span>
                     )}
-                    {busquedaGlobal && (
+                    {busquedaTabla && (
                       <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: 999 }}>
-                        Buscar: "{busquedaGlobal}"
+                        Buscar: "{busquedaTabla}"
                       </span>
                     )}
                   </div>
@@ -2450,19 +2536,14 @@ export default function DashboardSacosCompartido({ barco }) {
               }}>
                 {registrosFiltrados.length} viajes
               </span>
-              {filtroPlaca && (
+              {filtroBodegaGlobal !== 'todas' && (
                 <span style={{ fontSize: 12, color: '#64748b' }}>
-                  🚛 {filtroPlaca}
+                  📦 {filtroBodegaGlobal}
                 </span>
               )}
-              {filtroRemolque && (
-                <span style={{ fontSize: 12, color: '#64748b' }}>
-                  🔗 {filtroRemolque}
-                </span>
-              )}
-              {busquedaGlobal && (
+              {busquedaTabla && (
                 <span style={{ fontSize: 12, color: '#3b82f6' }}>
-                  🔍 "{busquedaGlobal}"
+                  🔍 "{busquedaTabla}"
                 </span>
               )}
             </div>
@@ -2733,14 +2814,54 @@ export default function DashboardSacosCompartido({ barco }) {
 
           <AtrasosBarco barcoId={barco.id} />
 
-          {/* TABLA DE VIAJES CON DETALLE EXPANDIBLE Y PAGINACIÓN */}
+          {/* TABLA DE VIAJES CON BARRA DE BÚSQUEDA Y DETALLE EXPANDIBLE */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <h3 className="alm-section-title">
                 🚛 LISTADO DE VIAJES
                 <span className="alm-badge">{registrosFiltrados.length} registros</span>
               </h3>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* BARRA DE BÚSQUEDA EN LA TABLA */}
+                <div style={{ position: 'relative', minWidth: 220 }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    placeholder="🔍 Buscar por placa, #viaje, remolque..."
+                    value={busquedaTabla}
+                    onChange={(e) => setBusquedaTabla(e.target.value)}
+                    style={{
+                      padding: '8px 12px 8px 32px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      width: '100%',
+                      background: '#fff',
+                      outline: 'none',
+                      transition: 'all 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                  />
+                  {busquedaTabla && (
+                    <button
+                      onClick={() => setBusquedaTabla('')}
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#94a3b8',
+                        fontSize: 12
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
                 {viajeExpandidoId && (
                   <button
                     onClick={() => setViajeExpandidoId(null)}
@@ -2795,7 +2916,6 @@ export default function DashboardSacosCompartido({ barco }) {
                           <td className="alm-td-num" style={{ color: (viaje.paquetes_danados || 0) > 0 ? '#ef4444' : '#94a3b8' }}>
                             {viaje.paquetes_danados || 0}
                           </td>
-                         
                           <td>
                             <button
                               onClick={() => setViajeExpandidoId(estaExpandido ? null : viaje.id)}
@@ -2817,7 +2937,7 @@ export default function DashboardSacosCompartido({ barco }) {
                         </tr>
                         {estaExpandido && (
                           <tr>
-                            <td colSpan={10} style={{ padding: 0 }}>
+                            <td colSpan={9} style={{ padding: 0 }}>
                               <ViajeDetalleExpandido 
                                 viaje={viaje} 
                                 onClose={() => setViajeExpandidoId(null)}
@@ -2829,7 +2949,7 @@ export default function DashboardSacosCompartido({ barco }) {
                     );
                   }) : (
                     <tr>
-                      <td colSpan={10} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                      <td colSpan={9} style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                         No hay viajes registrados con los filtros seleccionados
                       </td>
                     </tr>
@@ -2841,7 +2961,7 @@ export default function DashboardSacosCompartido({ barco }) {
                     <td className="alm-td-num alm-bold">{fmtNumber(statsGenerales.totalSacos)}</td>
                     <td className="alm-td-num alm-bold alm-green">{fmtTM(statsGenerales.totalTM, 2)}</td>
                     <td className="alm-td-num alm-bold">{fmtNumber(statsGenerales.totalDanados)}</td>
-                    <td colSpan={2} />
+                    <td />
                   </tr>
                 </tfoot>
               </table>
@@ -3058,9 +3178,8 @@ export default function DashboardSacosCompartido({ barco }) {
             {filtroFecha.activo && (
               <> &nbsp;·&nbsp; Rango: {dayjs(filtroFecha.inicio).format('DD/MM/YY HH:mm')} - {dayjs(filtroFecha.fin).format('DD/MM/YY HH:mm')}</>
             )}
-            {filtroPlaca && <> &nbsp;·&nbsp; Placa: {filtroPlaca}</>}
-            {filtroRemolque && <> &nbsp;·&nbsp; Remolque: {filtroRemolque}</>}
-            {busquedaGlobal && <> &nbsp;·&nbsp; Buscando: "{busquedaGlobal}"</>}
+            {filtroBodegaGlobal !== 'todas' && <> &nbsp;·&nbsp; Bodega: {filtroBodegaGlobal}</>}
+            {busquedaTabla && <> &nbsp;·&nbsp; Buscando: "{busquedaTabla}"</>}
           </div>
         </div>
       </div>
