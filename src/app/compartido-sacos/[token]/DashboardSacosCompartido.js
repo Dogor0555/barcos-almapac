@@ -1356,60 +1356,7 @@ function FlujoGlobalCard({ flujoPromedioGeneral, flujoUltimaHora, registrosFiltr
       border: '1px solid rgba(59,130,246,0.3)',
       color: 'white'
     }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-        flexWrap: 'wrap',
-        gap: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            background: 'rgba(16,185,129,0.2)',
-            width: 48,
-            height: 48,
-            borderRadius: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid rgba(16,185,129,0.3)'
-          }}>
-            <TrendingUp size={24} color="#10b981" />
-          </div>
-          <div>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.5)',
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              marginBottom: 4
-            }}>
-              FLUJO GLOBAL DE DESCARGA
-            </div>
-            <div style={{
-              fontSize: 28,
-              fontWeight: 900,
-              color: 'white',
-              fontFamily: "'DM Mono', monospace",
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8
-            }}>
-              {fmtTM(flujoGlobalBasadoEnBodegas, 2)} TM/h
-              <span style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: 'rgba(255,255,255,0.5)',
-                fontFamily: "'Sora', sans-serif"
-              }}>
-                (basado en última hora por bodega)
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      
 
       <div style={{
         display: 'grid',
