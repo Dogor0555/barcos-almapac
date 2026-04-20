@@ -1,10 +1,10 @@
-// AccionesBarcoMenu.jsx
+// components/adminC/AccionesBarcoMenu.jsx
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
   MoreVertical, Eye, Package, Edit2, ExternalLink, FileText,
   Truck, Clock, BarChart3, BookOpen, Power, Play,
-  Download, Trash2, Copy, Upload as Export, ChevronRight
+  Download, Trash2, Copy, Upload as Export, ChevronRight, Flame
 } from 'lucide-react'
 
 export default function AccionesBarcoMenu({
@@ -38,6 +38,9 @@ export default function AccionesBarcoMenu({
 
   const close = () => setOpen(false)
 
+  // Verificar si el barco tiene Pet Coke configurado
+  const tienePetCoke = barco.metas_json?.productos?.includes('PC-001')
+
   const grupos = [
     {
       titulo: 'Información',
@@ -63,11 +66,29 @@ export default function AccionesBarcoMenu({
           hoverBg: 'hover:bg-green-500/20',
           onClick: () => { onGenerarDashboardSacos(barco); close() },
         },
+        // 👇 Dashboard de Pet Coke (si el producto está asociado)
+        ...(tienePetCoke ? [{
+          icon: Flame,
+          label: 'Dashboard Pet Coke',
+          color: 'text-orange-400',
+          hoverBg: 'hover:bg-orange-500/20',
+          isLink: true,
+          href: `/compartido/petcoke/${barco.token_compartido}`,
+        }] : []),
       ],
     },
     {
       titulo: 'Registro',
       items: [
+        // 👇 Registro de Pet Coke (si el producto está asociado)
+        ...(tienePetCoke ? [{
+          icon: Flame,
+          label: 'Registrar Pet Coke',
+          color: 'text-orange-400',
+          hoverBg: 'hover:bg-orange-500/20',
+          isLink: true,
+          href: `/barco/${barco.token_compartido}/petcoke`,
+        }] : []),
         barco.tipo_operacion === 'exportacion'
           ? {
               icon: Export,
@@ -84,12 +105,12 @@ export default function AccionesBarcoMenu({
               onClick: () => { onVerRegistroViajes(barco.token_compartido, 'importacion'); close() },
             },
         {
-          icon: Package, // 👈 AGREGADO: Registrar Sacos
+          icon: Package,
           label: 'Registrar Sacos',
           color: 'text-green-400',
           hoverBg: 'hover:bg-green-500/20',
           isLink: true,
-          href: `/barco/${barco.token_compartido}/sacos`, // 👈 Link directo al registro de sacos
+          href: `/barco/${barco.token_compartido}/sacos`,
         },
         {
           icon: Copy,
@@ -193,12 +214,12 @@ export default function AccionesBarcoMenu({
       {open && (
         <div
           className="
-            absolute right-0 z-50 mt-1 w-64
+            absolute right-0 z-50 mt-1 w-72
             bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl
             overflow-hidden
             animate-in fade-in slide-in-from-top-2 duration-150
           "
-          style={{ minWidth: '15rem' }}
+          style={{ minWidth: '16rem' }}
         >
           {grupos.map((grupo, gi) => (
             <div key={gi}>
