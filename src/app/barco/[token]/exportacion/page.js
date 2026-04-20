@@ -1,8 +1,8 @@
-// app/barco/[token]/exportacion/page.js - Versión CORREGIDA - Resumen por Bodega funcionando correctamente
+// app/barco/[token]/exportacion/page.js - VERSIÓN CON GRÁFICA POR BODEGA
 
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from './../../../lib/supabase'
 import { getCurrentUser } from './../../../lib/auth'
@@ -16,7 +16,7 @@ import {
   Plus, PauseCircle, ClipboardList
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -52,14 +52,14 @@ const getCurrentSVTimeForInput = () => {
 // CONFIGURACIÓN DE BODEGAS DEL BARCO
 // =====================================================
 const BODEGAS_BARCO = [
-  { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01' },
-  { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02' },
-  { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03' },
-  { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04' },
-  { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05' },
-  { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06' },
-  { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07' },
-  { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
+  { id: 1, nombre: 'Bodega 1', codigo: 'BDG-01', color: '#3b82f6' },
+  { id: 2, nombre: 'Bodega 2', codigo: 'BDG-02', color: '#ef4444' },
+  { id: 3, nombre: 'Bodega 3', codigo: 'BDG-03', color: '#10b981' },
+  { id: 4, nombre: 'Bodega 4', codigo: 'BDG-04', color: '#f59e0b' },
+  { id: 5, nombre: 'Bodega 5', codigo: 'BDG-05', color: '#8b5cf6' },
+  { id: 6, nombre: 'Bodega 6', codigo: 'BDG-06', color: '#ec4899' },
+  { id: 7, nombre: 'Bodega 7', codigo: 'BDG-07', color: '#06b6d4' },
+  { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08', color: '#84cc16' },
 ]
 
 // =====================================================
@@ -603,9 +603,9 @@ const FormularioParoSimple = ({ barco, catalogosParos, onSave, onCancel, paroEdi
 }
 
 // =====================================================
-// TARJETA DE PARO
+// TARJETA DE PARO COMPACTA (para lista desplegable)
 // =====================================================
-const ParoCard = ({ paro, catalogosParos, onEditar, onEliminar }) => {
+const ParoCardCompact = ({ paro, catalogosParos, onEditar, onEliminar }) => {
   const TIPOS_PARO_CONFIG = getTiposParoConfig()
 
   const tipo = catalogosParos.find(t => t.id === paro.tipo_paro_id)
@@ -619,55 +619,180 @@ const ParoCard = ({ paro, catalogosParos, onEditar, onEliminar }) => {
   if (grupo === 'OTRAS') grupoColor = 'bg-purple-500/20 text-purple-400'
 
   return (
-    <div className="bg-slate-900 rounded-xl border-2 border-white/10 hover:border-orange-500/40 transition-all overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-start gap-3 mb-3">
-          <div className={`p-2.5 rounded-xl ${config.bg} flex-shrink-0`}>
+    <div className="bg-slate-800/50 rounded-lg p-3 border border-white/5 hover:border-orange-500/30 transition-all">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className={`p-1.5 rounded-lg flex-shrink-0 ${config.bg}`}>
             <span className={config.text}>{config.icono}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white text-sm leading-snug">{tipo?.nombre || 'Desconocido'}</h3>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${grupoColor}`}>{grupo}</span>
-              <span className="text-[10px] text-slate-400">{paro.fecha}</span>
+            <p className="text-sm font-semibold text-white truncate">{tipo?.nombre || 'Desconocido'}</p>
+            <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
+              <span>{paro.fecha}</span>
+              <span>{paro.hora_inicio?.slice(0, 5)}</span>
+              {paro.hora_fin ? (
+                <>
+                  <span>→</span>
+                  <span>{paro.hora_fin?.slice(0, 5)}</span>
+                  <span className="text-orange-400 font-medium">
+                    {Math.floor((paro.duracion_minutos || 0) / 60)}h {(paro.duracion_minutos || 0) % 60}m
+                  </span>
+                </>
+              ) : (
+                <span className="text-blue-400 animate-pulse">● En curso</span>
+              )}
             </div>
           </div>
-          <div className="flex gap-1 flex-shrink-0">
-            <button onClick={() => onEditar(paro)}
-              className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400"
-              title="Editar">
-              <Edit2 className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => onEliminar(paro.id)}
-              className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400"
-              title="Eliminar">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
-
-        <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg px-3 py-2 mb-3">
-          <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-          <span className="font-mono text-sm text-white">{paro.hora_inicio?.slice(0, 5)}</span>
-          {paro.hora_fin ? (
-            <>
-              <span className="text-slate-600">→</span>
-              <span className="font-mono text-sm text-white">{paro.hora_fin?.slice(0, 5)}</span>
-              <span className="ml-auto font-bold text-xs text-orange-400">
-                {Math.floor((paro.duracion_minutos || 0) / 60)}h {(paro.duracion_minutos || 0) % 60}m
-              </span>
-            </>
-          ) : (
-            <span className="ml-auto text-xs font-medium animate-pulse text-blue-400">En curso</span>
-          )}
+        <div className="flex gap-1 flex-shrink-0 ml-2">
+          <button 
+            onClick={() => onEditar(paro)}
+            className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition-colors"
+            title="Editar"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+          <button 
+            onClick={() => onEliminar(paro.id)}
+            className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+            title="Eliminar"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
-
-        {paro.observaciones && (
-          <p className="text-xs text-slate-400 italic bg-slate-800/40 rounded-lg px-3 py-2 border-l-2 border-slate-600">
-            {paro.observaciones}
-          </p>
-        )}
       </div>
+      {paro.observaciones && (
+        <p className="text-xs text-slate-400 mt-2 pl-7 border-l-2 border-slate-600 ml-1">
+          {paro.observaciones}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// =====================================================
+// LISTA DE PAROS DESPLEGABLE (ACCORDION)
+// =====================================================
+const ListaParosDesplegable = ({ registrosParos, catalogosParos, onEditar, onEliminar }) => {
+  const [gruposExpandidos, setGruposExpandidos] = useState({
+    ALMAPAC: true,
+    UPDP: false,
+    OTRAS: false
+  })
+
+  const TIPOS_PARO_CONFIG = getTiposParoConfig()
+
+  // Agrupar paros por grupo
+  const parosPorGrupo = {
+    ALMAPAC: [],
+    UPDP: [],
+    OTRAS: []
+  }
+
+  registrosParos.forEach(paro => {
+    const tipo = catalogosParos.find(t => t.id === paro.tipo_paro_id)
+    const grupo = TIPOS_PARO_CONFIG[tipo?.nombre || '']?.grupo || 'ALMAPAC'
+    
+    if (grupo === 'UPDP') {
+      parosPorGrupo.UPDP.push(paro)
+    } else if (grupo === 'OTRAS') {
+      parosPorGrupo.OTRAS.push(paro)
+    } else {
+      parosPorGrupo.ALMAPAC.push(paro)
+    }
+  })
+
+  // Calcular estadísticas por grupo
+  const getEstadisticasGrupo = (paros) => {
+    const totalMinutos = paros.reduce((sum, p) => sum + (p.duracion_minutos || 0), 0)
+    const enCurso = paros.filter(p => !p.hora_fin).length
+    return { totalMinutos, enCurso }
+  }
+
+  const toggleGrupo = (grupo) => {
+    setGruposExpandidos(prev => ({ ...prev, [grupo]: !prev[grupo] }))
+  }
+
+  const gruposConfig = {
+    ALMAPAC: {
+      titulo: '📦 PAROS ALMAPAC',
+      color: 'from-blue-600 to-blue-800',
+      bgHover: 'hover:bg-blue-500/10',
+      borderColor: 'border-blue-500/30',
+      icono: <Wrench className="w-4 h-4" />
+    },
+    UPDP: {
+      titulo: '⚡ PAROS UPDP',
+      color: 'from-green-600 to-green-800',
+      bgHover: 'hover:bg-green-500/10',
+      borderColor: 'border-green-500/30',
+      icono: <Zap className="w-4 h-4" />
+    },
+    OTRAS: {
+      titulo: '🌊 PAROS POR OTRAS CAUSAS',
+      color: 'from-purple-600 to-purple-800',
+      bgHover: 'hover:bg-purple-500/10',
+      borderColor: 'border-purple-500/30',
+      icono: <CloudRain className="w-4 h-4" />
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {Object.keys(parosPorGrupo).map(grupo => {
+        const paros = parosPorGrupo[grupo]
+        if (paros.length === 0) return null
+        
+        const estadisticas = getEstadisticasGrupo(paros)
+        const config = gruposConfig[grupo]
+        const expandido = gruposExpandidos[grupo]
+
+        return (
+          <div key={grupo} className="bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
+            <button
+              onClick={() => toggleGrupo(grupo)}
+              className={`w-full px-4 py-3 flex items-center justify-between transition-all ${config.bgHover}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-1.5 rounded-lg bg-gradient-to-r ${config.color}`}>
+                  {config.icono}
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-white text-sm">{config.titulo}</h3>
+                  <div className="flex gap-3 text-[10px] text-slate-400 mt-0.5">
+                    <span>{paros.length} paros</span>
+                    {estadisticas.totalMinutos > 0 && (
+                      <span>⏱️ {Math.floor(estadisticas.totalMinutos / 60)}h {estadisticas.totalMinutos % 60}m</span>
+                    )}
+                    {estadisticas.enCurso > 0 && (
+                      <span className="text-yellow-400">🟡 {estadisticas.enCurso} en curso</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="text-slate-500">
+                {expandido ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+              </div>
+            </button>
+
+            {expandido && (
+              <div className="p-3 border-t border-white/10">
+                <div className="grid grid-cols-1 gap-2 max-h-[400px] overflow-y-auto pr-1">
+                  {paros.map(paro => (
+                    <ParoCardCompact
+                      key={paro.id}
+                      paro={paro}
+                      catalogosParos={catalogosParos}
+                      onEditar={onEditar}
+                      onEliminar={onEliminar}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1046,127 +1171,134 @@ export default function ExportacionPage() {
     return deltaAcumulado / diferenciaHoras
   }, [exportaciones, productoActivo])
 
-  const datosGraficoFlujo = useMemo(() => {
+  // =====================================================
+  // DATOS PARA GRÁFICA POR BODEGA (NUEVO)
+  // =====================================================
+  const datosGraficoPorBodega = useMemo(() => {
     if (!productoActivo) return []
 
     const exportacionesProd = exportaciones
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    const puntos = []
+    // Crear un mapa para acumular por bodega a lo largo del tiempo
+    const puntosPorHora = new Map() // key: timestamp redondeado a hora, value: objeto con acumulados por bodega
     
     exportacionesProd.forEach(exp => {
-      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-      puntos.push({
-        hora: formatUTCToSV(exp.fecha_hora, 'DD/MM HH:mm'),
-        acumulado: Number(exp.acumulado_tm) || 0,
-        bodega: bodega?.nombre || '—',
-        timestamp: new Date(exp.fecha_hora).getTime()
-      })
-    })
-
-    return puntos
-  }, [exportaciones, productoActivo])
-
-  // =====================================================
-  // LÓGICA CORREGIDA PARA RESUMEN POR BODEGA - VERSIÓN SIMPLIFICADA Y CORRECTA
-  // =====================================================
-  const resumenPorBodega = useMemo(() => {
-    if (!productoActivo) return []
-
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-    
-    // Ordenar cronológicamente de MÁS ANTIGUO a MÁS RECIENTE
-    const todasOrdenadas = [...exportacionesProd].sort(
-      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-    )
-    
-    if (todasOrdenadas.length === 0) return []
-    
-    // Mapa para acumular por bodega
-    const bodegasMap = new Map()
-    
-    // Recorremos de la PRIMERA a la ÚLTIMA lectura
-    for (let i = 0; i < todasOrdenadas.length; i++) {
-      const lecturaActual = todasOrdenadas[i]
-      const bodegaActual = lecturaActual.bodega_id
-      const acumuladoActual = Number(lecturaActual.acumulado_tm) || 0
+      const fecha = new Date(exp.fecha_hora)
+      // Redondear a la hora (sin minutos)
+      const horaKey = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), fecha.getHours(), 0, 0).getTime()
+      const horaStr = formatUTCToSV(exp.fecha_hora, 'DD/MM HH:00')
       
-      // Buscar la lectura anterior (si existe)
-      let acumuladoAnterior = 0
-      if (i > 0) {
-        const lecturaAnterior = todasOrdenadas[i - 1]
-        acumuladoAnterior = Number(lecturaAnterior.acumulado_tm) || 0
-      }
-      
-      // Lo que se cargó en ESTE registro es la diferencia
-      // Si es el primer registro (i === 0), la carga es el acumulado actual
-      const cargaReal = i === 0 ? acumuladoActual : acumuladoActual - acumuladoAnterior
-      
-      // Inicializar la bodega en el mapa si no existe
-      if (!bodegasMap.has(bodegaActual)) {
-        bodegasMap.set(bodegaActual, {
-          bodega_id: bodegaActual,
-          nombre: BODEGAS_BARCO.find(b => b.id === bodegaActual)?.nombre || `Bodega ${bodegaActual}`,
-          codigo: BODEGAS_BARCO.find(b => b.id === bodegaActual)?.codigo || `BDG-${bodegaActual}`,
-          totalCargado: 0,
-          lecturas: [],
-          primeraFecha: lecturaActual.fecha_hora,
-          ultimaFecha: lecturaActual.fecha_hora,
-          primerAcumulado: acumuladoActual,
-          ultimoAcumulado: acumuladoActual
+      if (!puntosPorHora.has(horaKey)) {
+        puntosPorHora.set(horaKey, {
+          hora: horaStr,
+          timestamp: horaKey,
+          // Inicializar acumulados por bodega
+          ...BODEGAS_BARCO.reduce((acc, b) => ({ ...acc, [`bodega_${b.id}`]: 0 }), {})
         })
       }
       
-      // Actualizar la bodega
-      const bodegaData = bodegasMap.get(bodegaActual)
-      bodegaData.totalCargado += cargaReal
-      bodegaData.lecturas.push(lecturaActual)
+      const punto = puntosPorHora.get(horaKey)
+      const bodegaId = exp.bodega_id
+      const acumuladoActual = Number(exp.acumulado_tm) || 0
       
-      // Actualizar fechas
-      if (new Date(lecturaActual.fecha_hora) < new Date(bodegaData.primeraFecha)) {
-        bodegaData.primeraFecha = lecturaActual.fecha_hora
-        bodegaData.primerAcumulado = acumuladoActual
+      // Actualizar el acumulado de esta bodega (tomar el máximo/último de esa hora)
+      if (acumuladoActual > punto[`bodega_${bodegaId}`]) {
+        punto[`bodega_${bodegaId}`] = acumuladoActual
       }
-      if (new Date(lecturaActual.fecha_hora) > new Date(bodegaData.ultimaFecha)) {
-        bodegaData.ultimaFecha = lecturaActual.fecha_hora
-        bodegaData.ultimoAcumulado = acumuladoActual
-      }
-    }
+    })
     
-    // Convertir mapa a array y ordenar por total cargado
+    // Convertir a array y ordenar por timestamp
+    return Array.from(puntosPorHora.values()).sort((a, b) => a.timestamp - b.timestamp)
+  }, [exportaciones, productoActivo])
+
+  // =====================================================
+  // LÓGICA CORREGIDA PARA RESUMEN POR BODEGA
+  // CADA BODEGA MANTIENE SU ACUMULADO INDEPENDIENTE
+  // EL ACUMULADO GLOBAL ES LA SUMA DE LOS ACUMULADOS DE CADA BODEGA
+  // =====================================================
+  
+  // Primero, calcular los acumulados por bodega (independientes)
+  const acumuladosPorBodega = useMemo(() => {
+    if (!productoActivo) return new Map()
+    
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+    const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    
+    // Mapa para almacenar el ÚLTIMO acumulado registrado para cada bodega
+    const ultimoAcumuladoPorBodega = new Map()
+    
+    // Recorrer todas las lecturas en orden cronológico
+    ordenadas.forEach(lectura => {
+      const bodegaId = lectura.bodega_id
+      const acumuladoLeido = Number(lectura.acumulado_tm) || 0
+      
+      // Simplemente actualizar el último valor registrado para esta bodega
+      // Esto permite que cuando se vuelva a una bodega, se retome desde donde quedó
+      ultimoAcumuladoPorBodega.set(bodegaId, acumuladoLeido)
+    })
+    
+    return ultimoAcumuladoPorBodega
+  }, [exportaciones, productoActivo])
+  
+  // Calcular el total global como la SUMA de los acumulados de todas las bodegas
+  const totalGeneral = useMemo(() => {
+    let suma = 0
+    acumuladosPorBodega.forEach((valor) => {
+      suma += valor
+    })
+    return suma
+  }, [acumuladosPorBodega])
+  
+  // Construir el resumen por bodega con los acumulados actuales
+  const resumenPorBodega = useMemo(() => {
+    if (!productoActivo) return []
+    
     const resultado = []
-    bodegasMap.forEach((data) => {
+    acumuladosPorBodega.forEach((acumulado, bodegaId) => {
+      const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodegaId)
       resultado.push({
-        bodega_id: data.bodega_id,
-        nombre: data.nombre,
-        codigo: data.codigo,
-        totalCargado: data.totalCargado,
-        lecturas: data.lecturas.length,
-        primeraLectura: data.lecturas[0],
-        ultimaLectura: data.lecturas[data.lecturas.length - 1],
-        fechaInicio: data.primeraFecha,
-        fechaFin: data.ultimaFecha
+        bodega_id: bodegaId,
+        nombre: bodegaInfo?.nombre || `Bodega ${bodegaId}`,
+        codigo: bodegaInfo?.codigo || `BDG-${bodegaId}`,
+        color: bodegaInfo?.color || '#3b82f6',
+        acumuladoActual: acumulado, // Este es el acumulado INDEPENDIENTE de la bodega
+        // Determinar si es la bodega activa (último registro)
+        activa: (() => {
+          const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+          if (exportacionesProd.length === 0) return false
+          const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+          const ultimoRegistro = ordenadas[ordenadas.length - 1]
+          return ultimoRegistro?.bodega_id === bodegaId
+        })(),
+        lecturas: exportaciones.filter(e => e.producto_id === productoActivo.id && e.bodega_id === bodegaId).length
       })
     })
     
-    return resultado.sort((a, b) => b.totalCargado - a.totalCargado)
-  }, [exportaciones, productoActivo])
-
-  const totalGeneral = useMemo(() => {
-    if (!productoActivo) return 0
-    
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-    
-    if (exportacionesProd.length === 0) return 0
-    
-    const ordenadas = [...exportacionesProd].sort(
-      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-    )
-    
-    const ultimoRegistro = ordenadas[ordenadas.length - 1]
-    return Number(ultimoRegistro.acumulado_tm) || 0
-  }, [exportaciones, productoActivo])
+    return resultado.sort((a, b) => b.acumuladoActual - a.acumuladoActual)
+  }, [acumuladosPorBodega, exportaciones, productoActivo])
+  
+  // Calcular el flujo para cada bodega
+  // Flujo = Acumulado Global - Acumulado de la bodega actual (para la bodega activa)
+  // Para bodegas inactivas, el flujo es su propio acumulado
+  const flujoPorBodega = useMemo(() => {
+    return resumenPorBodega.map(bodega => {
+      let flujo = 0
+      if (bodega.activa) {
+        // Para la bodega activa: FLUJO = Acumulado Global - Acumulado de esta bodega
+        flujo = Math.max(0, totalGeneral - bodega.acumuladoActual)
+      } else {
+        // Para bodegas ya terminadas: FLUJO = Acumulado de la bodega (ya terminaron)
+        flujo = bodega.acumuladoActual
+      }
+      
+      return {
+        ...bodega,
+        flujo: flujo
+      }
+    })
+  }, [resumenPorBodega, totalGeneral])
 
   const faltaPorCargar = useMemo(() => {
     if (!productoActivo || !barco?.metas_json?.limites?.[productoActivo.codigo]) return 0
@@ -1468,6 +1600,27 @@ export default function ExportacionPage() {
   const exportacionesFiltradas = exportaciones.filter(e => e.producto_id === productoActivo?.id)
   const bitacoraFiltrada = bitacora.filter(b => b.producto_id === productoActivo?.id)
 
+  // Generar líneas para la gráfica por bodega
+  const lineasGrafica = BODEGAS_BARCO.filter(bodega => {
+    // Solo mostrar bodegas que tienen datos
+    return resumenPorBodega.some(rb => rb.bodega_id === bodega.id) || 
+           exportacionesFiltradas.some(e => e.bodega_id === bodega.id)
+  }).map(bodega => {
+    const bodegaInfo = resumenPorBodega.find(rb => rb.bodega_id === bodega.id)
+    return (
+      <Line
+        key={bodega.id}
+        type="monotone"
+        dataKey={`bodega_${bodega.id}`}
+        name={`${bodega.nombre} (${bodega.codigo}) - ${bodegaInfo?.acumuladoActual?.toFixed(1) || 0} TM`}
+        stroke={bodega.color}
+        strokeWidth={2}
+        dot={{ r: 3, fill: bodega.color }}
+        activeDot={{ r: 5 }}
+      />
+    )
+  })
+
   return (
     <div className="min-h-screen bg-[#0f172a] p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -1671,27 +1824,34 @@ export default function ExportacionPage() {
           paroEditando={null}
         />
 
-        {/* LISTADO DE PAROS REGISTRADOS */}
+        {/* LISTADO DE PAROS REGISTRADOS - VERSIÓN DESPLEGABLE */}
         {registrosParos.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <PauseCircle className="w-5 h-5 text-red-400" />
-                Paros Registrados ({registrosParos.length})
-              </h2>
+                <h2 className="text-xl font-bold text-white">
+                  Paros Registrados 
+                  <span className="ml-2 text-sm font-normal text-slate-400">
+                    ({registrosParos.length} paros · 
+                    {registrosParos.reduce((sum, p) => sum + (p.duracion_minutos || 0), 0) > 0 && (
+                      ` ${Math.floor(registrosParos.reduce((sum, p) => sum + (p.duracion_minutos || 0), 0) / 60)}h ` +
+                      `${registrosParos.reduce((sum, p) => sum + (p.duracion_minutos || 0), 0) % 60}m total`
+                    )}
+                    {registrosParos.filter(p => !p.hora_fin).length > 0 && (
+                      ` · ${registrosParos.filter(p => !p.hora_fin).length} en curso`
+                    )}
+                  </span>
+                </h2>
+              </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {registrosParos.map(paro => (
-                <ParoCard
-                  key={paro.id}
-                  paro={paro}
-                  catalogosParos={catalogosParos}
-                  onEditar={handleEditarParo}
-                  onEliminar={handleEliminarParo}
-                />
-              ))}
-            </div>
+            <ListaParosDesplegable 
+              registrosParos={registrosParos}
+              catalogosParos={catalogosParos}
+              onEditar={handleEditarParo}
+              onEliminar={handleEliminarParo}
+            />
           </div>
         )}
 
@@ -1722,7 +1882,7 @@ export default function ExportacionPage() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-black text-white">
-                  {estadisticasProducto.totalTM.toFixed(3)} TM
+                  {totalGeneral.toFixed(3)} TM
                 </p>
                 <div className="flex gap-3 text-sm text-slate-400">
                   <span>📊 {estadisticasProducto.lecturas} lecturas</span>
@@ -1743,7 +1903,7 @@ export default function ExportacionPage() {
                   <div className="bg-slate-900 rounded-xl p-4">
                     <p className="text-xs text-slate-500">Cargado</p>
                     <p className="text-xl font-bold text-blue-400">
-                      {estadisticasProducto.totalTM.toFixed(3)} TM
+                      {totalGeneral.toFixed(3)} TM
                     </p>
                   </div>
                   
@@ -1753,7 +1913,7 @@ export default function ExportacionPage() {
                       {faltaPorCargar.toFixed(3)} TM
                     </p>
                     <p className="text-[10px] text-slate-500 mt-1">
-                      {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}% completado
+                      {((totalGeneral / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}% completado
                     </p>
                   </div>
                   
@@ -1763,13 +1923,13 @@ export default function ExportacionPage() {
                       <div className="flex mb-2 items-center justify-between">
                         <div>
                           <span className="text-xs font-semibold inline-block text-green-400">
-                            {((estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
+                            {((totalGeneral / barco.metas_json.limites[productoActivo.codigo]) * 100).toFixed(1)}%
                           </span>
                         </div>
                       </div>
                       <div className="overflow-hidden h-2 text-xs flex rounded bg-slate-700">
                         <div
-                          style={{ width: `${Math.min(100, (estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` }}
+                          style={{ width: `${Math.min(100, (totalGeneral / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` }}
                           className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-gradient-to-r from-green-500 to-green-400"
                         />
                       </div>
@@ -1813,7 +1973,7 @@ export default function ExportacionPage() {
                   <p className="text-sm font-bold text-white">Progreso de Carga</p>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-green-400">
-                      {estadisticasProducto.totalTM.toFixed(1)} TM cargadas
+                      {totalGeneral.toFixed(1)} TM cargadas
                     </span>
                     <span className="text-xs text-orange-400 font-bold">
                       {faltaPorCargar.toFixed(1)} TM por cargar
@@ -1824,7 +1984,7 @@ export default function ExportacionPage() {
                   <div 
                     className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-500"
                     style={{ 
-                      width: `${Math.min(100, (estadisticasProducto.totalTM / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` 
+                      width: `${Math.min(100, (totalGeneral / barco.metas_json.limites[productoActivo.codigo]) * 100)}%` 
                     }}
                   />
                 </div>
@@ -1837,151 +1997,208 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Gráfico de tendencia */}
-        {productoActivo && datosGraficoFlujo.length > 1 && (
+        {/* NUEVA GRÁFICA POR BODEGA */}
+        {productoActivo && datosGraficoPorBodega.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <LineChart className="w-5 h-5 text-blue-400" />
-              Tendencia de Carga - {productoActivo.nombre}
+              Tendencia de Carga por Bodega - {productoActivo.nombre}
               <span className="text-sm font-normal text-slate-500 ml-2">
-                Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
+                Acumulado por bodega a lo largo del tiempo
               </span>
             </h3>
             
-            <div className="h-80 w-full">
+            <div className="h-96 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ReLineChart data={datosGraficoFlujo} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <ReLineChart data={datosGraficoPorBodega} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="hora" stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
-                  <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
+                  <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }} label={{ value: 'Toneladas (TM)', angle: -90, position: 'insideLeft', fill: '#94a3b8' }} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
                     labelStyle={{ color: '#94a3b8' }}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="acumulado" 
-                    stroke="#3b82f6" 
-                    name="Acumulado Total (TM)" 
-                    dot={{ r: 4, fill: '#3b82f6' }}
-                    strokeWidth={2}
+                  <Legend 
+                    wrapperStyle={{ color: '#94a3b8' }}
+                    formatter={(value) => <span style={{ color: '#94a3b8' }}>{value}</span>}
                   />
+                  {lineasGrafica}
                 </ReLineChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-slate-900 rounded-lg p-3">
-                <p className="text-xs text-slate-500">Primera lectura</p>
-                <p className="text-sm font-bold text-white">
-                  {datosGraficoFlujo[0]?.hora}
-                </p>
-              </div>
-              <div className="bg-slate-900 rounded-lg p-3">
-                <p className="text-xs text-slate-500">Última lectura</p>
-                <p className="text-sm font-bold text-white">
-                  {datosGraficoFlujo[datosGraficoFlujo.length - 1]?.hora}
-                </p>
-              </div>
-              <div className="bg-slate-900 rounded-lg p-3">
-                <p className="text-xs text-slate-500">Total acumulado</p>
-                <p className="text-lg font-bold text-blue-400">
-                  {datosGraficoFlujo[datosGraficoFlujo.length - 1]?.acumulado.toFixed(3)} TM
-                </p>
-              </div>
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+              {resumenPorBodega.map(bodega => {
+                const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
+                return (
+                  <div key={bodega.bodega_id} className="bg-slate-900 rounded-lg p-2 text-center">
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bodegaInfo?.color }} />
+                      <span className="text-xs font-bold text-white">{bodega.nombre}</span>
+                    </div>
+                    <p className="text-sm font-bold text-blue-400">{bodega.acumuladoActual.toFixed(1)} TM</p>
+                    <p className="text-[10px] text-slate-500">{bodega.lecturas} lecturas</p>
+                  </div>
+                )
+              })}
             </div>
 
-            {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
-              <div className="mt-4 bg-slate-900/50 rounded-lg p-3 border border-orange-500/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-orange-400" />
-                    <span className="text-sm text-slate-300">Meta:</span>
-                    <span className="font-bold text-white">
-                      {barco.metas_json.limites[productoActivo.codigo].toFixed(3)} TM
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-300">Falta:</span>
-                    <span className="font-bold text-orange-400">
-                      {faltaPorCargar.toFixed(3)} TM
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="mt-4 bg-slate-900/50 rounded-lg p-3 border border-blue-500/20">
+              <p className="text-xs text-slate-400 mb-2">📊 Interpretación de la gráfica:</p>
+              <p className="text-xs text-slate-300">
+                Cada línea representa el acumulado de una bodega a lo largo del tiempo. 
+                Cuando se cambia de bodega, la línea de la bodega anterior se estabiliza y la nueva bodega comienza a crecer.
+                El total global es la suma de todas las bodegas en cualquier momento.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA */}
+                {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA - VERSIÓN FINAL */}
         {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <Layers className="w-5 h-5 text-green-400" />
-              Carga por Bodega del Barco
+              Resumen por Bodega - {productoActivo.nombre}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resumenPorBodega.map(bodega => (
-                <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="bg-green-500/20 p-2 rounded-lg">
-                      <Layers className="w-4 h-4 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">{bodega.nombre}</p>
-                      <p className="text-xs text-green-400">{bodega.codigo}</p>
-                    </div>
-                  </div>
+              {resumenPorBodega.map(bodega => {
+                const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
+                
+                // Calcular flujo REAL de la bodega activa (últimos registros)
+                let flujoActual = 0
+                let flujoPromedioHistorial = 0
+                
+                if (bodega.activa) {
+                  // Para la bodega activa: calcular flujo con los últimos 2 registros de ESTA bodega
+                  const lecturasBodega = exportacionesFiltradas
+                    .filter(e => e.bodega_id === bodega.bodega_id)
+                    .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
                   
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Total cargado:</span>
-                      <span className="font-bold text-green-400">{bodega.totalCargado.toFixed(3)} TM</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Lecturas:</span>
-                      <span className="font-bold text-white">{bodega.lecturas}</span>
-                    </div>
-                    {bodega.ultimaLectura && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Última lectura:</span>
-                        <span className="font-bold text-white">
-                          {formatUTCToSV(bodega.ultimaLectura.fecha_hora, 'DD/MM HH:mm')}
+                  if (lecturasBodega.length >= 2) {
+                    const ultima = lecturasBodega[lecturasBodega.length - 1]
+                    const anterior = lecturasBodega[lecturasBodega.length - 2]
+                    const horas = (new Date(ultima.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
+                    const delta = (Number(ultima.acumulado_tm) || 0) - (Number(anterior.acumulado_tm) || 0)
+                    if (horas > 0 && delta > 0) {
+                      flujoActual = delta / horas
+                    }
+                  }
+                  
+                  // Calcular flujo promedio histórico de esta bodega
+                  if (lecturasBodega.length >= 2) {
+                    const primera = lecturasBodega[0]
+                    const ultima = lecturasBodega[lecturasBodega.length - 1]
+                    const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+                    if (horasTotal > 0 && bodega.acumuladoActual > 0) {
+                      flujoPromedioHistorial = bodega.acumuladoActual / horasTotal
+                    }
+                  }
+                } else {
+                  // Para bodegas inactivas: calcular su flujo promedio histórico (mientras estuvieron activas)
+                  const lecturasBodega = exportacionesFiltradas
+                    .filter(e => e.bodega_id === bodega.bodega_id)
+                    .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+                  
+                  if (lecturasBodega.length >= 2) {
+                    const primera = lecturasBodega[0]
+                    const ultima = lecturasBodega[lecturasBodega.length - 1]
+                    const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+                    if (horasTotal > 0 && bodega.acumuladoActual > 0) {
+                      flujoPromedioHistorial = bodega.acumuladoActual / horasTotal
+                    }
+                  }
+                }
+                
+                return (
+                  <div key={bodega.bodega_id} className={`bg-slate-900 rounded-xl p-4 border-2 transition-all ${
+                    bodega.activa ? 'border-green-500/50 shadow-lg shadow-green-500/10' : 'border-white/10'
+                  }`}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`p-2 rounded-lg ${bodega.activa ? 'bg-green-500/30 animate-pulse' : 'bg-green-500/20'}`}>
+                        <Layers className={`w-4 h-4 ${bodega.activa ? 'text-green-300' : 'text-green-400'}`} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-white">{bodega.nombre}</p>
+                        <p className="text-xs text-green-400">{bodega.codigo}</p>
+                      </div>
+                      {bodega.activa && (
+                        <span className="ml-auto text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                          ACTIVA
                         </span>
+                      )}
+                      {!bodega.activa && bodega.acumuladoActual > 0 && (
+                        <span className="ml-auto text-[10px] bg-slate-500/30 text-slate-400 px-2 py-0.5 rounded-full font-bold">
+                          COMPLETADA
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">📦 Total cargado en bodega:</span>
+                        <span className="font-bold text-blue-400">{bodega.acumuladoActual.toFixed(3)} TM</span>
                       </div>
-                    )}
-                    {bodega.lecturas > 1 && (
-                      <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-white/10">
-                        <p>Inicio: {formatUTCToSV(bodega.fechaInicio, 'DD/MM HH:mm')}</p>
-                        <p>Fin: {formatUTCToSV(bodega.fechaFin, 'DD/MM HH:mm')}</p>
+                      
+                      {bodega.activa && flujoActual > 0 && (
+                        <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2 -mx-1">
+                          <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
+                          <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
+                        </div>
+                      )}
+                      
+                      {flujoPromedioHistorial > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">📊 Flujo promedio histórico:</span>
+                          <span className="font-bold text-cyan-400">{flujoPromedioHistorial.toFixed(3)} TM/h</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-white/10">
+                        <span>📝 {bodega.lecturas} lecturas</span>
+                        {bodega.activa ? (
+                          <span className="text-green-500">● En progreso</span>
+                        ) : bodega.acumuladoActual > 0 ? (
+                          <span className="text-slate-500">✓ Finalizada</span>
+                        ) : (
+                          <span className="text-slate-600">○ Sin carga</span>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
             
             {/* VERIFICACIÓN DE CONSISTENCIA */}
             <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-2">🔍 Verificación de datos:</p>
-              <div className="flex justify-between text-sm">
-                <span>Suma por bodegas:</span>
-                <span className="font-bold text-yellow-400">
-                  {resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0).toFixed(3)} TM
-                </span>
+              <p className="text-xs text-slate-400 mb-2">📊 Resumen de carga:</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="flex justify-between text-sm">
+                  <span>🎯 Total acumulado global:</span>
+                  <span className="font-bold text-blue-400">{totalGeneral.toFixed(3)} TM</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>🔢 Suma acumulados por bodega:</span>
+                  <span className="font-bold text-green-400">
+                    {resumenPorBodega.reduce((sum, b) => sum + b.acumuladoActual, 0).toFixed(3)} TM
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>📍 Bodega activa actual:</span>
+                  <span className="font-bold text-yellow-400">
+                    {resumenPorBodega.find(b => b.activa)?.nombre || 'Ninguna'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>Total acumulado general:</span>
-                <span className="font-bold text-blue-400">
-                  {totalGeneral.toFixed(3)} TM
-                </span>
+              
+              {/* Leyenda de flujos */}
+              <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-500 flex flex-wrap gap-3">
+                <span>📖 Leyenda:</span>
+                <span>• <span className="text-blue-300">FLUJO ACTUAL</span>: Velocidad de carga en este momento (últimos 2 registros)</span>
+                <span>• <span className="text-cyan-400">Flujo promedio histórico</span>: Promedio desde que empezó la bodega</span>
               </div>
-              {Math.abs(resumenPorBodega.reduce((sum, b) => sum + b.totalCargado, 0) - totalGeneral) < 0.01 && totalGeneral > 0 ? (
-                <p className="text-green-400 text-xs mt-1">✅ Los datos coinciden correctamente</p>
-              ) : (
-                <p className="text-orange-400 text-xs mt-1">⚠️ Los datos no coinciden, revisar lógica</p>
-              )}
             </div>
           </div>
         )}
@@ -2024,7 +2241,7 @@ export default function ExportacionPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Acumulado (TM) *</label>
+              <label className="block text-xs text-slate-400 mb-1">Acumulado de la Bodega (TM) *</label>
               <input
                 type="number"
                 step="0.001"
@@ -2032,8 +2249,11 @@ export default function ExportacionPage() {
                 value={nuevaExportacion.acumulado_tm}
                 onChange={handleExportacionChange}
                 className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-                placeholder="150.000"
+                placeholder="Ej: 150.000"
               />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Cantidad TOTAL cargada en ESTA bodega hasta este momento
+              </p>
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Bodega *</label>
@@ -2088,7 +2308,7 @@ export default function ExportacionPage() {
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
               <h3 className="font-bold text-white">
-                Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length})
+                Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length} registros)
                 <span className="text-sm font-normal text-slate-500 ml-2">
                   Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
                 </span>
@@ -2100,138 +2320,107 @@ export default function ExportacionPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado (TM)</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Flujo (TM/h)</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {exportacionesFiltradas.map((exp, index, array) => {
-                    const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-                    
-                    const todasOrdenadas = [...exportacionesFiltradas].sort(
-                      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-                    )
-                    
-                    const indiceGlobal = todasOrdenadas.findIndex(e => e.id === exp.id)
-                    const lecturaAnterior = indiceGlobal > 0 ? todasOrdenadas[indiceGlobal - 1] : null
-                    
-                    let flujo = 0
-                    let delta = 0
-                    let tiempoHoras = 0
-                    
-                    if (lecturaAnterior) {
-                      const tiempoMs = new Date(exp.fecha_hora) - new Date(lecturaAnterior.fecha_hora)
-                      tiempoHoras = tiempoMs / (1000 * 60 * 60)
-                      delta = Number(exp.acumulado_tm) - Number(lecturaAnterior.acumulado_tm)
+                  {[...exportacionesFiltradas]
+                    .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
+                    .map((exp, idx, arr) => {
+                      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+                      const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+                      const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+                      const horaNum = parseInt(horaSV.split(':')[0])
                       
-                      if (tiempoHoras > 0 && delta > 0) {
-                        flujo = delta / tiempoHoras
+                      let turno = '—'
+                      if (horaNum >= 6 && horaNum < 18) {
+                        turno = '6:00 - 18:00'
+                      } else {
+                        turno = '18:00 - 6:00'
                       }
-                    }
-                    
-                    const cambioBodega = lecturaAnterior && lecturaAnterior.bodega_id !== exp.bodega_id
-                    
-                    const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
-                    const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
-                    const horaNum = parseInt(horaSV.split(':')[0])
-                    
-                    let turno = '—'
-                    if (horaNum >= 6 && horaNum < 18) {
-                      turno = '6:00 - 18:00'
-                    } else {
-                      turno = '18:00 - 6:00'
-                    }
-                    
-                    return (
-                      <tr key={exp.id} className="hover:bg-white/5">
-                        <td className="px-4 py-3">
-                          <div>{fechaSV}</div>
-                          <div className="text-xs text-slate-500">{horaSV}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            turno === '6:00 - 18:00' 
-                              ? 'bg-yellow-500/20 text-yellow-400' 
-                              : 'bg-blue-500/20 text-blue-400'
-                          }`}>
-                            {turno}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-bold text-blue-400">{exp.acumulado_tm?.toFixed(3)}</td>
-                        <td className="px-4 py-3">
-                          {flujo > 0 ? (
-                            <div>
-                              <span className="font-bold text-green-400">{flujo.toFixed(3)}</span>
-                              {cambioBodega && (
-                                <span className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full">
-                                  Cambio bodega
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-500 ml-1 block">
-                                (+{delta.toFixed(3)} en {tiempoHoras.toFixed(1)}h)
-                              </span>
+                      
+                      // Calcular flujo
+                      let flujo = 0
+                      if (idx < arr.length - 1) {
+                        const siguiente = arr[idx + 1]
+                        const tiempoHoras = (new Date(exp.fecha_hora) - new Date(siguiente.fecha_hora)) / (1000 * 60 * 60)
+                        const delta = Number(exp.acumulado_tm) - Number(siguiente.acumulado_tm)
+                        if (tiempoHoras > 0 && delta > 0) {
+                          flujo = delta / tiempoHoras
+                        }
+                      }
+                      
+                      return (
+                        <tr key={exp.id} className="hover:bg-white/5">
+                          <td className="px-4 py-3">
+                            <div>{fechaSV}</div>
+                            <div className="text-xs text-slate-500">{horaSV}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              turno === '6:00 - 18:00' 
+                                ? 'bg-yellow-500/20 text-yellow-400' 
+                                : 'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {turno}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400">
+                            {(exp.acumulado_tm || 0).toFixed(3)} TM
+                          </td>
+                          <td className="px-4 py-3 font-bold text-green-400">
+                            {flujo > 0 ? `${flujo.toFixed(3)} TM/h` : '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {bodega ? (
+                              <div>
+                                <p className="text-white">{bodega.nombre}</p>
+                                <p className="text-xs text-green-400">{bodega.codigo}</p>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditarExportacion(exp)}
+                                className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-4 h-4 text-blue-400" />
+                              </button>
+                              <button
+                                onClick={() => handleEliminarExportacion(exp.id)}
+                                className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
                             </div>
-                          ) : (
-                            <span className="text-slate-600">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {bodega ? (
-                            <div>
-                              <p className="text-white">{bodega.nombre}</p>
-                              <p className="text-xs text-green-400">{bodega.codigo}</p>
-                              {cambioBodega && lecturaAnterior && (
-                                <p className="text-[10px] text-yellow-500 mt-1">
-                                  ← {BODEGAS_BARCO.find(b => b.id === lecturaAnterior.bodega_id)?.nombre || '—'}
-                                </p>
-                              )}
-                            </div>
-                          ) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditarExportacion(exp)}
-                              className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-4 h-4 text-blue-400" />
-                            </button>
-                            <button
-                              onClick={() => handleEliminarExportacion(exp.id)}
-                              className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          </td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
                 <tfoot className="bg-slate-900">
-                  <tr>
-                    <td className="px-4 py-3 font-bold text-white" colSpan={2}>TOTAL GENERAL (Último acumulado)</td>
-                    <td className="px-4 py-3 font-bold text-blue-400">
+                  <tr className="bg-orange-500/5">
+                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
+                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
                       {totalGeneral.toFixed(3)} TM
-                    </td>
-                    <td className="px-4 py-3 font-bold text-green-400">
-                      {calcularFlujoBandaPorHora.toFixed(3)} TM/h
                     </td>
                     <td colSpan="3"></td>
                   </tr>
                   {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
                     <tr className="bg-orange-500/5">
                       <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
-                      <td className="px-4 py-3 font-bold text-orange-400">
+                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
                         {faltaPorCargar.toFixed(3)} TM
                       </td>
-                      <td colSpan="4"></td>
+                      <td colSpan="3"></td>
                     </tr>
                   )}
                 </tfoot>
@@ -2239,7 +2428,7 @@ export default function ExportacionPage() {
             </div>
           </div>
         )}
-
+        
         {/* Bitácora */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -2373,7 +2562,7 @@ export default function ExportacionPage() {
       </div>
 
       {/* Modal para editar paro */}
-      {showParoModal && barco && paroEditando && (
+      {showParoModal && barco && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
             <FormularioParoSimple
