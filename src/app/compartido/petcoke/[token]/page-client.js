@@ -56,7 +56,6 @@ function usePetCokeData(token, transporteFiltro = null) {
     try {
       setData(prev => ({ ...prev, loading: true, error: null }))
 
-      // Buscar barco por token
       const { data: barcoData, error: barcoError } = await supabase
         .from('barcos')
         .select('*')
@@ -67,7 +66,6 @@ function usePetCokeData(token, transporteFiltro = null) {
         throw new Error('Barco no encontrado')
       }
 
-      // Buscar producto PC-001
       const { data: productoData, error: productoError } = await supabase
         .from('productos')
         .select('*')
@@ -78,7 +76,6 @@ function usePetCokeData(token, transporteFiltro = null) {
         throw new Error('Producto PET COKE no encontrado')
       }
 
-      // Buscar registros con filtro opcional de transporte
       let query = supabase
         .from('petcoke_registros')
         .select('*')
@@ -120,8 +117,17 @@ function usePetCokeData(token, transporteFiltro = null) {
   return { ...data, refetch: cargar }
 }
 
-// Componente de tarjeta de transporte - AHORA RECIBE LOS PROMEDIOS CALCULADOS
-function TarjetaTransporte({ nombre, promedio, totalNeto, totalViajes, unidadesFuera, isSelected, onClick }) {
+// Componente de tarjeta de transporte - AHORA MUESTRA AMBOS PROMEDIOS
+function TarjetaTransporte({ 
+  nombre, 
+  promedioTraileta, 
+  promedioVolqueta, 
+  totalNeto, 
+  totalViajes, 
+  unidadesFuera, 
+  isSelected, 
+  onClick 
+}) {
   return (
     <div 
       onClick={onClick}
@@ -149,15 +155,36 @@ function TarjetaTransporte({ nombre, promedio, totalNeto, totalViajes, unidadesF
           {totalViajes} viajes
         </div>
       </div>
-      <div style={{ fontSize: '14px', fontWeight: '600', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8', marginBottom: '8px' }}>
+      
+      <div style={{ fontSize: '18px', fontWeight: '800', color: 'white', marginBottom: '16px' }}>
         {nombre}
       </div>
-      <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', fontFamily: 'DM Mono, monospace', marginBottom: '8px' }}>
-        {fmtTM(promedio, 2)} <span style={{ fontSize: '14px', fontWeight: 'normal' }}>TM/viaje</span>
+      
+      {/* AMBOS PROMEDIOS */}
+      <div style={{ 
+        background: isSelected ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.3)', 
+        borderRadius: '12px', 
+        padding: '12px',
+        marginBottom: '12px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8' }}>🚛 TRAILETA</span>
+          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#f97316', fontFamily: 'DM Mono, monospace' }}>
+            {fmtTM(promedioTraileta, 2)} <span style={{ fontSize: '11px' }}>TM/viaje</span>
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8' }}>🚛 VOLQUETA</span>
+          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#4ade80', fontFamily: 'DM Mono, monospace' }}>
+            {fmtTM(promedioVolqueta, 2)} <span style={{ fontSize: '11px' }}>TM/viaje</span>
+          </span>
+        </div>
       </div>
+      
       <div style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
         Total: {fmtTM(totalNeto, 2)} TM
       </div>
+      
       {unidadesFuera > 0 && (
         <div style={{ 
           marginTop: '12px', 
@@ -179,15 +206,6 @@ export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado)
-
-  // Calcular estadísticas de todos los registros (SIN FILTRO) para las tarjetas
-  const estadisticasGlobales = useMemo(() => {
-    // Esta función se ejecuta con los registros filtrados, necesitamos obtener los globales
-    // Para eso, hacemos una consulta aparte o usamos useEffect. Por simplicidad, vamos a calcular
-    // los promedios de TRAILETA y VOLQUETA desde los registros actuales, pero si hay filtro,
-    // necesitamos los datos originales. Usaremos una variable global.
-    return { promedioTraileta: 0, promedioVolqueta: 0, totalTraileta: 0, totalVolqueta: 0, viajesTraileta: 0, viajesVolqueta: 0, fueraTraileta: 0, fueraVolqueta: 0 }
-  }, [])
 
   // Estado para almacenar los datos globales (sin filtrar) para las tarjetas
   const [datosGlobales, setDatosGlobales] = useState({
@@ -387,7 +405,7 @@ export default function ClientPage({ token }) {
         .alm-refresh-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-        .alm-tarjetas-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 28px; }
+        .alm-tarjetas-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 28px; }
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
         .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--orange); }
@@ -418,10 +436,6 @@ export default function ClientPage({ token }) {
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
         .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
-        .alm-patio-stats { display: flex; gap: 16px; margin-top: 16px; }
-        .alm-patio-card { flex: 1; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; }
-        .alm-patio-norte { border-bottom: 3px solid #3b82f6; }
-        .alm-patio-sur { border-bottom: 3px solid #22c55e; }
         .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -462,13 +476,14 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* TARJETAS DE TRANSPORTE - AHORA CON LOS PROMEDIOS CORRECTOS */}
+          {/* TARJETAS DE TRANSPORTE - CADA UNA MUESTRA AMBOS PROMEDIOS */}
           <div className="alm-tarjetas-row">
             {transportesParaTarjetas.map(transporte => (
               <TarjetaTransporte
                 key={transporte}
                 nombre={transporte}
-                promedio={datosGlobales.promedios[transporte]}
+                promedioTraileta={datosGlobales.promedios.TRAILETA}
+                promedioVolqueta={datosGlobales.promedios.VOLQUETA}
                 totalNeto={datosGlobales.totales[transporte]}
                 totalViajes={datosGlobales.viajes[transporte]}
                 unidadesFuera={datosGlobales.fueraRango[transporte]}
@@ -803,8 +818,6 @@ export default function ClientPage({ token }) {
             🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
             <br />
             <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</span>
-            <br />
-            <span style={{ color: '#f97316' }}>📊 PROMEDIO TRAILETA: {fmtTM(datosGlobales.promedios.TRAILETA, 2)} TM/viaje | PROMEDIO VOLQUETA: {fmtTM(datosGlobales.promedios.VOLQUETA, 2)} TM/viaje</span>
           </div>
         </div>
       </div>
