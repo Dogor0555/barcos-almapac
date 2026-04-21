@@ -939,26 +939,7 @@ export default function ClientPage({ token }) {
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
             </div>
 
-            <div className="alm-chart-card">
-              <div className="alm-chart-title"><span>📊</span> Distribución de Pesos Netos</div>
-              {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#94a3b8' }} domain={[PESO_MINIMO - 5, PESO_MAXIMO + 5]} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
-                    <Bar dataKey="peso" fill="#f97316" radius={[4, 4, 0, 0]}>
-                      {estadisticas.acumuladoPorCorrelativo.map((entry, idx) => (
-                        <Cell key={idx} fill={entry.fueraRango ? '#ef4444' : '#f97316'} />
-                      ))}
-                    </Bar>
-                    <ReferenceLine y={PESO_MINIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Mín ${PESO_MINIMO}`, fill: '#22c55e', fontSize: 10 }} />
-                    <ReferenceLine y={PESO_MAXIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Máx ${PESO_MAXIMO}`, fill: '#22c55e', fontSize: 10 }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
-            </div>
+           
           </div>
 
           {/* Tabla de registros */}
