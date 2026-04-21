@@ -120,16 +120,8 @@ function usePetCokeData(token, transporteFiltro = null) {
   return { ...data, refetch: cargar }
 }
 
-// Componente de tarjeta de transporte
-function TarjetaTransporte({ nombre, registros, isSelected, onClick }) {
-  // Calcular promedio TM/viaje
-  const viajes = registros.filter(r => r.transporte === nombre)
-  const totalNeto = viajes.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-  const promedio = viajes.length > 0 ? totalNeto / viajes.length : 0
-  
-  // Unidades fuera de rango para este transporte
-  const unidadesFuera = viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
-  
+// Componente de tarjeta de transporte - AHORA RECIBE LOS PROMEDIOS CALCULADOS
+function TarjetaTransporte({ nombre, promedio, totalNeto, totalViajes, unidadesFuera, isSelected, onClick }) {
   return (
     <div 
       onClick={onClick}
@@ -154,7 +146,7 @@ function TarjetaTransporte({ nombre, registros, isSelected, onClick }) {
           fontWeight: 'bold',
           color: isSelected ? 'white' : '#f97316'
         }}>
-          {viajes.length} viajes
+          {totalViajes} viajes
         </div>
       </div>
       <div style={{ fontSize: '14px', fontWeight: '600', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8', marginBottom: '8px' }}>
@@ -166,7 +158,7 @@ function TarjetaTransporte({ nombre, registros, isSelected, onClick }) {
       <div style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
         Total: {fmtTM(totalNeto, 2)} TM
       </div>
-      {unidadesFuera.length > 0 && (
+      {unidadesFuera > 0 && (
         <div style={{ 
           marginTop: '12px', 
           fontSize: '11px', 
@@ -176,7 +168,7 @@ function TarjetaTransporte({ nombre, registros, isSelected, onClick }) {
           borderRadius: '8px',
           display: 'inline-block'
         }}>
-          ⚠️ {unidadesFuera.length} fuera de rango
+          ⚠️ {unidadesFuera} fuera de rango
         </div>
       )}
     </div>
@@ -188,14 +180,77 @@ export default function ClientPage({ token }) {
   
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado)
 
-  // Obtener lista de transportes únicos
-  const transportesUnicos = useMemo(() => {
-    const transportes = new Set()
-    registros.forEach(r => {
-      if (r.transporte) transportes.add(r.transporte)
-    })
-    return Array.from(transportes).sort()
-  }, [registros])
+  // Calcular estadísticas de todos los registros (SIN FILTRO) para las tarjetas
+  const estadisticasGlobales = useMemo(() => {
+    // Esta función se ejecuta con los registros filtrados, necesitamos obtener los globales
+    // Para eso, hacemos una consulta aparte o usamos useEffect. Por simplicidad, vamos a calcular
+    // los promedios de TRAILETA y VOLQUETA desde los registros actuales, pero si hay filtro,
+    // necesitamos los datos originales. Usaremos una variable global.
+    return { promedioTraileta: 0, promedioVolqueta: 0, totalTraileta: 0, totalVolqueta: 0, viajesTraileta: 0, viajesVolqueta: 0, fueraTraileta: 0, fueraVolqueta: 0 }
+  }, [])
+
+  // Estado para almacenar los datos globales (sin filtrar) para las tarjetas
+  const [datosGlobales, setDatosGlobales] = useState({
+    registrosGlobales: [],
+    promedios: { TRAILETA: 0, VOLQUETA: 0 },
+    totales: { TRAILETA: 0, VOLQUETA: 0 },
+    viajes: { TRAILETA: 0, VOLQUETA: 0 },
+    fueraRango: { TRAILETA: 0, VOLQUETA: 0 }
+  })
+
+  // Cargar datos globales (sin filtro) para las tarjetas
+  useEffect(() => {
+    const cargarGlobales = async () => {
+      try {
+        const { data: barcoData } = await supabase
+          .from('barcos')
+          .select('id')
+          .eq('token_compartido', token)
+          .single()
+
+        if (barcoData) {
+          const { data: registrosGlobales } = await supabase
+            .from('petcoke_registros')
+            .select('*')
+            .eq('barco_id', barcoData.id)
+
+          if (registrosGlobales) {
+            const viajesTraileta = registrosGlobales.filter(r => r.transporte === 'TRAILETA')
+            const viajesVolqueta = registrosGlobales.filter(r => r.transporte === 'VOLQUETA')
+            
+            const totalTraileta = viajesTraileta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+            const totalVolqueta = viajesVolqueta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+            
+            const fueraTraileta = viajesTraileta.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length
+            const fueraVolqueta = viajesVolqueta.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length
+
+            setDatosGlobales({
+              registrosGlobales,
+              promedios: {
+                TRAILETA: viajesTraileta.length > 0 ? totalTraileta / viajesTraileta.length : 0,
+                VOLQUETA: viajesVolqueta.length > 0 ? totalVolqueta / viajesVolqueta.length : 0
+              },
+              totales: {
+                TRAILETA: totalTraileta,
+                VOLQUETA: totalVolqueta
+              },
+              viajes: {
+                TRAILETA: viajesTraileta.length,
+                VOLQUETA: viajesVolqueta.length
+              },
+              fueraRango: {
+                TRAILETA: fueraTraileta,
+                VOLQUETA: fueraVolqueta
+              }
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando globales:', error)
+      }
+    }
+    cargarGlobales()
+  }, [token])
 
   const estadisticas = useMemo(() => {
     if (!registros.length) return {
@@ -210,9 +265,7 @@ export default function ClientPage({ token }) {
       totalNorte: 0,
       totalSur: 0,
       pesoPromedio: 0,
-      porcentajeDentroRango: 0,
-      promedioTraileta: 0,
-      promedioVolqueta: 0
+      porcentajeDentroRango: 0
     }
 
     const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
@@ -221,22 +274,10 @@ export default function ClientPage({ token }) {
     const pesoPromedio = totalNeto / totalViajes
 
     const porTransporte = {}
-    const viajesTraileta = []
-    const viajesVolqueta = []
-    
     registros.forEach(r => {
       const t = r.transporte || 'DESCONOCIDO'
       porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0)
-      if (t === 'TRAILETA') viajesTraileta.push(r.peso_neto_updp_tm || 0)
-      if (t === 'VOLQUETA') viajesVolqueta.push(r.peso_neto_updp_tm || 0)
     })
-
-    const promedioTraileta = viajesTraileta.length > 0 
-      ? viajesTraileta.reduce((a,b) => a+b, 0) / viajesTraileta.length 
-      : 0
-    const promedioVolqueta = viajesVolqueta.length > 0 
-      ? viajesVolqueta.reduce((a,b) => a+b, 0) / viajesVolqueta.length 
-      : 0
 
     const porDia = {}
     registros.forEach(r => {
@@ -250,7 +291,6 @@ export default function ClientPage({ token }) {
       porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0)
     })
 
-    // Total por patio
     const totalNorte = registros
       .filter(r => r.patio === 'NORTE')
       .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
@@ -259,11 +299,9 @@ export default function ClientPage({ token }) {
       .filter(r => r.patio === 'SUR')
       .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
 
-    // Unidades fuera de rango
     const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
     const porcentajeDentroRango = ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100
 
-    // Acumulado progresivo
     let acumulado = 0
     const acumuladoPorCorrelativo = registros.map(r => {
       acumulado += r.peso_neto_updp_tm || 0
@@ -278,13 +316,13 @@ export default function ClientPage({ token }) {
     return { 
       totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio, 
       acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
-      pesoPromedio, porcentajeDentroRango, promedioTraileta, promedioVolqueta
+      pesoPromedio, porcentajeDentroRango
     }
   }, [registros])
 
   const handleSeleccionarTransporte = (transporte) => {
     if (transporteSeleccionado === transporte) {
-      setTransporteSeleccionado(null) // Deseleccionar si ya está seleccionado
+      setTransporteSeleccionado(null)
     } else {
       setTransporteSeleccionado(transporte)
     }
@@ -327,10 +365,12 @@ export default function ClientPage({ token }) {
   const meta = barco.metas_json?.limites?.['PC-001'] || 0
   const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
-  // Texto del filtro activo
   const filtroActivoTexto = transporteSeleccionado 
-    ? `Mostrando solo ${transporteSeleccionADO}` 
+    ? `Mostrando solo ${transporteSeleccionado}` 
     : 'Mostrando todos los transportes'
+
+  // Obtener los transportes únicos para mostrar las tarjetas
+  const transportesParaTarjetas = ['TRAILETA', 'VOLQUETA'].filter(t => datosGlobales.viajes[t] > 0)
 
   return (
     <>
@@ -411,7 +451,6 @@ export default function ClientPage({ token }) {
         </header>
 
         <div className="alm-body">
-          {/* Filtro activo indicator */}
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <span className="alm-badge alm-badge-filter">
@@ -423,13 +462,16 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* TARJETAS DE TRANSPORTE */}
+          {/* TARJETAS DE TRANSPORTE - AHORA CON LOS PROMEDIOS CORRECTOS */}
           <div className="alm-tarjetas-row">
-            {transportesUnicos.map(transporte => (
+            {transportesParaTarjetas.map(transporte => (
               <TarjetaTransporte
                 key={transporte}
                 nombre={transporte}
-                registros={registros}
+                promedio={datosGlobales.promedios[transporte]}
+                totalNeto={datosGlobales.totales[transporte]}
+                totalViajes={datosGlobales.viajes[transporte]}
+                unidadesFuera={datosGlobales.fueraRango[transporte]}
                 isSelected={transporteSeleccionado === transporte}
                 onClick={() => handleSeleccionarTransporte(transporte)}
               />
@@ -762,7 +804,7 @@ export default function ClientPage({ token }) {
             <br />
             <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</span>
             <br />
-            <span style={{ color: '#f97316' }}>📊 Promedio TRAILETA: {fmtTM(estadisticas.promedioTraileta, 2)} TM/viaje | Promedio VOLQUETA: {fmtTM(estadisticas.promedioVolqueta, 2)} TM/viaje</span>
+            <span style={{ color: '#f97316' }}>📊 PROMEDIO TRAILETA: {fmtTM(datosGlobales.promedios.TRAILETA, 2)} TM/viaje | PROMEDIO VOLQUETA: {fmtTM(datosGlobales.promedios.VOLQUETA, 2)} TM/viaje</span>
           </div>
         </div>
       </div>
