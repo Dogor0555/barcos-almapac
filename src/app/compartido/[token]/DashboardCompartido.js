@@ -3,12 +3,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v25 · DISEÑO PREMIUM
- *  ⚡ CORREGIDO: Cálculos correctos para importación y exportación
- *  ⚡ CORREGIDO: Vista general muestra valores correctos
- *  ⚡ CORREGIDO: Panel de producto muestra valores correctos
- *  ⚡ MEJORADO: Primer producto seleccionado por defecto al cargar
- *  ⚡ NUEVO: Resumen de tiempos de paros para exportación
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v26 · DISEÑO PREMIUM
+ *  ⚡ CORREGIDO PARA EXPORTACIÓN: Total global = SUMA de acumulados por bodega
+ *  ⚡ CORREGIDO: Ya no usa el último registro como total global
+ *  ⚡ CORREGIDO: Flujos calculados correctamente
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -54,7 +52,7 @@ const COLORES_FALLBACK = [
 ];
 
 // ============================================================================
-// HOOK PRINCIPAL
+// HOOK PRINCIPAL - CORREGIDO PARA EXPORTACIÓN
 // ============================================================================
 function useBarcoData(codigoBarco) {
   const [data, setData] = useState({
@@ -206,6 +204,9 @@ function useBarcoData(codigoBarco) {
         };
       });
 
+      // =====================================================
+      // CORRECCIÓN PARA EXPORTACIÓN: Calcular total global como SUMA de acumulados por bodega
+      // =====================================================
       const exportacionesEnriquecidas = (exportaciones || []).map((e, index, array) => {
         let flujo = 0;
         const exportacionesOrdenadas = [...array].sort(
@@ -217,16 +218,20 @@ function useBarcoData(codigoBarco) {
           const expActual = exportacionesOrdenadas[indexOrdenado];
           const expAnterior = exportacionesOrdenadas[indexOrdenado - 1];
 
-          const horaActual = dayjs.utc(expActual.fecha_hora);
-          const horaAnterior = dayjs.utc(expAnterior.fecha_hora);
+          // Solo calcular flujo si es la MISMA bodega
+          if (expActual.bodega_id === expAnterior.bodega_id) {
+            const horaActual = dayjs.utc(expActual.fecha_hora);
+            const horaAnterior = dayjs.utc(expAnterior.fecha_hora);
+            const minutosTranscurridos = horaActual.diff(horaAnterior, 'minute', true);
 
-          const minutosTranscurridos = horaActual.diff(horaAnterior, 'minute', true);
-
-          if (minutosTranscurridos > 0) {
-            const acumuladoActual = expActual.acumulado_tm || 0;
-            const acumuladoAnterior = expAnterior.acumulado_tm || 0;
-            const diferencia = acumuladoActual - acumuladoAnterior;
-            flujo = (diferencia / minutosTranscurridos) * 60;
+            if (minutosTranscurridos > 0) {
+              const acumuladoActual = expActual.acumulado_tm || 0;
+              const acumuladoAnterior = expAnterior.acumulado_tm || 0;
+              const diferencia = acumuladoActual - acumuladoAnterior;
+              if (diferencia > 0) {
+                flujo = (diferencia / minutosTranscurridos) * 60;
+              }
+            }
           }
         }
 
@@ -292,6 +297,35 @@ const pct = (v, t) => (t > 0 ? Math.min(100, (v / t) * 100) : 0);
 function getMetaProducto(metas_json, producto) {
   if (!metas_json?.limites) return 0;
   return Number(metas_json.limites[producto.codigo]) || 0;
+}
+
+// ============================================================================
+// FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
+// ============================================================================
+function calcularTotalGlobalExportacion(exportaciones, productoId) {
+  const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
+  if (exportacionesProducto.length === 0) return 0;
+  
+  // Agrupar por bodega y tomar el último acumulado de cada una
+  const ultimoAcumuladoPorBodega = new Map();
+  
+  exportacionesProducto.forEach(exp => {
+    const bodegaId = exp.bodega_id;
+    const acumulado = exp.acumulado_tm || 0;
+    const existing = ultimoAcumuladoPorBodega.get(bodegaId);
+    
+    if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
+      ultimoAcumuladoPorBodega.set(bodegaId, { acumulado, fecha_hora: exp.fecha_hora });
+    }
+  });
+  
+  // Sumar todos los acumulados
+  let total = 0;
+  ultimoAcumuladoPorBodega.forEach(value => {
+    total += value.acumulado;
+  });
+  
+  return total;
 }
 
 // ============================================================================
@@ -606,7 +640,7 @@ function ResumenParosDashboard({ barcoId }) {
 // ============================================================================
 // COMPONENTE: Panel de Tendencias y Predicciones para Exportación - CORREGIDO
 // ============================================================================
-function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion }) {
+function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion, totalGlobal }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
   const textoAccion = 'CARGAR';
@@ -619,67 +653,102 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     );
   }, [lecturas]);
 
-  // CORREGIDO: El acumulado total ES SIMPLEMENTE EL VALOR DE LA ÚLTIMA LECTURA
-  // porque ya es un acumulado que crece con cada registro
-  const totalGeneral = useMemo(() => {
-    if (lecturasOrdenadas.length === 0) return 0;
-    // La última lectura (más reciente) ya tiene el acumulado total
-    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-    return ultimaLectura.acumulado_tm || 0;
-  }, [lecturasOrdenadas]);
+  // CORREGIDO: El total global se recibe por props (calculado como suma de acumulados por bodega)
+  const totalGeneral = totalGlobal;
 
-  // CORREGIDO: Flujo promedio general basado en primera y última lectura
+  // CORREGIDO: Flujo promedio general basado en primera y última lectura de CADA BODEGA
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
-    const primeraLectura = lecturasOrdenadas[0];
-    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
     
-    const acumuladoInicial = primeraLectura.acumulado_tm || 0;
-    const acumuladoFinal = ultimaLectura.acumulado_tm || 0;
-    const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-
-    if (diferenciaTotal <= 0) return 0;
+    // Agrupar por bodega para calcular flujo por bodega
+    const lecturasPorBodega = new Map();
+    lecturasOrdenadas.forEach(l => {
+      if (!lecturasPorBodega.has(l.bodega_id)) {
+        lecturasPorBodega.set(l.bodega_id, []);
+      }
+      lecturasPorBodega.get(l.bodega_id).push(l);
+    });
     
-    const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
-    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
-    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+    let totalToneladas = 0;
+    let totalHoras = 0;
     
-    if (horasTranscurridas <= 0) return 0;
-    return diferenciaTotal / horasTranscurridas;
+    lecturasPorBodega.forEach(lecturasBodega => {
+      if (lecturasBodega.length >= 2) {
+        const primera = lecturasBodega[0];
+        const ultima = lecturasBodega[lecturasBodega.length - 1];
+        const acumuladoInicial = primera.acumulado_tm || 0;
+        const acumuladoFinal = ultima.acumulado_tm || 0;
+        const diferencia = acumuladoFinal - acumuladoInicial;
+        
+        if (diferencia > 0) {
+          const horaInicial = dayjs.utc(primera.fecha_hora);
+          const horaFinal = dayjs.utc(ultima.fecha_hora);
+          const horas = horaFinal.diff(horaInicial, 'hour', true);
+          if (horas > 0) {
+            totalToneladas += diferencia;
+            totalHoras += horas;
+          }
+        }
+      }
+    });
+    
+    return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   }, [lecturasOrdenadas]);
 
-  // CORREGIDO: Flujo de la última hora (CORREGIDO)
+  // CORREGIDO: Flujo de la última hora
   const flujoUltimaHora = useMemo(() => {
-    if (lecturasOrdenadas.length < 2) return 0;
-    
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
     
-    // Encontrar la lectura más antigua dentro de la última hora
+    // Agrupar lecturas de la última hora por bodega
     const lecturasUltimaHora = lecturasOrdenadas.filter(l =>
       dayjs.utc(l.fecha_hora).isAfter(hace1Hora)
     );
     
     if (lecturasUltimaHora.length < 2) {
-      // Si no hay suficientes lecturas en la última hora, tomar las dos últimas lecturas disponibles
-      const ultimasDos = lecturasOrdenadas.slice(-2);
-      if (ultimasDos.length < 2) return 0;
-      
-      const [anterior, actual] = ultimasDos;
-      const diferenciaTon = (actual.acumulado_tm || 0) - (anterior.acumulado_tm || 0);
-      const diferenciaHoras = dayjs.utc(actual.fecha_hora).diff(dayjs.utc(anterior.fecha_hora), 'hour', true);
-      
-      return diferenciaHoras > 0 ? diferenciaTon / diferenciaHoras : 0;
+      // Tomar las dos últimas lecturas de la bodega más reciente
+      const bodegaActiva = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1].bodega_id : null;
+      if (bodegaActiva) {
+        const lecturasBodegaActiva = lecturasOrdenadas.filter(l => l.bodega_id === bodegaActiva);
+        if (lecturasBodegaActiva.length >= 2) {
+          const ultimasDos = lecturasBodegaActiva.slice(-2);
+          const [anterior, actual] = ultimasDos;
+          const diferenciaTon = (actual.acumulado_tm || 0) - (anterior.acumulado_tm || 0);
+          const diferenciaHoras = dayjs.utc(actual.fecha_hora).diff(dayjs.utc(anterior.fecha_hora), 'hour', true);
+          return diferenciaHoras > 0 ? diferenciaTon / diferenciaHoras : 0;
+        }
+      }
+      return 0;
     }
     
-    // Usar la primera y última lectura de la última hora
-    const primeraUltimaHora = lecturasUltimaHora[0];
-    const ultimaUltimaHora = lecturasUltimaHora[lecturasUltimaHora.length - 1];
+    // Agrupar por bodega y tomar la primera y última de cada una en la última hora
+    const lecturasPorBodega = new Map();
+    lecturasUltimaHora.forEach(l => {
+      if (!lecturasPorBodega.has(l.bodega_id)) {
+        lecturasPorBodega.set(l.bodega_id, []);
+      }
+      lecturasPorBodega.get(l.bodega_id).push(l);
+    });
     
-    const diferenciaTon = (ultimaUltimaHora.acumulado_tm || 0) - (primeraUltimaHora.acumulado_tm || 0);
-    const diferenciaHoras = dayjs.utc(ultimaUltimaHora.fecha_hora).diff(dayjs.utc(primeraUltimaHora.fecha_hora), 'hour', true);
+    let totalDiferencia = 0;
+    let totalHoras = 0;
     
-    return diferenciaHoras > 0 ? diferenciaTon / diferenciaHoras : 0;
+    lecturasPorBodega.forEach(lecturasBodega => {
+      if (lecturasBodega.length >= 2) {
+        const primera = lecturasBodega[0];
+        const ultima = lecturasBodega[lecturasBodega.length - 1];
+        const diferenciaTon = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
+        if (diferenciaTon > 0) {
+          const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+          if (horas > 0) {
+            totalDiferencia += diferenciaTon;
+            totalHoras += horas;
+          }
+        }
+      }
+    });
+    
+    return totalHoras > 0 ? totalDiferencia / totalHoras : 0;
   }, [lecturasOrdenadas]);
 
   const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
@@ -708,20 +777,52 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
     };
   }, [faltante, flujoUltimaHora]);
 
+  // Calcular horas transcurridas desde la primera lectura hasta ahora
   const horasTranscurridas = useMemo(() => {
-    if (!primeraLectura || !ultimaLectura) return 0;
+    if (!primeraLectura) return 0;
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
-    const horaFinal = dayjs.utc(ultimaLectura.fecha_hora);
-    return horaFinal.diff(horaInicial, 'hour', true);
-  }, [primeraLectura, ultimaLectura]);
+    const ahora = dayjs();
+    return ahora.diff(horaInicial, 'hour', true);
+  }, [primeraLectura]);
 
-  // CORREGIDO: Datos para el gráfico - usar directamente los valores acumulados
+  // CORREGIDO: Datos para el gráfico - acumulado TOTAL (suma por bodega en cada momento)
   const datosEvolucion = useMemo(() => {
-    return lecturasOrdenadas.slice(-10).map(l => ({
-      hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm"),
-      acumulado: l.acumulado_tm,
-      meta: meta
-    }));
+    if (lecturasOrdenadas.length === 0) return [];
+    
+    // Para cada punto en el tiempo, calcular la suma de acumulados de todas las bodegas
+    const puntosPorTiempo = new Map();
+    
+    lecturasOrdenadas.forEach(l => {
+      const timestamp = dayjs.utc(l.fecha_hora).unix();
+      const horaStr = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm");
+      
+      if (!puntosPorTiempo.has(timestamp)) {
+        puntosPorTiempo.set(timestamp, {
+          hora: horaStr,
+          timestamp,
+          acumuladoPorBodega: new Map()
+        });
+      }
+      
+      const punto = puntosPorTiempo.get(timestamp);
+      punto.acumuladoPorBodega.set(l.bodega_id, l.acumulado_tm || 0);
+    });
+    
+    // Convertir a array y calcular suma por punto
+    const resultado = Array.from(puntosPorTiempo.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(-20)
+      .map(punto => {
+        let suma = 0;
+        punto.acumuladoPorBodega.forEach(val => { suma += val; });
+        return {
+          hora: punto.hora,
+          acumulado: suma,
+          meta: meta
+        };
+      });
+    
+    return resultado;
   }, [lecturasOrdenadas, meta]);
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -771,12 +872,12 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
 
       <div className="alm-predicciones-grid">
         <div className="alm-pred-metricas">
-          {primeraLectura && ultimaLectura && (
+          {primeraLectura && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📅 PERÍODO DE OPERACIÓN</span>
               <span className="alm-pred-valor">{horasTranscurridas.toFixed(1)} horas</span>
               <span className="alm-pred-sub">
-                {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")} → {dayjs.utc(ultimaLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
+                Desde: {dayjs.utc(primeraLectura.fecha_hora).tz(ZONA_HORARIA_SV).format("DD/MM HH:mm")}
               </span>
             </div>
           )}
@@ -785,7 +886,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
             <span className="alm-pred-label">📊 FLUJO PROMEDIO GENERAL</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPromedioGeneral, 2)} T/h</span>
             <span className="alm-pred-sub">
-              {fmtTM(totalGeneral, 0)} T totales / {horasTranscurridas.toFixed(1)}h
+              {fmtTM(totalGeneral, 0)} T totales
             </span>
           </div>
 
@@ -822,7 +923,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
-              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Total General</span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Total General (Suma de bodegas)</span>
               <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Cantidad Manifestada ({fmtTM(meta, 0)} T)</span>
             </div>
           </div>
@@ -835,7 +936,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion 
           <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Promedio General</div>
             <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{fmtTM(flujoPromedioGeneral, 2)} T/h</div>
-            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{fmtTM(totalGeneral, 0)} T / {horasTranscurridas.toFixed(1)} h</div>
+            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{fmtTM(totalGeneral, 0)} T totales</div>
           </div>
           <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Última Hora</div>
@@ -1528,27 +1629,20 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
   let flujoDetalle = '';
 
   if (tipoOperacion === 'exportacion') {
-    const exportacionesOrdenadas = [...lecturasExportacion].sort(
-      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
-    );
-    
-    if (exportacionesOrdenadas.length >= 2) {
-      const primeraExportacion = exportacionesOrdenadas[0];
-      const ultimaExportacion = exportacionesOrdenadas[exportacionesOrdenadas.length - 1];
-      
-      const acumuladoInicial = primeraExportacion.acumulado_tm || 0;
-      const acumuladoFinal = ultimaExportacion.acumulado_tm || 0;
-      const diferenciaTotal = acumuladoFinal - acumuladoInicial;
-      
-      if (diferenciaTotal > 0) {
-        const horaInicial = dayjs.utc(primeraExportacion.fecha_hora);
-        const horaFinal = dayjs.utc(ultimaExportacion.fecha_hora);
-        const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+    // Para exportación, el flujo se calcula con la función de total global
+    if (totalGlobal > 0) {
+      // Calcular flujo basado en la primera y última lectura del primer y último registro
+      const todasExportaciones = lecturasExportacion;
+      if (todasExportaciones.length >= 2) {
+        const fechas = todasExportaciones.map(e => dayjs.utc(e.fecha_hora));
+        const primeraFecha = fechas.reduce((min, f) => f.isBefore(min) ? f : min);
+const ultimaFecha = fechas.reduce((max, f) => f.isAfter(max) ? f : max);
+        const horasTranscurridas = ultimaFecha.diff(primeraFecha, 'hour', true);
         
-        if (horasTranscurridas > 0) {
-          flujoTotal = diferenciaTotal / horasTranscurridas;
+        if (horasTranscurridas > 0 && totalGlobal > 0) {
+          flujoTotal = totalGlobal / horasTranscurridas;
           flujoTexto = `📊 Promedio Global`;
-          flujoDetalle = `${diferenciaTotal.toFixed(1)} TM en ${horasTranscurridas.toFixed(1)}h`;
+          flujoDetalle = `${totalGlobal.toFixed(1)} TM en ${horasTranscurridas.toFixed(1)}h`;
         }
       }
     }
@@ -1764,7 +1858,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
 }
 
 // ============================================================================
-// COMPONENTE: Vista General PREMIUM con Gráficos - CORREGIDO
+// COMPONENTE: Vista General PREMIUM con Gráficos - CORREGIDO PARA EXPORTACIÓN
 // ============================================================================
 function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExportacion, onSelectProducto }) {
   const tipoOperacion = barco.tipo_operacion || 'importacion';
@@ -1789,11 +1883,31 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
       const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
       
-      // Exportaciones para este producto - tomar la más reciente
-      const exportacionesProducto = lecturasExportacion
-        .filter((e) => e.producto_id === producto.id)
-        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
-      const totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
+      // =====================================================
+      // CORRECCIÓN PARA EXPORTACIÓN: Calcular total como SUMA de acumulados por bodega
+      // =====================================================
+      let totalExportacion = 0;
+      if (tipoOperacion === 'exportacion') {
+        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+        // Agrupar por bodega y tomar el último acumulado de cada una
+        const ultimoAcumuladoPorBodega = new Map();
+        exportacionesProducto.forEach(exp => {
+          const bodegaId = exp.bodega_id;
+          const acumulado = exp.acumulado_tm || 0;
+          const existing = ultimoAcumuladoPorBodega.get(bodegaId);
+          if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
+            ultimoAcumuladoPorBodega.set(bodegaId, acumulado);
+          }
+        });
+        // Sumar todos los acumulados
+        ultimoAcumuladoPorBodega.forEach(val => { totalExportacion += val; });
+      } else {
+        // Para importación, tomar el último registro
+        const exportacionesProducto = lecturasExportacion
+          .filter((e) => e.producto_id === producto.id)
+          .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+        totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
+      }
       
       const meta = getMetaProducto(barco.metas_json, producto);
       
@@ -1802,7 +1916,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         totalCamiones: totalCamiones.toFixed(3),
         lecturas: lecturasProducto.length,
         totalBanda: totalBanda.toFixed(3),
-        exportaciones: exportacionesProducto.length,
+        exportaciones: lecturasExportacion.filter(e => e.producto_id === producto.id).length,
         totalExportacion: totalExportacion.toFixed(3),
         total: (totalCamiones + totalBanda + totalExportacion).toFixed(3),
         meta: meta.toFixed(3)
@@ -1817,7 +1931,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         total: totalCamiones + totalBanda + totalExportacion 
       };
     });
-  }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json]);
+  }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json, tipoOperacion]);
 
   const totalGlobal = totales.reduce((s, t) => s + t.total, 0);
   const metaGlobal = totales.reduce((s, t) => s + t.meta, 0);
@@ -1836,21 +1950,54 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     .filter((t) => t.total > 0)
     .map((t) => ({ name: t.producto.nombre, value: parseFloat(t.total.toFixed(2)), color: t.producto.color_accent }));
 
+  // CORREGIDO: Datos para el gráfico de evolución en exportación (suma de acumulados por bodega)
   const areaData = useMemo(() => {
     if (tipoOperacion === 'exportacion') {
-      const sorted = [...lecturasExportacion]
-        .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
-        .slice(-20);
-      return sorted.map((l, i) => ({
-        hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
-        acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
-      }));
+      // Para exportación, necesitamos la suma de acumulados por bodega en cada punto
+      const todasExportaciones = [...lecturasExportacion].sort(
+        (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+      );
+      
+      // Crear mapa de acumulados por bodega en cada punto
+      const puntosPorTiempo = new Map();
+      
+      todasExportaciones.forEach(exp => {
+        const timestamp = dayjs.utc(exp.fecha_hora).unix();
+        const horaStr = dayjs.utc(exp.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm");
+        
+        if (!puntosPorTiempo.has(timestamp)) {
+          puntosPorTiempo.set(timestamp, {
+            hora: horaStr,
+            timestamp,
+            acumuladoPorBodega: new Map()
+          });
+        }
+        
+        const punto = puntosPorTiempo.get(timestamp);
+        punto.acumuladoPorBodega.set(exp.bodega_id, exp.acumulado_tm || 0);
+      });
+      
+      // Convertir a array y calcular suma
+      const resultado = Array.from(puntosPorTiempo.values())
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-20)
+        .map(punto => {
+          let suma = 0;
+          punto.acumuladoPorBodega.forEach(val => { suma += val; });
+          return {
+            hora: punto.hora,
+            acumulado: parseFloat(suma.toFixed(2))
+          };
+        });
+      
+      return resultado;
     } else {
+      // Para importación, usar lecturas de banda directamente
       const sorted = [...lecturasBanda]
         .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
         .slice(-20);
       return sorted.map((l, i) => ({
-        hora: dayjs.utc(l.fecha_hora).format("HH:mm"),
+        hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
         acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
       }));
     }
@@ -2001,7 +2148,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
 
         <div className="alm-chart-card alm-chart-wide">
           <h4 className="alm-chart-title">
-            {tipoOperacion === 'exportacion' ? '📈 Evolución de Carga' : '📈 Evolución Acumulado Banda'} (últimas lecturas)
+            {tipoOperacion === 'exportacion' ? '📈 Evolución de Carga (Suma por Bodega)' : '📈 Evolución Acumulado Banda'} (últimas lecturas)
           </h4>
           {areaData.length > 1 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -2016,7 +2163,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                 <XAxis dataKey="hora" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="acumulado" name="Acumulado"
+                <Area type="monotone" dataKey="acumulado" name={tipoOperacion === 'exportacion' ? "Total Cargado" : "Acumulado"}
                   stroke="#3b82f6" strokeWidth={2.5}
                   fill="url(#bandaGrad)" dot={{ r: 3, fill: "#3b82f6" }} />
               </AreaChart>
@@ -2035,7 +2182,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
           </h3>
           <p className="alm-section-sub">
             {tipoOperacion === 'exportacion' 
-              ? 'Toneladas cargadas por producto' 
+              ? 'Toneladas cargadas por producto (suma de todas las bodegas)' 
               : 'Distribución porcentual de toneladas por tipo de operación'}
           </p>
         </div>
@@ -2069,7 +2216,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                       <div className="alm-comparativa-bar-label">
                         <div className="alm-comparativa-label-left">
                           <span className="alm-comparativa-dot" style={{ background: color }} />
-                          <span>Carga a Barco</span>
+                          <span>Carga a Barco (Suma de bodegas)</span>
                         </div>
                         <span className="alm-comparativa-valor">{fmtTM(totalExportacion, 2)} TM</span>
                       </div>
@@ -2388,7 +2535,6 @@ function TablaBanda({ lecturas, producto }) {
     .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
     .slice(-20)
     .map((l) => ({
-      // CORREGIDO: Convertir UTC a hora de El Salvador
       hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
       acumulado: parseFloat(l.acumulado_tm.toFixed(2)),
     }));
@@ -2447,7 +2593,6 @@ function TablaBanda({ lecturas, producto }) {
             </thead>
             <tbody>
               {lecturas.map((l, i) => {
-                // CORREGIDO: Convertir UTC a hora de El Salvador
                 const fechaHoraSV = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV);
                 return (
                   <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
@@ -2475,7 +2620,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Exportaciones - SOLO LÍNEA DE TENDENCIA
+// COMPONENTE: Tabla de Exportaciones - CORREGIDA (muestra flujo y acumulado correcto)
 // ============================================================================
 function TablaExportacion({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2503,18 +2648,42 @@ function TablaExportacion({ lecturas, producto }) {
     const lecturasOrdenadas = [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
-    const primeraLectura = lecturasOrdenadas[0];
-    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-    const diferenciaTotal = ultimaLectura.acumulado_tm - primeraLectura.acumulado_tm;
-    const horasTranscurridas = dayjs.utc(ultimaLectura.fecha_hora).diff(dayjs.utc(primeraLectura.fecha_hora), 'hour', true);
-    return horasTranscurridas > 0 ? diferenciaTotal / horasTranscurridas : 0;
+    
+    // Agrupar por bodega para calcular flujo por bodega
+    const lecturasPorBodega = new Map();
+    lecturasOrdenadas.forEach(l => {
+      if (!lecturasPorBodega.has(l.bodega_id)) {
+        lecturasPorBodega.set(l.bodega_id, []);
+      }
+      lecturasPorBodega.get(l.bodega_id).push(l);
+    });
+    
+    let totalToneladas = 0;
+    let totalHoras = 0;
+    
+    lecturasPorBodega.forEach(lecturasBodega => {
+      if (lecturasBodega.length >= 2) {
+        const primera = lecturasBodega[0];
+        const ultima = lecturasBodega[lecturasBodega.length - 1];
+        const diferencia = ultima.acumulado_tm - primera.acumulado_tm;
+        if (diferencia > 0) {
+          const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+          if (horas > 0) {
+            totalToneladas += diferencia;
+            totalHoras += horas;
+          }
+        }
+      }
+    });
+    
+    return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   };
 
   // Datos para el gráfico de FLUJO (usando flujo_calculado)
   const lineData = useMemo(() => {
     const lecturasOrdenadas = [...lecturas]
       .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
-      .slice(-20); // Últimas 20 lecturas
+      .slice(-20);
     
     return lecturasOrdenadas.map((l) => ({
       hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
@@ -2522,7 +2691,6 @@ function TablaExportacion({ lecturas, producto }) {
     }));
   }, [lecturas]);
 
-  // Tooltip personalizado
   const CustomFlujoTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
@@ -2554,7 +2722,6 @@ function TablaExportacion({ lecturas, producto }) {
                   label={{ value: 'TM/h', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#94a3b8' } }}
                 />
                 <Tooltip content={<CustomFlujoTooltip />} />
-                {/* SOLO LA LÍNEA ROJA DE TENDENCIA */}
                 <Line 
                   type="monotone" 
                   dataKey="flujo" 
@@ -2599,7 +2766,7 @@ function TablaExportacion({ lecturas, producto }) {
               <tr>
                 <th>#</th>
                 <th>Fecha / Hora</th>
-                <th className="alm-th-num">Acumulado (TM)</th>
+                <th className="alm-th-num">Acumulado Bodega (TM)</th>
                 <th className="alm-th-num">Flujo (TM/h)</th>
                 <th>Bodega</th>
                 <th>Observaciones</th>
@@ -2654,8 +2821,6 @@ export default function DashboardCompartido({ codigoBarco }) {
   const [productoSeleccionado, setProductoSeleccionado] = useState("general");
   const { barco, productos, viajes, lecturasBanda, lecturasExportacion, loading, error, lastUpdate, refetch } = useBarcoData(codigoBarco);
 
- 
-
   console.log("📊 Dashboard - datos cargados:", {
     barco: barco?.codigo_barco,
     tipo: barco?.tipo_operacion,
@@ -2681,6 +2846,27 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
   }, [lecturasExportacion, productoSeleccionado]);
 
+  // CORREGIDO: Calcular total global para cada producto usando SUMA de acumulados por bodega
+  const totalGlobalPorProducto = useMemo(() => {
+    const mapa = new Map();
+    productos.forEach(producto => {
+      const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+      const ultimoAcumuladoPorBodega = new Map();
+      exportacionesProducto.forEach(exp => {
+        const bodegaId = exp.bodega_id;
+        const acumulado = exp.acumulado_tm || 0;
+        const existing = ultimoAcumuladoPorBodega.get(bodegaId);
+        if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
+          ultimoAcumuladoPorBodega.set(bodegaId, acumulado);
+        }
+      });
+      let total = 0;
+      ultimoAcumuladoPorBodega.forEach(val => { total += val; });
+      mapa.set(producto.id, total);
+    });
+    return mapa;
+  }, [productos, lecturasExportacion]);
+
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();
     productos.forEach((producto) => {
@@ -2688,18 +2874,15 @@ export default function DashboardCompartido({ codigoBarco }) {
       const lp = lecturasBanda
         .filter((l) => l.producto_id === producto.id)
         .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
-      const exp = lecturasExportacion
-        .filter((e) => e.producto_id === producto.id)
-        .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
       
       const totalCamiones = vp.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
       const totalBanda = lp.length > 0 ? lp[0]?.acumulado_tm || 0 : 0;
-      const totalExportacion = exp.length > 0 ? exp[0]?.acumulado_tm || 0 : 0;
+      const totalExportacion = totalGlobalPorProducto.get(producto.id) || 0;
       
       mapa.set(producto.id, { totalCamiones, totalBanda, totalExportacion });
     });
     return mapa;
-  }, [productos, viajes, lecturasBanda, lecturasExportacion]);
+  }, [productos, viajes, lecturasBanda, totalGlobalPorProducto]);
 
   if (loading && !barco) {
     return (
@@ -4218,6 +4401,7 @@ export default function DashboardCompartido({ codigoBarco }) {
                     lecturas={exportacionesFiltradas}
                     meta={getMetaProducto(barco.metas_json, productoActivo)}
                     tipoOperacion={tipoOperacion}
+                    totalGlobal={totalGlobalPorProducto.get(productoActivo.id) || 0}
                   />
                   
                   <TablaExportacion lecturas={exportacionesFiltradas} producto={productoActivo} />

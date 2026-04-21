@@ -1,10 +1,10 @@
 // barco/[token]/petcoke/page.js
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
-import { Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, Plus, X } from 'lucide-react'
+import { Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, Plus, X, MapPin, Calculator, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -15,6 +15,10 @@ dayjs.extend(utc)
 dayjs.extend(timezone)
 
 const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
+
+// Rango permitido para todas las unidades (Traileta y Volqueta)
+const PESO_MINIMO = 22  // TM
+const PESO_MAXIMO = 25  // TM
 
 // Opciones para Tipo Unidad
 const OPCIONES_TIPO_UNIDAD = [
@@ -77,7 +81,6 @@ export default function PetCokePage() {
       if (error) throw error
       setUnidades(data || [])
       
-      // Crear opciones para react-select
       const opciones = (data || []).map(unidad => ({
         value: unidad.placa,
         label: `${unidad.placa} - ${unidad.transporte}`,
@@ -129,7 +132,7 @@ export default function PetCokePage() {
       toast.success(`Unidad ${data.placa} agregada correctamente`)
       setModalAbierto(false)
       setNuevaUnidad({ placa: '', transporte: '', tipo: '' })
-      await cargarUnidades() // Recargar la lista
+      await cargarUnidades()
     } catch (error) {
       console.error('Error agregando unidad:', error)
       toast.error('Error al agregar la unidad')
@@ -236,6 +239,12 @@ export default function PetCokePage() {
     }
   }
 
+  // Función para verificar si el peso está fuera de rango
+  const estaFueraDeRango = (pesoNeto) => {
+    if (!pesoNeto) return false
+    return pesoNeto < PESO_MINIMO || pesoNeto > PESO_MAXIMO
+  }
+
   // Manejar selección de placa
   const handlePlacaSelect = (opcionSeleccionada) => {
     if (opcionSeleccionada) {
@@ -333,6 +342,15 @@ export default function PetCokePage() {
     if (!nuevoRegistro.peso_neto_updp_tm) {
       toast.error('El Peso Neto UPDP es obligatorio')
       return
+    }
+
+    // Validar rango de peso
+    const pesoNeto = Number(nuevoRegistro.peso_neto_updp_tm)
+    if (pesoNeto < PESO_MINIMO || pesoNeto > PESO_MAXIMO) {
+      toast.error(`⚠️ Peso fuera de rango permitido (${PESO_MINIMO}-${PESO_MAXIMO} TM). Valor: ${pesoNeto.toFixed(3)} TM`, {
+        duration: 5000,
+        icon: '⚠️'
+      })
     }
 
     const tiempoAtencion = calcularTiempoAtencion(
@@ -513,12 +531,28 @@ export default function PetCokePage() {
     )
   }
 
+  // ========== ESTADÍSTICAS ==========
   const totalNeto = registros.reduce((sum, r) => sum + (r.peso_neto_updp_tm || 0), 0)
   const ultimoAcumulado = registros.length > 0 ? registros[registros.length - 1].acumulado_updp_tm || 0 : 0
   const faltante = Math.max(0, meta - totalNeto)
   const porcentajeCompletado = meta > 0 ? (totalNeto / meta) * 100 : 0
   const estaCompleto = faltante <= 0 && meta > 0
   const estaCerca = !estaCompleto && porcentajeCompletado >= 90 && meta > 0
+  
+  // Peso neto promedio
+  const pesoNetoPromedio = registros.length > 0 ? totalNeto / registros.length : 0
+  
+  // Total por patio
+  const totalNorte = registros
+    .filter(r => r.patio === 'NORTE')
+    .reduce((sum, r) => sum + (r.peso_neto_updp_tm || 0), 0)
+  
+  const totalSur = registros
+    .filter(r => r.patio === 'SUR')
+    .reduce((sum, r) => sum + (r.peso_neto_updp_tm || 0), 0)
+
+  // Unidades fuera de rango (problemas)
+  const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
 
   const selectStyles = {
     control: (base, state) => ({
@@ -602,6 +636,101 @@ export default function PetCokePage() {
           </div>
         </div>
 
+        {/* TARJETA DE ALERTA - UNIDADES FUERA DE RANGO */}
+        {unidadesFueraDeRango.length > 0 && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-2xl p-5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-500/30">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-red-400 flex items-center gap-2">
+                  ⚠️ UNIDADES FUERA DE RANGO
+                  <span className="text-xs bg-red-500/30 px-2 py-0.5 rounded-full">
+                    {unidadesFueraDeRango.length} alerta{unidadesFueraDeRango.length !== 1 ? 's' : ''}
+                  </span>
+                </h3>
+                <p className="text-xs text-red-300/80 mt-1">
+                  Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje
+                </p>
+                <div className="mt-3 space-y-1">
+                  {unidadesFueraDeRango.slice(0, 5).map((reg, idx) => (
+                    <div key={idx} className="text-sm font-mono text-red-300">
+                      • Placa <span className="font-bold">{reg.placa}</span> - {reg.peso_neto_updp_tm?.toFixed(3)} TM 
+                      {reg.peso_neto_updp_tm < PESO_MINIMO ? ' (⬇️ POR DEBAJO)' : ' (⬆️ POR ENCIMA)'}
+                    </div>
+                  ))}
+                  {unidadesFueraDeRango.length > 5 && (
+                    <div className="text-xs text-red-400/70">
+                      + {unidadesFueraDeRango.length - 5} más...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TARJETAS DE ESTADÍSTICAS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Peso Neto Promedio */}
+          <div className="bg-gradient-to-r from-purple-600/20 to-purple-800/20 border border-purple-500/30 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-purple-500/20">
+                <Calculator className="w-5 h-5 text-purple-400" />
+              </div>
+              <p className="text-xs text-purple-400 uppercase font-bold tracking-wider">
+                PESO NETO PROMEDIO
+              </p>
+            </div>
+            <p className="text-3xl font-black text-purple-400">
+              {pesoNetoPromedio.toFixed(3)} TM
+            </p>
+            <p className="text-[10px] text-purple-300/70 mt-1">
+              Promedio por {registros.length} viaje{registros.length !== 1 ? 's' : ''}
+            </p>
+            <p className="text-[10px] text-purple-300/50 mt-1">
+              Rango ideal: {PESO_MINIMO} - {PESO_MAXIMO} TM
+            </p>
+          </div>
+
+          {/* Total Patio NORTE */}
+          <div className="bg-gradient-to-r from-blue-600/20 to-blue-800/20 border border-blue-500/30 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-blue-500/20">
+                <MapPin className="w-5 h-5 text-blue-400" />
+              </div>
+              <p className="text-xs text-blue-400 uppercase font-bold tracking-wider">
+                TOTAL PATIO NORTE
+              </p>
+            </div>
+            <p className="text-3xl font-black text-blue-400">
+              {totalNorte.toFixed(3)} TM
+            </p>
+            <p className="text-[10px] text-blue-300/70 mt-1">
+              {((totalNorte / totalNeto) * 100 || 0).toFixed(1)}% del total descargado
+            </p>
+          </div>
+
+          {/* Total Patio SUR */}
+          <div className="bg-gradient-to-r from-green-600/20 to-green-800/20 border border-green-500/30 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-green-500/20">
+                <MapPin className="w-5 h-5 text-green-400" />
+              </div>
+              <p className="text-xs text-green-400 uppercase font-bold tracking-wider">
+                TOTAL PATIO SUR
+              </p>
+            </div>
+            <p className="text-3xl font-black text-green-400">
+              {totalSur.toFixed(3)} TM
+            </p>
+            <p className="text-[10px] text-green-300/70 mt-1">
+              {((totalSur / totalNeto) * 100 || 0).toFixed(1)}% del total descargado
+            </p>
+          </div>
+        </div>
+
         {/* Tarjeta de progreso */}
         {meta > 0 && (
           <div className={`rounded-2xl p-6 transition-all ${
@@ -668,24 +797,6 @@ export default function PetCokePage() {
                 <span>{meta.toFixed(0)} TM</span>
               </div>
             </div>
-
-            {estaCerca && !estaCompleto && (
-              <div className="mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-yellow-400" />
-                <p className="text-xs text-yellow-400">
-                  ⚠️ ¡Cerca de completar la descarga! Faltan {faltante.toFixed(3)} TM para terminar.
-                </p>
-              </div>
-            )}
-
-            {estaCompleto && (
-              <div className="mt-4 bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-400" />
-                <p className="text-xs text-green-400">
-                  ✅ ¡Descarga completada! Se ha alcanzado la cantidad manifestada de {meta.toFixed(3)} TM.
-                </p>
-              </div>
-            )}
           </div>
         )}
 
@@ -705,9 +816,12 @@ export default function PetCokePage() {
               <>
                 <div className="text-center">
                   <p className="text-xs text-slate-500">+ Este viaje</p>
-                  <p className="text-xl font-bold text-green-400">
+                  <p className={`text-xl font-bold ${estaFueraDeRango(Number(nuevoRegistro.peso_neto_updp_tm)) ? 'text-red-400' : 'text-green-400'}`}>
                     +{Number(nuevoRegistro.peso_neto_updp_tm).toFixed(3)} TM
                   </p>
+                  {estaFueraDeRango(Number(nuevoRegistro.peso_neto_updp_tm)) && (
+                    <p className="text-[9px] text-red-400">⚠️ Fuera de rango</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-blue-400 uppercase font-bold">NUEVO ACUMULADO</p>
@@ -922,11 +1036,20 @@ export default function PetCokePage() {
                 value={nuevoRegistro.peso_neto_updp_tm}
                 onChange={handleChange}
                 placeholder="19.345"
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-white ${
+                  nuevoRegistro.peso_neto_updp_tm && estaFueraDeRango(Number(nuevoRegistro.peso_neto_updp_tm))
+                    ? 'border-red-500 ring-1 ring-red-500'
+                    : 'border-white/10'
+                }`}
               />
               <p className="text-[10px] text-slate-500 mt-0.5">
-                💡 Al ingresar el peso, se calculará el acumulado automáticamente
+                💡 Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM
               </p>
+              {nuevoRegistro.peso_neto_updp_tm && estaFueraDeRango(Number(nuevoRegistro.peso_neto_updp_tm)) && (
+                <p className="text-[10px] text-red-400 mt-0.5">
+                  ⚠️ Peso fuera de rango permitido
+                </p>
+              )}
             </div>
 
             {/* Acumulado */}
@@ -1007,57 +1130,63 @@ export default function PetCokePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {registros.map((reg) => (
-                  <tr key={reg.id} className="hover:bg-white/5">
-                    <td className="px-4 py-3 font-bold text-white">{reg.correlativo}</td>
-                    <td className="px-4 py-3 font-mono text-orange-400">{reg.placa}</td>
-                    <td className="px-4 py-3">{reg.transporte || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        reg.tipo_unidad === 'Traileta' ? 'bg-blue-500/20 text-blue-400' : 
-                        reg.tipo_unidad === 'Volqueta' ? 'bg-green-500/20 text-green-400' : 
-                        'bg-slate-700 text-slate-400'
-                      }`}>
-                        {reg.tipo_unidad || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{reg.fecha}</td>
-                    <td className="px-4 py-3">{reg.hora_entrada || '—'}</td>
-                    <td className="px-4 py-3">{reg.hora_salida || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-green-400">{reg.tiempo_atencion || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        reg.patio === 'NORTE' ? 'bg-blue-500/20 text-blue-400' : 
-                        reg.patio === 'SUR' ? 'bg-green-500/20 text-green-400' : 
-                        'bg-slate-700 text-slate-400'
-                      }`}>
-                        {reg.patio || '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{reg.bodega_barco || '—'}</td>
-                    <td className="px-4 py-3 text-blue-400">{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
-                    <td className="px-4 py-3 font-bold text-green-400">{reg.peso_neto_updp_tm?.toFixed(3)}</td>
-                    <td className="px-4 py-3 font-bold text-yellow-400">{reg.acumulado_updp_tm?.toFixed(3)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditar(reg)}
-                          className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                          title="Editar"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleEliminar(reg.id, reg.correlativo)}
-                          className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                          title="Eliminar"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {registros.map((reg) => {
+                  const fueraRango = estaFueraDeRango(reg.peso_neto_updp_tm)
+                  return (
+                    <tr key={reg.id} className={`hover:bg-white/5 ${fueraRango ? 'bg-red-500/10' : ''}`}>
+                      <td className="px-4 py-3 font-bold text-white">{reg.correlativo}</td>
+                      <td className="px-4 py-3 font-mono text-orange-400">{reg.placa}</td>
+                      <td className="px-4 py-3">{reg.transporte || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          reg.tipo_unidad === 'Traileta' ? 'bg-blue-500/20 text-blue-400' : 
+                          reg.tipo_unidad === 'Volqueta' ? 'bg-green-500/20 text-green-400' : 
+                          'bg-slate-700 text-slate-400'
+                        }`}>
+                          {reg.tipo_unidad || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{reg.fecha}</td>
+                      <td className="px-4 py-3">{reg.hora_entrada || '—'}</td>
+                      <td className="px-4 py-3">{reg.hora_salida || '—'}</td>
+                      <td className="px-4 py-3 font-mono text-green-400">{reg.tiempo_atencion || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          reg.patio === 'NORTE' ? 'bg-blue-500/20 text-blue-400' : 
+                          reg.patio === 'SUR' ? 'bg-green-500/20 text-green-400' : 
+                          'bg-slate-700 text-slate-400'
+                        }`}>
+                          {reg.patio || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{reg.bodega_barco || '—'}</td>
+                      <td className="px-4 py-3 text-blue-400">{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
+                      <td className={`px-4 py-3 font-bold ${fueraRango ? 'text-red-400' : 'text-green-400'}`}>
+                        {reg.peso_neto_updp_tm?.toFixed(3)}
+                        {fueraRango && <span className="ml-1 text-[10px]">⚠️</span>}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-yellow-400">{reg.acumulado_updp_tm?.toFixed(3)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditar(reg)}
+                            className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                            title="Editar"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleEliminar(reg.id, reg.correlativo)}
+                            className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                            title="Eliminar"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
               <tfoot className="bg-slate-900">
                 <tr>
@@ -1093,6 +1222,14 @@ export default function PetCokePage() {
             <p className="flex items-center gap-2">
               <span className="text-lg">🏭</span>
               Selecciona el patio: <strong>NORTE</strong> o <strong>SUR</strong>
+            </p>
+            <p className="flex items-center gap-2">
+              <span className="text-lg">📈</span>
+              Las tarjetas muestran: <strong>Peso Promedio</strong>, <strong>Total NORTE</strong> y <strong>Total SUR</strong>
+            </p>
+            <p className="flex items-center gap-2 text-red-400">
+              <span className="text-lg">⚠️</span>
+              <strong>RANGO PERMITIDO:</strong> {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje. Las unidades fuera de este rango aparecen en <strong className="text-red-400">ROJO</strong>
             </p>
           </div>
         </div>

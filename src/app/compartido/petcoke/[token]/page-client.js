@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
   PieChart, Pie, Cell
 } from 'recharts'
 import dayjs from 'dayjs'
@@ -21,7 +21,12 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Rango permitido para todas las unidades (Traileta y Volqueta)
+const PESO_MINIMO = 22  // TM
+const PESO_MAXIMO = 25  // TM
+
 const COLORES = ["#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"]
+const COLORES_PATIO = { "NORTE": "#3b82f6", "SUR": "#22c55e" }
 
 const fmtTM = (tm, d = 3) => {
   if (tm == null || isNaN(tm)) return "0.000"
@@ -29,6 +34,12 @@ const fmtTM = (tm, d = 3) => {
   const partes = valor.split(".")
   partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",")
   return partes.join(".")
+}
+
+// Función para verificar si el peso está fuera de rango
+const estaFueraDeRango = (pesoNeto) => {
+  if (!pesoNeto) return false
+  return pesoNeto < PESO_MINIMO || pesoNeto > PESO_MAXIMO
 }
 
 function usePetCokeData(token) {
@@ -114,12 +125,18 @@ export default function ClientPage({ token }) {
       porTransporte: {},
       porDia: {},
       porPatio: {},
-      acumuladoPorCorrelativo: []
+      acumuladoPorCorrelativo: [],
+      unidadesFueraDeRango: [],
+      totalNorte: 0,
+      totalSur: 0,
+      pesoPromedio: 0,
+      porcentajeDentroRango: 0
     }
 
     const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
     const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0)
     const totalViajes = registros.length
+    const pesoPromedio = totalNeto / totalViajes
 
     const porTransporte = {}
     registros.forEach(r => {
@@ -139,6 +156,19 @@ export default function ClientPage({ token }) {
       porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0)
     })
 
+    // Total por patio
+    const totalNorte = registros
+      .filter(r => r.patio === 'NORTE')
+      .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    
+    const totalSur = registros
+      .filter(r => r.patio === 'SUR')
+      .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+
+    // Unidades fuera de rango
+    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
+    const porcentajeDentroRango = ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100
+
     // Acumulado progresivo
     let acumulado = 0
     const acumuladoPorCorrelativo = registros.map(r => {
@@ -146,11 +176,16 @@ export default function ClientPage({ token }) {
       return {
         correlativo: r.correlativo,
         peso: r.peso_neto_updp_tm,
-        acumulado: acumulado
+        acumulado: acumulado,
+        fueraRango: estaFueraDeRango(r.peso_neto_updp_tm)
       }
     })
 
-    return { totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio, acumuladoPorCorrelativo }
+    return { 
+      totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio, 
+      acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
+      pesoPromedio, porcentajeDentroRango
+    }
   }, [registros])
 
   if (loading && !barco) {
@@ -185,6 +220,10 @@ export default function ClientPage({ token }) {
 
   const datosGraficoTransporte = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
   const datosGraficoDia = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
+  const datosGraficoPatio = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
+
+  const meta = barco.metas_json?.limites?.['PC-001'] || 0
+  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
   return (
     <>
@@ -208,6 +247,8 @@ export default function ClientPage({ token }) {
         .alm-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
         .alm-kpi-value { font-size: 28px; font-weight: 900; color: white; font-family: 'DM Mono', monospace; }
         .alm-kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+        .alm-alert-card { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 16px; padding: 16px 20px; margin-bottom: 24px; }
+        .alm-alert-title { font-size: 13px; font-weight: bold; color: #f87171; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
         .alm-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
         .alm-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
         .alm-chart-wide { grid-column: 1 / -1; }
@@ -219,11 +260,19 @@ export default function ClientPage({ token }) {
         .alm-table td { padding: 12px 16px; color: #cbd5e1; border-bottom: 1px solid var(--border); }
         .alm-table tbody tr:hover { background: rgba(249, 115, 22, 0.05); }
         .alm-table .alm-td-num { text-align: right; }
+        .alm-table-row-warning { background: rgba(239, 68, 68, 0.1); }
+        .alm-table-row-warning:hover { background: rgba(239, 68, 68, 0.2); }
         .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; }
         .alm-badge { background: rgba(249, 115, 22, 0.2); color: #f97316; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 8px; }
+        .alm-badge-warning { background: rgba(239, 68, 68, 0.2); color: #f87171; }
         .alm-progress-hero { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
+        .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
+        .alm-patio-stats { display: flex; gap: 16px; margin-top: 16px; }
+        .alm-patio-card { flex: 1; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; }
+        .alm-patio-norte { border-bottom: 3px solid #3b82f6; }
+        .alm-patio-sur { border-bottom: 3px solid #22c55e; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 768px) { .alm-charts-row { grid-template-columns: 1fr; } .alm-body { padding: 16px; } }
       `}</style>
@@ -244,7 +293,7 @@ export default function ClientPage({ token }) {
         </header>
 
         <div className="alm-body">
-          {/* KPIs */}
+          {/* KPIs principales */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
               <div className="alm-kpi-icon">🪨</div>
@@ -266,8 +315,8 @@ export default function ClientPage({ token }) {
               <div className="alm-kpi-icon">⚖️</div>
               <div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
-                <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto / (estadisticas.totalViajes || 1), 2)} TM</div>
-                <div className="alm-kpi-sub">Peso promedio</div>
+                <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} TM</div>
+                <div className="alm-kpi-sub">Rango ideal: {PESO_MINIMO}-{PESO_MAXIMO} TM</div>
               </div>
             </div>
             <div className="alm-kpi">
@@ -280,23 +329,93 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* Progreso (si hay meta configurada) */}
-          {barco.metas_json?.limites?.['PC-001'] > 0 && (
+          {/* Estadísticas de Patios */}
+          <div className="alm-kpis-row">
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon">🏭🔵</div>
+              <div>
+                <div className="alm-kpi-label">Patio NORTE</div>
+                <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{fmtTM(estadisticas.totalNorte, 2)} TM</div>
+                <div className="alm-kpi-sub">{((estadisticas.totalNorte / estadisticas.totalNeto) * 100 || 0).toFixed(1)}% del total</div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon">🏭🟢</div>
+              <div>
+                <div className="alm-kpi-label">Patio SUR</div>
+                <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{fmtTM(estadisticas.totalSur, 2)} TM</div>
+                <div className="alm-kpi-sub">{((estadisticas.totalSur / estadisticas.totalNeto) * 100 || 0).toFixed(1)}% del total</div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon">✅</div>
+              <div>
+                <div className="alm-kpi-label">Viajes en Rango</div>
+                <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
+                <div className="alm-kpi-sub">{estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} de {estadisticas.totalViajes} viajes</div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon">⚠️</div>
+              <div>
+                <div className="alm-kpi-label">Fuera de Rango</div>
+                <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
+                <div className="alm-kpi-sub">Viajes con peso &lt;{PESO_MINIMO} o &gt;{PESO_MAXIMO} TM</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ALERTA DE UNIDADES FUERA DE RANGO */}
+          {estadisticas.unidadesFueraDeRango.length > 0 && (
+            <div className="alm-alert-card">
+              <div className="alm-alert-title">
+                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido ({PESO_MINIMO}-{PESO_MAXIMO} TM)
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {estadisticas.unidadesFueraDeRango.slice(0, 10).map((reg, idx) => (
+                  <span key={idx} style={{ 
+                    background: 'rgba(239, 68, 68, 0.2)', 
+                    padding: '4px 12px', 
+                    borderRadius: '20px', 
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    color: '#f87171'
+                  }}>
+                    {reg.placa}: {reg.peso_neto_updp_tm?.toFixed(2)} TM
+                    {reg.peso_neto_updp_tm < PESO_MINIMO ? ' ⬇️' : ' ⬆️'}
+                  </span>
+                ))}
+                {estadisticas.unidadesFueraDeRango.length > 10 && (
+                  <span style={{ color: '#64748b', fontSize: '12px', padding: '4px 12px' }}>
+                    + {estadisticas.unidadesFueraDeRango.length - 10} más
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Progreso de meta */}
+          {meta > 0 && (
             <div className="alm-progress-hero">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontWeight: 'bold', color: 'white' }}>Progreso de Descarga</span>
-                <span style={{ color: '#f97316', fontWeight: 'bold' }}>
-                  {((estadisticas.totalNeto / barco.metas_json.limites['PC-001']) * 100).toFixed(1)}%
+                <span style={{ color: porcentajeMeta >= 100 ? '#4ade80' : porcentajeMeta >= 90 ? '#fbbf24' : '#f97316', fontWeight: 'bold' }}>
+                  {porcentajeMeta.toFixed(1)}%
                 </span>
               </div>
               <div className="alm-progress-track">
-                <div className="alm-progress-fill" style={{ width: `${Math.min(100, (estadisticas.totalNeto / barco.metas_json.limites['PC-001']) * 100)}%` }} />
+                <div className={`alm-progress-fill ${porcentajeMeta >= 100 ? 'alm-progress-fill-warning' : ''}`} style={{ width: `${Math.min(100, porcentajeMeta)}%` }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8' }}>
                 <span>0 TM</span>
                 <span>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
-                <span>{fmtTM(barco.metas_json.limites['PC-001'], 0)} TM</span>
+                <span>{fmtTM(meta, 0)} TM</span>
               </div>
+              {porcentajeMeta >= 100 && (
+                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74, 222, 128, 0.1)', borderRadius: '8px', textAlign: 'center' }}>
+                  <span style={{ color: '#4ade80', fontSize: '12px' }}>✅ ¡Meta alcanzada! Se ha completado la cantidad manifestada.</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -311,6 +430,22 @@ export default function ClientPage({ token }) {
                   <PieChart>
                     <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                       {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+            </div>
+
+            <div className="alm-chart-card">
+              <div className="alm-chart-title">
+                <span>🏭</span> Descarga por Patio
+              </div>
+              {datosGraficoPatio.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={datosGraficoPatio} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {datosGraficoPatio.map((entry, i) => <Cell key={i} fill={COLORES_PATIO[entry.name] || COLORES[i % COLORES.length]} />)}
                     </Pie>
                     <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
                   </PieChart>
@@ -335,6 +470,30 @@ export default function ClientPage({ token }) {
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
             </div>
 
+            <div className="alm-chart-card">
+              <div className="alm-chart-title">
+                <span>📊</span> Distribución de Pesos Netos
+              </div>
+              {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#94a3b8' }} domain={[PESO_MINIMO - 5, PESO_MAXIMO + 5]} tickFormatter={(v) => fmtTM(v, 0)} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                    <Bar dataKey="peso" fill="#f97316" radius={[4, 4, 0, 0]}>
+                      {estadisticas.acumuladoPorCorrelativo.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fueraRango ? '#ef4444' : '#f97316'} />
+                      ))}
+                    </Bar>
+                    {/* Líneas de rango permitido */}
+                    <ReferenceLine y={PESO_MINIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Mín ${PESO_MINIMO}`, fill: '#22c55e', fontSize: 10 }} />
+                    <ReferenceLine y={PESO_MAXIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Máx ${PESO_MAXIMO}`, fill: '#22c55e', fontSize: 10 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+            </div>
+
             <div className="alm-chart-card alm-chart-wide">
               <div className="alm-chart-title">
                 <span>📈</span> Evolución Acumulada de Descarga
@@ -353,19 +512,25 @@ export default function ClientPage({ token }) {
                     <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
                     <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
                     <Area type="monotone" dataKey="acumulado" stroke="#f97316" strokeWidth={2} fill="url(#acumuladoGrad)" name="Acumulado Total" />
+                    {meta > 0 && (
+                      <ReferenceLine y={meta} stroke="#4ade80" strokeDasharray="3 3" label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#4ade80', fontSize: 10 }} />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Se necesitan al menos 2 registros</div>}
             </div>
           </div>
 
-          {/* Tabla de registros */}
+          {/* Tabla de registros con resaltado de fuera de rango */}
           <div className="alm-table-card">
             <div className="alm-table-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>📋</span>
                 <span style={{ fontWeight: 'bold', color: 'white' }}>Registros de Descarga</span>
                 <span className="alm-badge">{registros.length} viajes</span>
+                {estadisticas.unidadesFueraDeRango.length > 0 && (
+                  <span className="alm-badge alm-badge-warning">⚠️ {estadisticas.unidadesFueraDeRango.length} fuera de rango</span>
+                )}
               </div>
             </div>
             <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
@@ -387,29 +552,70 @@ export default function ClientPage({ token }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {registros.map((reg) => (
-                    <tr key={reg.id}>
-                      <td>{reg.correlativo}</td>
-                      <td><span style={{ fontFamily: 'monospace', color: '#f97316' }}>{reg.placa}</span></td>
-                      <td>{reg.transporte || '—'}</td>
-                      <td>{reg.fecha}</td>
-                      <td>{reg.hora_entrada || '—'}</td>
-                      <td>{reg.hora_salida || '—'}</td>
-                      <td style={{ color: '#4ade80' }}>{reg.tiempo_atencion || '—'}</td>
-                      <td>{reg.patio || '—'}</td>
-                      <td>{reg.bodega_barco || '—'}</td>
-                      <td className="alm-td-num" style={{ color: '#60a5fa' }}>{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
-                      <td className="alm-td-num" style={{ color: '#4ade80', fontWeight: 'bold' }}>{reg.peso_neto_updp_tm?.toFixed(3)}</td>
-                      <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3) || '—'}</td>
-                    </tr>
-                  ))}
+                  {registros.map((reg) => {
+                    const fueraRango = estaFueraDeRango(reg.peso_neto_updp_tm)
+                    return (
+                      <tr key={reg.id} className={fueraRango ? 'alm-table-row-warning' : ''}>
+                        <td style={{ fontWeight: 'bold' }}>{reg.correlativo}</td>
+                        <td><span style={{ fontFamily: 'monospace', color: fueraRango ? '#f87171' : '#f97316' }}>{reg.placa}</span></td>
+                        <td>{reg.transporte || '—'}</td>
+                        <td>{reg.fecha}</td>
+                        <td>{reg.hora_entrada || '—'}</td>
+                        <td>{reg.hora_salida || '—'}</td>
+                        <td style={{ color: '#4ade80' }}>{reg.tiempo_atencion || '—'}</td>
+                        <td>{reg.patio || '—'}</td>
+                        <td>{reg.bodega_barco || '—'}</td>
+                        <td className="alm-td-num" style={{ color: '#60a5fa' }}>{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
+                        <td className="alm-td-num" style={{ color: fueraRango ? '#f87171' : '#4ade80', fontWeight: 'bold' }}>
+                          {reg.peso_neto_updp_tm?.toFixed(3)}
+                          {fueraRango && <span style={{ marginLeft: '4px' }}>⚠️</span>}
+                        </td>
+                        <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3) || '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
+          {/* Resumen de unidades problemáticas */}
+          {estadisticas.unidadesFueraDeRango.length > 0 && (
+            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '18px' }}>⚠️</span>
+                <span style={{ fontWeight: 'bold', color: 'white' }}>Unidades que requieren atención</span>
+                <span className="alm-badge alm-badge-warning">{estadisticas.unidadesFueraDeRango.length} alertas</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                {Object.entries(
+                  estadisticas.unidadesFueraDeRango.reduce((acc, reg) => {
+                    if (!acc[reg.placa]) acc[reg.placa] = { count: 0, viajes: [], promedio: 0, sumPesos: 0 }
+                    acc[reg.placa].count++
+                    acc[reg.placa].viajes.push(reg.correlativo)
+                    acc[reg.placa].sumPesos += reg.peso_neto_updp_tm
+                    acc[reg.placa].promedio = acc[reg.placa].sumPesos / acc[reg.placa].count
+                    return acc
+                  }, {})
+                ).map(([placa, data]) => (
+                  <div key={placa} style={{ background: '#0f172a', borderRadius: '12px', padding: '12px 16px', minWidth: '180px' }}>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#f87171', fontSize: '16px' }}>{placa}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                      {data.count} fuera de rango · Prom: {data.promedio.toFixed(2)} TM
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#64748b' }}>
+                      Viajes: #{data.viajes.join(', #')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="alm-footer">
             🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
+            <br />
+            <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</span>
           </div>
         </div>
       </div>
