@@ -42,7 +42,7 @@ const estaFueraDeRango = (pesoNeto) => {
   return pesoNeto < PESO_MINIMO || pesoNeto > PESO_MAXIMO
 }
 
-function usePetCokeData(token) {
+function usePetCokeData(token, transporteFiltro = null) {
   const [data, setData] = useState({
     barco: null,
     producto: null,
@@ -78,12 +78,18 @@ function usePetCokeData(token) {
         throw new Error('Producto PET COKE no encontrado')
       }
 
-      // Buscar registros
-      const { data: registrosData, error: registrosError } = await supabase
+      // Buscar registros con filtro opcional de transporte
+      let query = supabase
         .from('petcoke_registros')
         .select('*')
         .eq('barco_id', barcoData.id)
         .order('correlativo', { ascending: true })
+
+      if (transporteFiltro) {
+        query = query.eq('transporte', transporteFiltro)
+      }
+
+      const { data: registrosData, error: registrosError } = await query
 
       if (registrosError) throw registrosError
 
@@ -109,13 +115,87 @@ function usePetCokeData(token) {
     cargar()
     const interval = setInterval(cargar, 30000)
     return () => clearInterval(interval)
-  }, [token])
+  }, [token, transporteFiltro])
 
   return { ...data, refetch: cargar }
 }
 
+// Componente de tarjeta de transporte
+function TarjetaTransporte({ nombre, registros, isSelected, onClick }) {
+  // Calcular promedio TM/viaje
+  const viajes = registros.filter(r => r.transporte === nombre)
+  const totalNeto = viajes.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+  const promedio = viajes.length > 0 ? totalNeto / viajes.length : 0
+  
+  // Unidades fuera de rango para este transporte
+  const unidadesFuera = viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
+  
+  return (
+    <div 
+      onClick={onClick}
+      style={{
+        background: isSelected ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#1e293b',
+        border: isSelected ? '2px solid #f97316' : '1px solid #334155',
+        borderRadius: '20px',
+        padding: '24px 20px',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+        boxShadow: isSelected ? '0 10px 25px -5px rgba(249, 115, 22, 0.3)' : 'none'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <div style={{ fontSize: '40px' }}>{nombre === 'TRAILETA' ? '🚛💨' : nombre === 'VOLQUETA' ? '🚛⛰️' : '🚛'}</div>
+        <div style={{ 
+          background: isSelected ? 'rgba(255,255,255,0.2)' : 'rgba(249,115,22,0.2)', 
+          padding: '4px 12px', 
+          borderRadius: '20px',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          color: isSelected ? 'white' : '#f97316'
+        }}>
+          {viajes.length} viajes
+        </div>
+      </div>
+      <div style={{ fontSize: '14px', fontWeight: '600', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8', marginBottom: '8px' }}>
+        {nombre}
+      </div>
+      <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', fontFamily: 'DM Mono, monospace', marginBottom: '8px' }}>
+        {fmtTM(promedio, 2)} <span style={{ fontSize: '14px', fontWeight: 'normal' }}>TM/viaje</span>
+      </div>
+      <div style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
+        Total: {fmtTM(totalNeto, 2)} TM
+      </div>
+      {unidadesFuera.length > 0 && (
+        <div style={{ 
+          marginTop: '12px', 
+          fontSize: '11px', 
+          color: '#f87171',
+          background: isSelected ? 'rgba(0,0,0,0.3)' : 'rgba(239,68,68,0.15)',
+          padding: '4px 8px',
+          borderRadius: '8px',
+          display: 'inline-block'
+        }}>
+          ⚠️ {unidadesFuera.length} fuera de rango
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ClientPage({ token }) {
-  const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token)
+  const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
+  
+  const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado)
+
+  // Obtener lista de transportes únicos
+  const transportesUnicos = useMemo(() => {
+    const transportes = new Set()
+    registros.forEach(r => {
+      if (r.transporte) transportes.add(r.transporte)
+    })
+    return Array.from(transportes).sort()
+  }, [registros])
 
   const estadisticas = useMemo(() => {
     if (!registros.length) return {
@@ -130,7 +210,9 @@ export default function ClientPage({ token }) {
       totalNorte: 0,
       totalSur: 0,
       pesoPromedio: 0,
-      porcentajeDentroRango: 0
+      porcentajeDentroRango: 0,
+      promedioTraileta: 0,
+      promedioVolqueta: 0
     }
 
     const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
@@ -139,10 +221,22 @@ export default function ClientPage({ token }) {
     const pesoPromedio = totalNeto / totalViajes
 
     const porTransporte = {}
+    const viajesTraileta = []
+    const viajesVolqueta = []
+    
     registros.forEach(r => {
       const t = r.transporte || 'DESCONOCIDO'
       porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0)
+      if (t === 'TRAILETA') viajesTraileta.push(r.peso_neto_updp_tm || 0)
+      if (t === 'VOLQUETA') viajesVolqueta.push(r.peso_neto_updp_tm || 0)
     })
+
+    const promedioTraileta = viajesTraileta.length > 0 
+      ? viajesTraileta.reduce((a,b) => a+b, 0) / viajesTraileta.length 
+      : 0
+    const promedioVolqueta = viajesVolqueta.length > 0 
+      ? viajesVolqueta.reduce((a,b) => a+b, 0) / viajesVolqueta.length 
+      : 0
 
     const porDia = {}
     registros.forEach(r => {
@@ -184,9 +278,17 @@ export default function ClientPage({ token }) {
     return { 
       totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio, 
       acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
-      pesoPromedio, porcentajeDentroRango
+      pesoPromedio, porcentajeDentroRango, promedioTraileta, promedioVolqueta
     }
   }, [registros])
+
+  const handleSeleccionarTransporte = (transporte) => {
+    if (transporteSeleccionado === transporte) {
+      setTransporteSeleccionado(null) // Deseleccionar si ya está seleccionado
+    } else {
+      setTransporteSeleccionado(transporte)
+    }
+  }
 
   if (loading && !barco) {
     return (
@@ -225,6 +327,11 @@ export default function ClientPage({ token }) {
   const meta = barco.metas_json?.limites?.['PC-001'] || 0
   const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
+  // Texto del filtro activo
+  const filtroActivoTexto = transporteSeleccionado 
+    ? `Mostrando solo ${transporteSeleccionADO}` 
+    : 'Mostrando todos los transportes'
+
   return (
     <>
       <style>{`
@@ -240,6 +347,7 @@ export default function ClientPage({ token }) {
         .alm-refresh-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
+        .alm-tarjetas-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 28px; }
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
         .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--orange); }
@@ -265,6 +373,7 @@ export default function ClientPage({ token }) {
         .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; }
         .alm-badge { background: rgba(249, 115, 22, 0.2); color: #f97316; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 8px; }
         .alm-badge-warning { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .alm-badge-filter { background: rgba(249, 115, 22, 0.3); color: #f97316; }
         .alm-progress-hero { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
@@ -273,6 +382,8 @@ export default function ClientPage({ token }) {
         .alm-patio-card { flex: 1; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; }
         .alm-patio-norte { border-bottom: 3px solid #3b82f6; }
         .alm-patio-sur { border-bottom: 3px solid #22c55e; }
+        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; }
+        .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 768px) { .alm-charts-row { grid-template-columns: 1fr; } .alm-body { padding: 16px; } }
       `}</style>
@@ -287,12 +398,44 @@ export default function ClientPage({ token }) {
               <div className="alm-ship-code">#{barco.codigo_barco} · Pet Coke</div>
             </div>
           </div>
-          <button onClick={refetch} className="alm-refresh-btn">
-            <span>🔄</span> Actualizar
-          </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {transporteSeleccionado && (
+              <button onClick={() => setTransporteSeleccionado(null)} className="alm-clear-filter">
+                ✕ Limpiar filtro
+              </button>
+            )}
+            <button onClick={refetch} className="alm-refresh-btn">
+              <span>🔄</span> Actualizar
+            </button>
+          </div>
         </header>
 
         <div className="alm-body">
+          {/* Filtro activo indicator */}
+          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span className="alm-badge alm-badge-filter">
+                {filtroActivoTexto}
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>
+              Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
+            </div>
+          </div>
+
+          {/* TARJETAS DE TRANSPORTE */}
+          <div className="alm-tarjetas-row">
+            {transportesUnicos.map(transporte => (
+              <TarjetaTransporte
+                key={transporte}
+                nombre={transporte}
+                registros={registros}
+                isSelected={transporteSeleccionado === transporte}
+                onClick={() => handleSeleccionarTransporte(transporte)}
+              />
+            ))}
+          </div>
+
           {/* KPIs principales */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
@@ -486,7 +629,6 @@ export default function ClientPage({ token }) {
                         <Cell key={idx} fill={entry.fueraRango ? '#ef4444' : '#f97316'} />
                       ))}
                     </Bar>
-                    {/* Líneas de rango permitido */}
                     <ReferenceLine y={PESO_MINIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Mín ${PESO_MINIMO}`, fill: '#22c55e', fontSize: 10 }} />
                     <ReferenceLine y={PESO_MAXIMO} stroke="#22c55e" strokeDasharray="3 3" label={{ value: `Máx ${PESO_MAXIMO}`, fill: '#22c55e', fontSize: 10 }} />
                   </BarChart>
@@ -530,6 +672,9 @@ export default function ClientPage({ token }) {
                 <span className="alm-badge">{registros.length} viajes</span>
                 {estadisticas.unidadesFueraDeRango.length > 0 && (
                   <span className="alm-badge alm-badge-warning">⚠️ {estadisticas.unidadesFueraDeRango.length} fuera de rango</span>
+                )}
+                {transporteSeleccionado && (
+                  <span className="alm-badge alm-badge-filter">Filtrado por: {transporteSeleccionado}</span>
                 )}
               </div>
             </div>
@@ -616,6 +761,8 @@ export default function ClientPage({ token }) {
             🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
             <br />
             <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</span>
+            <br />
+            <span style={{ color: '#f97316' }}>📊 Promedio TRAILETA: {fmtTM(estadisticas.promedioTraileta, 2)} TM/viaje | Promedio VOLQUETA: {fmtTM(estadisticas.promedioVolqueta, 2)} TM/viaje</span>
           </div>
         </div>
       </div>
