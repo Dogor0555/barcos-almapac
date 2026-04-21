@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { ArrowRightLeft } from 'lucide-react'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -2316,7 +2317,7 @@ export default function ExportacionPage() {
     </div>
     <div className="overflow-x-auto">
       <table className="w-full">
-        <thead className="bg-slate-800">
+        <thead className="bg-slate-800 sticky top-0">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
@@ -2355,6 +2356,9 @@ export default function ExportacionPage() {
               (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
             )
             
+            // 4. Identificar cambios de bodega para mostrar alerta
+            let ultimaBodegaId = null
+            
             return descendente.map((exp, idx, arrDesc) => {
               const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
               const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
@@ -2367,6 +2371,10 @@ export default function ExportacionPage() {
               } else {
                 turno = '18:00 - 6:00'
               }
+              
+              // Verificar si hay cambio de bodega respecto al registro anterior (más reciente)
+              const hayCambioBodega = ultimaBodegaId !== null && ultimaBodegaId !== exp.bodega_id
+              ultimaBodegaId = exp.bodega_id
               
               // Calcular flujo (velocidad entre registros CONSECUTIVOS en orden ascendente)
               let flujo = 0
@@ -2389,11 +2397,40 @@ export default function ExportacionPage() {
                 }
               }
               
+              // Determinar clases de fondo según el tipo de registro
+              let rowClasses = "hover:bg-white/5 transition-colors"
+              let badgeCambio = null
+              
+              if (esPrimero) {
+                // PRIMER REGISTRO DE BODEGA: fondo azul claro + badge "INICIO BODEGA"
+                rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
+                badgeCambio = (
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
+                      <Layers className="w-3 h-3" />
+                      INICIO DE BODEGA
+                    </span>
+                  </div>
+                )
+              } else if (hayCambioBodega) {
+                // CAMBIO DE BODEGA (pero no es el primer registro, es el último de la bodega anterior)
+                rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
+                badgeCambio = (
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-500/30 text-orange-300 px-2 py-0.5 rounded-full">
+                      <ArrowRightLeft className="w-3 h-3" />
+                      CAMBIO DE BODEGA
+                    </span>
+                  </div>
+                )
+              }
+              
               return (
-                <tr key={exp.id} className="hover:bg-white/5">
+                <tr key={exp.id} className={rowClasses}>
                   <td className="px-4 py-3">
                     <div>{fechaSV}</div>
                     <div className="text-xs text-slate-500">{horaSV}</div>
+                    {badgeCambio}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${
@@ -2417,12 +2454,17 @@ export default function ExportacionPage() {
                   <td className="px-4 py-3">
                     {bodega ? (
                       <div>
-                        <p className="text-white">{bodega.nombre}</p>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodega.color }} />
+                          <p className="text-white font-medium">{bodega.nombre}</p>
+                        </div>
                         <p className="text-xs text-green-400">{bodega.codigo}</p>
                       </div>
                     ) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
+                  <td className="px-4 py-3 text-slate-400 max-w-xs truncate" title={exp.observaciones || ''}>
+                    {exp.observaciones || '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button
@@ -2446,7 +2488,7 @@ export default function ExportacionPage() {
             })
           })()}
         </tbody>
-        <tfoot className="bg-slate-900">
+        <tfoot className="bg-slate-900 sticky bottom-0">
           <tr className="bg-orange-500/5">
             <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
             <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>

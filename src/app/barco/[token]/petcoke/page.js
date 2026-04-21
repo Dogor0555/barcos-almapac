@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
-import { Save, RefreshCw, Truck, Clock, AlertCircle, Target, TrendingUp, CheckCircle } from 'lucide-react'
+import { Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -16,115 +16,11 @@ dayjs.extend(timezone)
 
 const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
 
-// =====================================================
-// MAPEO COMPLETO DE PLACAS A TRANSPORTE Y TIPO UNIDAD
-// =====================================================
-const DATOS_PLACAS = {
-  // ========== ALMAGESAL ==========
-  '71003': { transporte: 'ALMAGESAL', tipo: 'Traileta' },
-  '100055': { transporte: 'ALMAGESAL', tipo: 'Volqueta' },
-  '100605': { transporte: 'ALMAGESAL', tipo: 'Traileta' },
-  '100882': { transporte: 'ALMAGESAL', tipo: 'Volqueta' },
-  '121572': { transporte: 'ALMAGESAL', tipo: 'Traileta' },
-  '126089': { transporte: 'ALMAGESAL', tipo: 'Ambos' },
-  '132703': { transporte: 'ALMAGESAL', tipo: 'Ambos' },
-  '136646': { transporte: 'ALMAGESAL', tipo: 'Traileta' },
-  '137533': { transporte: 'ALMAGESAL', tipo: 'Traileta' },
-  '138885': { transporte: 'ALMAGESAL', tipo: 'Volqueta' },
-
-  // ========== CORPORIN ==========
-  '93053': { transporte: 'CORPORIN', tipo: 'Traileta' },
-  '122752': { transporte: 'CORPORIN', tipo: 'Ambos' },
-  '123971': { transporte: 'CORPORIN', tipo: 'Traileta' },
-  '125053': { transporte: 'CORPORIN', tipo: 'Traileta' },
-  '128913': { transporte: 'CORPORIN', tipo: 'Traileta' },
-  '130861': { transporte: 'CORPORIN', tipo: 'Traileta' },
-  '134228': { transporte: 'CORPORIN', tipo: 'Traileta' },
-
-  // ========== ESCOBAR ==========
-  '66281': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '70425': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '76171': { transporte: 'ESCOBAR', tipo: 'Traileta' },
-  '82489': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '85202': { transporte: 'ESCOBAR', tipo: 'Ambos' },
-  '100054': { transporte: 'ESCOBAR', tipo: 'Traileta' },
-  '100069': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '105467': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '108646': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '114908': { transporte: 'ESCOBAR', tipo: 'Volqueta' },
-  '132410': { transporte: 'ESCOBAR', tipo: 'Traileta' },
-
-  // ========== ESMERALDA ==========
-  '77362': { transporte: 'ESMERALDA', tipo: 'Volqueta' },
-  '82965': { transporte: 'ESMERALDA', tipo: 'Traileta' },
-  '90028': { transporte: 'ESMERALDA', tipo: 'Volqueta' },
-  '92614': { transporte: 'ESMERALDA', tipo: 'Ambos' },
-  '98943': { transporte: 'ESMERALDA', tipo: 'Volqueta' },
-  '113663': { transporte: 'ESMERALDA', tipo: 'Traileta' },
-  '113870': { transporte: 'ESMERALDA', tipo: 'Traileta' },
-  '116017': { transporte: 'ESMERALDA', tipo: 'Traileta' },
-  '117606': { transporte: 'ESMERALDA', tipo: 'Traileta' },
-
-  // ========== JOB ==========
-  '140221': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140222': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140223': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140224': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140225': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140226': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140227': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140228': { transporte: 'JOB', tipo: 'Volqueta' },
-  '140313': { transporte: 'JOB', tipo: 'Volqueta' },
-
-  // ========== MARTINEZ ==========
-  '88312': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-  '115221': { transporte: 'MARTINEZ', tipo: 'Ambos' },
-  '115588': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-  '124102': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-  '128148': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-  '130730': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-  '131783': { transporte: 'MARTINEZ', tipo: 'Traileta' },
-
-  // ========== SANTIMONI ==========
-  '61570': { transporte: 'SANTIMONI', tipo: 'Volqueta' },
-  '64460': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '68925': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '70842': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '75525': { transporte: 'SANTIMONI', tipo: 'Volqueta' },
-  '76751': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '78218': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '80222': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '81172': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '87341': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '90770': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '95285': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '99204': { transporte: 'SANTIMONI', tipo: 'Volqueta' },
-  '104624': { transporte: 'SANTIMONI', tipo: 'Volqueta' },
-  '108299': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '110177': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '111149': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '111160': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '112579': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '115673': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '129535': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '132189': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '132346': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '132782': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-  '133381': { transporte: 'SANTIMONI', tipo: 'Traileta' },
-}
-
-// Opciones para el select de placas
-const OPCIONES_PLACAS = Object.keys(DATOS_PLACAS).sort().map(placa => ({
-  value: placa,
-  label: `${placa} - ${DATOS_PLACAS[placa].transporte}`,
-  transporte: DATOS_PLACAS[placa].transporte,
-  tipoPredeterminado: DATOS_PLACAS[placa].tipo
-}))
-
 // Opciones para Tipo Unidad
 const OPCIONES_TIPO_UNIDAD = [
   { value: 'Traileta', label: '🚛 TRAILETA' },
   { value: 'Volqueta', label: '🚛 VOLQUETA' },
+  { value: 'Ambos', label: '🔄 AMBOS' },
 ]
 
 // Opciones para Patio
@@ -140,6 +36,19 @@ export default function PetCokePage() {
   const [producto, setProducto] = useState(null)
   const [registros, setRegistros] = useState([])
   const [meta, setMeta] = useState(0)
+  
+  // Estado para las unidades (placas)
+  const [unidades, setUnidades] = useState([])
+  const [opcionesPlacas, setOpcionesPlacas] = useState([])
+  
+  // Estado para el modal de agregar placa
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const [nuevaUnidad, setNuevaUnidad] = useState({
+    placa: '',
+    transporte: '',
+    tipo: ''
+  })
+  
   const [nuevoRegistro, setNuevoRegistro] = useState({
     correlativo: 1,
     placa: '',
@@ -157,9 +66,80 @@ export default function PetCokePage() {
   const [editando, setEditando] = useState(null)
   const [tipoUnidadOptions, setTipoUnidadOptions] = useState(OPCIONES_TIPO_UNIDAD)
 
+  // Cargar unidades desde Supabase
+  const cargarUnidades = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('unidades')
+        .select('*')
+        .order('placa', { ascending: true })
+
+      if (error) throw error
+      setUnidades(data || [])
+      
+      // Crear opciones para react-select
+      const opciones = (data || []).map(unidad => ({
+        value: unidad.placa,
+        label: `${unidad.placa} - ${unidad.transporte}`,
+        transporte: unidad.transporte,
+        tipoPredeterminado: unidad.tipo
+      }))
+      setOpcionesPlacas(opciones)
+    } catch (error) {
+      console.error('Error cargando unidades:', error)
+      toast.error('Error al cargar las unidades')
+    }
+  }
+
+  // Agregar nueva unidad
+  const handleAgregarUnidad = async () => {
+    if (!nuevaUnidad.placa.trim()) {
+      toast.error('La placa es obligatoria')
+      return
+    }
+    if (!nuevaUnidad.transporte.trim()) {
+      toast.error('El transporte es obligatorio')
+      return
+    }
+    if (!nuevaUnidad.tipo) {
+      toast.error('Debes seleccionar un tipo de unidad')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('unidades')
+        .insert([{
+          placa: nuevaUnidad.placa.toUpperCase(),
+          transporte: nuevaUnidad.transporte.toUpperCase(),
+          tipo: nuevaUnidad.tipo
+        }])
+        .select()
+        .single()
+
+      if (error) {
+        if (error.code === '23505') {
+          toast.error('Esta placa ya existe')
+        } else {
+          throw error
+        }
+        return
+      }
+
+      toast.success(`Unidad ${data.placa} agregada correctamente`)
+      setModalAbierto(false)
+      setNuevaUnidad({ placa: '', transporte: '', tipo: '' })
+      await cargarUnidades() // Recargar la lista
+    } catch (error) {
+      console.error('Error agregando unidad:', error)
+      toast.error('Error al agregar la unidad')
+    }
+  }
+
   // Cargar datos del barco y producto PET COKE
   useEffect(() => {
     cargarDatos()
+    cargarUnidades()
   }, [token])
 
   const cargarDatos = async () => {
@@ -192,7 +172,6 @@ export default function PetCokePage() {
 
       setProducto(productoData)
 
-      // Obtener la meta (cantidad manifestada) del barco para este producto
       const metaProducto = barcoData.metas_json?.limites?.['PC-001'] || 0
       setMeta(metaProducto)
 
@@ -204,7 +183,6 @@ export default function PetCokePage() {
 
       if (registrosError) throw registrosError
 
-      // Calcular acumulados correctamente (suma progresiva)
       let acumulado = 0
       const registrosConAcumulado = (registrosData || []).map(reg => {
         acumulado += Number(reg.peso_neto_updp_tm) || 0
@@ -226,7 +204,7 @@ export default function PetCokePage() {
     }
   }
 
-  // Función para recalcular acumulados después de guardar/editar/eliminar
+  // Recalcular acumulados
   const recalcularAcumulados = async (barcoId, productoId) => {
     try {
       const { data: registrosData, error } = await supabase
@@ -261,14 +239,14 @@ export default function PetCokePage() {
   // Manejar selección de placa
   const handlePlacaSelect = (opcionSeleccionada) => {
     if (opcionSeleccionada) {
-      const datosPlaca = DATOS_PLACAS[opcionSeleccionada.value]
+      const unidad = unidades.find(u => u.placa === opcionSeleccionada.value)
       
-      if (datosPlaca.tipo === 'Ambos') {
+      if (unidad.tipo === 'Ambos') {
         setTipoUnidadOptions(OPCIONES_TIPO_UNIDAD)
         setNuevoRegistro(prev => ({
           ...prev,
           placa: opcionSeleccionada.value,
-          transporte: datosPlaca.transporte,
+          transporte: unidad.transporte,
           tipo_unidad: '',
         }))
       } else {
@@ -276,8 +254,8 @@ export default function PetCokePage() {
         setNuevoRegistro(prev => ({
           ...prev,
           placa: opcionSeleccionada.value,
-          transporte: datosPlaca.transporte,
-          tipo_unidad: datosPlaca.tipo,
+          transporte: unidad.transporte,
+          tipo_unidad: unidad.tipo,
         }))
       }
     } else {
@@ -542,7 +520,6 @@ export default function PetCokePage() {
   const estaCompleto = faltante <= 0 && meta > 0
   const estaCerca = !estaCompleto && porcentajeCompletado >= 90 && meta > 0
 
-  // Estilos personalizados para react-select
   const selectStyles = {
     control: (base, state) => ({
       ...base,
@@ -625,9 +602,7 @@ export default function PetCokePage() {
           </div>
         </div>
 
-        {/* ===================================================== */}
-        {/* NUEVA TARJETA DE PROGRESO - CUÁNTO FALTA PARA TERMINAR */}
-        {/* ===================================================== */}
+        {/* Tarjeta de progreso */}
         {meta > 0 && (
           <div className={`rounded-2xl p-6 transition-all ${
             estaCompleto 
@@ -674,7 +649,6 @@ export default function PetCokePage() {
               </div>
             </div>
 
-            {/* Barra de progreso */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-slate-400">
                 <span>Progreso de descarga</span>
@@ -695,7 +669,6 @@ export default function PetCokePage() {
               </div>
             </div>
 
-            {/* Alertas */}
             {estaCerca && !estaCompleto && (
               <div className="mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-yellow-400" />
@@ -781,21 +754,33 @@ export default function PetCokePage() {
               />
             </div>
 
-            {/* Placa */}
-            <div>
+            {/* Placa con botón para agregar */}
+            <div className="md:col-span-2">
               <label className="block text-xs text-slate-400 mb-1">
                 Placa <span className="text-red-400">*</span>
               </label>
-              <Select
-                options={OPCIONES_PLACAS}
-                onChange={handlePlacaSelect}
-                value={nuevoRegistro.placa ? OPCIONES_PLACAS.find(opt => opt.value === nuevoRegistro.placa) : null}
-                placeholder="🔍 Buscar o seleccionar placa..."
-                isClearable
-                styles={selectStyles}
-                className="w-full"
-                classNamePrefix="react-select"
-              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Select
+                    options={opcionesPlacas}
+                    onChange={handlePlacaSelect}
+                    value={nuevoRegistro.placa ? opcionesPlacas.find(opt => opt.value === nuevoRegistro.placa) : null}
+                    placeholder="🔍 Buscar o seleccionar placa..."
+                    isClearable
+                    styles={selectStyles}
+                    className="w-full"
+                    classNamePrefix="react-select"
+                  />
+                </div>
+                <button
+                  onClick={() => setModalAbierto(true)}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all"
+                  title="Agregar nueva placa"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar
+                </button>
+              </div>
             </div>
 
             {/* Transporte */}
@@ -944,7 +929,7 @@ export default function PetCokePage() {
               </p>
             </div>
 
-            {/* Acumulado - Solo lectura */}
+            {/* Acumulado */}
             <div>
               <label className="block text-xs text-slate-400 mb-1">Acumulado UPDP (TM)</label>
               <input
@@ -1094,6 +1079,10 @@ export default function PetCokePage() {
               Selecciona la placa → Transporte y Tipo de unidad se autocompletan
             </p>
             <p className="flex items-center gap-2">
+              <span className="text-lg">➕</span>
+              Si una placa no existe, haz clic en <strong>"Agregar"</strong> para registrarla
+            </p>
+            <p className="flex items-center gap-2">
               <span className="text-lg">📊</span>
               El <strong>Acumulado UPDP</strong> se calcula automáticamente
             </p>
@@ -1109,6 +1098,86 @@ export default function PetCokePage() {
         </div>
 
       </div>
+
+      {/* MODAL PARA AGREGAR NUEVA UNIDAD */}
+      {modalAbierto && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1e293b] rounded-2xl w-full max-w-md border border-white/20">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-green-400" />
+                Agregar Nueva Unidad
+              </h2>
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Placa <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={nuevaUnidad.placa}
+                  onChange={(e) => setNuevaUnidad({ ...nuevaUnidad, placa: e.target.value.toUpperCase() })}
+                  placeholder="Ej: 123456"
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white font-mono"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Transporte <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={nuevaUnidad.transporte}
+                  onChange={(e) => setNuevaUnidad({ ...nuevaUnidad, transporte: e.target.value.toUpperCase() })}
+                  placeholder="Ej: SANTIMONI, ESCOBAR, JOB..."
+                  className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Tipo Unidad <span className="text-red-400">*</span>
+                </label>
+                <Select
+                  options={OPCIONES_TIPO_UNIDAD}
+                  onChange={(opt) => setNuevaUnidad({ ...nuevaUnidad, tipo: opt?.value || '' })}
+                  value={OPCIONES_TIPO_UNIDAD.find(opt => opt.value === nuevaUnidad.tipo)}
+                  placeholder="Seleccionar tipo..."
+                  styles={selectStyles}
+                  className="w-full"
+                  classNamePrefix="react-select"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t border-white/10">
+              <button
+                onClick={handleAgregarUnidad}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar Unidad
+              </button>
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-lg transition-all"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
