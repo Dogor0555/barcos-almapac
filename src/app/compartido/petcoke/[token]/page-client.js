@@ -60,9 +60,7 @@ function usePetCokeData(token, transporteFiltro = null) {
         .eq('token_compartido', token)
         .single()
 
-      if (barcoError || !barcoData) {
-        throw new Error('Barco no encontrado')
-      }
+      if (barcoError || !barcoData) throw new Error('Barco no encontrado')
 
       const { data: productoData, error: productoError } = await supabase
         .from('productos')
@@ -70,9 +68,7 @@ function usePetCokeData(token, transporteFiltro = null) {
         .eq('codigo', 'PC-001')
         .single()
 
-      if (productoError || !productoData) {
-        throw new Error('Producto PET COKE no encontrado')
-      }
+      if (productoError || !productoData) throw new Error('Producto PET COKE no encontrado')
 
       let query = supabase
         .from('petcoke_registros')
@@ -85,7 +81,6 @@ function usePetCokeData(token, transporteFiltro = null) {
       }
 
       const { data: registrosData, error: registrosError } = await query
-
       if (registrosError) throw registrosError
 
       setData({
@@ -98,11 +93,7 @@ function usePetCokeData(token, transporteFiltro = null) {
       })
     } catch (error) {
       console.error('Error:', error)
-      setData(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message
-      }))
+      setData(prev => ({ ...prev, loading: false, error: error.message }))
     }
   }
 
@@ -115,96 +106,13 @@ function usePetCokeData(token, transporteFiltro = null) {
   return { ...data, refetch: cargar }
 }
 
-function TarjetaTransporte({ 
-  nombre, 
-  promedioTraileta, 
-  promedioVolqueta, 
-  totalNeto, 
-  totalViajes, 
-  unidadesFuera, 
-  isSelected, 
-  onClick 
-}) {
-  return (
-    <div 
-      onClick={onClick}
-      style={{
-        background: isSelected ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#1e293b',
-        border: isSelected ? '2px solid #f97316' : '1px solid #334155',
-        borderRadius: '20px',
-        padding: '24px 20px',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
-        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
-        boxShadow: isSelected ? '0 10px 25px -5px rgba(249, 115, 22, 0.3)' : 'none'
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div style={{ fontSize: '40px' }}>{nombre === 'TRAILETA' ? '🚛💨' : '🚛⛰️'}</div>
-        <div style={{ 
-          background: isSelected ? 'rgba(255,255,255,0.2)' : 'rgba(249,115,22,0.2)', 
-          padding: '4px 12px', 
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          color: isSelected ? 'white' : '#f97316'
-        }}>
-          {totalViajes} viajes
-        </div>
-      </div>
-      
-      <div style={{ fontSize: '18px', fontWeight: '800', color: 'white', marginBottom: '16px' }}>
-        {nombre}
-      </div>
-      
-      <div style={{ 
-        background: isSelected ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.3)', 
-        borderRadius: '12px', 
-        padding: '12px',
-        marginBottom: '12px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8' }}>🚛 PROM. TRAILETA</span>
-          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#f97316', fontFamily: 'DM Mono, monospace' }}>
-            {fmtTM(promedioTraileta, 2)} <span style={{ fontSize: '11px' }}>TM/viaje</span>
-          </span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.8)' : '#94a3b8' }}>🚛 PROM. VOLQUETA</span>
-          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#4ade80', fontFamily: 'DM Mono, monospace' }}>
-            {fmtTM(promedioVolqueta, 2)} <span style={{ fontSize: '11px' }}>TM/viaje</span>
-          </span>
-        </div>
-      </div>
-      
-      <div style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
-        Total {nombre}: {fmtTM(totalNeto, 2)} TM
-      </div>
-      
-      {unidadesFuera > 0 && (
-        <div style={{ 
-          marginTop: '12px', 
-          fontSize: '11px', 
-          color: '#f87171',
-          background: isSelected ? 'rgba(0,0,0,0.3)' : 'rgba(239,68,68,0.15)',
-          padding: '4px 8px',
-          borderRadius: '8px',
-          display: 'inline-block'
-        }}>
-          ⚠️ {unidadesFuera} fuera de rango
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
-  
+
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado)
 
-  // Cargar TODOS los registros (sin filtro) para calcular los promedios globales
+  // Cargar TODOS los registros (sin filtro) para las tarjetas
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -220,9 +128,7 @@ export default function ClientPage({ token }) {
             .select('*')
             .eq('barco_id', barcoData.id)
 
-          if (registrosGlobales) {
-            setTodosLosRegistros(registrosGlobales)
-          }
+          if (registrosGlobales) setTodosLosRegistros(registrosGlobales)
         }
       } catch (error) {
         console.error('Error cargando todos los registros:', error)
@@ -231,43 +137,54 @@ export default function ClientPage({ token }) {
     cargarTodosRegistros()
   }, [token])
 
-  // Calcular promedios globales de TRAILETA y VOLQUETA
-  const promediosGlobales = useMemo(() => {
-    const viajesTraileta = todosLosRegistros.filter(r => r.transporte === 'TRAILETA')
-    const viajesVolqueta = todosLosRegistros.filter(r => r.transporte === 'VOLQUETA')
-    
-    const totalTraileta = viajesTraileta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-    const totalVolqueta = viajesVolqueta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-    
-    return {
-      TRAILETA: viajesTraileta.length > 0 ? totalTraileta / viajesTraileta.length : 0,
-      VOLQUETA: viajesVolqueta.length > 0 ? totalVolqueta / viajesVolqueta.length : 0,
-      totalTraileta,
-      totalVolqueta,
-      viajesTraileta: viajesTraileta.length,
-      viajesVolqueta: viajesVolqueta.length,
-      fueraTraileta: viajesTraileta.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length,
-      fueraVolqueta: viajesVolqueta.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length
-    }
+  // ============================================================
+  // NUEVO: Una entrada por empresa transportista (campo transporte)
+  // Dentro de cada empresa se desglosa por tipo_unidad: VOLQUETA / TRAILETA
+  // ============================================================
+  const promediosPorTransporte = useMemo(() => {
+    const mapa = {}
+
+    todosLosRegistros.forEach(r => {
+      const empresa = r.transporte || 'DESCONOCIDO'
+      if (!mapa[empresa]) {
+        mapa[empresa] = { nombre: empresa, viajes: [], traileta: [], volqueta: [] }
+      }
+      mapa[empresa].viajes.push(r)
+
+      const tipo = (r.tipo_unidad || '').toUpperCase()
+      if (tipo === 'TRAILETA') mapa[empresa].traileta.push(r)
+      else if (tipo === 'VOLQUETA') mapa[empresa].volqueta.push(r)
+    })
+
+    return Object.values(mapa).map(e => {
+      const totalNeto      = e.viajes.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+      const totalTraileta  = e.traileta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+      const totalVolqueta  = e.volqueta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+
+      return {
+        nombre:           e.nombre,
+        totalViajes:      e.viajes.length,
+        totalNeto,
+        viajesTraileta:   e.traileta.length,
+        viajesVolqueta:   e.volqueta.length,
+        totalTraileta,
+        totalVolqueta,
+        promedioTraileta: e.traileta.length > 0 ? totalTraileta / e.traileta.length : null,
+        promedioVolqueta: e.volqueta.length > 0 ? totalVolqueta / e.volqueta.length : null,
+        fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length,
+      }
+    }).sort((a, b) => b.totalNeto - a.totalNeto) // ordenar de mayor a menor TM
   }, [todosLosRegistros])
 
   const estadisticas = useMemo(() => {
     if (!registros.length) return {
-      totalNeto: 0,
-      totalBruto: 0,
-      totalViajes: 0,
-      porTransporte: {},
-      porDia: {},
-      porPatio: {},
-      acumuladoPorCorrelativo: [],
-      unidadesFueraDeRango: [],
-      totalNorte: 0,
-      totalSur: 0,
-      pesoPromedio: 0,
-      porcentajeDentroRango: 0
+      totalNeto: 0, totalBruto: 0, totalViajes: 0,
+      porTransporte: {}, porDia: {}, porPatio: {},
+      acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
+      totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0
     }
 
-    const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    const totalNeto  = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
     const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0)
     const totalViajes = registros.length
     const pesoPromedio = totalNeto / totalViajes
@@ -279,10 +196,7 @@ export default function ClientPage({ token }) {
     })
 
     const porDia = {}
-    registros.forEach(r => {
-      const dia = r.fecha
-      porDia[dia] = (porDia[dia] || 0) + (r.peso_neto_updp_tm || 0)
-    })
+    registros.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + (r.peso_neto_updp_tm || 0) })
 
     const porPatio = {}
     registros.forEach(r => {
@@ -290,13 +204,8 @@ export default function ClientPage({ token }) {
       porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0)
     })
 
-    const totalNorte = registros
-      .filter(r => r.patio === 'NORTE')
-      .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-    
-    const totalSur = registros
-      .filter(r => r.patio === 'SUR')
-      .reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    const totalSur   = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
 
     const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
     const porcentajeDentroRango = ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100
@@ -307,24 +216,20 @@ export default function ClientPage({ token }) {
       return {
         correlativo: r.correlativo,
         peso: r.peso_neto_updp_tm,
-        acumulado: acumulado,
+        acumulado,
         fueraRango: estaFueraDeRango(r.peso_neto_updp_tm)
       }
     })
 
-    return { 
-      totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio, 
+    return {
+      totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
       acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
       pesoPromedio, porcentajeDentroRango
     }
   }, [registros])
 
   const handleSeleccionarTransporte = (transporte) => {
-    if (transporteSeleccionado === transporte) {
-      setTransporteSeleccionado(null)
-    } else {
-      setTransporteSeleccionado(transporte)
-    }
+    setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
   }
 
   if (loading && !barco) {
@@ -351,41 +256,17 @@ export default function ClientPage({ token }) {
     )
   }
 
-  const datosGraficoAcumulado = estadisticas.acumuladoPorCorrelativo.map(item => ({
-    correlativo: `#${item.correlativo}`,
-    peso: item.peso,
-    acumulado: item.acumulado
-  }))
-
-  const datosGraficoTransporte = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
-  const datosGraficoDia = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
-  const datosGraficoPatio = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
+  const datosGraficoAcumulado   = estadisticas.acumuladoPorCorrelativo.map(item => ({ correlativo: `#${item.correlativo}`, peso: item.peso, acumulado: item.acumulado }))
+  const datosGraficoTransporte  = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
+  const datosGraficoDia         = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
+  const datosGraficoPatio       = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
 
   const meta = barco.metas_json?.limites?.['PC-001'] || 0
   const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
-  const filtroActivoTexto = transporteSeleccionado 
-    ? `Mostrando solo ${transporteSeleccionado}` 
+  const filtroActivoTexto = transporteSeleccionado
+    ? `Filtrando: ${transporteSeleccionado}`
     : 'Mostrando todos los transportes'
-
-  // Definir las tarjetas a mostrar (siempre TRAILETA y VOLQUETA si tienen datos)
-  const tarjetasAMostrar = []
-  if (promediosGlobales.viajesTraileta > 0) {
-    tarjetasAMostrar.push({
-      nombre: 'TRAILETA',
-      totalNeto: promediosGlobales.totalTraileta,
-      totalViajes: promediosGlobales.viajesTraileta,
-      unidadesFuera: promediosGlobales.fueraTraileta
-    })
-  }
-  if (promediosGlobales.viajesVolqueta > 0) {
-    tarjetasAMostrar.push({
-      nombre: 'VOLQUETA',
-      totalNeto: promediosGlobales.totalVolqueta,
-      totalViajes: promediosGlobales.viajesVolqueta,
-      unidadesFuera: promediosGlobales.fueraVolqueta
-    })
-  }
 
   return (
     <>
@@ -402,7 +283,16 @@ export default function ClientPage({ token }) {
         .alm-refresh-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-        .alm-tarjetas-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 28px; }
+
+        /* Grid de tarjetas: 2 columnas siempre, con wrap automático */
+        .alm-tarjetas-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+          margin-bottom: 28px;
+          margin-top: 20px;
+        }
+
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
         .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--orange); }
@@ -435,8 +325,72 @@ export default function ClientPage({ token }) {
         .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
         .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* ---- Tarjeta de empresa transportista ---- */
+        .tarjeta-transporte {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 20px;
+          padding: 22px 20px;
+          cursor: pointer;
+          transition: all 0.25s ease;
+          position: relative;
+          overflow: hidden;
+        }
+        .tarjeta-transporte:hover {
+          transform: translateY(-4px);
+          border-color: #f97316;
+          box-shadow: 0 8px 20px -4px rgba(249,115,22,0.2);
+        }
+        .tarjeta-transporte-selected {
+          background: linear-gradient(135deg, #f97316, #ea580c);
+          border: 2px solid #f97316;
+          transform: scale(1.02);
+          box-shadow: 0 10px 25px -5px rgba(249,115,22,0.35);
+        }
+
+        /* Sección de promedios dentro de la tarjeta */
+        .prom-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 14px;
+          border-radius: 10px;
+          background: rgba(0,0,0,0.25);
+          margin-bottom: 8px;
+        }
+        .prom-row-selected { background: rgba(255,255,255,0.12); }
+        .prom-label { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .prom-value { font-size: 20px; font-weight: 800; font-family: 'DM Mono', monospace; }
+        .prom-viajes { font-size: 10px; opacity: 0.7; margin-top: 1px; }
+
+        /* Mini-pill de tipo unidad */
+        .pill-tipo {
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+        }
+        .pill-traileta { background: rgba(249,115,22,0.2); color: #f97316; }
+        .pill-volqueta { background: rgba(74,222,128,0.2); color: #4ade80; }
+        .pill-traileta-sel { background: rgba(255,255,255,0.2); color: white; }
+        .pill-volqueta-sel { background: rgba(255,255,255,0.15); color: white; }
+
+        /* Encabezado de sección */
+        .section-title {
+          font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+          text-transform: uppercase; color: #64748b;
+          margin-bottom: 14px; margin-top: 4px;
+          display: flex; align-items: center; gap: 8px;
+        }
+        .section-title::after {
+          content: ''; flex: 1; height: 1px; background: #334155;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) { .alm-charts-row { grid-template-columns: 1fr; } .alm-body { padding: 16px; } }
+        @media (max-width: 768px) {
+          .alm-charts-row { grid-template-columns: 1fr; }
+          .alm-body { padding: 16px; }
+          .alm-tarjetas-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
 
       <div className="alm-petcoke-root">
@@ -463,31 +417,10 @@ export default function ClientPage({ token }) {
 
         <div className="alm-body">
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <span className="alm-badge alm-badge-filter">
-                {filtroActivoTexto}
-              </span>
-            </div>
+            <span className="alm-badge alm-badge-filter">{filtroActivoTexto}</span>
             <div style={{ fontSize: '11px', color: '#64748b' }}>
               Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
             </div>
-          </div>
-
-          {/* TARJETAS DE TRANSPORTE - CADA UNA MUESTRA AMBOS PROMEDIOS */}
-          <div className="alm-tarjetas-row">
-            {tarjetasAMostrar.map(transporte => (
-              <TarjetaTransporte
-                key={transporte.nombre}
-                nombre={transporte.nombre}
-                promedioTraileta={promediosGlobales.TRAILETA}
-                promedioVolqueta={promediosGlobales.VOLQUETA}
-                totalNeto={transporte.totalNeto}
-                totalViajes={transporte.totalViajes}
-                unidadesFuera={transporte.unidadesFuera}
-                isSelected={transporteSeleccionado === transporte.nombre}
-                onClick={() => handleSeleccionarTransporte(transporte.nombre)}
-              />
-            ))}
           </div>
 
           {/* KPIs principales */}
@@ -513,23 +446,23 @@ export default function ClientPage({ token }) {
               <div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
                 <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} TM</div>
-                <div className="alm-kpi-sub">Rango ideal: {PESO_MINIMO}-{PESO_MAXIMO} TM</div>
+                <div className="alm-kpi-sub">Rango ideal: {PESO_MINIMO}–{PESO_MAXIMO} TM</div>
               </div>
             </div>
             <div className="alm-kpi">
               <div className="alm-kpi-icon">🏭</div>
               <div>
                 <div className="alm-kpi-label">Transportistas</div>
-                <div className="alm-kpi-value">{Object.keys(estadisticas.porTransporte).length}</div>
+                <div className="alm-kpi-value">{promediosPorTransporte.length}</div>
                 <div className="alm-kpi-sub">Empresas diferentes</div>
               </div>
             </div>
           </div>
 
-          {/* Estadísticas de Patios */}
+          {/* KPIs patios */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🏭🔵</div>
+              <div className="alm-kpi-icon">🔵</div>
               <div>
                 <div className="alm-kpi-label">Patio NORTE</div>
                 <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{fmtTM(estadisticas.totalNorte, 2)} TM</div>
@@ -537,7 +470,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🏭🟢</div>
+              <div className="alm-kpi-icon">🟢</div>
               <div>
                 <div className="alm-kpi-label">Patio SUR</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{fmtTM(estadisticas.totalSur, 2)} TM</div>
@@ -557,29 +490,21 @@ export default function ClientPage({ token }) {
               <div>
                 <div className="alm-kpi-label">Fuera de Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
-                <div className="alm-kpi-sub">Viajes con peso &lt;{PESO_MINIMO} o &gt;{PESO_MAXIMO} TM</div>
+                <div className="alm-kpi-sub">Peso &lt;{PESO_MINIMO} o &gt;{PESO_MAXIMO} TM</div>
               </div>
             </div>
           </div>
 
-          {/* ALERTA DE UNIDADES FUERA DE RANGO */}
+          {/* Alerta fuera de rango */}
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
               <div className="alm-alert-title">
-                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido ({PESO_MINIMO}-{PESO_MAXIMO} TM)
+                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido ({PESO_MINIMO}–{PESO_MAXIMO} TM)
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {estadisticas.unidadesFueraDeRango.slice(0, 10).map((reg, idx) => (
-                  <span key={idx} style={{ 
-                    background: 'rgba(239, 68, 68, 0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    color: '#f87171'
-                  }}>
-                    {reg.placa}: {reg.peso_neto_updp_tm?.toFixed(2)} TM
-                    {reg.peso_neto_updp_tm < PESO_MINIMO ? ' ⬇️' : ' ⬆️'}
+                  <span key={idx} style={{ background: 'rgba(239,68,68,0.2)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontFamily: 'monospace', color: '#f87171' }}>
+                    {reg.placa}: {reg.peso_neto_updp_tm?.toFixed(2)} TM {reg.peso_neto_updp_tm < PESO_MINIMO ? '⬇️' : '⬆️'}
                   </span>
                 ))}
                 {estadisticas.unidadesFueraDeRango.length > 10 && (
@@ -609,19 +534,140 @@ export default function ClientPage({ token }) {
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
               {porcentajeMeta >= 100 && (
-                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74, 222, 128, 0.1)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center' }}>
                   <span style={{ color: '#4ade80', fontSize: '12px' }}>✅ ¡Meta alcanzada! Se ha completado la cantidad manifestada.</span>
                 </div>
               )}
             </div>
           )}
 
+          {/* ============================================================
+              TARJETAS POR EMPRESA TRANSPORTISTA
+              Haz clic en una tarjeta para filtrar la tabla y los gráficos
+              ============================================================ */}
+          {promediosPorTransporte.length > 0 && (
+            <>
+              <div className="section-title">🏢 Empresas Transportistas</div>
+              <div className="alm-tarjetas-grid">
+                {promediosPorTransporte.map((empresa) => {
+                  const sel = transporteSeleccionado === empresa.nombre
+                  return (
+                    <div
+                      key={empresa.nombre}
+                      className={`tarjeta-transporte ${sel ? 'tarjeta-transporte-selected' : ''}`}
+                      onClick={() => handleSeleccionarTransporte(empresa.nombre)}
+                    >
+                      {/* Encabezado de la tarjeta */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: sel ? 'rgba(255,255,255,0.7)' : '#64748b', marginBottom: '4px' }}>
+                            Transportista
+                          </div>
+                          <div style={{ fontSize: '17px', fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
+                            {empresa.nombre}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{
+                            background: sel ? 'rgba(255,255,255,0.2)' : 'rgba(249,115,22,0.15)',
+                            color: sel ? 'white' : '#f97316',
+                            padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, marginBottom: '4px'
+                          }}>
+                            {empresa.totalViajes} viajes
+                          </div>
+                          <div style={{ fontSize: '11px', color: sel ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
+                            {fmtTM(empresa.totalNeto, 2)} TM total
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Divisor */}
+                      <div style={{ height: '1px', background: sel ? 'rgba(255,255,255,0.2)' : '#334155', marginBottom: '14px' }} />
+
+                      {/* Fila TRAILETA */}
+                      {empresa.viajesTraileta > 0 ? (
+                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`}>
+                          <div>
+                            <div className="prom-label">
+                              <span className={`pill-tipo ${sel ? 'pill-traileta-sel' : 'pill-traileta'}`}>🚛 TRAILETA</span>
+                            </div>
+                            <div className="prom-viajes" style={{ color: sel ? 'rgba(255,255,255,0.6)' : '#64748b', marginTop: '4px', paddingLeft: '2px' }}>
+                              {empresa.viajesTraileta} viajes · {fmtTM(empresa.totalTraileta, 2)} TM
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div className="prom-value" style={{ color: sel ? 'white' : '#f97316' }}>
+                              {fmtTM(empresa.promedioTraileta, 2)}
+                            </div>
+                            <div style={{ fontSize: '10px', color: sel ? 'rgba(255,255,255,0.6)' : '#64748b' }}>TM / viaje</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ opacity: 0.4 }}>
+                          <span className={`pill-tipo ${sel ? 'pill-traileta-sel' : 'pill-traileta'}`}>🚛 TRAILETA</span>
+                          <span style={{ fontSize: '12px', color: sel ? 'rgba(255,255,255,0.5)' : '#475569' }}>Sin registros</span>
+                        </div>
+                      )}
+
+                      {/* Fila VOLQUETA */}
+                      {empresa.viajesVolqueta > 0 ? (
+                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ marginBottom: 0 }}>
+                          <div>
+                            <div className="prom-label">
+                              <span className={`pill-tipo ${sel ? 'pill-volqueta-sel' : 'pill-volqueta'}`}>⛰️ VOLQUETA</span>
+                            </div>
+                            <div className="prom-viajes" style={{ color: sel ? 'rgba(255,255,255,0.6)' : '#64748b', marginTop: '4px', paddingLeft: '2px' }}>
+                              {empresa.viajesVolqueta} viajes · {fmtTM(empresa.totalVolqueta, 2)} TM
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div className="prom-value" style={{ color: sel ? 'white' : '#4ade80' }}>
+                              {fmtTM(empresa.promedioVolqueta, 2)}
+                            </div>
+                            <div style={{ fontSize: '10px', color: sel ? 'rgba(255,255,255,0.6)' : '#64748b' }}>TM / viaje</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ marginBottom: 0, opacity: 0.4 }}>
+                          <span className={`pill-tipo ${sel ? 'pill-volqueta-sel' : 'pill-volqueta'}`}>⛰️ VOLQUETA</span>
+                          <span style={{ fontSize: '12px', color: sel ? 'rgba(255,255,255,0.5)' : '#475569' }}>Sin registros</span>
+                        </div>
+                      )}
+
+                      {/* Alerta fuera de rango de esta empresa */}
+                      {empresa.fueraRango > 0 && (
+                        <div style={{
+                          marginTop: '12px', fontSize: '11px', color: '#f87171',
+                          background: sel ? 'rgba(0,0,0,0.25)' : 'rgba(239,68,68,0.12)',
+                          padding: '6px 12px', borderRadius: '8px', textAlign: 'center'
+                        }}>
+                          ⚠️ {empresa.fueraRango} {empresa.fueraRango === 1 ? 'unidad fuera' : 'unidades fuera'} del rango ({PESO_MINIMO}–{PESO_MAXIMO} TM)
+                        </div>
+                      )}
+
+                      {/* Indicador "clic para filtrar" */}
+                      {!sel && (
+                        <div style={{ marginTop: '10px', fontSize: '10px', color: '#475569', textAlign: 'center' }}>
+                          Clic para filtrar por esta empresa
+                        </div>
+                      )}
+                      {sel && (
+                        <div style={{ marginTop: '10px', fontSize: '10px', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+                          ✓ Filtrando · Clic para quitar filtro
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          {/* ============ FIN TARJETAS ============ */}
+
           {/* Gráficos */}
           <div className="alm-charts-row">
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <span>📊</span> Descarga por Transporte
-              </div>
+              <div className="alm-chart-title"><span>📊</span> Descarga por Transporte</div>
               {datosGraficoTransporte.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
@@ -635,9 +681,7 @@ export default function ClientPage({ token }) {
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <span>🏭</span> Descarga por Patio
-              </div>
+              <div className="alm-chart-title"><span>🏭</span> Descarga por Patio</div>
               {datosGraficoPatio.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
@@ -651,9 +695,7 @@ export default function ClientPage({ token }) {
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <span>📈</span> Descarga por Día
-              </div>
+              <div className="alm-chart-title"><span>📈</span> Descarga por Día</div>
               {datosGraficoDia.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={datosGraficoDia}>
@@ -668,9 +710,7 @@ export default function ClientPage({ token }) {
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <span>📊</span> Distribución de Pesos Netos
-              </div>
+              <div className="alm-chart-title"><span>📊</span> Distribución de Pesos Netos</div>
               {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
@@ -691,9 +731,7 @@ export default function ClientPage({ token }) {
             </div>
 
             <div className="alm-chart-card alm-chart-wide">
-              <div className="alm-chart-title">
-                <span>📈</span> Evolución Acumulada de Descarga
-              </div>
+              <div className="alm-chart-title"><span>📈</span> Evolución Acumulada de Descarga</div>
               {datosGraficoAcumulado.length > 1 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <AreaChart data={datosGraficoAcumulado}>
@@ -717,7 +755,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* Tabla de registros con resaltado de fuera de rango */}
+          {/* Tabla de registros */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -728,7 +766,7 @@ export default function ClientPage({ token }) {
                   <span className="alm-badge alm-badge-warning">⚠️ {estadisticas.unidadesFueraDeRango.length} fuera de rango</span>
                 )}
                 {transporteSeleccionado && (
-                  <span className="alm-badge alm-badge-filter">Filtrado por: {transporteSeleccionado}</span>
+                  <span className="alm-badge alm-badge-filter">Filtrado: {transporteSeleccionado}</span>
                 )}
               </div>
             </div>
@@ -739,6 +777,7 @@ export default function ClientPage({ token }) {
                     <th>#</th>
                     <th>Placa</th>
                     <th>Transporte</th>
+                    <th>Tipo Unidad</th>
                     <th>Fecha</th>
                     <th>Hora Entrada</th>
                     <th>Hora Salida</th>
@@ -758,6 +797,15 @@ export default function ClientPage({ token }) {
                         <td style={{ fontWeight: 'bold' }}>{reg.correlativo}</td>
                         <td><span style={{ fontFamily: 'monospace', color: fueraRango ? '#f87171' : '#f97316' }}>{reg.placa}</span></td>
                         <td>{reg.transporte || '—'}</td>
+                        <td>
+                          {reg.tipo_unidad
+                            ? <span style={{
+                                background: reg.tipo_unidad.toUpperCase() === 'TRAILETA' ? 'rgba(249,115,22,0.15)' : 'rgba(74,222,128,0.15)',
+                                color: reg.tipo_unidad.toUpperCase() === 'TRAILETA' ? '#f97316' : '#4ade80',
+                                padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 700
+                              }}>{reg.tipo_unidad}</span>
+                            : '—'}
+                        </td>
                         <td>{reg.fecha}</td>
                         <td>{reg.hora_entrada || '—'}</td>
                         <td>{reg.hora_salida || '—'}</td>
@@ -778,43 +826,10 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* Resumen de unidades problemáticas */}
-          {estadisticas.unidadesFueraDeRango.length > 0 && (
-            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '18px' }}>⚠️</span>
-                <span style={{ fontWeight: 'bold', color: 'white' }}>Unidades que requieren atención</span>
-                <span className="alm-badge alm-badge-warning">{estadisticas.unidadesFueraDeRango.length} alertas</span>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-                {Object.entries(
-                  estadisticas.unidadesFueraDeRango.reduce((acc, reg) => {
-                    if (!acc[reg.placa]) acc[reg.placa] = { count: 0, viajes: [], promedio: 0, sumPesos: 0 }
-                    acc[reg.placa].count++
-                    acc[reg.placa].viajes.push(reg.correlativo)
-                    acc[reg.placa].sumPesos += reg.peso_neto_updp_tm
-                    acc[reg.placa].promedio = acc[reg.placa].sumPesos / acc[reg.placa].count
-                    return acc
-                  }, {})
-                ).map(([placa, data]) => (
-                  <div key={placa} style={{ background: '#0f172a', borderRadius: '12px', padding: '12px 16px', minWidth: '180px' }}>
-                    <div style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#f87171', fontSize: '16px' }}>{placa}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
-                      {data.count} fuera de rango · Prom: {data.promedio.toFixed(2)} TM
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#64748b' }}>
-                      Viajes: #{data.viajes.join(', #')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="alm-footer">
             🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
             <br />
-            <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</span>
+            <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO}–{PESO_MAXIMO} TM por viaje</span>
           </div>
         </div>
       </div>
