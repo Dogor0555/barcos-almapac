@@ -137,10 +137,6 @@ export default function ClientPage({ token }) {
     cargarTodosRegistros()
   }, [token])
 
-  // ============================================================
-  // NUEVO: Una entrada por empresa transportista (campo transporte)
-  // Dentro de cada empresa se desglosa por tipo_unidad: VOLQUETA / TRAILETA
-  // ============================================================
   const promediosPorTransporte = useMemo(() => {
     const mapa = {}
 
@@ -173,7 +169,7 @@ export default function ClientPage({ token }) {
         promedioVolqueta: e.volqueta.length > 0 ? totalVolqueta / e.volqueta.length : null,
         fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length,
       }
-    }).sort((a, b) => b.totalNeto - a.totalNeto) // ordenar de mayor a menor TM
+    }).sort((a, b) => b.totalNeto - a.totalNeto)
   }, [todosLosRegistros])
 
   const estadisticas = useMemo(() => {
@@ -284,13 +280,123 @@ export default function ClientPage({ token }) {
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
 
-        /* Grid de tarjetas: 2 columnas siempre, con wrap automático */
+        /* Grid de tarjetas mejorado - más compacto */
         .alm-tarjetas-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 20px;
+          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 16px;
           margin-bottom: 28px;
           margin-top: 20px;
+        }
+
+        /* Tarjeta compacta */
+        .tarjeta-transporte {
+          background: #1e293b;
+          border: 1px solid #334155;
+          border-radius: 14px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          overflow: hidden;
+        }
+        .tarjeta-transporte:hover {
+          transform: translateY(-2px);
+          border-color: #f97316;
+          box-shadow: 0 4px 12px -2px rgba(249,115,22,0.2);
+        }
+        .tarjeta-transporte-selected {
+          background: linear-gradient(135deg, #f97316, #ea580c);
+          border: 1px solid #f97316;
+          box-shadow: 0 4px 12px -2px rgba(249,115,22,0.35);
+        }
+
+        /* Header compacto */
+        .tarjeta-header {
+          padding: 12px 14px 8px 14px;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .tarjeta-nombre {
+          font-size: 14px;
+          font-weight: 800;
+          color: white;
+          line-height: 1.2;
+          margin-bottom: 6px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .tarjeta-stats {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          font-size: 11px;
+        }
+        .tarjeta-viajes {
+          color: #94a3b8;
+          font-weight: 600;
+        }
+        .tarjeta-total {
+          color: #f97316;
+          font-weight: 700;
+          font-family: 'DM Mono', monospace;
+        }
+        .tarjeta-transporte-selected .tarjeta-total {
+          color: white;
+        }
+
+        /* Grid de tipos de unidad - 2 columnas */
+        .tarjeta-tipos {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          padding: 10px 14px;
+        }
+        .tipo-item {
+          background: rgba(0,0,0,0.2);
+          border-radius: 10px;
+          padding: 8px 10px;
+          transition: all 0.2s;
+        }
+        .tipo-item-empty {
+          opacity: 0.4;
+        }
+        .tipo-header {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-bottom: 6px;
+          font-size: 10px;
+          font-weight: 700;
+        }
+        .tipo-valor {
+          font-size: 16px;
+          font-weight: 800;
+          font-family: 'DM Mono', monospace;
+          margin-bottom: 2px;
+        }
+        .tipo-sub {
+          font-size: 9px;
+          color: #64748b;
+        }
+        .tarjeta-transporte-selected .tipo-sub {
+          color: rgba(255,255,255,0.6);
+        }
+
+        /* Alerta compacta */
+        .tarjeta-alerta {
+          margin: 0 14px 12px 14px;
+          padding: 6px 10px;
+          background: rgba(239,68,68,0.15);
+          border-radius: 8px;
+          font-size: 10px;
+          color: #f87171;
+          text-align: center;
+        }
+        .tarjeta-indicador {
+          padding: 8px 14px;
+          font-size: 9px;
+          text-align: center;
+          border-top: 1px solid rgba(255,255,255,0.08);
+          background: rgba(0,0,0,0.1);
         }
 
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -326,55 +432,6 @@ export default function ClientPage({ token }) {
         .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
 
-        /* ---- Tarjeta de empresa transportista ---- */
-        .tarjeta-transporte {
-          background: #1e293b;
-          border: 1px solid #334155;
-          border-radius: 20px;
-          padding: 22px 20px;
-          cursor: pointer;
-          transition: all 0.25s ease;
-          position: relative;
-          overflow: hidden;
-        }
-        .tarjeta-transporte:hover {
-          transform: translateY(-4px);
-          border-color: #f97316;
-          box-shadow: 0 8px 20px -4px rgba(249,115,22,0.2);
-        }
-        .tarjeta-transporte-selected {
-          background: linear-gradient(135deg, #f97316, #ea580c);
-          border: 2px solid #f97316;
-          transform: scale(1.02);
-          box-shadow: 0 10px 25px -5px rgba(249,115,22,0.35);
-        }
-
-        /* Sección de promedios dentro de la tarjeta */
-        .prom-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px 14px;
-          border-radius: 10px;
-          background: rgba(0,0,0,0.25);
-          margin-bottom: 8px;
-        }
-        .prom-row-selected { background: rgba(255,255,255,0.12); }
-        .prom-label { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-        .prom-value { font-size: 20px; font-weight: 800; font-family: 'DM Mono', monospace; }
-        .prom-viajes { font-size: 10px; opacity: 0.7; margin-top: 1px; }
-
-        /* Mini-pill de tipo unidad */
-        .pill-tipo {
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
-        }
-        .pill-traileta { background: rgba(249,115,22,0.2); color: #f97316; }
-        .pill-volqueta { background: rgba(74,222,128,0.2); color: #4ade80; }
-        .pill-traileta-sel { background: rgba(255,255,255,0.2); color: white; }
-        .pill-volqueta-sel { background: rgba(255,255,255,0.15); color: white; }
-
-        /* Encabezado de sección */
         .section-title {
           font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
           text-transform: uppercase; color: #64748b;
@@ -542,8 +599,8 @@ export default function ClientPage({ token }) {
           )}
 
           {/* ============================================================
-              TARJETAS POR EMPRESA TRANSPORTISTA
-              Haz clic en una tarjeta para filtrar la tabla y los gráficos
+              TARJETAS COMPACTAS POR EMPRESA TRANSPORTISTA
+              Diseño mejorado: más pequeño, menos scroll vertical
               ============================================================ */}
           {promediosPorTransporte.length > 0 && (
             <>
@@ -557,112 +614,72 @@ export default function ClientPage({ token }) {
                       className={`tarjeta-transporte ${sel ? 'tarjeta-transporte-selected' : ''}`}
                       onClick={() => handleSeleccionarTransporte(empresa.nombre)}
                     >
-                      {/* Encabezado de la tarjeta */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                        <div>
-                          <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: sel ? 'rgba(255,255,255,0.7)' : '#64748b', marginBottom: '4px' }}>
-                            Transportista
-                          </div>
-                          <div style={{ fontSize: '17px', fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
-                            {empresa.nombre}
-                          </div>
+                      {/* Header compacto */}
+                      <div className="tarjeta-header">
+                        <div className="tarjeta-nombre" title={empresa.nombre}>
+                          {empresa.nombre}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{
-                            background: sel ? 'rgba(255,255,255,0.2)' : 'rgba(249,115,22,0.15)',
-                            color: sel ? 'white' : '#f97316',
-                            padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, marginBottom: '4px'
-                          }}>
-                            {empresa.totalViajes} viajes
-                          </div>
-                          <div style={{ fontSize: '11px', color: sel ? 'rgba(255,255,255,0.7)' : '#64748b' }}>
-                            {fmtTM(empresa.totalNeto, 2)} TM total
-                          </div>
+                        <div className="tarjeta-stats">
+                          <span className="tarjeta-viajes">{empresa.totalViajes} viajes</span>
+                          <span className="tarjeta-total">{fmtTM(empresa.totalNeto, 1)} TM</span>
                         </div>
                       </div>
 
-                      {/* Divisor */}
-                      <div style={{ height: '1px', background: sel ? 'rgba(255,255,255,0.2)' : '#334155', marginBottom: '14px' }} />
+                      {/* Grid de tipos de unidad - 2 columnas lado a lado */}
+                      <div className="tarjeta-tipos">
+                        {/* TRAILETA */}
+                        <div className={`tipo-item ${empresa.viajesTraileta === 0 ? 'tipo-item-empty' : ''}`}>
+                          <div className="tipo-header">
+                            <span>🚛</span> TRAILETA
+                          </div>
+                          {empresa.viajesTraileta > 0 ? (
+                            <>
+                              <div className="tipo-valor" style={{ color: sel ? 'white' : '#f97316' }}>
+                                {fmtTM(empresa.promedioTraileta, 1)}
+                              </div>
+                              <div className="tipo-sub">{empresa.viajesTraileta} viajes · {fmtTM(empresa.totalTraileta, 0)} TM</div>
+                            </>
+                          ) : (
+                            <div className="tipo-sub" style={{ color: '#475569', marginTop: '4px' }}>Sin registros</div>
+                          )}
+                        </div>
 
-                      {/* Fila TRAILETA */}
-                      {empresa.viajesTraileta > 0 ? (
-                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`}>
-                          <div>
-                            <div className="prom-label">
-                              <span className={`pill-tipo ${sel ? 'pill-traileta-sel' : 'pill-traileta'}`}>🚛 TRAILETA</span>
-                            </div>
-                            <div className="prom-viajes" style={{ color: sel ? 'rgba(255,255,255,0.6)' : '#64748b', marginTop: '4px', paddingLeft: '2px' }}>
-                              {empresa.viajesTraileta} viajes · {fmtTM(empresa.totalTraileta, 2)} TM
-                            </div>
+                        {/* VOLQUETA */}
+                        <div className={`tipo-item ${empresa.viajesVolqueta === 0 ? 'tipo-item-empty' : ''}`}>
+                          <div className="tipo-header">
+                            <span>⛰️</span> VOLQUETA
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div className="prom-value" style={{ color: sel ? 'white' : '#f97316' }}>
-                              {fmtTM(empresa.promedioTraileta, 2)}
-                            </div>
-                            <div style={{ fontSize: '10px', color: sel ? 'rgba(255,255,255,0.6)' : '#64748b' }}>TM / viaje</div>
-                          </div>
+                          {empresa.viajesVolqueta > 0 ? (
+                            <>
+                              <div className="tipo-valor" style={{ color: sel ? 'white' : '#4ade80' }}>
+                                {fmtTM(empresa.promedioVolqueta, 1)}
+                              </div>
+                              <div className="tipo-sub">{empresa.viajesVolqueta} viajes · {fmtTM(empresa.totalVolqueta, 0)} TM</div>
+                            </>
+                          ) : (
+                            <div className="tipo-sub" style={{ color: '#475569', marginTop: '4px' }}>Sin registros</div>
+                          )}
                         </div>
-                      ) : (
-                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ opacity: 0.4 }}>
-                          <span className={`pill-tipo ${sel ? 'pill-traileta-sel' : 'pill-traileta'}`}>🚛 TRAILETA</span>
-                          <span style={{ fontSize: '12px', color: sel ? 'rgba(255,255,255,0.5)' : '#475569' }}>Sin registros</span>
-                        </div>
-                      )}
+                      </div>
 
-                      {/* Fila VOLQUETA */}
-                      {empresa.viajesVolqueta > 0 ? (
-                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ marginBottom: 0 }}>
-                          <div>
-                            <div className="prom-label">
-                              <span className={`pill-tipo ${sel ? 'pill-volqueta-sel' : 'pill-volqueta'}`}>⛰️ VOLQUETA</span>
-                            </div>
-                            <div className="prom-viajes" style={{ color: sel ? 'rgba(255,255,255,0.6)' : '#64748b', marginTop: '4px', paddingLeft: '2px' }}>
-                              {empresa.viajesVolqueta} viajes · {fmtTM(empresa.totalVolqueta, 2)} TM
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div className="prom-value" style={{ color: sel ? 'white' : '#4ade80' }}>
-                              {fmtTM(empresa.promedioVolqueta, 2)}
-                            </div>
-                            <div style={{ fontSize: '10px', color: sel ? 'rgba(255,255,255,0.6)' : '#64748b' }}>TM / viaje</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className={`prom-row ${sel ? 'prom-row-selected' : ''}`} style={{ marginBottom: 0, opacity: 0.4 }}>
-                          <span className={`pill-tipo ${sel ? 'pill-volqueta-sel' : 'pill-volqueta'}`}>⛰️ VOLQUETA</span>
-                          <span style={{ fontSize: '12px', color: sel ? 'rgba(255,255,255,0.5)' : '#475569' }}>Sin registros</span>
-                        </div>
-                      )}
-
-                      {/* Alerta fuera de rango de esta empresa */}
+                      {/* Alerta fuera de rango (solo si aplica) */}
                       {empresa.fueraRango > 0 && (
-                        <div style={{
-                          marginTop: '12px', fontSize: '11px', color: '#f87171',
-                          background: sel ? 'rgba(0,0,0,0.25)' : 'rgba(239,68,68,0.12)',
-                          padding: '6px 12px', borderRadius: '8px', textAlign: 'center'
-                        }}>
-                          ⚠️ {empresa.fueraRango} {empresa.fueraRango === 1 ? 'unidad fuera' : 'unidades fuera'} del rango ({PESO_MINIMO}–{PESO_MAXIMO} TM)
+                        <div className="tarjeta-alerta">
+                          ⚠️ {empresa.fueraRango} fuera de rango ({PESO_MINIMO}-{PESO_MAXIMO} TM)
                         </div>
                       )}
 
-                      {/* Indicador "clic para filtrar" */}
-                      {!sel && (
-                        <div style={{ marginTop: '10px', fontSize: '10px', color: '#475569', textAlign: 'center' }}>
-                          Clic para filtrar por esta empresa
-                        </div>
-                      )}
-                      {sel && (
-                        <div style={{ marginTop: '10px', fontSize: '10px', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
-                          ✓ Filtrando · Clic para quitar filtro
-                        </div>
-                      )}
+                      {/* Indicador de acción */}
+                      <div className="tarjeta-indicador">
+                        {sel ? '✓ Filtrando · clic para quitar' : 'clic para filtrar'}
+                      </div>
                     </div>
                   )
                 })}
               </div>
             </>
           )}
-          {/* ============ FIN TARJETAS ============ */}
+          {/* ============ FIN TARJETAS COMPACTAS ============ */}
 
           {/* Gráficos */}
           <div className="alm-charts-row">
