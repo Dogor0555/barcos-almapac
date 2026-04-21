@@ -1279,17 +1279,17 @@ export default function ExportacionPage() {
     return resultado.sort((a, b) => b.acumuladoActual - a.acumuladoActual)
   }, [acumuladosPorBodega, exportaciones, productoActivo])
   
-  // Calcular el flujo para cada bodega (CORREGIDO)
-  // Para la bodega activa: FLUJO = Acumulado Global - Acumulado de esa bodega
-  // Para bodegas inactivas: FLUJO = Su propio acumulado (ya terminaron de cargar)
+  // Calcular el flujo para cada bodega
+  // Flujo = Acumulado Global - Acumulado de la bodega actual (para la bodega activa)
+  // Para bodegas inactivas, el flujo es su propio acumulado
   const flujoPorBodega = useMemo(() => {
     return resumenPorBodega.map(bodega => {
       let flujo = 0
       if (bodega.activa) {
-        // Bodega activa: el flujo es lo que falta por cargar (global - acumulado de esta bodega)
+        // Para la bodega activa: FLUJO = Acumulado Global - Acumulado de esta bodega
         flujo = Math.max(0, totalGeneral - bodega.acumuladoActual)
       } else {
-        // Bodegas inactivas: muestran su acumulado total (lo que ya cargaron)
+        // Para bodegas ya terminadas: FLUJO = Acumulado de la bodega (ya terminaron)
         flujo = bodega.acumuladoActual
       }
       
@@ -2054,7 +2054,7 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA - VERSIÓN FINAL */}
+                {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA - VERSIÓN FINAL */}
         {productoActivo && resumenPorBodega.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -2063,7 +2063,7 @@ export default function ExportacionPage() {
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {flujoPorBodega.map(bodega => {
+              {resumenPorBodega.map(bodega => {
                 const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
                 
                 // Calcular flujo REAL de la bodega activa (últimos registros)
@@ -2141,19 +2141,9 @@ export default function ExportacionPage() {
                         <span className="font-bold text-blue-400">{bodega.acumuladoActual.toFixed(3)} TM</span>
                       </div>
                       
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">
-                          {bodega.activa ? '⚡ FLUJO (FALTA POR CARGAR):' : '📊 TOTAL CARGADO (FLUJO):'}
-                        </span>
-                        <span className={`font-bold ${bodega.activa ? 'text-orange-400' : 'text-cyan-400'}`}>
-                          {bodega.flujo.toFixed(3)} TM
-                          {!bodega.activa && ''}
-                        </span>
-                      </div>
-                      
                       {bodega.activa && flujoActual > 0 && (
                         <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2 -mx-1">
-                          <span className="text-blue-300">⚡ VELOCIDAD ACTUAL:</span>
+                          <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
                           <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
                         </div>
                       )}
@@ -2206,9 +2196,8 @@ export default function ExportacionPage() {
               {/* Leyenda de flujos */}
               <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-500 flex flex-wrap gap-3">
                 <span>📖 Leyenda:</span>
-                <span>• <span className="text-orange-400">FLUJO (BODEGA ACTIVA)</span>: Lo que falta por cargar = Total Global - Acumulado Bodega</span>
-                <span>• <span className="text-cyan-400">TOTAL CARGADO (BODEGA INACTIVA)</span>: Total que ya cargó esa bodega</span>
-                <span>• <span className="text-blue-300">VELOCIDAD ACTUAL</span>: Velocidad en este momento (últimos 2 registros de la bodega)</span>
+                <span>• <span className="text-blue-300">FLUJO ACTUAL</span>: Velocidad de carga en este momento (últimos 2 registros)</span>
+                <span>• <span className="text-cyan-400">Flujo promedio histórico</span>: Promedio desde que empezó la bodega</span>
               </div>
             </div>
           </div>
