@@ -2303,131 +2303,171 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Historial de carga */}
-        {exportacionesFiltradas.length > 0 && (
-          <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-            <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
-              <h3 className="font-bold text-white">
-                Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length} registros)
-                <span className="text-sm font-normal text-slate-500 ml-2">
-                  Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
-                </span>
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {[...exportacionesFiltradas]
-                    .sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora))
-                    .map((exp, idx, arr) => {
-                      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-                      const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
-                      const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
-                      const horaNum = parseInt(horaSV.split(':')[0])
-                      
-                      let turno = '—'
-                      if (horaNum >= 6 && horaNum < 18) {
-                        turno = '6:00 - 18:00'
-                      } else {
-                        turno = '18:00 - 6:00'
-                      }
-                      
-                      // Calcular flujo
-                      let flujo = 0
-                      if (idx < arr.length - 1) {
-                        const siguiente = arr[idx + 1]
-                        const tiempoHoras = (new Date(exp.fecha_hora) - new Date(siguiente.fecha_hora)) / (1000 * 60 * 60)
-                        const delta = Number(exp.acumulado_tm) - Number(siguiente.acumulado_tm)
-                        if (tiempoHoras > 0 && delta > 0) {
-                          flujo = delta / tiempoHoras
-                        }
-                      }
-                      
-                      return (
-                        <tr key={exp.id} className="hover:bg-white/5">
-                          <td className="px-4 py-3">
-                            <div>{fechaSV}</div>
-                            <div className="text-xs text-slate-500">{horaSV}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              turno === '6:00 - 18:00' 
-                                ? 'bg-yellow-500/20 text-yellow-400' 
-                                : 'bg-blue-500/20 text-blue-400'
-                            }`}>
-                              {turno}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-bold text-blue-400">
-                            {(exp.acumulado_tm || 0).toFixed(3)} TM
-                          </td>
-                          <td className="px-4 py-3 font-bold text-green-400">
-                            {flujo > 0 ? `${flujo.toFixed(3)} TM/h` : '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            {bodega ? (
-                              <div>
-                                <p className="text-white">{bodega.nombre}</p>
-                                <p className="text-xs text-green-400">{bodega.codigo}</p>
-                              </div>
-                            ) : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleEditarExportacion(exp)}
-                                className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-4 h-4 text-blue-400" />
-                              </button>
-                              <button
-                                onClick={() => handleEliminarExportacion(exp.id)}
-                                className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                </tbody>
-                <tfoot className="bg-slate-900">
-                  <tr className="bg-orange-500/5">
-                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
-                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-                      {totalGeneral.toFixed(3)} TM
-                    </td>
-                    <td colSpan="3"></td>
-                  </tr>
-                  {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
-                    <tr className="bg-orange-500/5">
-                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
-                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-                        {faltaPorCargar.toFixed(3)} TM
-                      </td>
-                      <td colSpan="3"></td>
-                    </tr>
-                  )}
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        )}
+      
+{exportacionesFiltradas.length > 0 && (
+  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+    <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+      <h3 className="font-bold text-white">
+        Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length} registros)
+        <span className="text-sm font-normal text-slate-500 ml-2">
+          Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
+        </span>
+      </h3>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead className="bg-slate-800">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {(() => {
+            // 1. Primero, ordenar ASCENDENTE para identificar primeros registros
+            const ascendente = [...exportacionesFiltradas].sort(
+              (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+            )
+            
+            // 2. Identificar qué registros son los PRIMEROS de cada bodega
+            const esPrimerRegistroDeBodega = new Map() // key: id_registro, value: true/false
+            const bodegasVistas = new Set()
+            
+            // Recorrer de MÁS ANTIGUO a MÁS RECIENTE
+            ascendente.forEach(exp => {
+              const key = `${exp.bodega_id}`
+              if (!bodegasVistas.has(key)) {
+                // Es el primer registro de esta bodega
+                esPrimerRegistroDeBodega.set(exp.id, true)
+                bodegasVistas.add(key)
+              } else {
+                esPrimerRegistroDeBodega.set(exp.id, false)
+              }
+            })
+            
+            // 3. Ahora mostrar en orden DESCENDENTE (más reciente primero)
+            const descendente = [...exportacionesFiltradas].sort(
+              (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
+            )
+            
+            return descendente.map((exp, idx, arrDesc) => {
+              const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+              const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+              const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+              const horaNum = parseInt(horaSV.split(':')[0])
+              
+              let turno = '—'
+              if (horaNum >= 6 && horaNum < 18) {
+                turno = '6:00 - 18:00'
+              } else {
+                turno = '18:00 - 6:00'
+              }
+              
+              // Calcular flujo (velocidad entre registros CONSECUTIVOS en orden ascendente)
+              let flujo = 0
+              const esPrimero = esPrimerRegistroDeBodega.get(exp.id) || false
+              
+              // Buscar el registro anterior (más antiguo) de la MISMA bodega
+              const ascendenteFiltrado = ascendente.filter(a => a.bodega_id === exp.bodega_id)
+              const idxEnAscendente = ascendenteFiltrado.findIndex(a => a.id === exp.id)
+              const registroAnterior = idxEnAscendente > 0 ? ascendenteFiltrado[idxEnAscendente - 1] : null
+              
+              if (esPrimero) {
+                // PRIMER REGISTRO DE LA BODEGA: el flujo ES el acumulado
+                flujo = Number(exp.acumulado_tm) || 0
+              } else if (registroAnterior) {
+                // Calcular velocidad entre este registro y el anterior
+                const tiempoHoras = (new Date(exp.fecha_hora) - new Date(registroAnterior.fecha_hora)) / (1000 * 60 * 60)
+                const delta = Number(exp.acumulado_tm) - Number(registroAnterior.acumulado_tm)
+                if (tiempoHoras > 0 && delta > 0) {
+                  flujo = delta / tiempoHoras
+                }
+              }
+              
+              return (
+                <tr key={exp.id} className="hover:bg-white/5">
+                  <td className="px-4 py-3">
+                    <div>{fechaSV}</div>
+                    <div className="text-xs text-slate-500">{horaSV}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      turno === '6:00 - 18:00' 
+                        ? 'bg-yellow-500/20 text-yellow-400' 
+                        : 'bg-blue-500/20 text-blue-400'
+                    }`}>
+                      {turno}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-bold text-blue-400">
+                    {(exp.acumulado_tm || 0).toFixed(3)} TM
+                  </td>
+                  <td className="px-4 py-3 font-bold text-green-400">
+                    {flujo > 0 
+                      ? esPrimero 
+                        ? `${flujo.toFixed(3)} TM` 
+                        : `${flujo.toFixed(3)} TM/h`
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {bodega ? (
+                      <div>
+                        <p className="text-white">{bodega.nombre}</p>
+                        <p className="text-xs text-green-400">{bodega.codigo}</p>
+                      </div>
+                    ) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">{exp.observaciones || '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditarExportacion(exp)}
+                        className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 className="w-4 h-4 text-blue-400" />
+                      </button>
+                      <button
+                        onClick={() => handleEliminarExportacion(exp.id)}
+                        className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })
+          })()}
+        </tbody>
+        <tfoot className="bg-slate-900">
+          <tr className="bg-orange-500/5">
+            <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
+            <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
+              {totalGeneral.toFixed(3)} TM
+            </td>
+            <td colSpan="3"></td>
+           </tr>
+          {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+            <tr className="bg-orange-500/5">
+              <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
+              <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
+                {faltaPorCargar.toFixed(3)} TM
+              </td>
+              <td colSpan="3"></td>
+            </tr>
+          )}
+        </tfoot>
+      </table>
+    </div>
+  </div>
+)}
         
         {/* Bitácora */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
