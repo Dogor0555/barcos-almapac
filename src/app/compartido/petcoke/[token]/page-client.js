@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -171,6 +171,79 @@ export default function ClientPage({ token }) {
       }
     }).sort((a, b) => b.totalNeto - a.totalNeto)
   }, [todosLosRegistros])
+
+  // NUEVO: Calcular flujo por hora
+  const flujoPorHora = useMemo(() => {
+    if (!registros.length) return []
+
+    // Agrupar por hora (usando hora_entrada si existe, o fecha/hora combinada)
+    const flujoMap = new Map()
+
+    registros.forEach(reg => {
+      let horaKey = ''
+      let horaMostrar = ''
+      
+      if (reg.hora_entrada) {
+        // Extraer hora de entrada (formato HH:MM:SS)
+        const horaPart = reg.hora_entrada.split(':')[0]
+        horaKey = `${reg.fecha} ${horaPart}:00`
+        horaMostrar = `${horaPart}:00`
+      } else if (reg.fecha) {
+        // Si no hay hora, usar fecha sola
+        horaKey = reg.fecha
+        horaMostrar = reg.fecha
+      } else {
+        return
+      }
+
+      if (!flujoMap.has(horaKey)) {
+        flujoMap.set(horaKey, {
+          hora: horaMostrar,
+          horaCompleta: horaKey,
+          viajes: 0,
+          totalTM: 0,
+          promedio: 0,
+          viajesFueraRango: 0
+        })
+      }
+
+      const horaData = flujoMap.get(horaKey)
+      horaData.viajes++
+      horaData.totalTM += reg.peso_neto_updp_tm || 0
+      if (estaFueraDeRango(reg.peso_neto_updp_tm)) {
+        horaData.viajesFueraRango++
+      }
+    })
+
+    // Convertir a array y calcular promedios
+    let flujoArray = Array.from(flujoMap.values()).map(item => ({
+      ...item,
+      promedio: item.viajes > 0 ? item.totalTM / item.viajes : 0
+    }))
+
+    // Ordenar por hora/fecha
+    flujoArray.sort((a, b) => a.horaCompleta.localeCompare(b.horaCompleta))
+
+    // Calcular flujo acumulado
+    let acumulado = 0
+    flujoArray = flujoArray.map(item => {
+      acumulado += item.totalTM
+      return { ...item, acumulado }
+    })
+
+    return flujoArray
+  }, [registros])
+
+  // Calcular estadísticas de flujo
+  const estadisticasFlujo = useMemo(() => {
+    if (!flujoPorHora.length) return { maxPorHora: 0, promedioPorHora: 0, totalHoras: 0 }
+    
+    const maxPorHora = Math.max(...flujoPorHora.map(h => h.totalTM))
+    const promedioPorHora = flujoPorHora.reduce((sum, h) => sum + h.totalTM, 0) / flujoPorHora.length
+    const totalHoras = flujoPorHora.length
+    
+    return { maxPorHora, promedioPorHora, totalHoras }
+  }, [flujoPorHora])
 
   const estadisticas = useMemo(() => {
     if (!registros.length) return {
@@ -399,6 +472,33 @@ export default function ClientPage({ token }) {
           background: rgba(0,0,0,0.1);
         }
 
+        /* Estadísticas de flujo */
+        .flujo-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          margin-bottom: 16px;
+          background: rgba(0,0,0,0.2);
+          border-radius: 12px;
+          padding: 12px;
+        }
+        .flujo-stat {
+          text-align: center;
+        }
+        .flujo-stat-label {
+          font-size: 10px;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+        }
+        .flujo-stat-value {
+          font-size: 18px;
+          font-weight: 800;
+          font-family: 'DM Mono', monospace;
+          color: #f97316;
+        }
+
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
         .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--orange); }
@@ -447,6 +547,7 @@ export default function ClientPage({ token }) {
           .alm-charts-row { grid-template-columns: 1fr; }
           .alm-body { padding: 16px; }
           .alm-tarjetas-grid { grid-template-columns: 1fr; }
+          .flujo-stats { grid-template-columns: 1fr; gap: 8px; }
         }
       `}</style>
 
@@ -600,7 +701,6 @@ export default function ClientPage({ token }) {
 
           {/* ============================================================
               TARJETAS COMPACTAS POR EMPRESA TRANSPORTISTA
-              Diseño mejorado: más pequeño, menos scroll vertical
               ============================================================ */}
           {promediosPorTransporte.length > 0 && (
             <>
@@ -614,7 +714,6 @@ export default function ClientPage({ token }) {
                       className={`tarjeta-transporte ${sel ? 'tarjeta-transporte-selected' : ''}`}
                       onClick={() => handleSeleccionarTransporte(empresa.nombre)}
                     >
-                      {/* Header compacto */}
                       <div className="tarjeta-header">
                         <div className="tarjeta-nombre" title={empresa.nombre}>
                           {empresa.nombre}
@@ -625,9 +724,7 @@ export default function ClientPage({ token }) {
                         </div>
                       </div>
 
-                      {/* Grid de tipos de unidad - 2 columnas lado a lado */}
                       <div className="tarjeta-tipos">
-                        {/* TRAILETA */}
                         <div className={`tipo-item ${empresa.viajesTraileta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
                             <span>🚛</span> TRAILETA
@@ -644,7 +741,6 @@ export default function ClientPage({ token }) {
                           )}
                         </div>
 
-                        {/* VOLQUETA */}
                         <div className={`tipo-item ${empresa.viajesVolqueta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
                             <span>⛰️</span> VOLQUETA
@@ -662,14 +758,12 @@ export default function ClientPage({ token }) {
                         </div>
                       </div>
 
-                      {/* Alerta fuera de rango (solo si aplica) */}
                       {empresa.fueraRango > 0 && (
                         <div className="tarjeta-alerta">
                           ⚠️ {empresa.fueraRango} fuera de rango ({PESO_MINIMO}-{PESO_MAXIMO} TM)
                         </div>
                       )}
 
-                      {/* Indicador de acción */}
                       <div className="tarjeta-indicador">
                         {sel ? '✓ Filtrando · clic para quitar' : 'clic para filtrar'}
                       </div>
@@ -679,9 +773,128 @@ export default function ClientPage({ token }) {
               </div>
             </>
           )}
-          {/* ============ FIN TARJETAS COMPACTAS ============ */}
 
-          {/* Gráficos */}
+          {/* ============================================================
+              NUEVO GRÁFICO DE FLUJO POR HORA
+              ============================================================ */}
+          <div className="alm-chart-card alm-chart-wide">
+            <div className="alm-chart-title">
+              <span>⏱️</span> Flujo de Descarga por Hora
+            </div>
+            
+            {/* Estadísticas rápidas del flujo */}
+            {flujoPorHora.length > 0 && (
+              <div className="flujo-stats">
+                <div className="flujo-stat">
+                  <div className="flujo-stat-label">🚛 Pico Máximo por Hora</div>
+                  <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.maxPorHora, 1)} TM</div>
+                </div>
+                <div className="flujo-stat">
+                  <div className="flujo-stat-label">📊 Promedio por Hora</div>
+                  <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM</div>
+                </div>
+                <div className="flujo-stat">
+                  <div className="flujo-stat-label">⏰ Periodos Activos</div>
+                  <div className="flujo-stat-value">{estadisticasFlujo.totalHoras} horas</div>
+                </div>
+              </div>
+            )}
+
+            {flujoPorHora.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={flujoPorHora}>
+                  <defs>
+                    <linearGradient id="flujoGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis 
+                    dataKey="hora" 
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                    interval={Math.floor(flujoPorHora.length / 10)} // Mostrar ~10 etiquetas
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    tick={{ fill: '#94a3b8' }} 
+                    tickFormatter={(v) => fmtTM(v, 0)}
+                    label={{ value: 'Toneladas por Hora', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: '#94a3b8' }}
+                    tickFormatter={(v) => fmtTM(v, 0)}
+                    label={{ value: 'Acumulado Total', angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 11 }}
+                  />
+                  <Tooltip 
+                    formatter={(value, name) => {
+                      if (name === 'totalTM') return [`${fmtTM(value, 2)} TM`, 'Descarga por Hora']
+                      if (name === 'acumulado') return [`${fmtTM(value, 2)} TM`, 'Acumulado Total']
+                      if (name === 'viajes') return [`${value} viajes`, 'N° Viajes']
+                      if (name === 'promedio') return [`${fmtTM(value, 2)} TM`, 'Promedio por Viaje']
+                      return [value, name]
+                    }}
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                    labelStyle={{ color: '#f97316', fontWeight: 'bold' }}
+                  />
+                  
+                  {/* Barras de toneladas por hora */}
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="totalTM" 
+                    fill="#f97316" 
+                    opacity={0.8}
+                    radius={[4, 4, 0, 0]}
+                    name="Descarga por Hora"
+                  />
+                  
+                  {/* Línea de acumulado */}
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="acumulado" 
+                    stroke="#4ade80" 
+                    strokeWidth={3}
+                    dot={{ r: 3, fill: '#4ade80' }}
+                    name="Acumulado Total"
+                  />
+                  
+                  {/* Línea de referencia para el promedio */}
+                  <ReferenceLine 
+                    yAxisId="left"
+                    y={estadisticasFlujo.promedioPorHora} 
+                    stroke="#fb923c" 
+                    strokeDasharray="5 5"
+                    label={{ value: `Promedio: ${fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM/h`, fill: '#fb923c', fontSize: 10 }}
+                  />
+                  
+                  {/* Línea de meta si existe */}
+                  {meta > 0 && (
+                    <ReferenceLine 
+                      yAxisId="right"
+                      y={meta} 
+                      stroke="#22c55e" 
+                      strokeDasharray="3 3"
+                      label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#22c55e', fontSize: 10 }}
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#64748b', padding: '80px 40px' }}>
+                <span style={{ fontSize: '48px', display: 'block', marginBottom: '16px' }}>⏰</span>
+                <p>No hay datos de hora disponibles para mostrar el flujo</p>
+                <p style={{ fontSize: '12px', marginTop: '8px' }}>Se requiere información de hora_entrada en los registros</p>
+              </div>
+            )}
+          </div>
+
+          {/* Gráficos adicionales */}
           <div className="alm-charts-row">
             <div className="alm-chart-card">
               <div className="alm-chart-title"><span>📊</span> Descarga por Transporte</div>
@@ -745,30 +958,6 @@ export default function ClientPage({ token }) {
                   </BarChart>
                 </ResponsiveContainer>
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
-            </div>
-
-            <div className="alm-chart-card alm-chart-wide">
-              <div className="alm-chart-title"><span>📈</span> Evolución Acumulada de Descarga</div>
-              {datosGraficoAcumulado.length > 1 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <AreaChart data={datosGraficoAcumulado}>
-                    <defs>
-                      <linearGradient id="acumuladoGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
-                    <Area type="monotone" dataKey="acumulado" stroke="#f97316" strokeWidth={2} fill="url(#acumuladoGrad)" name="Acumulado Total" />
-                    {meta > 0 && (
-                      <ReferenceLine y={meta} stroke="#4ade80" strokeDasharray="3 3" label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#4ade80', fontSize: 10 }} />
-                    )}
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Se necesitan al menos 2 registros</div>}
             </div>
           </div>
 
