@@ -2475,7 +2475,7 @@ export default function ExportacionPage() {
                 if (infoFlujo.tipo === 'inicio_o_retorno') {
                   // Para INICIO o RETORNO: mostrar el ACUMULADO (positivo)
                   flujoColor = "text-cyan-400"
-                  flujoIcono = <span className="mr-1">🎯</span>
+                  flujoIcono = <span className="mr-1"></span>
                   flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
                 } else {
                   // Para delta entre lecturas de la MISMA bodega
@@ -2484,7 +2484,7 @@ export default function ExportacionPage() {
                     if (infoFlujo.minutos && infoFlujo.minutos < 15) {
                       flujoIcono = <span className="mr-1">⚡</span>
                     } else {
-                      flujoIcono = <span className="mr-1">📈</span>
+                      flujoIcono = <span className="mr-1"></span>
                     }
                     flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
                     if (infoFlujo.minutos) {
