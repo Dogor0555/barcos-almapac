@@ -2057,152 +2057,215 @@ export default function ExportacionPage() {
 
                 {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA - VERSIÓN FINAL */}
         {productoActivo && resumenPorBodega.length > 0 && (
-          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-green-400" />
-              Resumen por Bodega - {productoActivo.nombre}
-            </h3>
+  <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+      <Layers className="w-5 h-5 text-green-400" />
+      Resumen por Bodega - {productoActivo.nombre}
+    </h3>
+    
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {(() => {
+        // Obtener todas las exportaciones ordenadas para analizar retornos
+        const todasExportaciones = exportaciones.filter(e => e.producto_id === productoActivo.id)
+        const ascendente = [...todasExportaciones].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+        
+        return resumenPorBodega.map(bodega => {
+          const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
+          
+          // Obtener registros de ESTA bodega
+          const misRegistros = ascendente.filter(e => e.bodega_id === bodega.bodega_id)
+          
+          // CALCULAR TOTAL REAL (sumando retornos si existen)
+          let totalReal = bodega.acumuladoActual
+          let tieneRetorno = false
+          let valorAnterior = 0
+          let nuevoCargado = 0
+          
+          if (misRegistros.length >= 2) {
+            // Verificar si el último registro es un retorno
+            const ultimo = misRegistros[misRegistros.length - 1]
+            const penultimo = misRegistros[misRegistros.length - 2]
+            const fechaUltimo = new Date(ultimo.fecha_hora)
+            const fechaPenultimo = new Date(penultimo.fecha_hora)
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resumenPorBodega.map(bodega => {
-                const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
-                
-                // Calcular flujo REAL de la bodega activa (últimos registros)
-                let flujoActual = 0
-                let flujoPromedioHistorial = 0
-                
-                if (bodega.activa) {
-                  // Para la bodega activa: calcular flujo con los últimos 2 registros de ESTA bodega
-                  const lecturasBodega = exportacionesFiltradas
-                    .filter(e => e.bodega_id === bodega.bodega_id)
-                    .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-                  
-                  if (lecturasBodega.length >= 2) {
-                    const ultima = lecturasBodega[lecturasBodega.length - 1]
-                    const anterior = lecturasBodega[lecturasBodega.length - 2]
-                    const horas = (new Date(ultima.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
-                    const delta = (Number(ultima.acumulado_tm) || 0) - (Number(anterior.acumulado_tm) || 0)
-                    if (horas > 0 && delta > 0) {
-                      flujoActual = delta / horas
-                    }
-                  }
-                  
-                  // Calcular flujo promedio histórico de esta bodega
-                  if (lecturasBodega.length >= 2) {
-                    const primera = lecturasBodega[0]
-                    const ultima = lecturasBodega[lecturasBodega.length - 1]
-                    const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
-                    if (horasTotal > 0 && bodega.acumuladoActual > 0) {
-                      flujoPromedioHistorial = bodega.acumuladoActual / horasTotal
-                    }
-                  }
-                } else {
-                  // Para bodegas inactivas: calcular su flujo promedio histórico (mientras estuvieron activas)
-                  const lecturasBodega = exportacionesFiltradas
-                    .filter(e => e.bodega_id === bodega.bodega_id)
-                    .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-                  
-                  if (lecturasBodega.length >= 2) {
-                    const primera = lecturasBodega[0]
-                    const ultima = lecturasBodega[lecturasBodega.length - 1]
-                    const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
-                    if (horasTotal > 0 && bodega.acumuladoActual > 0) {
-                      flujoPromedioHistorial = bodega.acumuladoActual / horasTotal
-                    }
-                  }
-                }
-                
-                return (
-                  <div key={bodega.bodega_id} className={`bg-slate-900 rounded-xl p-4 border-2 transition-all ${
-                    bodega.activa ? 'border-green-500/50 shadow-lg shadow-green-500/10' : 'border-white/10'
-                  }`}>
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className={`p-2 rounded-lg ${bodega.activa ? 'bg-green-500/30 animate-pulse' : 'bg-green-500/20'}`}>
-                        <Layers className={`w-4 h-4 ${bodega.activa ? 'text-green-300' : 'text-green-400'}`} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-white">{bodega.nombre}</p>
-                        <p className="text-xs text-green-400">{bodega.codigo}</p>
-                      </div>
-                      {bodega.activa && (
-                        <span className="ml-auto text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                          ACTIVA
-                        </span>
-                      )}
-                      {!bodega.activa && bodega.acumuladoActual > 0 && (
-                        <span className="ml-auto text-[10px] bg-slate-500/30 text-slate-400 px-2 py-0.5 rounded-full font-bold">
-                          COMPLETADA
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">📦 Total cargado en bodega:</span>
-                        <span className="font-bold text-blue-400">{bodega.acumuladoActual.toFixed(3)} TM</span>
-                      </div>
-                      
-                      {bodega.activa && flujoActual > 0 && (
-                        <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2 -mx-1">
-                          <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
-                          <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
-                        </div>
-                      )}
-                      
-                      {flujoPromedioHistorial > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-slate-400">📊 Flujo promedio histórico:</span>
-                          <span className="font-bold text-cyan-400">{flujoPromedioHistorial.toFixed(3)} TM/h</span>
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-white/10">
-                        <span>📝 {bodega.lecturas} lecturas</span>
-                        {bodega.activa ? (
-                          <span className="text-green-500">● En progreso</span>
-                        ) : bodega.acumuladoActual > 0 ? (
-                          <span className="text-slate-500">✓ Finalizada</span>
-                        ) : (
-                          <span className="text-slate-600">○ Sin carga</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            // Ver si entre estos dos hubo otras bodegas
+            let huboOtras = false
+            for (const exp of ascendente) {
+              if (exp.bodega_id === bodega.bodega_id) continue
+              const fechaExp = new Date(exp.fecha_hora)
+              if (fechaExp > fechaPenultimo && fechaExp < fechaUltimo) {
+                huboOtras = true
+                break
+              }
+            }
             
-            {/* VERIFICACIÓN DE CONSISTENCIA */}
-            <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-2">📊 Resumen de carga:</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="flex justify-between text-sm">
-                  <span>🎯 Total acumulado global:</span>
-                  <span className="font-bold text-blue-400">{totalGeneral.toFixed(3)} TM</span>
+            if (huboOtras) {
+              tieneRetorno = true
+              valorAnterior = Number(penultimo.acumulado_tm) || 0
+              nuevoCargado = bodega.acumuladoActual
+              totalReal = valorAnterior + nuevoCargado
+            }
+          }
+          
+          // Calcular flujo REAL de la bodega activa (últimos registros)
+          let flujoActual = 0
+          let flujoPromedioHistorial = 0
+          
+          if (bodega.activa) {
+            const lecturasBodega = exportacionesFiltradas
+              .filter(e => e.bodega_id === bodega.bodega_id)
+              .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+            
+            if (lecturasBodega.length >= 2) {
+              const ultima = lecturasBodega[lecturasBodega.length - 1]
+              const anterior = lecturasBodega[lecturasBodega.length - 2]
+              const horas = (new Date(ultima.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
+              const delta = (Number(ultima.acumulado_tm) || 0) - (Number(anterior.acumulado_tm) || 0)
+              if (horas > 0 && delta > 0) {
+                flujoActual = delta / horas
+              }
+            }
+            
+            if (lecturasBodega.length >= 2) {
+              const primera = lecturasBodega[0]
+              const ultima = lecturasBodega[lecturasBodega.length - 1]
+              const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+              if (horasTotal > 0 && totalReal > 0) {
+                flujoPromedioHistorial = totalReal / horasTotal
+              }
+            }
+          } else {
+            const lecturasBodega = exportacionesFiltradas
+              .filter(e => e.bodega_id === bodega.bodega_id)
+              .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+            
+            if (lecturasBodega.length >= 2) {
+              const primera = lecturasBodega[0]
+              const ultima = lecturasBodega[lecturasBodega.length - 1]
+              const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+              if (horasTotal > 0 && totalReal > 0) {
+                flujoPromedioHistorial = totalReal / horasTotal
+              }
+            }
+          }
+          
+          return (
+            <div key={bodega.bodega_id} className={`bg-slate-900 rounded-xl p-4 border-2 transition-all ${
+              bodega.activa ? 'border-green-500/50 shadow-lg shadow-green-500/10' : 'border-white/10'
+            }`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`p-2 rounded-lg ${bodega.activa ? 'bg-green-500/30 animate-pulse' : 'bg-green-500/20'}`}>
+                  <Layers className={`w-4 h-4 ${bodega.activa ? 'text-green-300' : 'text-green-400'}`} />
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>🔢 Suma acumulados por bodega:</span>
-                  <span className="font-bold text-green-400">
-                    {resumenPorBodega.reduce((sum, b) => sum + b.acumuladoActual, 0).toFixed(3)} TM
+                <div>
+                  <p className="font-bold text-white">{bodega.nombre}</p>
+                  <p className="text-xs text-green-400">{bodega.codigo}</p>
+                </div>
+                {bodega.activa && (
+                  <span className="ml-auto text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                    ACTIVA
                   </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>📍 Bodega activa actual:</span>
-                  <span className="font-bold text-yellow-400">
-                    {resumenPorBodega.find(b => b.activa)?.nombre || 'Ninguna'}
+                )}
+                {!bodega.activa && bodega.acumuladoActual > 0 && (
+                  <span className="ml-auto text-[10px] bg-slate-500/30 text-slate-400 px-2 py-0.5 rounded-full font-bold">
+                    COMPLETADA
                   </span>
-                </div>
+                )}
               </div>
               
-              {/* Leyenda de flujos */}
-              <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-500 flex flex-wrap gap-3">
-                <span>📖 Leyenda:</span>
-                <span>• <span className="text-blue-300">FLUJO ACTUAL</span>: Velocidad de carga en este momento (últimos 2 registros)</span>
-                <span>• <span className="text-cyan-400">Flujo promedio histórico</span>: Promedio desde que empezó la bodega</span>
+              <div className="space-y-2">
+                {/* Lo que había ANTES de irse (si tiene retorno) */}
+                {tieneRetorno && (
+                  <div className="flex justify-between text-sm bg-yellow-500/10 rounded-lg p-2">
+                    <span className="text-yellow-300">📦 Lo que había ANTES:</span>
+                    <span className="font-bold text-yellow-400">{valorAnterior.toFixed(3)} TM</span>
+                  </div>
+                )}
+                
+                {/* Lo NUEVO que se cargó (si tiene retorno) */}
+                {tieneRetorno && (
+                  <div className="flex justify-between text-sm bg-purple-500/10 rounded-lg p-2">
+                    <span className="text-purple-300">🔄 Lo NUEVO cargado:</span>
+                    <span className="font-bold text-green-400">+{nuevoCargado.toFixed(3)} TM</span>
+                  </div>
+                )}
+                
+                {/* TOTAL REAL (suma) */}
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">
+                    {tieneRetorno ? '🎯 TOTAL REAL EN BODEGA:' : '📦 Total cargado en bodega:'}
+                  </span>
+                  <span className="font-bold text-blue-400 text-lg">{totalReal.toFixed(3)} TM</span>
+                </div>
+                
+                {tieneRetorno && (
+                  <div className="text-[10px] text-slate-500 text-center -mt-1">
+                    ({valorAnterior.toFixed(0)} + {nuevoCargado.toFixed(0)} = {totalReal.toFixed(0)})
+                  </div>
+                )}
+                
+                {bodega.activa && flujoActual > 0 && (
+                  <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2 -mx-1">
+                    <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
+                    <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
+                  </div>
+                )}
+                
+                {flujoPromedioHistorial > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">📊 Flujo promedio histórico:</span>
+                    <span className="font-bold text-cyan-400">{flujoPromedioHistorial.toFixed(3)} TM/h</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-white/10">
+                  <span>📝 {bodega.lecturas} lecturas</span>
+                  {bodega.activa ? (
+                    <span className="text-green-500">● En progreso</span>
+                  ) : bodega.acumuladoActual > 0 ? (
+                    <span className="text-slate-500">✓ Finalizada</span>
+                  ) : (
+                    <span className="text-slate-600">○ Sin carga</span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })
+      })()}
+    </div>
+    
+    {/* VERIFICACIÓN DE CONSISTENCIA */}
+    <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
+      <p className="text-xs text-slate-400 mb-2">📊 Resumen de carga:</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="flex justify-between text-sm">
+          <span>🎯 Total acumulado global:</span>
+          <span className="font-bold text-blue-400">{totalGeneral.toFixed(3)} TM</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span>🔢 Suma acumulados por bodega:</span>
+          <span className="font-bold text-green-400">
+            {resumenPorBodega.reduce((sum, b) => sum + b.acumuladoActual, 0).toFixed(3)} TM
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span>📍 Bodega activa actual:</span>
+          <span className="font-bold text-yellow-400">
+            {resumenPorBodega.find(b => b.activa)?.nombre || 'Ninguna'}
+          </span>
+        </div>
+      </div>
+      
+      <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-500 flex flex-wrap gap-3">
+        <span>📖 Leyenda:</span>
+        <span>• <span className="text-yellow-300">Lo que había ANTES</span>: Acumulado antes de irse a otra bodega</span>
+        <span>• <span className="text-purple-300">Lo NUEVO cargado</span>: Lo que se cargó al volver</span>
+        <span>• <span className="text-blue-300">TOTAL REAL</span>: Suma de ambos (lo que realmente tiene la bodega)</span>
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Formulario de registro de carga */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
