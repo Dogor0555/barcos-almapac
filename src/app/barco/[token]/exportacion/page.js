@@ -2367,7 +2367,7 @@ export default function ExportacionPage() {
               })
             })
             
-            // Identificar PRIMER REGISTRO de cada bodega (para badge)
+            // Identificar PRIMER REGISTRO de cada bodega (para badge INICIO DE BODEGA)
             const esPrimerRegistroDeBodega = new Map()
             const bodegasVistas = new Set()
             
@@ -2380,27 +2380,22 @@ export default function ExportacionPage() {
               }
             })
             
-            // Identificar ULTIMO REGISTRO de cada bodega
-            const esUltimoRegistroDeBodega = new Map()
-            const contadorBodegas = new Map()
-            
-            ascendente.forEach(exp => {
-              contadorBodegas.set(exp.bodega_id, (contadorBodegas.get(exp.bodega_id) || 0) + 1)
-            })
-            
-            const posicionEnBodega = new Map()
-            ascendente.forEach(exp => {
-              const nuevaPos = (posicionEnBodega.get(exp.bodega_id) || 0) + 1
-              posicionEnBodega.set(exp.bodega_id, nuevaPos)
-              esUltimoRegistroDeBodega.set(exp.id, nuevaPos === contadorBodegas.get(exp.bodega_id))
-            })
+            // IDENTIFICAR CAMBIO DE BODEGA
+            // El badge "CAMBIO DE BODEGA" va en el registro ANTERIOR (último de la bodega que se termina)
+            const hayCambioBodega = new Map() // key: id del registro ANTERIOR
+            for (let i = 1; i < ascendente.length; i++) {
+              const actual = ascendente[i]
+              const anterior = ascendente[i - 1]
+              if (actual.bodega_id !== anterior.bodega_id) {
+                // El registro ANTERIOR es el último de su bodega → le ponemos CAMBIO DE BODEGA
+                hayCambioBodega.set(anterior.id, true)
+              }
+            }
             
             // Mostrar en orden DESCENDENTE
             const descendente = [...exportacionesFiltradas].sort(
               (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
             )
-            
-            let ultimaBodegaId = null
             
             return descendente.map((exp) => {
               const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
@@ -2411,13 +2406,14 @@ export default function ExportacionPage() {
               const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
               
               const esPrimero = esPrimerRegistroDeBodega.get(exp.id)
-              const esUltimo = esUltimoRegistroDeBodega.get(exp.id)
+              const esCambio = hayCambioBodega.get(exp.id)
               const infoDelta = deltaPorRegistro.get(exp.id)
               
               // Determinar clases y badges
               let rowClasses = "hover:bg-white/5 transition-colors"
               let badges = []
               
+              // INICIO DE BODEGA (si es el primer registro de esa bodega)
               if (esPrimero) {
                 rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
                 badges.push({
@@ -2427,7 +2423,8 @@ export default function ExportacionPage() {
                 })
               }
               
-              if (esUltimo && !esPrimero) {
+              // CAMBIO DE BODEGA (en el registro ANTERIOR, el último de la bodega que se termina)
+              if (esCambio) {
                 rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
                 badges.push({
                   text: "CAMBIO DE BODEGA",
@@ -2435,18 +2432,6 @@ export default function ExportacionPage() {
                   color: "bg-orange-500/30 text-orange-300"
                 })
               }
-              
-              // Detectar cambio visual
-              const hayCambio = ultimaBodegaId !== null && ultimaBodegaId !== exp.bodega_id
-              if (hayCambio && !esUltimo && !esPrimero) {
-                rowClasses = "bg-yellow-500/5 hover:bg-yellow-500/10 border-l-4 border-yellow-500"
-                badges.push({
-                  text: "CAMBIO DE BODEGA",
-                  icono: <ArrowRightLeft className="w-3 h-3" />,
-                  color: "bg-yellow-500/30 text-yellow-300"
-                })
-              }
-              ultimaBodegaId = exp.bodega_id
               
               return (
                 <tr key={exp.id} className={rowClasses}>
