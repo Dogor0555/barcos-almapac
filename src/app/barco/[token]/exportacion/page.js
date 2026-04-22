@@ -1173,7 +1173,7 @@ export default function ExportacionPage() {
   }, [exportaciones, productoActivo])
 
   // =====================================================
-  // DATOS PARA GRÁFICA POR BODEGA (NUEVO)
+  // DATOS PARA GRÁFICA POR BODEGA
   // =====================================================
   const datosGraficoPorBodega = useMemo(() => {
     if (!productoActivo) return []
@@ -1182,12 +1182,10 @@ export default function ExportacionPage() {
       .filter(e => e.producto_id === productoActivo.id)
       .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
 
-    // Crear un mapa para acumular por bodega a lo largo del tiempo
-    const puntosPorHora = new Map() // key: timestamp redondeado a hora, value: objeto con acumulados por bodega
+    const puntosPorHora = new Map()
     
     exportacionesProd.forEach(exp => {
       const fecha = new Date(exp.fecha_hora)
-      // Redondear a la hora (sin minutos)
       const horaKey = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), fecha.getHours(), 0, 0).getTime()
       const horaStr = formatUTCToSV(exp.fecha_hora, 'DD/MM HH:00')
       
@@ -1195,7 +1193,6 @@ export default function ExportacionPage() {
         puntosPorHora.set(horaKey, {
           hora: horaStr,
           timestamp: horaKey,
-          // Inicializar acumulados por bodega
           ...BODEGAS_BARCO.reduce((acc, b) => ({ ...acc, [`bodega_${b.id}`]: 0 }), {})
         })
       }
@@ -1204,53 +1201,77 @@ export default function ExportacionPage() {
       const bodegaId = exp.bodega_id
       const acumuladoActual = Number(exp.acumulado_tm) || 0
       
-      // Actualizar el acumulado de esta bodega (tomar el máximo/último de esa hora)
       if (acumuladoActual > punto[`bodega_${bodegaId}`]) {
         punto[`bodega_${bodegaId}`] = acumuladoActual
       }
     })
     
-    // Convertir a array y ordenar por timestamp
     return Array.from(puntosPorHora.values()).sort((a, b) => a.timestamp - b.timestamp)
   }, [exportaciones, productoActivo])
 
   // =====================================================
-  // LÓGICA CORREGIDA PARA RESUMEN POR BODEGA
-  // CADA BODEGA MANTIENE SU ACUMULADO INDEPENDIENTE
-  // EL ACUMULADO GLOBAL ES LA SUMA DE LOS ACUMULADOS DE CADA BODEGA
+  // LÓGICA CORREGIDA: ACUMULADO GLOBAL QUE SUMA RETORNOS
   // =====================================================
   
-  // Primero, calcular los acumulados por bodega (independientes)
+  // Calcular el aporte REAL de cada bodega (sumando retornos correctamente)
+  const aporteRealPorBodega = useMemo(() => {
+    if (!productoActivo) return new Map()
+    
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+    const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    
+    const aporteTotal = new Map()
+    const ultimoValorPorBodega = new Map()
+    
+    ordenadas.forEach(lectura => {
+      const bodegaId = lectura.bodega_id
+      const valorActual = Number(lectura.acumulado_tm) || 0
+      const ultimoValor = ultimoValorPorBodega.get(bodegaId)
+      
+      let aporte = 0
+      if (ultimoValor === undefined) {
+        // PRIMERA VEZ que se carga esta bodega
+        aporte = valorActual
+      } else if (valorActual >= ultimoValor) {
+        // CONTINUACIÓN normal de la misma bodega
+        aporte = valorActual - ultimoValor
+      } else {
+        // RETORNO a una bodega que ya se había usado
+        // El valor en BD es el nuevo acumulado de esa bodega
+        aporte = valorActual
+      }
+      
+      const aporteExistente = aporteTotal.get(bodegaId) || 0
+      aporteTotal.set(bodegaId, aporteExistente + aporte)
+      ultimoValorPorBodega.set(bodegaId, valorActual)
+    })
+    
+    return aporteTotal
+  }, [exportaciones, productoActivo])
+  
+  // TOTAL GENERAL = suma de los aportes REALES de todas las bodegas
+  const totalGeneral = useMemo(() => {
+    let suma = 0
+    aporteRealPorBodega.forEach((aporte) => {
+      suma += aporte
+    })
+    return suma
+  }, [aporteRealPorBodega])
+  
+  // ACUMULADOS POR BODEGA (para el resumen - se mantiene igual)
   const acumuladosPorBodega = useMemo(() => {
     if (!productoActivo) return new Map()
     
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
     const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
     
-    // Mapa para almacenar el ÚLTIMO acumulado registrado para cada bodega
     const ultimoAcumuladoPorBodega = new Map()
-    
-    // Recorrer todas las lecturas en orden cronológico
     ordenadas.forEach(lectura => {
-      const bodegaId = lectura.bodega_id
-      const acumuladoLeido = Number(lectura.acumulado_tm) || 0
-      
-      // Simplemente actualizar el último valor registrado para esta bodega
-      // Esto permite que cuando se vuelva a una bodega, se retome desde donde quedó
-      ultimoAcumuladoPorBodega.set(bodegaId, acumuladoLeido)
+      ultimoAcumuladoPorBodega.set(lectura.bodega_id, Number(lectura.acumulado_tm) || 0)
     })
     
     return ultimoAcumuladoPorBodega
   }, [exportaciones, productoActivo])
-  
-  // Calcular el total global como la SUMA de los acumulados de todas las bodegas
-  const totalGeneral = useMemo(() => {
-    let suma = 0
-    acumuladosPorBodega.forEach((valor) => {
-      suma += valor
-    })
-    return suma
-  }, [acumuladosPorBodega])
   
   // Construir el resumen por bodega con los acumulados actuales
   const resumenPorBodega = useMemo(() => {
@@ -1264,8 +1285,7 @@ export default function ExportacionPage() {
         nombre: bodegaInfo?.nombre || `Bodega ${bodegaId}`,
         codigo: bodegaInfo?.codigo || `BDG-${bodegaId}`,
         color: bodegaInfo?.color || '#3b82f6',
-        acumuladoActual: acumulado, // Este es el acumulado INDEPENDIENTE de la bodega
-        // Determinar si es la bodega activa (último registro)
+        acumuladoActual: acumulado,
         activa: (() => {
           const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
           if (exportacionesProd.length === 0) return false
@@ -1281,16 +1301,12 @@ export default function ExportacionPage() {
   }, [acumuladosPorBodega, exportaciones, productoActivo])
   
   // Calcular el flujo para cada bodega
-  // Flujo = Acumulado Global - Acumulado de la bodega actual (para la bodega activa)
-  // Para bodegas inactivas, el flujo es su propio acumulado
   const flujoPorBodega = useMemo(() => {
     return resumenPorBodega.map(bodega => {
       let flujo = 0
       if (bodega.activa) {
-        // Para la bodega activa: FLUJO = Acumulado Global - Acumulado de esta bodega
         flujo = Math.max(0, totalGeneral - bodega.acumuladoActual)
       } else {
-        // Para bodegas ya terminadas: FLUJO = Acumulado de la bodega (ya terminaron)
         flujo = bodega.acumuladoActual
       }
       
@@ -1601,9 +1617,7 @@ export default function ExportacionPage() {
   const exportacionesFiltradas = exportaciones.filter(e => e.producto_id === productoActivo?.id)
   const bitacoraFiltrada = bitacora.filter(b => b.producto_id === productoActivo?.id)
 
-  // Generar líneas para la gráfica por bodega
   const lineasGrafica = BODEGAS_BARCO.filter(bodega => {
-    // Solo mostrar bodegas que tienen datos
     return resumenPorBodega.some(rb => rb.bodega_id === bodega.id) || 
            exportacionesFiltradas.some(e => e.bodega_id === bodega.id)
   }).map(bodega => {
@@ -1783,7 +1797,6 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* Selector de productos */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
           <div className="flex overflow-x-auto">
             {productos.map(prod => {
@@ -1816,7 +1829,6 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-        {/* FORMULARIO DE PAROS SIMPLE - SIN CRONÓMETRO */}
         <FormularioParoSimple 
           barco={barco}
           catalogosParos={catalogosParos}
@@ -1825,7 +1837,6 @@ export default function ExportacionPage() {
           paroEditando={null}
         />
 
-        {/* LISTADO DE PAROS REGISTRADOS - VERSIÓN DESPLEGABLE */}
         {registrosParos.length > 0 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1856,7 +1867,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Advertencia de operación finalizada */}
         {barco.estado === 'finalizado' && (
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-3">
@@ -1868,7 +1878,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* Estadísticas del producto */}
         {productoActivo && estadisticasProducto && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <div className="flex items-start justify-between">
@@ -1998,7 +2007,6 @@ export default function ExportacionPage() {
           </div>
         )}
 
-        {/* NUEVA GRÁFICA POR BODEGA */}
         {productoActivo && datosGraficoPorBodega.length > 1 && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
@@ -2055,219 +2063,192 @@ export default function ExportacionPage() {
           </div>
         )}
 
-                {/* SECCIÓN CORREGIDA: RESUMEN POR BODEGA - VERSIÓN FINAL */}
-       {productoActivo && resumenPorBodega.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
-    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-      <Layers className="w-5 h-5 text-green-400" />
-      Resumen por Bodega - {productoActivo.nombre}
-    </h3>
-    
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {(() => {
-        // Obtener todas las exportaciones ordenadas para analizar retornos
-        const todasExportaciones = exportaciones.filter(e => e.producto_id === productoActivo.id)
-        const ascendente = [...todasExportaciones].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-        
-        return resumenPorBodega.map(bodega => {
-          const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
-          
-          // Obtener registros de ESTA bodega
-          const misRegistros = ascendente.filter(e => e.bodega_id === bodega.bodega_id)
-          
-          // CALCULAR TOTAL REAL (sumando retornos si existen)
-          let totalReal = bodega.acumuladoActual
-          let tieneRetorno = false
-          let valorAnterior = 0
-          let nuevoCargado = 0
-          
-          if (misRegistros.length >= 2) {
-            // Verificar si el último registro es un retorno
-            const ultimo = misRegistros[misRegistros.length - 1]
-            const penultimo = misRegistros[misRegistros.length - 2]
-            const fechaUltimo = new Date(ultimo.fecha_hora)
-            const fechaPenultimo = new Date(penultimo.fecha_hora)
+        {productoActivo && resumenPorBodega.length > 0 && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-green-400" />
+              Resumen por Bodega - {productoActivo.nombre}
+            </h3>
             
-            // Ver si entre estos dos hubo otras bodegas
-            let huboOtras = false
-            for (const exp of ascendente) {
-              if (exp.bodega_id === bodega.bodega_id) continue
-              const fechaExp = new Date(exp.fecha_hora)
-              if (fechaExp > fechaPenultimo && fechaExp < fechaUltimo) {
-                huboOtras = true
-                break
-              }
-            }
-            
-            if (huboOtras) {
-              tieneRetorno = true
-              valorAnterior = Number(penultimo.acumulado_tm) || 0
-              nuevoCargado = bodega.acumuladoActual
-              totalReal = valorAnterior + nuevoCargado
-            }
-          }
-          
-          // Calcular flujo REAL de la bodega activa (últimos registros)
-          let flujoActual = 0
-          let flujoPromedioHistorial = 0
-          
-          if (bodega.activa) {
-            const lecturasBodega = exportacionesFiltradas
-              .filter(e => e.bodega_id === bodega.bodega_id)
-              .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-            
-            if (lecturasBodega.length >= 2) {
-              const ultima = lecturasBodega[lecturasBodega.length - 1]
-              const anterior = lecturasBodega[lecturasBodega.length - 2]
-              const horas = (new Date(ultima.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
-              const delta = (Number(ultima.acumulado_tm) || 0) - (Number(anterior.acumulado_tm) || 0)
-              if (horas > 0 && delta > 0) {
-                flujoActual = delta / horas
-              }
-            }
-            
-            if (lecturasBodega.length >= 2) {
-              const primera = lecturasBodega[0]
-              const ultima = lecturasBodega[lecturasBodega.length - 1]
-              const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
-              if (horasTotal > 0 && totalReal > 0) {
-                flujoPromedioHistorial = totalReal / horasTotal
-              }
-            }
-          } else {
-            const lecturasBodega = exportacionesFiltradas
-              .filter(e => e.bodega_id === bodega.bodega_id)
-              .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-            
-            if (lecturasBodega.length >= 2) {
-              const primera = lecturasBodega[0]
-              const ultima = lecturasBodega[lecturasBodega.length - 1]
-              const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
-              if (horasTotal > 0 && totalReal > 0) {
-                flujoPromedioHistorial = totalReal / horasTotal
-              }
-            }
-          }
-          
-          return (
-            <div key={bodega.bodega_id} className={`bg-slate-900 rounded-xl p-4 border-2 transition-all ${
-              bodega.activa ? 'border-green-500/50 shadow-lg shadow-green-500/10' : 'border-white/10'
-            }`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className={`p-2 rounded-lg ${bodega.activa ? 'bg-green-500/30 animate-pulse' : 'bg-green-500/20'}`}>
-                  <Layers className={`w-4 h-4 ${bodega.activa ? 'text-green-300' : 'text-green-400'}`} />
-                </div>
-                <div>
-                  <p className="font-bold text-white">{bodega.nombre}</p>
-                  <p className="text-xs text-green-400">{bodega.codigo}</p>
-                </div>
-                {bodega.activa && (
-                  <span className="ml-auto text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                    ACTIVA
-                  </span>
-                )}
-                {!bodega.activa && bodega.acumuladoActual > 0 && (
-                  <span className="ml-auto text-[10px] bg-slate-500/30 text-slate-400 px-2 py-0.5 rounded-full font-bold">
-                    COMPLETADA
-                  </span>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                {/* Lo que había ANTES de irse (si tiene retorno) */}
-                {tieneRetorno && (
-                  <div className="flex justify-between text-sm bg-yellow-500/10 rounded-lg p-2">
-                    <span className="text-yellow-300">📦 Lo que había ANTES:</span>
-                    <span className="font-bold text-yellow-400">{valorAnterior.toFixed(3)} TM</span>
-                  </div>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(() => {
+                const todasExportaciones = exportaciones.filter(e => e.producto_id === productoActivo.id)
+                const ascendente = [...todasExportaciones].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
                 
-                {/* Lo NUEVO que se cargó (si tiene retorno) */}
-                {tieneRetorno && (
-                  <div className="flex justify-between text-sm bg-purple-500/10 rounded-lg p-2">
-                    <span className="text-purple-300">🔄 Lo NUEVO cargado:</span>
-                    <span className="font-bold text-green-400">+{nuevoCargado.toFixed(3)} TM</span>
-                  </div>
-                )}
-                
-                {/* TOTAL REAL (suma) */}
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">
-                    {tieneRetorno ? '🎯 TOTAL REAL EN BODEGA:' : '📦 Total cargado en bodega:'}
-                  </span>
-                  <span className="font-bold text-blue-400 text-lg">{totalReal.toFixed(3)} TM</span>
-                </div>
-                
-                {tieneRetorno && (
-                  <div className="text-[10px] text-slate-500 text-center -mt-1">
-                    ({valorAnterior.toFixed(0)} + {nuevoCargado.toFixed(0)} = {totalReal.toFixed(0)})
-                  </div>
-                )}
-                
-                {bodega.activa && flujoActual > 0 && (
-                  <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2 -mx-1">
-                    <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
-                    <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
-                  </div>
-                )}
-                
-                {flujoPromedioHistorial > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">📊 Flujo promedio histórico:</span>
-                    <span className="font-bold text-cyan-400">{flujoPromedioHistorial.toFixed(3)} TM/h</span>
-                  </div>
-                )}
-                
-                <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-white/10">
-                  <span>📝 {bodega.lecturas} lecturas</span>
-                  {bodega.activa ? (
-                    <span className="text-green-500">● En progreso</span>
-                  ) : bodega.acumuladoActual > 0 ? (
-                    <span className="text-slate-500">✓ Finalizada</span>
-                  ) : (
-                    <span className="text-slate-600">○ Sin carga</span>
-                  )}
-                </div>
-              </div>
+                return resumenPorBodega.map(bodega => {
+                  const bodegaInfo = BODEGAS_BARCO.find(b => b.id === bodega.bodega_id)
+                  const misRegistros = ascendente.filter(e => e.bodega_id === bodega.bodega_id)
+                  
+                  if (misRegistros.length === 0) {
+                    return (
+                      <div key={bodega.bodega_id} className="bg-slate-900 rounded-xl p-4 border border-white/10">
+                        <p className="text-slate-400">Sin datos</p>
+                      </div>
+                    )
+                  }
+                  
+                  let totalReal = Number(misRegistros[0].acumulado_tm) || 0
+                  let retornosDetalles = []
+                  let valorAnterior = totalReal
+                  
+                  for (let i = 1; i < misRegistros.length; i++) {
+                    const actual = misRegistros[i]
+                    const actualValor = Number(actual.acumulado_tm) || 0
+                    const fechaActual = new Date(actual.fecha_hora)
+                    const fechaAnterior = new Date(misRegistros[i - 1].fecha_hora)
+                    
+                    let huboOtrasBodegas = false
+                    for (const exp of ascendente) {
+                      if (exp.bodega_id === bodega.bodega_id) continue
+                      const fechaExp = new Date(exp.fecha_hora)
+                      if (fechaExp > fechaAnterior && fechaExp < fechaActual) {
+                        huboOtrasBodegas = true
+                        break
+                      }
+                    }
+                    
+                    if (huboOtrasBodegas) {
+                      const nuevoCargado = actualValor
+                      totalReal += nuevoCargado
+                      retornosDetalles.push({
+                        fecha: formatUTCToSV(actual.fecha_hora, 'HH:mm'),
+                        nuevoCargado: nuevoCargado,
+                        acumuladoEnBD: actualValor
+                      })
+                      valorAnterior = actualValor
+                    } else {
+                      const diferencia = actualValor - valorAnterior
+                      if (diferencia > 0) {
+                        totalReal += diferencia
+                      }
+                      valorAnterior = actualValor
+                    }
+                  }
+                  
+                  const ultimoValorBD = Number(misRegistros[misRegistros.length - 1].acumulado_tm) || 0
+                  const tieneRetorno = retornosDetalles.length > 0
+                  
+                  let flujoActual = 0
+                  let flujoPromedioHistorial = 0
+                  
+                  if (bodega.activa) {
+                    const lecturasBodega = exportacionesFiltradas
+                      .filter(e => e.bodega_id === bodega.bodega_id)
+                      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+                    
+                    if (lecturasBodega.length >= 2) {
+                      const ultima = lecturasBodega[lecturasBodega.length - 1]
+                      const anterior = lecturasBodega[lecturasBodega.length - 2]
+                      const horas = (new Date(ultima.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
+                      const delta = (Number(ultima.acumulado_tm) || 0) - (Number(anterior.acumulado_tm) || 0)
+                      if (horas > 0 && delta > 0) {
+                        flujoActual = delta / horas
+                      }
+                    }
+                    
+                    if (lecturasBodega.length >= 2 && totalReal > 0) {
+                      const primera = lecturasBodega[0]
+                      const ultima = lecturasBodega[lecturasBodega.length - 1]
+                      const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+                      if (horasTotal > 0) {
+                        flujoPromedioHistorial = totalReal / horasTotal
+                      }
+                    }
+                  } else {
+                    const lecturasBodega = exportacionesFiltradas
+                      .filter(e => e.bodega_id === bodega.bodega_id)
+                      .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+                    
+                    if (lecturasBodega.length >= 2 && totalReal > 0) {
+                      const primera = lecturasBodega[0]
+                      const ultima = lecturasBodega[lecturasBodega.length - 1]
+                      const horasTotal = (new Date(ultima.fecha_hora) - new Date(primera.fecha_hora)) / (1000 * 60 * 60)
+                      if (horasTotal > 0) {
+                        flujoPromedioHistorial = totalReal / horasTotal
+                      }
+                    }
+                  }
+                  
+                  const primerValor = Number(misRegistros[0].acumulado_tm) || 0
+                  
+                  return (
+                    <div key={bodega.bodega_id} className={`bg-slate-900 rounded-xl p-4 border-2 transition-all ${
+                      bodega.activa ? 'border-green-500/50 shadow-lg shadow-green-500/10' : 'border-white/10'
+                    }`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`p-2 rounded-lg ${bodega.activa ? 'bg-green-500/30 animate-pulse' : 'bg-green-500/20'}`}>
+                          <Layers className={`w-4 h-4 ${bodega.activa ? 'text-green-300' : 'text-green-400'}`} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white">{bodega.nombre}</p>
+                          <p className="text-xs text-green-400">{bodega.codigo}</p>
+                        </div>
+                        {bodega.activa && (
+                          <span className="ml-auto text-[10px] bg-green-500/30 text-green-300 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                            ACTIVA
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm bg-slate-800/50 rounded-lg p-2">
+                          <span className="text-slate-400">📦 Valor INICIAL:</span>
+                          <span className="font-bold text-cyan-400">{primerValor.toFixed(3)} TM</span>
+                        </div>
+                        
+                        {retornosDetalles.map((ret, idx) => (
+                          <div key={idx} className="bg-purple-500/10 rounded-lg p-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-purple-300">🔄 RETORNO {idx + 1} ({ret.fecha}):</span>
+                              <span className="font-bold text-green-400">+{ret.nuevoCargado.toFixed(3)} TM</span>
+                            </div>
+                            <div className="text-[10px] text-purple-300">
+                              (Acumulado en BD: {ret.acumuladoEnBD.toFixed(3)} TM)
+                            </div>
+                          </div>
+                        ))}
+                        
+                        <div className="bg-blue-500/10 rounded-lg p-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-blue-300">🎯 TOTAL REAL EN BODEGA:</span>
+                            <span className="font-bold text-blue-400 text-lg">{totalReal.toFixed(3)} TM</span>
+                          </div>
+                          {tieneRetorno && (
+                            <div className="text-[10px] text-blue-300 text-center mt-1">
+                              (Inicial {primerValor.toFixed(0)} + {retornosDetalles.map(r => r.nuevoCargado.toFixed(0)).join(' + ')} = {totalReal.toFixed(0)})
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>📊 Último valor en BD:</span>
+                          <span>{ultimoValorBD.toFixed(3)} TM</span>
+                        </div>
+                        
+                        {bodega.activa && flujoActual > 0 && (
+                          <div className="flex justify-between text-sm bg-blue-500/10 rounded-lg p-2">
+                            <span className="text-blue-300">⚡ FLUJO ACTUAL:</span>
+                            <span className="font-bold text-blue-400">{flujoActual.toFixed(3)} TM/h</span>
+                          </div>
+                        )}
+                        
+                        <div className="flex justify-between text-xs text-slate-500 pt-1 border-t border-white/10">
+                          <span>📝 {misRegistros.length} lecturas</span>
+                          {bodega.activa ? (
+                            <span className="text-green-500">● En progreso</span>
+                          ) : (
+                            <span className="text-slate-500">✓ Finalizada</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
             </div>
-          )
-        })
-      })()}
-    </div>
-    
-    {/* VERIFICACIÓN DE CONSISTENCIA */}
-    <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
-      <p className="text-xs text-slate-400 mb-2">📊 Resumen de carga:</p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="flex justify-between text-sm">
-          <span>🎯 Total acumulado global:</span>
-          <span className="font-bold text-blue-400">{totalGeneral.toFixed(3)} TM</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span>🔢 Suma acumulados por bodega:</span>
-          <span className="font-bold text-green-400">
-            {resumenPorBodega.reduce((sum, b) => sum + b.acumuladoActual, 0).toFixed(3)} TM
-          </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span>📍 Bodega activa actual:</span>
-          <span className="font-bold text-yellow-400">
-            {resumenPorBodega.find(b => b.activa)?.nombre || 'Ninguna'}
-          </span>
-        </div>
-      </div>
-      
-      <div className="mt-3 pt-2 border-t border-white/10 text-[10px] text-slate-500 flex flex-wrap gap-3">
-        <span>📖 Leyenda:</span>
-        <span>• <span className="text-yellow-300">Lo que había ANTES</span>: Acumulado antes de irse a otra bodega</span>
-        <span>• <span className="text-purple-300">Lo NUEVO cargado</span>: Lo que se cargó al volver</span>
-        <span>• <span className="text-blue-300">TOTAL REAL</span>: Suma de ambos (lo que realmente tiene la bodega)</span>
-      </div>
-    </div>
-  </div>
-)}
+          </div>
+        )}
 
-        {/* Formulario de registro de carga */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -2367,292 +2348,269 @@ export default function ExportacionPage() {
           </div>
         </div>
 
-      
-{exportacionesFiltradas.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-    <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
-      <h3 className="font-bold text-white">
-        Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length} registros)
-        <span className="text-sm font-normal text-slate-500 ml-2">
-          Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
-        </span>
-      </h3>
-    </div>
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-slate-800 sticky top-0">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/5">
-          {(() => {
-            // Ordenar ASCENDENTE para análisis
-            const ascendente = [...exportacionesFiltradas].sort(
-              (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
-            )
-            
-            // IDENTIFICAR RETORNO EXACTO A BODEGA (primero, antes de calcular flujos)
-            const esRetornoExacto = new Map()
-            for (let i = 1; i < ascendente.length; i++) {
-              const actual = ascendente[i]
-              const anterior = ascendente[i - 1]
-              if (actual.bodega_id !== anterior.bodega_id) {
-                // Verificar si esta bodega ya se había usado antes
-                let bodegaVistaAntes = false
-                for (let j = 0; j < i; j++) {
-                  if (ascendente[j].bodega_id === actual.bodega_id) {
-                    bodegaVistaAntes = true
-                    break
-                  }
-                }
-                if (bodegaVistaAntes) {
-                  esRetornoExacto.set(actual.id, true)
-                }
-              }
-            }
-            
-            // Calcular FLUJO correctamente
-            const flujoPorRegistro = new Map()
-            
-            // Procesar CADA BODEGA por separado
-            const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
-            
-            bodegasUnicas.forEach(bodegaId => {
-              // Obtener SOLO los registros de esta bodega, en orden cronológico
-              const registrosBodega = ascendente.filter(e => e.bodega_id === bodegaId)
-              
-              registrosBodega.forEach((reg, idx) => {
-                // Verificar si este registro es un RETORNO EXACTO
-                const esRetorno = esRetornoExacto.get(reg.id)
-                
-                if (idx === 0 || esRetorno) {
-                  // Si es el PRIMER REGISTRO de esta bodega (en la lista filtrada)
-                  // O es un RETORNO EXACTO
-                  // El FLUJO es el ACUMULADO de esta bodega
-                  flujoPorRegistro.set(reg.id, {
-                    valor: Number(reg.acumulado_tm) || 0,
-                    tipo: 'inicio_o_retorno',
-                    minutos: null
-                  })
-                } else {
-                  // Para registros siguientes de la MISMA bodega (NO es retorno)
-                  // El FLUJO es el DELTA entre esta lectura y la anterior de la MISMA bodega
-                  const anterior = registrosBodega[idx - 1]
-                  const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
-                  const minutosDiff = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60)
-                  
-                  flujoPorRegistro.set(reg.id, {
-                    valor: deltaTM,
-                    tipo: 'delta_entre_lecturas',
-                    minutos: minutosDiff
-                  })
-                }
-              })
-            })
-            
-            // Identificar PRIMERA VEZ que aparece cada bodega (para badge INICIO)
-            const esPrimeraVezBodega = new Map()
-            const bodegasVistas = new Set()
-            
-            ascendente.forEach(exp => {
-              if (!bodegasVistas.has(exp.bodega_id)) {
-                esPrimeraVezBodega.set(exp.id, true)
-                bodegasVistas.add(exp.bodega_id)
-              } else {
-                esPrimeraVezBodega.set(exp.id, false)
-              }
-            })
-            
-            // IDENTIFICAR CAMBIO DE BODEGA (en el registro ANTERIOR)
-            const hayCambioBodega = new Map()
-            for (let i = 1; i < ascendente.length; i++) {
-              const actual = ascendente[i]
-              const anterior = ascendente[i - 1]
-              if (actual.bodega_id !== anterior.bodega_id) {
-                hayCambioBodega.set(anterior.id, true)
-              }
-            }
-            
-            // Mostrar en orden DESCENDENTE
-            const descendente = [...exportacionesFiltradas].sort(
-              (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
-            )
-            
-            return descendente.map((exp) => {
-              const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
-              const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
-              const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
-              const horaNum = parseInt(horaSV.split(':')[0])
-              
-              const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
-              
-              const esPrimera = esPrimeraVezBodega.get(exp.id)
-              const esCambio = hayCambioBodega.get(exp.id)
-              const esRetorno = esRetornoExacto.get(exp.id)
-              const infoFlujo = flujoPorRegistro.get(exp.id)
-              
-              // Determinar clases y badges
-              let rowClasses = "hover:bg-white/5 transition-colors"
-              let badges = []
-              
-              if (esPrimera && !esRetorno) {
-                rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
-                badges.push({
-                  text: "INICIO DE BODEGA",
-                  icono: <Layers className="w-3 h-3" />,
-                  color: "bg-blue-500/30 text-blue-300"
-                })
-              }
-              
-              if (esRetorno) {
-                rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
-                badges.push({
-                  text: "RETORNO A BODEGA",
-                  icono: <ArrowRightLeft className="w-3 h-3" />,
-                  color: "bg-purple-500/30 text-purple-300"
-                })
-              }
-              
-              if (esCambio) {
-                rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
-                badges.push({
-                  text: "CAMBIO DE BODEGA",
-                  icono: <ArrowRightLeft className="w-3 h-3" />,
-                  color: "bg-orange-500/30 text-orange-300"
-                })
-              }
-              
-              // Determinar el color y formato del flujo
-              let flujoColor = "text-slate-500"
-              let flujoIcono = null
-              let flujoDisplay = "—"
-              
-              if (infoFlujo) {
-                if (infoFlujo.tipo === 'inicio_o_retorno') {
-                  // Para INICIO o RETORNO: mostrar el ACUMULADO (positivo)
-                  flujoColor = "text-cyan-400"
-                  flujoIcono = <span className="mr-1"></span>
-                  flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
-                } else {
-                  // Para delta entre lecturas de la MISMA bodega
-                  if (infoFlujo.valor >= 0) {
-                    flujoColor = "text-green-400"
-                    if (infoFlujo.minutos && infoFlujo.minutos < 15) {
-                      flujoIcono = <span className="mr-1">⚡</span>
-                    } else {
-                      flujoIcono = <span className="mr-1"></span>
+        {exportacionesFiltradas.length > 0 && (
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+              <h3 className="font-bold text-white">
+                Historial de Carga - {productoActivo?.nombre} ({exportacionesFiltradas.length} registros)
+                <span className="text-sm font-normal text-slate-500 ml-2">
+                  Flujo promedio: {calcularFlujoBandaPorHora.toFixed(3)} TM/h
+                </span>
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-800 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {(() => {
+                    const ascendente = [...exportacionesFiltradas].sort(
+                      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+                    )
+                    
+                    const esRetornoExacto = new Map()
+                    for (let i = 1; i < ascendente.length; i++) {
+                      const actual = ascendente[i]
+                      const anterior = ascendente[i - 1]
+                      if (actual.bodega_id !== anterior.bodega_id) {
+                        let bodegaVistaAntes = false
+                        for (let j = 0; j < i; j++) {
+                          if (ascendente[j].bodega_id === actual.bodega_id) {
+                            bodegaVistaAntes = true
+                            break
+                          }
+                        }
+                        if (bodegaVistaAntes) {
+                          esRetornoExacto.set(actual.id, true)
+                        }
+                      }
                     }
-                    flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
-                    if (infoFlujo.minutos) {
-                      flujoDisplay += ` (${infoFlujo.minutos.toFixed(0)} min)`
+                    
+                    const flujoPorRegistro = new Map()
+                    const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
+                    
+                    bodegasUnicas.forEach(bodegaId => {
+                      const registrosBodega = ascendente.filter(e => e.bodega_id === bodegaId)
+                      
+                      registrosBodega.forEach((reg, idx) => {
+                        const esRetorno = esRetornoExacto.get(reg.id)
+                        
+                        if (idx === 0 || esRetorno) {
+                          flujoPorRegistro.set(reg.id, {
+                            valor: Number(reg.acumulado_tm) || 0,
+                            tipo: 'inicio_o_retorno',
+                            minutos: null
+                          })
+                        } else {
+                          const anterior = registrosBodega[idx - 1]
+                          const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
+                          const minutosDiff = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60)
+                          
+                          flujoPorRegistro.set(reg.id, {
+                            valor: deltaTM,
+                            tipo: 'delta_entre_lecturas',
+                            minutos: minutosDiff
+                          })
+                        }
+                      })
+                    })
+                    
+                    const esPrimeraVezBodega = new Map()
+                    const bodegasVistas = new Set()
+                    
+                    ascendente.forEach(exp => {
+                      if (!bodegasVistas.has(exp.bodega_id)) {
+                        esPrimeraVezBodega.set(exp.id, true)
+                        bodegasVistas.add(exp.bodega_id)
+                      } else {
+                        esPrimeraVezBodega.set(exp.id, false)
+                      }
+                    })
+                    
+                    const hayCambioBodega = new Map()
+                    for (let i = 1; i < ascendente.length; i++) {
+                      const actual = ascendente[i]
+                      const anterior = ascendente[i - 1]
+                      if (actual.bodega_id !== anterior.bodega_id) {
+                        hayCambioBodega.set(anterior.id, true)
+                      }
                     }
-                  } else {
-                    // NUNCA debería pasar con la nueva lógica
-                    flujoColor = "text-red-400"
-                    flujoIcono = <span className="mr-1">⚠️</span>
-                    flujoDisplay = `ERROR: ${infoFlujo.valor.toFixed(3)} TM`
-                  }
-                }
-              }
-              
-              return (
-                <tr key={exp.id} className={rowClasses}>
-                  <td className="px-4 py-3">
-                    <div>{fechaSV}</div>
-                    <div className="text-xs text-slate-500">{horaSV}</div>
-                    {badges.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {badges.map((badge, i) => (
-                          <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
-                            {badge.icono}
-                            {badge.text}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      turno === '6:00 - 18:00' 
-                        ? 'bg-yellow-500/20 text-yellow-400' 
-                        : 'bg-blue-500/20 text-blue-400'
-                    }`}>
-                      {turno}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-blue-400">
-                    {(exp.acumulado_tm || 0).toFixed(3)} TM
-                  </td>
-                  <td className="px-4 py-3 font-bold">
-                    {infoFlujo ? (
-                      <span className={flujoColor}>
-                        {flujoIcono}
-                        {flujoDisplay}
-                      </span>
-                    ) : (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {bodega ? (
-                      <div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodega.color }} />
-                          <p className="text-white font-medium">{bodega.nombre}</p>
-                        </div>
-                        <p className="text-xs text-green-400">{bodega.codigo}</p>
-                      </div>
-                    ) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 max-w-xs truncate" title={exp.observaciones || ''}>
-                    {exp.observaciones || '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button onClick={() => handleEditarExportacion(exp)} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
-                        <Edit2 className="w-4 h-4 text-blue-400" />
-                      </button>
-                      <button onClick={() => handleEliminarExportacion(exp.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })
-          })()}
-        </tbody>
-        <tfoot className="bg-slate-900 sticky bottom-0">
-          <tr className="bg-orange-500/5">
-            <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
-            <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-              {totalGeneral.toFixed(3)} TM
-            </td>
-            <td colSpan="3"></td>
-          </tr>
-          {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
-            <tr className="bg-orange-500/5">
-              <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
-              <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-                {faltaPorCargar.toFixed(3)} TM
-              </td>
-              <td colSpan="3"></td>
-            </tr>
-          )}
-        </tfoot>
-      </table>
-    </div>
-  </div>
-)}
+                    
+                    const descendente = [...exportacionesFiltradas].sort(
+                      (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
+                    )
+                    
+                    return descendente.map((exp) => {
+                      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+                      const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+                      const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+                      const horaNum = parseInt(horaSV.split(':')[0])
+                      
+                      const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
+                      
+                      const esPrimera = esPrimeraVezBodega.get(exp.id)
+                      const esCambio = hayCambioBodega.get(exp.id)
+                      const esRetorno = esRetornoExacto.get(exp.id)
+                      const infoFlujo = flujoPorRegistro.get(exp.id)
+                      
+                      let rowClasses = "hover:bg-white/5 transition-colors"
+                      let badges = []
+                      
+                      if (esPrimera && !esRetorno) {
+                        rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
+                        badges.push({
+                          text: "INICIO DE BODEGA",
+                          icono: <Layers className="w-3 h-3" />,
+                          color: "bg-blue-500/30 text-blue-300"
+                        })
+                      }
+                      
+                      if (esRetorno) {
+                        rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
+                        badges.push({
+                          text: "RETORNO A BODEGA",
+                          icono: <ArrowRightLeft className="w-3 h-3" />,
+                          color: "bg-purple-500/30 text-purple-300"
+                        })
+                      }
+                      
+                      if (esCambio) {
+                        rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
+                        badges.push({
+                          text: "CAMBIO DE BODEGA",
+                          icono: <ArrowRightLeft className="w-3 h-3" />,
+                          color: "bg-orange-500/30 text-orange-300"
+                        })
+                      }
+                      
+                      let flujoColor = "text-slate-500"
+                      let flujoIcono = null
+                      let flujoDisplay = "—"
+                      
+                      if (infoFlujo) {
+                        if (infoFlujo.tipo === 'inicio_o_retorno') {
+                          flujoColor = "text-cyan-400"
+                          flujoIcono = <span className="mr-1"></span>
+                          flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                        } else {
+                          if (infoFlujo.valor >= 0) {
+                            flujoColor = "text-green-400"
+                            if (infoFlujo.minutos && infoFlujo.minutos < 15) {
+                              flujoIcono = <span className="mr-1">⚡</span>
+                            } else {
+                              flujoIcono = <span className="mr-1"></span>
+                            }
+                            flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                            if (infoFlujo.minutos) {
+                              flujoDisplay += ` (${infoFlujo.minutos.toFixed(0)} min)`
+                            }
+                          } else {
+                            flujoColor = "text-red-400"
+                            flujoIcono = <span className="mr-1">⚠️</span>
+                            flujoDisplay = `ERROR: ${infoFlujo.valor.toFixed(3)} TM`
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <tr key={exp.id} className={rowClasses}>
+                          <td className="px-4 py-3">
+                            <div>{fechaSV}</div>
+                            <div className="text-xs text-slate-500">{horaSV}</div>
+                            {badges.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {badges.map((badge, i) => (
+                                  <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
+                                    {badge.icono}
+                                    {badge.text}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              turno === '6:00 - 18:00' 
+                                ? 'bg-yellow-500/20 text-yellow-400' 
+                                : 'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {turno}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400">
+                            {(exp.acumulado_tm || 0).toFixed(3)} TM
+                          </td>
+                          <td className="px-4 py-3 font-bold">
+                            {infoFlujo ? (
+                              <span className={flujoColor}>
+                                {flujoIcono}
+                                {flujoDisplay}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {bodega ? (
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodega.color }} />
+                                  <p className="text-white font-medium">{bodega.nombre}</p>
+                                </div>
+                                <p className="text-xs text-green-400">{bodega.codigo}</p>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 max-w-xs truncate" title={exp.observaciones || ''}>
+                            {exp.observaciones || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button onClick={() => handleEditarExportacion(exp)} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
+                                <Edit2 className="w-4 h-4 text-blue-400" />
+                              </button>
+                              <button onClick={() => handleEliminarExportacion(exp.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+                <tfoot className="bg-slate-900 sticky bottom-0">
+                  <tr className="bg-orange-500/5">
+                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
+                    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
+                      {totalGeneral.toFixed(3)} TM
+                    </td>
+                    <td colSpan="3"></td>
+                  </tr>
+                  {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
+                    <tr className="bg-orange-500/5">
+                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
+                      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
+                        {faltaPorCargar.toFixed(3)} TM
+                      </td>
+                      <td colSpan="3"></td>
+                    </tr>
+                  )}
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
         
-        {/* Bitácora */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -2784,7 +2742,6 @@ export default function ExportacionPage() {
         </div>
       </div>
 
-      {/* Modal para editar paro */}
       {showParoModal && barco && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
@@ -2802,7 +2759,6 @@ export default function ExportacionPage() {
         </div>
       )}
 
-      {/* Dashboard de paros */}
       {showParosDashboard && barco && (
         <DashboardParos
           barco={barco}
