@@ -2322,7 +2322,7 @@ export default function ExportacionPage() {
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM/h)</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
@@ -2330,20 +2330,46 @@ export default function ExportacionPage() {
         </thead>
         <tbody className="divide-y divide-white/5">
           {(() => {
-            // 1. Primero, ordenar ASCENDENTE para identificar primeros registros
+            // 1. Ordenar ASCENDENTE para análisis
             const ascendente = [...exportacionesFiltradas].sort(
               (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
             )
             
-            // 2. Identificar qué registros son los PRIMEROS de cada bodega
-            const esPrimerRegistroDeBodega = new Map() // key: id_registro, value: true/false
+            // 2. Crear mapa de flujos por bodega (solo entre registros de la misma bodega)
+            const flujoPorRegistro = new Map() // key: id_registro, value: flujo_tmh
+            
+            // Procesar CADA BODEGA por separado
+            const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
+            
+            bodegasUnicas.forEach(bodegaId => {
+              const registrosBodega = ascendente.filter(e => e.bodega_id === bodegaId)
+              
+              registrosBodega.forEach((reg, idx) => {
+                if (idx === 0) {
+                  // PRIMER REGISTRO de esta bodega: NO tiene flujo (solo muestra el acumulado inicial)
+                  flujoPorRegistro.set(reg.id, null)
+                } else {
+                  // Calcular flujo con el registro ANTERIOR de la MISMA bodega
+                  const anterior = registrosBodega[idx - 1]
+                  const tiempoHoras = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
+                  const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
+                  
+                  let flujo = 0
+                  if (tiempoHoras > 0 && deltaTM > 0) {
+                    flujo = deltaTM / tiempoHoras
+                  }
+                  flujoPorRegistro.set(reg.id, flujo > 0 ? flujo : null)
+                }
+              })
+            })
+            
+            // 3. Identificar PRIMER REGISTRO de cada bodega (para badge "INICIO DE BODEGA")
+            const esPrimerRegistroDeBodega = new Map()
             const bodegasVistas = new Set()
             
-            // Recorrer de MÁS ANTIGUO a MÁS RECIENTE
             ascendente.forEach(exp => {
               const key = `${exp.bodega_id}`
               if (!bodegasVistas.has(key)) {
-                // Es el primer registro de esta bodega
                 esPrimerRegistroDeBodega.set(exp.id, true)
                 bodegasVistas.add(key)
               } else {
@@ -2351,15 +2377,40 @@ export default function ExportacionPage() {
               }
             })
             
-            // 3. Ahora mostrar en orden DESCENDENTE (más reciente primero)
+            // 4. Identificar ULTIMO REGISTRO de cada bodega (para badge "CAMBIO DE BODEGA")
+            const esUltimoRegistroDeBodega = new Map()
+            const contadorBodegas = new Map()
+            
+            // Contar cuántos registros tiene cada bodega
+            ascendente.forEach(exp => {
+              contadorBodegas.set(exp.bodega_id, (contadorBodegas.get(exp.bodega_id) || 0) + 1)
+            })
+            
+            // Contar posición dentro de cada bodega
+            const posicionEnBodega = new Map()
+            ascendente.forEach(exp => {
+              const key = `${exp.bodega_id}`
+              const actual = posicionEnBodega.get(key) || 0
+              const nuevo = actual + 1
+              posicionEnBodega.set(key, nuevo)
+              
+              const totalBodega = contadorBodegas.get(exp.bodega_id)
+              if (nuevo === totalBodega) {
+                esUltimoRegistroDeBodega.set(exp.id, true)
+              } else {
+                esUltimoRegistroDeBodega.set(exp.id, false)
+              }
+            })
+            
+            // 5. Mostrar en orden DESCENDENTE (más reciente primero)
             const descendente = [...exportacionesFiltradas].sort(
               (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
             )
             
-            // 4. Identificar cambios de bodega para mostrar alerta
-            let ultimaBodegaId = null
+            // Variable para detectar cambio visual
+            let ultimaBodegaIdMostrada = null
             
-            return descendente.map((exp, idx, arrDesc) => {
+            return descendente.map((exp) => {
               const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
               const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
               const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
@@ -2372,65 +2423,61 @@ export default function ExportacionPage() {
                 turno = '18:00 - 6:00'
               }
               
-              // Verificar si hay cambio de bodega respecto al registro anterior (más reciente)
-              const hayCambioBodega = ultimaBodegaId !== null && ultimaBodegaId !== exp.bodega_id
-              ultimaBodegaId = exp.bodega_id
-              
-              // Calcular flujo (velocidad entre registros CONSECUTIVOS en orden ascendente)
-              let flujo = 0
               const esPrimero = esPrimerRegistroDeBodega.get(exp.id) || false
+              const esUltimo = esUltimoRegistroDeBodega.get(exp.id) || false
               
-              // Buscar el registro anterior (más antiguo) de la MISMA bodega
-              const ascendenteFiltrado = ascendente.filter(a => a.bodega_id === exp.bodega_id)
-              const idxEnAscendente = ascendenteFiltrado.findIndex(a => a.id === exp.id)
-              const registroAnterior = idxEnAscendente > 0 ? ascendenteFiltrado[idxEnAscendente - 1] : null
+              // Obtener flujo REAL (calculado solo dentro de la misma bodega)
+              const flujoReal = flujoPorRegistro.get(exp.id)
               
-              if (esPrimero) {
-                // PRIMER REGISTRO DE LA BODEGA: el flujo ES el acumulado
-                flujo = Number(exp.acumulado_tm) || 0
-              } else if (registroAnterior) {
-                // Calcular velocidad entre este registro y el anterior
-                const tiempoHoras = (new Date(exp.fecha_hora) - new Date(registroAnterior.fecha_hora)) / (1000 * 60 * 60)
-                const delta = Number(exp.acumulado_tm) - Number(registroAnterior.acumulado_tm)
-                if (tiempoHoras > 0 && delta > 0) {
-                  flujo = delta / tiempoHoras
-                }
-              }
-              
-              // Determinar clases de fondo según el tipo de registro
+              // Determinar clases y badges
               let rowClasses = "hover:bg-white/5 transition-colors"
-              let badgeCambio = null
+              let badges = []
               
               if (esPrimero) {
-                // PRIMER REGISTRO DE BODEGA: fondo azul claro + badge "INICIO BODEGA"
                 rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
-                badgeCambio = (
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full">
-                      <Layers className="w-3 h-3" />
-                      INICIO DE BODEGA
-                    </span>
-                  </div>
-                )
-              } else if (hayCambioBodega) {
-                // CAMBIO DE BODEGA (pero no es el primer registro, es el último de la bodega anterior)
-                rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
-                badgeCambio = (
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-orange-500/30 text-orange-300 px-2 py-0.5 rounded-full">
-                      <ArrowRightLeft className="w-3 h-3" />
-                      CAMBIO DE BODEGA
-                    </span>
-                  </div>
-                )
+                badges.push({
+                  text: "INICIO DE BODEGA",
+                  icono: <Layers className="w-3 h-3" />,
+                  color: "bg-blue-500/30 text-blue-300"
+                })
               }
+              
+              if (esUltimo && !esPrimero) {
+                rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
+                badges.push({
+                  text: "CAMBIO DE BODEGA",
+                  icono: <ArrowRightLeft className="w-3 h-3" />,
+                  color: "bg-orange-500/30 text-orange-300"
+                })
+              }
+              
+              // Detectar cambio visual para resaltar en la tabla
+              const hayCambioVisual = ultimaBodegaIdMostrada !== null && ultimaBodegaIdMostrada !== exp.bodega_id
+              if (hayCambioVisual && !esUltimo && !esPrimero) {
+                rowClasses = "bg-yellow-500/5 hover:bg-yellow-500/10 border-l-4 border-yellow-500"
+                badges.push({
+                  text: "CAMBIO DE BODEGA",
+                  icono: <ArrowRightLeft className="w-3 h-3" />,
+                  color: "bg-yellow-500/30 text-yellow-300"
+                })
+              }
+              ultimaBodegaIdMostrada = exp.bodega_id
               
               return (
                 <tr key={exp.id} className={rowClasses}>
                   <td className="px-4 py-3">
                     <div>{fechaSV}</div>
                     <div className="text-xs text-slate-500">{horaSV}</div>
-                    {badgeCambio}
+                    {badges.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {badges.map((badge, idx) => (
+                          <span key={idx} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
+                            {badge.icono}
+                            {badge.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${
@@ -2444,12 +2491,14 @@ export default function ExportacionPage() {
                   <td className="px-4 py-3 font-bold text-blue-400">
                     {(exp.acumulado_tm || 0).toFixed(3)} TM
                   </td>
-                  <td className="px-4 py-3 font-bold text-green-400">
-                    {flujo > 0 
-                      ? esPrimero 
-                        ? `${flujo.toFixed(3)} TM` 
-                        : `${flujo.toFixed(3)} TM/h`
-                      : '—'}
+                  <td className="px-4 py-3 font-bold">
+                    {flujoReal !== null && flujoReal > 0 ? (
+                      <span className="text-green-400">{flujoReal.toFixed(3)} TM/h</span>
+                    ) : esPrimero ? (
+                      <span className="text-slate-500 text-xs">—</span>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {bodega ? (
@@ -2495,7 +2544,7 @@ export default function ExportacionPage() {
               {totalGeneral.toFixed(3)} TM
             </td>
             <td colSpan="3"></td>
-           </tr>
+          </tr>
           {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
             <tr className="bg-orange-500/5">
               <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
