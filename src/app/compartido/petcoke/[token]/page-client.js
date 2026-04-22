@@ -7,10 +7,26 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
   PieChart, Pie, Cell, LineChart, Line
 } from 'recharts'
+import { FiSearch } from 'react-icons/fi'
+
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
+import * as XLSX from 'xlsx'
+
+// Importación de iconos de react-icons
+import { 
+  FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
+  FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
+  FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp
+} from 'react-icons/fi'
+import { 
+  FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
+  FaTrailer, FaMountain, FaChartPie, FaChartLine, FaDatabase,
+  FaClipboardList, FaFileExcel
+} from 'react-icons/fa'
+import { GiCoalWagon, GiWeightScale } from 'react-icons/gi'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -52,12 +68,12 @@ const getEstadoPeso = (pesoNeto, tipoUnidad) => {
 
 // Función para obtener el color según estado
 const getColorPorEstado = (estado) => {
-  if (estado === 'bajo') return '#fbbf24' // Amarillo
-  if (estado === 'sobre') return '#ef4444' // Rojo
-  return '#4ade80' // Verde para OK
+  if (estado === 'bajo') return '#fbbf24'
+  if (estado === 'sobre') return '#ef4444'
+  return '#4ade80'
 }
 
-// Función para verificar si está fuera de rango (para alertas generales)
+// Función para verificar si está fuera de rango
 const estaFueraDeRango = (pesoNeto, tipoUnidad) => {
   if (!pesoNeto || !tipoUnidad) return false
   const tipo = tipoUnidad.toUpperCase()
@@ -143,7 +159,6 @@ export default function ClientPage({ token }) {
 
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
 
-  // Cargar TODOS los registros (sin filtro) para las tarjetas
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -167,6 +182,73 @@ export default function ClientPage({ token }) {
     }
     cargarTodosRegistros()
   }, [token])
+
+  const descargarExcel = () => {
+    if (!registros.length) {
+      alert('No hay datos para exportar')
+      return
+    }
+
+    const datosExportar = registros.map(reg => {
+      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+      const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+      
+      return {
+        'Correlativo': reg.correlativo,
+        'Placa': reg.placa,
+        'Transporte': reg.transporte || '—',
+        'Tipo Unidad': reg.tipo_unidad || '—',
+        'Rango Mínimo (TM)': rango.min,
+        'Rango Máximo (TM)': rango.max,
+        'Estado Peso': estado === 'bajo' ? 'Bajo peso' : (estado === 'sobre' ? 'Sobrepeso' : 'En rango'),
+        'Fecha': reg.fecha,
+        'Hora Entrada': reg.hora_entrada || '—',
+        'Hora Salida': reg.hora_salida || '—',
+        'Tiempo Atención': reg.tiempo_atencion || '—',
+        'Patio': reg.patio || '—',
+        'Bodega Barco': reg.bodega_barco || '—',
+        'Peso Bruto (TM)': reg.peso_bruto_updp_tm || 0,
+        'Peso Neto (TM)': reg.peso_neto_updp_tm || 0,
+        'Acumulado (TM)': reg.acumulado_updp_tm || 0
+      }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(datosExportar)
+    
+    const colWidths = [
+      { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
+      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+      { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ]
+    ws['!cols'] = colWidths
+
+    const wb = XLSX.utils.book_new()
+    const nombreArchivo = `PetCoke_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
+    
+    const resumenData = [
+      { 'Métrica': 'Barco', 'Valor': barco?.nombre || 'N/A' },
+      { 'Métrica': 'Código Barco', 'Valor': barco?.codigo_barco || 'N/A' },
+      { 'Métrica': 'Total Descargado (TM)', 'Valor': fmtTM(estadisticas.totalNeto, 2) },
+      { 'Métrica': 'Total Viajes', 'Valor': estadisticas.totalViajes },
+      { 'Métrica': 'Promedio por Viaje (TM)', 'Valor': fmtTM(estadisticas.pesoPromedio, 2) },
+      { 'Métrica': 'Viajes en Rango', 'Valor': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
+      { 'Métrica': 'Viajes Bajo Peso', 'Valor': estadisticas.bajoPeso },
+      { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
+      { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
+      { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
+      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') },
+      { 'Métrica': 'Filtro Aplicado', 'Valor': filtroActivoTexto }
+    ]
+    
+    const wsResumen = XLSX.utils.json_to_sheet(resumenData)
+    wsResumen['!cols'] = [{ wch: 25 }, { wch: 35 }]
+    
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
+    XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+    
+    XLSX.writeFile(wb, nombreArchivo)
+  }
 
   const promediosPorTransporte = useMemo(() => {
     const mapa = {}
@@ -203,7 +285,6 @@ export default function ClientPage({ token }) {
     }).sort((a, b) => b.totalNeto - a.totalNeto)
   }, [todosLosRegistros])
 
-  // Calcular flujo por hora
   const flujoPorHora = useMemo(() => {
     if (!registros.length) return []
 
@@ -389,6 +470,8 @@ export default function ClientPage({ token }) {
         .alm-ship-code { font-size: 10px; color: #64748b; font-family: 'DM Mono', monospace; }
         .alm-refresh-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
+        .alm-excel-btn { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); border-radius: 8px; padding: 6px 12px; color: #4ade80; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .alm-excel-btn:hover { background: rgba(34, 197, 94, 0.25); transform: translateY(-1px); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
 
         .alm-tarjetas-grid {
@@ -534,7 +617,7 @@ export default function ClientPage({ token }) {
         .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
         .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--orange); }
-        .alm-kpi-icon { font-size: 28px; }
+        .alm-kpi-icon { font-size: 28px; color: #f97316; }
         .alm-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
         .alm-kpi-value { font-size: 28px; font-weight: 900; color: white; font-family: 'DM Mono', monospace; }
         .alm-kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
@@ -564,7 +647,7 @@ export default function ClientPage({ token }) {
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
         .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
-        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; }
+        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
 
         .section-title {
@@ -605,13 +688,19 @@ export default function ClientPage({ token }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button onClick={descargarExcel} className="alm-excel-btn">
+              <FaFileExcel size={14} />
+              Descargar Excel
+            </button>
             {(transporteSeleccionado || diaSeleccionado) && (
               <button onClick={limpiarTodosLosFiltros} className="alm-clear-filter">
-                ✕ Limpiar todos los filtros
+                <FiX size={12} />
+                Limpiar todos los filtros
               </button>
             )}
             <button onClick={refetch} className="alm-refresh-btn">
-              <span>🔄</span> Actualizar
+              <FiRefreshCw size={14} />
+              Actualizar
             </button>
           </div>
         </header>
@@ -619,15 +708,15 @@ export default function ClientPage({ token }) {
         <div className="alm-body">
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span className="alm-badge alm-badge-filter">{filtroActivoTexto}</span>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>
+            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <FiClock size={12} />
               Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
             </div>
           </div>
 
-          {/* KPIs principales */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🪨</div>
+              <div className="alm-kpi-icon"><GiWeightScale size={28} /></div>
               <div>
                 <div className="alm-kpi-label">Total Descargado</div>
                 <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto, 2)} TM</div>
@@ -635,7 +724,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🚛</div>
+              <div className="alm-kpi-icon"><FiTruck size={28} /></div>
               <div>
                 <div className="alm-kpi-label">Total Viajes</div>
                 <div className="alm-kpi-value">{estadisticas.totalViajes}</div>
@@ -643,7 +732,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">⚖️</div>
+              <div className="alm-kpi-icon"><FiBarChart2 size={28} /></div>
               <div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
                 <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} TM</div>
@@ -651,7 +740,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🏭</div>
+              <div className="alm-kpi-icon"><FiUsers size={28} /></div>
               <div>
                 <div className="alm-kpi-label">Transportistas</div>
                 <div className="alm-kpi-value">{promediosPorTransporte.length}</div>
@@ -660,10 +749,9 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPIs patios con nuevos contadores */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🔵</div>
+              <div className="alm-kpi-icon"><FiMapPin size={28} style={{ color: '#60a5fa' }} /></div>
               <div>
                 <div className="alm-kpi-label">Patio NORTE</div>
                 <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{fmtTM(estadisticas.totalNorte, 2)} TM</div>
@@ -671,7 +759,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">🟢</div>
+              <div className="alm-kpi-icon"><FiMapPin size={28} style={{ color: '#4ade80' }} /></div>
               <div>
                 <div className="alm-kpi-label">Patio SUR</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{fmtTM(estadisticas.totalSur, 2)} TM</div>
@@ -679,7 +767,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">✅</div>
+              <div className="alm-kpi-icon"><FiCheckCircle size={28} style={{ color: '#4ade80' }} /></div>
               <div>
                 <div className="alm-kpi-label">En Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
@@ -687,23 +775,23 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon">⚠️</div>
+              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: '#f87171' }} /></div>
               <div>
                 <div className="alm-kpi-label">Fuera de Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
                 <div className="alm-kpi-sub">
-                  <span style={{ color: '#fbbf24' }}>↓{estadisticas.bajoPeso}</span> · 
-                  <span style={{ color: '#f87171' }}> ↑{estadisticas.sobrePeso}</span>
+                  <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><FiArrowDown size={10} />{estadisticas.bajoPeso}</span> · 
+                  <span style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><FiArrowUp size={10} />{estadisticas.sobrePeso}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Alerta fuera de rango con colores diferenciados */}
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
               <div className="alm-alert-title">
-                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido
+                <FiAlertCircle size={16} />
+                ALERTA: Unidades fuera del rango permitido
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {estadisticas.unidadesFueraDeRango.slice(0, 10).map((reg, idx) => {
@@ -716,10 +804,14 @@ export default function ClientPage({ token }) {
                       borderRadius: '20px', 
                       fontSize: '12px', 
                       fontFamily: 'monospace', 
-                      color: estado === 'bajo' ? '#fbbf24' : '#f87171' 
+                      color: estado === 'bajo' ? '#fbbf24' : '#f87171',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
                     }}>
+                      {estado === 'bajo' ? <FiArrowDown size={12} /> : <FiArrowUp size={12} />}
                       {reg.placa} ({reg.tipo_unidad}): {reg.peso_neto_updp_tm?.toFixed(2)} TM 
-                      {estado === 'bajo' ? ` ⬇️ (mín ${rango.min})` : ` ⬆️ (máx ${rango.max})`}
+                      {estado === 'bajo' ? ` (min ${rango.min})` : ` (max ${rango.max})`}
                     </span>
                   )
                 })}
@@ -732,11 +824,13 @@ export default function ClientPage({ token }) {
             </div>
           )}
 
-          {/* Progreso de meta */}
           {meta > 0 && (
             <div className="alm-progress-hero">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold', color: 'white' }}>Progreso de Descarga</span>
+                <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FiTrendingUp size={16} />
+                  Progreso de Descarga
+                </span>
                 <span style={{ color: porcentajeMeta >= 100 ? '#4ade80' : porcentajeMeta >= 90 ? '#fbbf24' : '#f97316', fontWeight: 'bold' }}>
                   {porcentajeMeta.toFixed(1)}%
                 </span>
@@ -751,16 +845,21 @@ export default function ClientPage({ token }) {
               </div>
               {porcentajeMeta >= 100 && (
                 <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center' }}>
-                  <span style={{ color: '#4ade80', fontSize: '12px' }}>✅ ¡Meta alcanzada! Se ha completado la cantidad manifestada.</span>
+                  <span style={{ color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <FiCheckCircle size={14} />
+                    ¡Meta alcanzada! Se ha completado la cantidad manifestada.
+                  </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* TARJETAS COMPACTAS POR EMPRESA TRANSPORTISTA */}
           {promediosPorTransporte.length > 0 && (
             <>
-              <div className="section-title">🏢 Empresas Transportistas</div>
+              <div className="section-title">
+                <FaBuilding size={14} />
+                Empresas Transportistas
+              </div>
               <div className="alm-tarjetas-grid">
                 {promediosPorTransporte.map((empresa) => {
                   const sel = transporteSeleccionado === empresa.nombre
@@ -783,7 +882,8 @@ export default function ClientPage({ token }) {
                       <div className="tarjeta-tipos">
                         <div className={`tipo-item ${empresa.viajesTraileta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
-                            <span>🚛</span> TRAILETA
+                            <FaTrailer size={12} />
+                            TRAILETA
                             <span style={{ fontSize: '8px', marginLeft: 'auto', opacity: 0.7 }}>22-25 TM</span>
                           </div>
                           {empresa.viajesTraileta > 0 ? (
@@ -800,7 +900,8 @@ export default function ClientPage({ token }) {
 
                         <div className={`tipo-item ${empresa.viajesVolqueta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
-                            <span>⛰️</span> VOLQUETA
+                            <FaMountain size={12} />
+                            VOLQUETA
                             <span style={{ fontSize: '8px', marginLeft: 'auto', opacity: 0.7 }}>14-18 TM</span>
                           </div>
                           {empresa.viajesVolqueta > 0 ? (
@@ -818,7 +919,8 @@ export default function ClientPage({ token }) {
 
                       {empresa.fueraRango > 0 && (
                         <div className="tarjeta-alerta">
-                          ⚠️ {empresa.fueraRango} fuera de rango
+                          <FiAlertCircle size={10} style={{ display: 'inline', marginRight: '4px' }} />
+                          {empresa.fueraRango} fuera de rango
                         </div>
                       )}
 
@@ -832,24 +934,24 @@ export default function ClientPage({ token }) {
             </>
           )}
 
-          {/* GRÁFICO DE FLUJO POR HORA */}
           <div className="alm-chart-card alm-chart-wide">
             <div className="alm-chart-title">
-              <span>⏱️</span> Flujo de Descarga por Hora
+              <FiClock size={16} />
+              Flujo de Descarga por Hora
             </div>
             
             {flujoPorHora.length > 0 && (
               <div className="flujo-stats">
                 <div className="flujo-stat">
-                  <div className="flujo-stat-label">🚛 Pico Máximo por Hora</div>
+                  <div className="flujo-stat-label">Pico Máximo por Hora</div>
                   <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.maxPorHora, 1)} TM</div>
                 </div>
                 <div className="flujo-stat">
-                  <div className="flujo-stat-label">📊 Promedio por Hora</div>
+                  <div className="flujo-stat-label">Promedio por Hora</div>
                   <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM</div>
                 </div>
                 <div className="flujo-stat">
-                  <div className="flujo-stat-label">⏰ Periodos Activos</div>
+                  <div className="flujo-stat-label">Periodos Activos</div>
                   <div className="flujo-stat-value">{estadisticasFlujo.totalHoras} horas</div>
                 </div>
               </div>
@@ -938,17 +1040,19 @@ export default function ClientPage({ token }) {
               </ResponsiveContainer>
             ) : (
               <div style={{ textAlign: 'center', color: '#64748b', padding: '80px 40px' }}>
-                <span style={{ fontSize: '48px', display: 'block', marginBottom: '16px' }}>⏰</span>
+                <FiClock size={48} style={{ display: 'block', margin: '0 auto 16px', opacity: 0.5 }} />
                 <p>No hay datos de hora disponibles para mostrar el flujo</p>
                 <p style={{ fontSize: '12px', marginTop: '8px' }}>Se requiere información de hora_entrada en los registros</p>
               </div>
             )}
           </div>
 
-          {/* Gráficos adicionales */}
           <div className="alm-charts-row">
             <div className="alm-chart-card">
-              <div className="alm-chart-title"><span>📊</span> Descarga por Transporte</div>
+              <div className="alm-chart-title">
+                <FaChartPie size={16} />
+                Descarga por Transporte
+              </div>
               {datosGraficoTransporte.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
@@ -962,7 +1066,10 @@ export default function ClientPage({ token }) {
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title"><span>🏭</span> Descarga por Patio</div>
+              <div className="alm-chart-title">
+                <FiHome size={16} />
+                Descarga por Patio
+              </div>
               {datosGraficoPatio.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
@@ -975,10 +1082,10 @@ export default function ClientPage({ token }) {
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
             </div>
 
-            {/* GRÁFICO DE DESCARGA POR DÍA */}
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <span>📈</span> Descarga por Día
+                <FiCalendar size={16} />
+                Descarga por Día
                 {diaSeleccionado && (
                   <span className="alm-badge alm-badge-filter" style={{ marginLeft: '8px' }}>
                     Filtrado: {diaSeleccionado}
@@ -1030,10 +1137,10 @@ export default function ClientPage({ token }) {
               </div>
             </div>
 
-            {/* GRÁFICO DE DISTRIBUCIÓN DE PESOS CON COLORES POR TIPO */}
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <span>📊</span> Distribución de Pesos Netos
+                <FaChartLine size={16} />
+                Distribución de Pesos Netos
                 {diaSeleccionado && (
                   <span className="alm-badge alm-badge-filter" style={{ marginLeft: '8px' }}>
                     {diaSeleccionado}
@@ -1041,9 +1148,9 @@ export default function ClientPage({ token }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '10px', justifyContent: 'center' }}>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#4ade80', borderRadius: '2px', marginRight: '4px' }}></span> En Rango</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fbbf24', borderRadius: '2px', marginRight: '4px' }}></span> Bajo Peso (⬇️)</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px', marginRight: '4px' }}></span> Sobrepeso (⬆️)</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#4ade80', borderRadius: '2px' }}></span> En Rango</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fbbf24', borderRadius: '2px' }}></span> Bajo Peso <FiArrowDown size={10} /></span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></span> Sobrepeso <FiArrowUp size={10} /></span>
               </div>
               {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
@@ -1060,34 +1167,37 @@ export default function ClientPage({ token }) {
                         <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
                       ))}
                     </Bar>
-                    {/* Líneas de referencia según tipo de unidad - se muestran ambas */}
-                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq mín ${RANGOS.VOLQUETA.min}`, fill: '#fbbf24', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq máx ${RANGOS.VOLQUETA.max}`, fill: '#fbbf24', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail mín ${RANGOS.TRAILETA.min}`, fill: '#f97316', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail máx ${RANGOS.TRAILETA.max}`, fill: '#f97316', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq min ${RANGOS.VOLQUETA.min}`, fill: '#fbbf24', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq max ${RANGOS.VOLQUETA.max}`, fill: '#fbbf24', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail min ${RANGOS.TRAILETA.min}`, fill: '#f97316', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail max ${RANGOS.TRAILETA.max}`, fill: '#f97316', fontSize: 9 }} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
               {diaSeleccionado && (
                 <div style={{ fontSize: '10px', color: '#f97316', textAlign: 'center', marginTop: '8px' }}>
-                  🔍 Mostrando solo viajes del día {diaSeleccionado}
+                  <FiSearch size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                  Mostrando solo viajes del día {diaSeleccionado}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Tabla de registros con colores por estado */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span>📋</span>
+                <FaClipboardList size={14} />
                 <span style={{ fontWeight: 'bold', color: 'white' }}>Registros de Descarga</span>
                 <span className="alm-badge">{registros.length} viajes</span>
                 {estadisticas.bajoPeso > 0 && (
-                  <span className="alm-badge alm-badge-bajo">⬇️ {estadisticas.bajoPeso} bajo peso</span>
+                  <span className="alm-badge alm-badge-bajo" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <FiArrowDown size={10} /> {estadisticas.bajoPeso} bajo peso
+                  </span>
                 )}
                 {estadisticas.sobrePeso > 0 && (
-                  <span className="alm-badge alm-badge-warning">⬆️ {estadisticas.sobrePeso} sobrepeso</span>
+                  <span className="alm-badge alm-badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <FiArrowUp size={10} /> {estadisticas.sobrePeso} sobrepeso
+                  </span>
                 )}
                 {transporteSeleccionado && (
                   <span className="alm-badge alm-badge-filter">Transporte: {transporteSeleccionado}</span>
@@ -1135,8 +1245,12 @@ export default function ClientPage({ token }) {
                             ? <span style={{
                                 background: reg.tipo_unidad.toUpperCase() === 'TRAILETA' ? 'rgba(249,115,22,0.15)' : 'rgba(74,222,128,0.15)',
                                 color: reg.tipo_unidad.toUpperCase() === 'TRAILETA' ? '#f97316' : '#4ade80',
-                                padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 700
-                              }}>{reg.tipo_unidad}</span>
+                                padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 700,
+                                display: 'inline-flex', alignItems: 'center', gap: '4px'
+                              }}>
+                              {reg.tipo_unidad.toUpperCase() === 'TRAILETA' ? <FaTrailer size={10} /> : <FaMountain size={10} />}
+                              {reg.tipo_unidad}
+                            </span>
                             : '—'}
                         </td>
                         <td style={{ fontSize: '10px', fontFamily: 'monospace' }}>
@@ -1151,11 +1265,15 @@ export default function ClientPage({ token }) {
                         <td className="alm-td-num" style={{ color: '#60a5fa' }}>{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
                         <td className="alm-td-num" style={{ 
                           color: estado === 'bajo' ? '#fbbf24' : (estado === 'sobre' ? '#f87171' : '#4ade80'), 
-                          fontWeight: 'bold' 
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: '4px'
                         }}>
                           {reg.peso_neto_updp_tm?.toFixed(3)}
-                          {estado === 'bajo' && <span style={{ marginLeft: '4px' }}>⬇️</span>}
-                          {estado === 'sobre' && <span style={{ marginLeft: '4px' }}>⬆️</span>}
+                          {estado === 'bajo' && <FiArrowDown size={12} />}
+                          {estado === 'sobre' && <FiArrowUp size={12} />}
                         </td>
                         <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3) || '—'}</td>
                       </tr>
@@ -1167,12 +1285,13 @@ export default function ClientPage({ token }) {
           </div>
 
           <div className="alm-footer">
-            🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
+            <FiRefreshCw size={10} style={{ display: 'inline', marginRight: '4px' }} />
+            auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
             <br />
-            <span style={{ color: '#fbbf24' }}>⚠️ VOLQUETA: 14-18 TM</span> · 
-            <span style={{ color: '#f97316' }}> TRAILETA: 22-25 TM</span> · 
-            <span style={{ color: '#f87171' }}> Rojo = Sobrepeso</span> · 
-            <span style={{ color: '#fbbf24' }}> Amarillo = Bajo peso</span>
+            <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiAlertCircle size={10} /> VOLQUETA: 14-18 TM</span> · 
+            <span style={{ color: '#f97316', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FaTrailer size={10} /> TRAILETA: 22-25 TM</span> · 
+            <span style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiArrowUp size={10} /> Rojo = Sobrepeso</span> · 
+            <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiArrowDown size={10} /> Amarillo = Bajo peso</span>
           </div>
         </div>
       </div>

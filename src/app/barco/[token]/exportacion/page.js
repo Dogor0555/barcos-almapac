@@ -2335,59 +2335,84 @@ export default function ExportacionPage() {
               (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
             )
             
-            // Mapa para almacenar el delta (TM cargados entre lecturas)
-            const deltaPorRegistro = new Map()
+            // IDENTIFICAR RETORNO EXACTO A BODEGA (primero, antes de calcular flujos)
+            const esRetornoExacto = new Map()
+            for (let i = 1; i < ascendente.length; i++) {
+              const actual = ascendente[i]
+              const anterior = ascendente[i - 1]
+              if (actual.bodega_id !== anterior.bodega_id) {
+                // Verificar si esta bodega ya se había usado antes
+                let bodegaVistaAntes = false
+                for (let j = 0; j < i; j++) {
+                  if (ascendente[j].bodega_id === actual.bodega_id) {
+                    bodegaVistaAntes = true
+                    break
+                  }
+                }
+                if (bodegaVistaAntes) {
+                  esRetornoExacto.set(actual.id, true)
+                }
+              }
+            }
+            
+            // Calcular FLUJO correctamente
+            const flujoPorRegistro = new Map()
             
             // Procesar CADA BODEGA por separado
             const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
             
             bodegasUnicas.forEach(bodegaId => {
+              // Obtener SOLO los registros de esta bodega, en orden cronológico
               const registrosBodega = ascendente.filter(e => e.bodega_id === bodegaId)
               
               registrosBodega.forEach((reg, idx) => {
-                if (idx === 0) {
-                  // PRIMER REGISTRO de esta bodega: FLUJO = acumulado (punto de partida)
-                  deltaPorRegistro.set(reg.id, {
+                // Verificar si este registro es un RETORNO EXACTO
+                const esRetorno = esRetornoExacto.get(reg.id)
+                
+                if (idx === 0 || esRetorno) {
+                  // Si es el PRIMER REGISTRO de esta bodega (en la lista filtrada)
+                  // O es un RETORNO EXACTO
+                  // El FLUJO es el ACUMULADO de esta bodega
+                  flujoPorRegistro.set(reg.id, {
                     valor: Number(reg.acumulado_tm) || 0,
-                    esPrimero: true,
+                    tipo: 'inicio_o_retorno',
                     minutos: null
                   })
                 } else {
-                  // Calcular delta con registro anterior de la MISMA bodega
+                  // Para registros siguientes de la MISMA bodega (NO es retorno)
+                  // El FLUJO es el DELTA entre esta lectura y la anterior de la MISMA bodega
                   const anterior = registrosBodega[idx - 1]
                   const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
                   const minutosDiff = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60)
                   
-                  deltaPorRegistro.set(reg.id, {
+                  flujoPorRegistro.set(reg.id, {
                     valor: deltaTM,
-                    esPrimero: false,
+                    tipo: 'delta_entre_lecturas',
                     minutos: minutosDiff
                   })
                 }
               })
             })
             
-            // Identificar PRIMER REGISTRO de cada bodega (para badge INICIO DE BODEGA)
-            const esPrimerRegistroDeBodega = new Map()
+            // Identificar PRIMERA VEZ que aparece cada bodega (para badge INICIO)
+            const esPrimeraVezBodega = new Map()
             const bodegasVistas = new Set()
             
             ascendente.forEach(exp => {
               if (!bodegasVistas.has(exp.bodega_id)) {
-                esPrimerRegistroDeBodega.set(exp.id, true)
+                esPrimeraVezBodega.set(exp.id, true)
                 bodegasVistas.add(exp.bodega_id)
               } else {
-                esPrimerRegistroDeBodega.set(exp.id, false)
+                esPrimeraVezBodega.set(exp.id, false)
               }
             })
             
-            // IDENTIFICAR CAMBIO DE BODEGA
-            // El badge "CAMBIO DE BODEGA" va en el registro ANTERIOR (último de la bodega que se termina)
-            const hayCambioBodega = new Map() // key: id del registro ANTERIOR
+            // IDENTIFICAR CAMBIO DE BODEGA (en el registro ANTERIOR)
+            const hayCambioBodega = new Map()
             for (let i = 1; i < ascendente.length; i++) {
               const actual = ascendente[i]
               const anterior = ascendente[i - 1]
               if (actual.bodega_id !== anterior.bodega_id) {
-                // El registro ANTERIOR es el último de su bodega → le ponemos CAMBIO DE BODEGA
                 hayCambioBodega.set(anterior.id, true)
               }
             }
@@ -2405,16 +2430,16 @@ export default function ExportacionPage() {
               
               const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
               
-              const esPrimero = esPrimerRegistroDeBodega.get(exp.id)
+              const esPrimera = esPrimeraVezBodega.get(exp.id)
               const esCambio = hayCambioBodega.get(exp.id)
-              const infoDelta = deltaPorRegistro.get(exp.id)
+              const esRetorno = esRetornoExacto.get(exp.id)
+              const infoFlujo = flujoPorRegistro.get(exp.id)
               
               // Determinar clases y badges
               let rowClasses = "hover:bg-white/5 transition-colors"
               let badges = []
               
-              // INICIO DE BODEGA (si es el primer registro de esa bodega)
-              if (esPrimero) {
+              if (esPrimera && !esRetorno) {
                 rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
                 badges.push({
                   text: "INICIO DE BODEGA",
@@ -2423,7 +2448,15 @@ export default function ExportacionPage() {
                 })
               }
               
-              // CAMBIO DE BODEGA (en el registro ANTERIOR, el último de la bodega que se termina)
+              if (esRetorno) {
+                rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
+                badges.push({
+                  text: "RETORNO A BODEGA",
+                  icono: <ArrowRightLeft className="w-3 h-3" />,
+                  color: "bg-purple-500/30 text-purple-300"
+                })
+              }
+              
               if (esCambio) {
                 rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
                 badges.push({
@@ -2431,6 +2464,39 @@ export default function ExportacionPage() {
                   icono: <ArrowRightLeft className="w-3 h-3" />,
                   color: "bg-orange-500/30 text-orange-300"
                 })
+              }
+              
+              // Determinar el color y formato del flujo
+              let flujoColor = "text-slate-500"
+              let flujoIcono = null
+              let flujoDisplay = "—"
+              
+              if (infoFlujo) {
+                if (infoFlujo.tipo === 'inicio_o_retorno') {
+                  // Para INICIO o RETORNO: mostrar el ACUMULADO (positivo)
+                  flujoColor = "text-cyan-400"
+                  flujoIcono = <span className="mr-1">🎯</span>
+                  flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                } else {
+                  // Para delta entre lecturas de la MISMA bodega
+                  if (infoFlujo.valor >= 0) {
+                    flujoColor = "text-green-400"
+                    if (infoFlujo.minutos && infoFlujo.minutos < 15) {
+                      flujoIcono = <span className="mr-1">⚡</span>
+                    } else {
+                      flujoIcono = <span className="mr-1">📈</span>
+                    }
+                    flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                    if (infoFlujo.minutos) {
+                      flujoDisplay += ` (${infoFlujo.minutos.toFixed(0)} min)`
+                    }
+                  } else {
+                    // NUNCA debería pasar con la nueva lógica
+                    flujoColor = "text-red-400"
+                    flujoIcono = <span className="mr-1">⚠️</span>
+                    flujoDisplay = `ERROR: ${infoFlujo.valor.toFixed(3)} TM`
+                  }
+                }
               }
               
               return (
@@ -2462,17 +2528,10 @@ export default function ExportacionPage() {
                     {(exp.acumulado_tm || 0).toFixed(3)} TM
                   </td>
                   <td className="px-4 py-3 font-bold">
-                    {infoDelta ? (
-                      <span 
-                        className={infoDelta.esPrimero ? "text-cyan-400" : "text-green-400"}
-                        title={!infoDelta.esPrimero && infoDelta.minutos ? `${infoDelta.valor.toFixed(3)} TM en ${infoDelta.minutos.toFixed(1)} minutos` : "Punto de inicio de bodega"}
-                      >
-                        {infoDelta.valor.toFixed(3)} TM
-                        {!infoDelta.esPrimero && infoDelta.minutos && infoDelta.minutos < 15 && (
-                          <span className="ml-1 text-[10px] text-yellow-500" title={`Intervalo corto: ${infoDelta.minutos.toFixed(1)} minutos`}>
-                            ⚡
-                          </span>
-                        )}
+                    {infoFlujo ? (
+                      <span className={flujoColor}>
+                        {flujoIcono}
+                        {flujoDisplay}
                       </span>
                     ) : (
                       <span className="text-slate-500">—</span>
