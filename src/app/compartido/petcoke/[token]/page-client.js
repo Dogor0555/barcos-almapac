@@ -21,8 +21,11 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-const PESO_MINIMO = 22
-const PESO_MAXIMO = 25
+// Rangos por tipo de unidad
+const RANGOS = {
+  VOLQUETA: { min: 14, max: 18 },
+  TRAILETA: { min: 22, max: 26 }
+}
 
 const COLORES = ["#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"]
 const COLORES_PATIO = { "NORTE": "#3b82f6", "SUR": "#22c55e" }
@@ -35,12 +38,35 @@ const fmtTM = (tm, d = 3) => {
   return partes.join(".")
 }
 
-const estaFueraDeRango = (pesoNeto) => {
-  if (!pesoNeto) return false
-  return pesoNeto < PESO_MINIMO || pesoNeto > PESO_MAXIMO
+// Función para obtener el estado del peso según tipo de unidad
+const getEstadoPeso = (pesoNeto, tipoUnidad) => {
+  if (!pesoNeto || !tipoUnidad) return null
+  const tipo = tipoUnidad.toUpperCase()
+  const rango = RANGOS[tipo]
+  if (!rango) return null
+  
+  if (pesoNeto < rango.min) return 'bajo'
+  if (pesoNeto > rango.max) return 'sobre'
+  return 'ok'
 }
 
-function usePetCokeData(token, transporteFiltro = null) {
+// Función para obtener el color según estado
+const getColorPorEstado = (estado) => {
+  if (estado === 'bajo') return '#fbbf24' // Amarillo
+  if (estado === 'sobre') return '#ef4444' // Rojo
+  return '#4ade80' // Verde para OK
+}
+
+// Función para verificar si está fuera de rango (para alertas generales)
+const estaFueraDeRango = (pesoNeto, tipoUnidad) => {
+  if (!pesoNeto || !tipoUnidad) return false
+  const tipo = tipoUnidad.toUpperCase()
+  const rango = RANGOS[tipo]
+  if (!rango) return false
+  return pesoNeto < rango.min || pesoNeto > rango.max
+}
+
+function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
   const [data, setData] = useState({
     barco: null,
     producto: null,
@@ -80,6 +106,10 @@ function usePetCokeData(token, transporteFiltro = null) {
         query = query.eq('transporte', transporteFiltro)
       }
 
+      if (diaFiltro) {
+        query = query.eq('fecha', diaFiltro)
+      }
+
       const { data: registrosData, error: registrosError } = await query
       if (registrosError) throw registrosError
 
@@ -101,16 +131,17 @@ function usePetCokeData(token, transporteFiltro = null) {
     cargar()
     const interval = setInterval(cargar, 30000)
     return () => clearInterval(interval)
-  }, [token, transporteFiltro])
+  }, [token, transporteFiltro, diaFiltro])
 
   return { ...data, refetch: cargar }
 }
 
 export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
 
-  const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado)
+  const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
 
   // Cargar TODOS los registros (sin filtro) para las tarjetas
   useEffect(() => {
@@ -167,16 +198,15 @@ export default function ClientPage({ token }) {
         totalVolqueta,
         promedioTraileta: e.traileta.length > 0 ? totalTraileta / e.traileta.length : null,
         promedioVolqueta: e.volqueta.length > 0 ? totalVolqueta / e.volqueta.length : null,
-        fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm)).length,
+        fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad)).length,
       }
     }).sort((a, b) => b.totalNeto - a.totalNeto)
   }, [todosLosRegistros])
 
-  // NUEVO: Calcular flujo por hora
+  // Calcular flujo por hora
   const flujoPorHora = useMemo(() => {
     if (!registros.length) return []
 
-    // Agrupar por hora (usando hora_entrada si existe, o fecha/hora combinada)
     const flujoMap = new Map()
 
     registros.forEach(reg => {
@@ -184,12 +214,10 @@ export default function ClientPage({ token }) {
       let horaMostrar = ''
       
       if (reg.hora_entrada) {
-        // Extraer hora de entrada (formato HH:MM:SS)
         const horaPart = reg.hora_entrada.split(':')[0]
         horaKey = `${reg.fecha} ${horaPart}:00`
         horaMostrar = `${horaPart}:00`
       } else if (reg.fecha) {
-        // Si no hay hora, usar fecha sola
         horaKey = reg.fecha
         horaMostrar = reg.fecha
       } else {
@@ -210,21 +238,18 @@ export default function ClientPage({ token }) {
       const horaData = flujoMap.get(horaKey)
       horaData.viajes++
       horaData.totalTM += reg.peso_neto_updp_tm || 0
-      if (estaFueraDeRango(reg.peso_neto_updp_tm)) {
+      if (estaFueraDeRango(reg.peso_neto_updp_tm, reg.tipo_unidad)) {
         horaData.viajesFueraRango++
       }
     })
 
-    // Convertir a array y calcular promedios
     let flujoArray = Array.from(flujoMap.values()).map(item => ({
       ...item,
       promedio: item.viajes > 0 ? item.totalTM / item.viajes : 0
     }))
 
-    // Ordenar por hora/fecha
     flujoArray.sort((a, b) => a.horaCompleta.localeCompare(b.horaCompleta))
 
-    // Calcular flujo acumulado
     let acumulado = 0
     flujoArray = flujoArray.map(item => {
       acumulado += item.totalTM
@@ -234,7 +259,6 @@ export default function ClientPage({ token }) {
     return flujoArray
   }, [registros])
 
-  // Calcular estadísticas de flujo
   const estadisticasFlujo = useMemo(() => {
     if (!flujoPorHora.length) return { maxPorHora: 0, promedioPorHora: 0, totalHoras: 0 }
     
@@ -250,7 +274,8 @@ export default function ClientPage({ token }) {
       totalNeto: 0, totalBruto: 0, totalViajes: 0,
       porTransporte: {}, porDia: {}, porPatio: {},
       acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
-      totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0
+      totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0,
+      bajoPeso: 0, sobrePeso: 0
     }
 
     const totalNeto  = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
@@ -276,7 +301,9 @@ export default function ClientPage({ token }) {
     const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
     const totalSur   = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
 
-    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm))
+    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad))
+    const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length
+    const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length
     const porcentajeDentroRango = ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100
 
     let acumulado = 0
@@ -286,19 +313,29 @@ export default function ClientPage({ token }) {
         correlativo: r.correlativo,
         peso: r.peso_neto_updp_tm,
         acumulado,
-        fueraRango: estaFueraDeRango(r.peso_neto_updp_tm)
+        estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
+        tipoUnidad: r.tipo_unidad
       }
     })
 
     return {
       totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
       acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
-      pesoPromedio, porcentajeDentroRango
+      pesoPromedio, porcentajeDentroRango, bajoPeso, sobrePeso
     }
   }, [registros])
 
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
+  }
+
+  const handleSeleccionarDia = (dia) => {
+    setDiaSeleccionado(prev => prev === dia ? null : dia)
+  }
+
+  const limpiarTodosLosFiltros = () => {
+    setTransporteSeleccionado(null)
+    setDiaSeleccionado(null)
   }
 
   if (loading && !barco) {
@@ -325,7 +362,7 @@ export default function ClientPage({ token }) {
     )
   }
 
-  const datosGraficoAcumulado   = estadisticas.acumuladoPorCorrelativo.map(item => ({ correlativo: `#${item.correlativo}`, peso: item.peso, acumulado: item.acumulado }))
+  const datosGraficoAcumulado   = estadisticas.acumuladoPorCorrelativo.map(item => ({ correlativo: `#${item.correlativo}`, peso: item.peso, acumulado: item.acumulado, estado: item.estado }))
   const datosGraficoTransporte  = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
   const datosGraficoDia         = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
   const datosGraficoPatio       = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
@@ -333,9 +370,10 @@ export default function ClientPage({ token }) {
   const meta = barco.metas_json?.limites?.['PC-001'] || 0
   const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
-  const filtroActivoTexto = transporteSeleccionado
-    ? `Filtrando: ${transporteSeleccionado}`
-    : 'Mostrando todos los transportes'
+  const filtroActivoTexto = [
+    transporteSeleccionado && `Transporte: ${transporteSeleccionado}`,
+    diaSeleccionado && `Día: ${diaSeleccionado}`
+  ].filter(Boolean).join(' · ') || 'Mostrando todos los datos'
 
   return (
     <>
@@ -353,7 +391,6 @@ export default function ClientPage({ token }) {
         .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
 
-        /* Grid de tarjetas mejorado - más compacto */
         .alm-tarjetas-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -362,7 +399,6 @@ export default function ClientPage({ token }) {
           margin-top: 20px;
         }
 
-        /* Tarjeta compacta */
         .tarjeta-transporte {
           background: #1e293b;
           border: 1px solid #334155;
@@ -382,7 +418,6 @@ export default function ClientPage({ token }) {
           box-shadow: 0 4px 12px -2px rgba(249,115,22,0.35);
         }
 
-        /* Header compacto */
         .tarjeta-header {
           padding: 12px 14px 8px 14px;
           border-bottom: 1px solid rgba(255,255,255,0.1);
@@ -416,7 +451,6 @@ export default function ClientPage({ token }) {
           color: white;
         }
 
-        /* Grid de tipos de unidad - 2 columnas */
         .tarjeta-tipos {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -454,7 +488,6 @@ export default function ClientPage({ token }) {
           color: rgba(255,255,255,0.6);
         }
 
-        /* Alerta compacta */
         .tarjeta-alerta {
           margin: 0 14px 12px 14px;
           padding: 6px 10px;
@@ -472,7 +505,6 @@ export default function ClientPage({ token }) {
           background: rgba(0,0,0,0.1);
         }
 
-        /* Estadísticas de flujo */
         .flujo-stats {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
@@ -519,12 +551,15 @@ export default function ClientPage({ token }) {
         .alm-table td { padding: 12px 16px; color: #cbd5e1; border-bottom: 1px solid var(--border); }
         .alm-table tbody tr:hover { background: rgba(249, 115, 22, 0.05); }
         .alm-table .alm-td-num { text-align: right; }
-        .alm-table-row-warning { background: rgba(239, 68, 68, 0.1); }
-        .alm-table-row-warning:hover { background: rgba(239, 68, 68, 0.2); }
+        .alm-table-row-bajo { background: rgba(251, 191, 36, 0.15); }
+        .alm-table-row-bajo:hover { background: rgba(251, 191, 36, 0.25); }
+        .alm-table-row-sobre { background: rgba(239, 68, 68, 0.15); }
+        .alm-table-row-sobre:hover { background: rgba(239, 68, 68, 0.25); }
         .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; }
         .alm-badge { background: rgba(249, 115, 22, 0.2); color: #f97316; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 8px; }
         .alm-badge-warning { background: rgba(239, 68, 68, 0.2); color: #f87171; }
         .alm-badge-filter { background: rgba(249, 115, 22, 0.3); color: #f97316; }
+        .alm-badge-bajo { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
         .alm-progress-hero { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
@@ -540,6 +575,14 @@ export default function ClientPage({ token }) {
         }
         .section-title::after {
           content: ''; flex: 1; height: 1px; background: #334155;
+        }
+
+        .barra-dia {
+          cursor: pointer;
+          transition: opacity 0.2s;
+        }
+        .barra-dia:hover {
+          opacity: 0.8;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -562,9 +605,9 @@ export default function ClientPage({ token }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            {transporteSeleccionado && (
-              <button onClick={() => setTransporteSeleccionado(null)} className="alm-clear-filter">
-                ✕ Limpiar filtro
+            {(transporteSeleccionado || diaSeleccionado) && (
+              <button onClick={limpiarTodosLosFiltros} className="alm-clear-filter">
+                ✕ Limpiar todos los filtros
               </button>
             )}
             <button onClick={refetch} className="alm-refresh-btn">
@@ -574,7 +617,7 @@ export default function ClientPage({ token }) {
         </header>
 
         <div className="alm-body">
-          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span className="alm-badge alm-badge-filter">{filtroActivoTexto}</span>
             <div style={{ fontSize: '11px', color: '#64748b' }}>
               Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
@@ -604,7 +647,7 @@ export default function ClientPage({ token }) {
               <div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
                 <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} TM</div>
-                <div className="alm-kpi-sub">Rango ideal: {PESO_MINIMO}–{PESO_MAXIMO} TM</div>
+                <div className="alm-kpi-sub">VOLQ: 14-18 | TRAIL: 22-25 TM</div>
               </div>
             </div>
             <div className="alm-kpi">
@@ -617,7 +660,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPIs patios */}
+          {/* KPIs patios con nuevos contadores */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
               <div className="alm-kpi-icon">🔵</div>
@@ -638,9 +681,9 @@ export default function ClientPage({ token }) {
             <div className="alm-kpi">
               <div className="alm-kpi-icon">✅</div>
               <div>
-                <div className="alm-kpi-label">Viajes en Rango</div>
+                <div className="alm-kpi-label">En Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
-                <div className="alm-kpi-sub">{estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} de {estadisticas.totalViajes} viajes</div>
+                <div className="alm-kpi-sub">{estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} viajes OK</div>
               </div>
             </div>
             <div className="alm-kpi">
@@ -648,23 +691,38 @@ export default function ClientPage({ token }) {
               <div>
                 <div className="alm-kpi-label">Fuera de Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
-                <div className="alm-kpi-sub">Peso &lt;{PESO_MINIMO} o &gt;{PESO_MAXIMO} TM</div>
+                <div className="alm-kpi-sub">
+                  <span style={{ color: '#fbbf24' }}>↓{estadisticas.bajoPeso}</span> · 
+                  <span style={{ color: '#f87171' }}> ↑{estadisticas.sobrePeso}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Alerta fuera de rango */}
+          {/* Alerta fuera de rango con colores diferenciados */}
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
               <div className="alm-alert-title">
-                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido ({PESO_MINIMO}–{PESO_MAXIMO} TM)
+                <span>⚠️</span> ALERTA: Unidades fuera del rango permitido
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {estadisticas.unidadesFueraDeRango.slice(0, 10).map((reg, idx) => (
-                  <span key={idx} style={{ background: 'rgba(239,68,68,0.2)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontFamily: 'monospace', color: '#f87171' }}>
-                    {reg.placa}: {reg.peso_neto_updp_tm?.toFixed(2)} TM {reg.peso_neto_updp_tm < PESO_MINIMO ? '⬇️' : '⬆️'}
-                  </span>
-                ))}
+                {estadisticas.unidadesFueraDeRango.slice(0, 10).map((reg, idx) => {
+                  const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+                  const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: 0, max: 0 }
+                  return (
+                    <span key={idx} style={{ 
+                      background: estado === 'bajo' ? 'rgba(251,191,36,0.2)' : 'rgba(239,68,68,0.2)', 
+                      padding: '4px 12px', 
+                      borderRadius: '20px', 
+                      fontSize: '12px', 
+                      fontFamily: 'monospace', 
+                      color: estado === 'bajo' ? '#fbbf24' : '#f87171' 
+                    }}>
+                      {reg.placa} ({reg.tipo_unidad}): {reg.peso_neto_updp_tm?.toFixed(2)} TM 
+                      {estado === 'bajo' ? ` ⬇️ (mín ${rango.min})` : ` ⬆️ (máx ${rango.max})`}
+                    </span>
+                  )
+                })}
                 {estadisticas.unidadesFueraDeRango.length > 10 && (
                   <span style={{ color: '#64748b', fontSize: '12px', padding: '4px 12px' }}>
                     + {estadisticas.unidadesFueraDeRango.length - 10} más
@@ -699,9 +757,7 @@ export default function ClientPage({ token }) {
             </div>
           )}
 
-          {/* ============================================================
-              TARJETAS COMPACTAS POR EMPRESA TRANSPORTISTA
-              ============================================================ */}
+          {/* TARJETAS COMPACTAS POR EMPRESA TRANSPORTISTA */}
           {promediosPorTransporte.length > 0 && (
             <>
               <div className="section-title">🏢 Empresas Transportistas</div>
@@ -728,6 +784,7 @@ export default function ClientPage({ token }) {
                         <div className={`tipo-item ${empresa.viajesTraileta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
                             <span>🚛</span> TRAILETA
+                            <span style={{ fontSize: '8px', marginLeft: 'auto', opacity: 0.7 }}>22-25 TM</span>
                           </div>
                           {empresa.viajesTraileta > 0 ? (
                             <>
@@ -744,6 +801,7 @@ export default function ClientPage({ token }) {
                         <div className={`tipo-item ${empresa.viajesVolqueta === 0 ? 'tipo-item-empty' : ''}`}>
                           <div className="tipo-header">
                             <span>⛰️</span> VOLQUETA
+                            <span style={{ fontSize: '8px', marginLeft: 'auto', opacity: 0.7 }}>14-18 TM</span>
                           </div>
                           {empresa.viajesVolqueta > 0 ? (
                             <>
@@ -760,7 +818,7 @@ export default function ClientPage({ token }) {
 
                       {empresa.fueraRango > 0 && (
                         <div className="tarjeta-alerta">
-                          ⚠️ {empresa.fueraRango} fuera de rango ({PESO_MINIMO}-{PESO_MAXIMO} TM)
+                          ⚠️ {empresa.fueraRango} fuera de rango
                         </div>
                       )}
 
@@ -774,15 +832,12 @@ export default function ClientPage({ token }) {
             </>
           )}
 
-          {/* ============================================================
-              NUEVO GRÁFICO DE FLUJO POR HORA
-              ============================================================ */}
+          {/* GRÁFICO DE FLUJO POR HORA */}
           <div className="alm-chart-card alm-chart-wide">
             <div className="alm-chart-title">
               <span>⏱️</span> Flujo de Descarga por Hora
             </div>
             
-            {/* Estadísticas rápidas del flujo */}
             {flujoPorHora.length > 0 && (
               <div className="flujo-stats">
                 <div className="flujo-stat">
@@ -816,7 +871,7 @@ export default function ClientPage({ token }) {
                     angle={-45}
                     textAnchor="end"
                     height={60}
-                    interval={Math.floor(flujoPorHora.length / 10)} // Mostrar ~10 etiquetas
+                    interval={Math.floor(flujoPorHora.length / 10)}
                   />
                   <YAxis 
                     yAxisId="left"
@@ -843,7 +898,6 @@ export default function ClientPage({ token }) {
                     labelStyle={{ color: '#f97316', fontWeight: 'bold' }}
                   />
                   
-                  {/* Barras de toneladas por hora */}
                   <Bar 
                     yAxisId="left"
                     dataKey="totalTM" 
@@ -853,7 +907,6 @@ export default function ClientPage({ token }) {
                     name="Descarga por Hora"
                   />
                   
-                  {/* Línea de acumulado */}
                   <Line 
                     yAxisId="right"
                     type="monotone" 
@@ -864,7 +917,6 @@ export default function ClientPage({ token }) {
                     name="Acumulado Total"
                   />
                   
-                  {/* Línea de referencia para el promedio */}
                   <ReferenceLine 
                     yAxisId="left"
                     y={estadisticasFlujo.promedioPorHora} 
@@ -873,7 +925,6 @@ export default function ClientPage({ token }) {
                     label={{ value: `Promedio: ${fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM/h`, fill: '#fb923c', fontSize: 10 }}
                   />
                   
-                  {/* Línea de meta si existe */}
                   {meta > 0 && (
                     <ReferenceLine 
                       yAxisId="right"
@@ -924,36 +975,125 @@ export default function ClientPage({ token }) {
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
             </div>
 
+            {/* GRÁFICO DE DESCARGA POR DÍA */}
             <div className="alm-chart-card">
-              <div className="alm-chart-title"><span>📈</span> Descarga por Día</div>
+              <div className="alm-chart-title">
+                <span>📈</span> Descarga por Día
+                {diaSeleccionado && (
+                  <span className="alm-badge alm-badge-filter" style={{ marginLeft: '8px' }}>
+                    Filtrado: {diaSeleccionado}
+                  </span>
+                )}
+              </div>
               {datosGraficoDia.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={datosGraficoDia}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="dia" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
-                    <Bar dataKey="total" fill="#f97316" radius={[4, 4, 0, 0]} />
+                    <Tooltip 
+                      formatter={(v) => `${fmtTM(v, 2)} TM`}
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                    />
+                    <Bar 
+                      dataKey="total" 
+                      fill="#f97316" 
+                      radius={[4, 4, 0, 0]}
+                      onClick={(data) => handleSeleccionarDia(data.dia)}
+                      cursor="pointer"
+                      className="barra-dia"
+                      shape={(props) => {
+                        const { x, y, width, height, payload } = props
+                        const isSelected = diaSeleccionado === payload.dia
+                        return (
+                          <rect
+                            x={x}
+                            y={y}
+                            width={width}
+                            height={height}
+                            fill={isSelected ? '#ea580c' : '#f97316'}
+                            stroke={isSelected ? '#fbbf24' : 'none'}
+                            strokeWidth={isSelected ? 2 : 0}
+                            rx={4}
+                            ry={4}
+                            style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                            onClick={() => handleSeleccionarDia(payload.dia)}
+                          />
+                        )
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+              <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', marginTop: '8px' }}>
+                💡 Haz clic en cualquier barra para filtrar la distribución de pesos por ese día
+              </div>
             </div>
 
-           
+            {/* GRÁFICO DE DISTRIBUCIÓN DE PESOS CON COLORES POR TIPO */}
+            <div className="alm-chart-card">
+              <div className="alm-chart-title">
+                <span>📊</span> Distribución de Pesos Netos
+                {diaSeleccionado && (
+                  <span className="alm-badge alm-badge-filter" style={{ marginLeft: '8px' }}>
+                    {diaSeleccionado}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '10px', justifyContent: 'center' }}>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#4ade80', borderRadius: '2px', marginRight: '4px' }}></span> En Rango</span>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fbbf24', borderRadius: '2px', marginRight: '4px' }}></span> Bajo Peso (⬇️)</span>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px', marginRight: '4px' }}></span> Sobrepeso (⬆️)</span>
+              </div>
+              {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
+                    <Tooltip 
+                      formatter={(v) => `${fmtTM(v, 2)} TM`}
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                    />
+                    <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
+                      {estadisticas.acumuladoPorCorrelativo.map((entry, idx) => (
+                        <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
+                      ))}
+                    </Bar>
+                    {/* Líneas de referencia según tipo de unidad - se muestran ambas */}
+                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq mín ${RANGOS.VOLQUETA.min}`, fill: '#fbbf24', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq máx ${RANGOS.VOLQUETA.max}`, fill: '#fbbf24', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail mín ${RANGOS.TRAILETA.min}`, fill: '#f97316', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#f97316" strokeDasharray="3 3" label={{ value: `Trail máx ${RANGOS.TRAILETA.max}`, fill: '#f97316', fontSize: 9 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+              {diaSeleccionado && (
+                <div style={{ fontSize: '10px', color: '#f97316', textAlign: 'center', marginTop: '8px' }}>
+                  🔍 Mostrando solo viajes del día {diaSeleccionado}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Tabla de registros */}
+          {/* Tabla de registros con colores por estado */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>📋</span>
                 <span style={{ fontWeight: 'bold', color: 'white' }}>Registros de Descarga</span>
                 <span className="alm-badge">{registros.length} viajes</span>
-                {estadisticas.unidadesFueraDeRango.length > 0 && (
-                  <span className="alm-badge alm-badge-warning">⚠️ {estadisticas.unidadesFueraDeRango.length} fuera de rango</span>
+                {estadisticas.bajoPeso > 0 && (
+                  <span className="alm-badge alm-badge-bajo">⬇️ {estadisticas.bajoPeso} bajo peso</span>
+                )}
+                {estadisticas.sobrePeso > 0 && (
+                  <span className="alm-badge alm-badge-warning">⬆️ {estadisticas.sobrePeso} sobrepeso</span>
                 )}
                 {transporteSeleccionado && (
-                  <span className="alm-badge alm-badge-filter">Filtrado: {transporteSeleccionado}</span>
+                  <span className="alm-badge alm-badge-filter">Transporte: {transporteSeleccionado}</span>
+                )}
+                {diaSeleccionado && (
+                  <span className="alm-badge alm-badge-filter">Día: {diaSeleccionado}</span>
                 )}
               </div>
             </div>
@@ -965,6 +1105,7 @@ export default function ClientPage({ token }) {
                     <th>Placa</th>
                     <th>Transporte</th>
                     <th>Tipo Unidad</th>
+                    <th>Rango</th>
                     <th>Fecha</th>
                     <th>Hora Entrada</th>
                     <th>Hora Salida</th>
@@ -978,11 +1119,16 @@ export default function ClientPage({ token }) {
                 </thead>
                 <tbody>
                   {registros.map((reg) => {
-                    const fueraRango = estaFueraDeRango(reg.peso_neto_updp_tm)
+                    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+                    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+                    let rowClass = ''
+                    if (estado === 'bajo') rowClass = 'alm-table-row-bajo'
+                    if (estado === 'sobre') rowClass = 'alm-table-row-sobre'
+                    
                     return (
-                      <tr key={reg.id} className={fueraRango ? 'alm-table-row-warning' : ''}>
+                      <tr key={reg.id} className={rowClass}>
                         <td style={{ fontWeight: 'bold' }}>{reg.correlativo}</td>
-                        <td><span style={{ fontFamily: 'monospace', color: fueraRango ? '#f87171' : '#f97316' }}>{reg.placa}</span></td>
+                        <td><span style={{ fontFamily: 'monospace' }}>{reg.placa}</span></td>
                         <td>{reg.transporte || '—'}</td>
                         <td>
                           {reg.tipo_unidad
@@ -993,6 +1139,9 @@ export default function ClientPage({ token }) {
                               }}>{reg.tipo_unidad}</span>
                             : '—'}
                         </td>
+                        <td style={{ fontSize: '10px', fontFamily: 'monospace' }}>
+                          {rango.min}-{rango.max} TM
+                        </td>
                         <td>{reg.fecha}</td>
                         <td>{reg.hora_entrada || '—'}</td>
                         <td>{reg.hora_salida || '—'}</td>
@@ -1000,9 +1149,13 @@ export default function ClientPage({ token }) {
                         <td>{reg.patio || '—'}</td>
                         <td>{reg.bodega_barco || '—'}</td>
                         <td className="alm-td-num" style={{ color: '#60a5fa' }}>{reg.peso_bruto_updp_tm?.toFixed(3) || '—'}</td>
-                        <td className="alm-td-num" style={{ color: fueraRango ? '#f87171' : '#4ade80', fontWeight: 'bold' }}>
+                        <td className="alm-td-num" style={{ 
+                          color: estado === 'bajo' ? '#fbbf24' : (estado === 'sobre' ? '#f87171' : '#4ade80'), 
+                          fontWeight: 'bold' 
+                        }}>
                           {reg.peso_neto_updp_tm?.toFixed(3)}
-                          {fueraRango && <span style={{ marginLeft: '4px' }}>⚠️</span>}
+                          {estado === 'bajo' && <span style={{ marginLeft: '4px' }}>⬇️</span>}
+                          {estado === 'sobre' && <span style={{ marginLeft: '4px' }}>⬆️</span>}
                         </td>
                         <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3) || '—'}</td>
                       </tr>
@@ -1016,7 +1169,10 @@ export default function ClientPage({ token }) {
           <div className="alm-footer">
             🔄 auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
             <br />
-            <span style={{ color: '#f87171' }}>⚠️ Rango permitido: {PESO_MINIMO}–{PESO_MAXIMO} TM por viaje</span>
+            <span style={{ color: '#fbbf24' }}>⚠️ VOLQUETA: 14-18 TM</span> · 
+            <span style={{ color: '#f97316' }}> TRAILETA: 22-25 TM</span> · 
+            <span style={{ color: '#f87171' }}> Rojo = Sobrepeso</span> · 
+            <span style={{ color: '#fbbf24' }}> Amarillo = Bajo peso</span>
           </div>
         </div>
       </div>
