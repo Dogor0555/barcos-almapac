@@ -2322,7 +2322,7 @@ export default function ExportacionPage() {
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fecha/Hora</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Turno</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acumulado Bodega (TM)</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM/h)</th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">FLUJO (TM)</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Bodega</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Observaciones</th>
             <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
@@ -2330,13 +2330,13 @@ export default function ExportacionPage() {
         </thead>
         <tbody className="divide-y divide-white/5">
           {(() => {
-            // 1. Ordenar ASCENDENTE para análisis
+            // Ordenar ASCENDENTE para análisis
             const ascendente = [...exportacionesFiltradas].sort(
               (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
             )
             
-            // 2. Crear mapa de flujos por bodega (solo entre registros de la misma bodega)
-            const flujoPorRegistro = new Map() // key: id_registro, value: flujo_tmh
+            // Mapa para almacenar el delta (TM cargados entre lecturas)
+            const deltaPorRegistro = new Map()
             
             // Procesar CADA BODEGA por separado
             const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
@@ -2346,69 +2346,61 @@ export default function ExportacionPage() {
               
               registrosBodega.forEach((reg, idx) => {
                 if (idx === 0) {
-                  // PRIMER REGISTRO de esta bodega: NO tiene flujo (solo muestra el acumulado inicial)
-                  flujoPorRegistro.set(reg.id, null)
+                  // PRIMER REGISTRO de esta bodega: FLUJO = acumulado (punto de partida)
+                  deltaPorRegistro.set(reg.id, {
+                    valor: Number(reg.acumulado_tm) || 0,
+                    esPrimero: true,
+                    minutos: null
+                  })
                 } else {
-                  // Calcular flujo con el registro ANTERIOR de la MISMA bodega
+                  // Calcular delta con registro anterior de la MISMA bodega
                   const anterior = registrosBodega[idx - 1]
-                  const tiempoHoras = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60 * 60)
                   const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
+                  const minutosDiff = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60)
                   
-                  let flujo = 0
-                  if (tiempoHoras > 0 && deltaTM > 0) {
-                    flujo = deltaTM / tiempoHoras
-                  }
-                  flujoPorRegistro.set(reg.id, flujo > 0 ? flujo : null)
+                  deltaPorRegistro.set(reg.id, {
+                    valor: deltaTM,
+                    esPrimero: false,
+                    minutos: minutosDiff
+                  })
                 }
               })
             })
             
-            // 3. Identificar PRIMER REGISTRO de cada bodega (para badge "INICIO DE BODEGA")
+            // Identificar PRIMER REGISTRO de cada bodega (para badge)
             const esPrimerRegistroDeBodega = new Map()
             const bodegasVistas = new Set()
             
             ascendente.forEach(exp => {
-              const key = `${exp.bodega_id}`
-              if (!bodegasVistas.has(key)) {
+              if (!bodegasVistas.has(exp.bodega_id)) {
                 esPrimerRegistroDeBodega.set(exp.id, true)
-                bodegasVistas.add(key)
+                bodegasVistas.add(exp.bodega_id)
               } else {
                 esPrimerRegistroDeBodega.set(exp.id, false)
               }
             })
             
-            // 4. Identificar ULTIMO REGISTRO de cada bodega (para badge "CAMBIO DE BODEGA")
+            // Identificar ULTIMO REGISTRO de cada bodega
             const esUltimoRegistroDeBodega = new Map()
             const contadorBodegas = new Map()
             
-            // Contar cuántos registros tiene cada bodega
             ascendente.forEach(exp => {
               contadorBodegas.set(exp.bodega_id, (contadorBodegas.get(exp.bodega_id) || 0) + 1)
             })
             
-            // Contar posición dentro de cada bodega
             const posicionEnBodega = new Map()
             ascendente.forEach(exp => {
-              const key = `${exp.bodega_id}`
-              const actual = posicionEnBodega.get(key) || 0
-              const nuevo = actual + 1
-              posicionEnBodega.set(key, nuevo)
-              
-              const totalBodega = contadorBodegas.get(exp.bodega_id)
-              if (nuevo === totalBodega) {
-                esUltimoRegistroDeBodega.set(exp.id, true)
-              } else {
-                esUltimoRegistroDeBodega.set(exp.id, false)
-              }
+              const nuevaPos = (posicionEnBodega.get(exp.bodega_id) || 0) + 1
+              posicionEnBodega.set(exp.bodega_id, nuevaPos)
+              esUltimoRegistroDeBodega.set(exp.id, nuevaPos === contadorBodegas.get(exp.bodega_id))
             })
             
-            // 5. Mostrar en orden DESCENDENTE (más reciente primero)
+            // Mostrar en orden DESCENDENTE
             const descendente = [...exportacionesFiltradas].sort(
               (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
             )
             
-            // Variable para detectar cambio visual
-            let ultimaBodegaIdMostrada = null
+            let ultimaBodegaId = null
             
             return descendente.map((exp) => {
               const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
@@ -2416,18 +2408,11 @@ export default function ExportacionPage() {
               const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
               const horaNum = parseInt(horaSV.split(':')[0])
               
-              let turno = '—'
-              if (horaNum >= 6 && horaNum < 18) {
-                turno = '6:00 - 18:00'
-              } else {
-                turno = '18:00 - 6:00'
-              }
+              const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
               
-              const esPrimero = esPrimerRegistroDeBodega.get(exp.id) || false
-              const esUltimo = esUltimoRegistroDeBodega.get(exp.id) || false
-              
-              // Obtener flujo REAL (calculado solo dentro de la misma bodega)
-              const flujoReal = flujoPorRegistro.get(exp.id)
+              const esPrimero = esPrimerRegistroDeBodega.get(exp.id)
+              const esUltimo = esUltimoRegistroDeBodega.get(exp.id)
+              const infoDelta = deltaPorRegistro.get(exp.id)
               
               // Determinar clases y badges
               let rowClasses = "hover:bg-white/5 transition-colors"
@@ -2451,9 +2436,9 @@ export default function ExportacionPage() {
                 })
               }
               
-              // Detectar cambio visual para resaltar en la tabla
-              const hayCambioVisual = ultimaBodegaIdMostrada !== null && ultimaBodegaIdMostrada !== exp.bodega_id
-              if (hayCambioVisual && !esUltimo && !esPrimero) {
+              // Detectar cambio visual
+              const hayCambio = ultimaBodegaId !== null && ultimaBodegaId !== exp.bodega_id
+              if (hayCambio && !esUltimo && !esPrimero) {
                 rowClasses = "bg-yellow-500/5 hover:bg-yellow-500/10 border-l-4 border-yellow-500"
                 badges.push({
                   text: "CAMBIO DE BODEGA",
@@ -2461,7 +2446,7 @@ export default function ExportacionPage() {
                   color: "bg-yellow-500/30 text-yellow-300"
                 })
               }
-              ultimaBodegaIdMostrada = exp.bodega_id
+              ultimaBodegaId = exp.bodega_id
               
               return (
                 <tr key={exp.id} className={rowClasses}>
@@ -2470,8 +2455,8 @@ export default function ExportacionPage() {
                     <div className="text-xs text-slate-500">{horaSV}</div>
                     {badges.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {badges.map((badge, idx) => (
-                          <span key={idx} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
+                        {badges.map((badge, i) => (
+                          <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
                             {badge.icono}
                             {badge.text}
                           </span>
@@ -2492,10 +2477,18 @@ export default function ExportacionPage() {
                     {(exp.acumulado_tm || 0).toFixed(3)} TM
                   </td>
                   <td className="px-4 py-3 font-bold">
-                    {flujoReal !== null && flujoReal > 0 ? (
-                      <span className="text-green-400">{flujoReal.toFixed(3)} TM/h</span>
-                    ) : esPrimero ? (
-                      <span className="text-slate-500 text-xs">—</span>
+                    {infoDelta ? (
+                      <span 
+                        className={infoDelta.esPrimero ? "text-cyan-400" : "text-green-400"}
+                        title={!infoDelta.esPrimero && infoDelta.minutos ? `${infoDelta.valor.toFixed(3)} TM en ${infoDelta.minutos.toFixed(1)} minutos` : "Punto de inicio de bodega"}
+                      >
+                        {infoDelta.valor.toFixed(3)} TM
+                        {!infoDelta.esPrimero && infoDelta.minutos && infoDelta.minutos < 15 && (
+                          <span className="ml-1 text-[10px] text-yellow-500" title={`Intervalo corto: ${infoDelta.minutos.toFixed(1)} minutos`}>
+                            ⚡
+                          </span>
+                        )}
+                      </span>
                     ) : (
                       <span className="text-slate-500">—</span>
                     )}
@@ -2516,18 +2509,10 @@ export default function ExportacionPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditarExportacion(exp)}
-                        className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                        title="Editar"
-                      >
+                      <button onClick={() => handleEditarExportacion(exp)} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
                         <Edit2 className="w-4 h-4 text-blue-400" />
                       </button>
-                      <button
-                        onClick={() => handleEliminarExportacion(exp.id)}
-                        className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                        title="Eliminar"
-                      >
+                      <button onClick={() => handleEliminarExportacion(exp.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
                         <Trash2 className="w-4 h-4 text-red-400" />
                       </button>
                     </div>
