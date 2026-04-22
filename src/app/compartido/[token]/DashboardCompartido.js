@@ -3,10 +3,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v26 · DISEÑO PREMIUM
- *  ⚡ CORREGIDO PARA EXPORTACIÓN: Total global = SUMA de acumulados por bodega
- *  ⚡ CORREGIDO: Ya no usa el último registro como total global
- *  ⚡ CORREGIDO: Flujos calculados correctamente
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v27 · DISEÑO PREMIUM
+ *  ✅ CORREGIDO PARA EXPORTACIÓN: Total global = SUMA de acumulados por bodega
+ *  ✅ CORREGIDO: Flujos calculados correctamente (solo entre misma bodega)
+ *  ✅ CORREGIDO: Ya no usa el último registro como total global
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -50,6 +50,35 @@ const COLORES_FALLBACK = [
   "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
 ];
+
+// ============================================================================
+// FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
+// ============================================================================
+function calcularTotalGlobalExportacion(exportaciones, productoId) {
+  const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
+  if (exportacionesProducto.length === 0) return 0;
+  
+  // Agrupar por bodega y tomar el último acumulado de cada una
+  const ultimoAcumuladoPorBodega = new Map();
+  
+  exportacionesProducto.forEach(exp => {
+    const bodegaId = exp.bodega_id;
+    const acumulado = exp.acumulado_tm || 0;
+    const existing = ultimoAcumuladoPorBodega.get(bodegaId);
+    
+    if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
+      ultimoAcumuladoPorBodega.set(bodegaId, { acumulado, fecha_hora: exp.fecha_hora });
+    }
+  });
+  
+  // Sumar todos los acumulados
+  let total = 0;
+  ultimoAcumuladoPorBodega.forEach(value => {
+    total += value.acumulado;
+  });
+  
+  return total;
+}
 
 // ============================================================================
 // HOOK PRINCIPAL - CORREGIDO PARA EXPORTACIÓN
@@ -205,7 +234,8 @@ function useBarcoData(codigoBarco) {
       });
 
       // =====================================================
-      // CORRECCIÓN PARA EXPORTACIÓN: Calcular total global como SUMA de acumulados por bodega
+      // CORRECCIÓN PARA EXPORTACIÓN: Calcular flujo correctamente
+      // El flujo solo se calcula entre lecturas de la MISMA bodega
       // =====================================================
       const exportacionesEnriquecidas = (exportaciones || []).map((e, index, array) => {
         let flujo = 0;
@@ -297,35 +327,6 @@ const pct = (v, t) => (t > 0 ? Math.min(100, (v / t) * 100) : 0);
 function getMetaProducto(metas_json, producto) {
   if (!metas_json?.limites) return 0;
   return Number(metas_json.limites[producto.codigo]) || 0;
-}
-
-// ============================================================================
-// FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
-// ============================================================================
-function calcularTotalGlobalExportacion(exportaciones, productoId) {
-  const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
-  if (exportacionesProducto.length === 0) return 0;
-  
-  // Agrupar por bodega y tomar el último acumulado de cada una
-  const ultimoAcumuladoPorBodega = new Map();
-  
-  exportacionesProducto.forEach(exp => {
-    const bodegaId = exp.bodega_id;
-    const acumulado = exp.acumulado_tm || 0;
-    const existing = ultimoAcumuladoPorBodega.get(bodegaId);
-    
-    if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
-      ultimoAcumuladoPorBodega.set(bodegaId, { acumulado, fecha_hora: exp.fecha_hora });
-    }
-  });
-  
-  // Sumar todos los acumulados
-  let total = 0;
-  ultimoAcumuladoPorBodega.forEach(value => {
-    total += value.acumulado;
-  });
-  
-  return total;
 }
 
 // ============================================================================
@@ -695,7 +696,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
     return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   }, [lecturasOrdenadas]);
 
-  // CORREGIDO: Flujo de la última hora
+  // CORREGIDO: Flujo de la última hora (solo entre lecturas de la misma bodega)
   const flujoUltimaHora = useMemo(() => {
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
@@ -1636,7 +1637,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
       if (todasExportaciones.length >= 2) {
         const fechas = todasExportaciones.map(e => dayjs.utc(e.fecha_hora));
         const primeraFecha = fechas.reduce((min, f) => f.isBefore(min) ? f : min);
-const ultimaFecha = fechas.reduce((max, f) => f.isAfter(max) ? f : max);
+        const ultimaFecha = fechas.reduce((max, f) => f.isAfter(max) ? f : max);
         const horasTranscurridas = ultimaFecha.diff(primeraFecha, 'hour', true);
         
         if (horasTranscurridas > 0 && totalGlobal > 0) {
@@ -1888,19 +1889,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       // =====================================================
       let totalExportacion = 0;
       if (tipoOperacion === 'exportacion') {
-        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
-        // Agrupar por bodega y tomar el último acumulado de cada una
-        const ultimoAcumuladoPorBodega = new Map();
-        exportacionesProducto.forEach(exp => {
-          const bodegaId = exp.bodega_id;
-          const acumulado = exp.acumulado_tm || 0;
-          const existing = ultimoAcumuladoPorBodega.get(bodegaId);
-          if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
-            ultimoAcumuladoPorBodega.set(bodegaId, acumulado);
-          }
-        });
-        // Sumar todos los acumulados
-        ultimoAcumuladoPorBodega.forEach(val => { totalExportacion += val; });
+        totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id);
       } else {
         // Para importación, tomar el último registro
         const exportacionesProducto = lecturasExportacion
@@ -2048,56 +2037,55 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       </div>
 
       {metaGlobal > 0 && faltanteGlobal > 0 && (
-  <div style={{
-    background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-    borderRadius: '20px',
-    padding: '24px 28px',
-    marginBottom: '24px',
-    border: '1px solid #3b82f6',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-    width: '100%'
-  }}>
-    {/* Header centrado */}
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '16px',
-      marginBottom: '24px',
-      paddingBottom: '16px',
-      borderBottom: '1px solid rgba(59, 130, 246, 0.2)'
-    }}>
-      <div style={{
-        background: '#3b82f620',
-        borderRadius: '50%',
-        width: '56px',
-        height: '56px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <span style={{ fontSize: '28px' }}>⏱️</span>
-      </div>
-      <div>
-        <div style={{ fontSize: '13px', fontWeight: '600', color: '#94a3b8', letterSpacing: '1.5px' }}>
-          FINALIZACIÓN ESTIMADA
+        <div style={{
+          background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+          borderRadius: '20px',
+          padding: '24px 28px',
+          marginBottom: '24px',
+          border: '1px solid #3b82f6',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          width: '100%'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '16px',
+            marginBottom: '24px',
+            paddingBottom: '16px',
+            borderBottom: '1px solid rgba(59, 130, 246, 0.2)'
+          }}>
+            <div style={{
+              background: '#3b82f620',
+              borderRadius: '50%',
+              width: '56px',
+              height: '56px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '28px' }}>⏱️</span>
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#94a3b8', letterSpacing: '1.5px' }}>
+                FINALIZACIÓN ESTIMADA
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa' }}>
+                {((totalGlobal / metaGlobal) * 100).toFixed(1)}% completado
+              </div>
+            </div>
+          </div>
+          
+          <FinalizacionGeneral
+            metaGlobal={metaGlobal}
+            totalGlobal={totalGlobal}
+            viajes={viajes}
+            lecturasBanda={lecturasBanda}
+            lecturasExportacion={lecturasExportacion}
+            tipoOperacion={tipoOperacion}
+          />
         </div>
-        <div style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa' }}>
-          {((totalGlobal / metaGlobal) * 100).toFixed(1)}% completado
-        </div>
-      </div>
-    </div>
-    
-    <FinalizacionGeneral
-      metaGlobal={metaGlobal}
-      totalGlobal={totalGlobal}
-      viajes={viajes}
-      lecturasBanda={lecturasBanda}
-      lecturasExportacion={lecturasExportacion}
-      tipoOperacion={tipoOperacion}
-    />
-  </div>
-)}
+      )}
       
       <div className="alm-charts-row">
 
@@ -2620,7 +2608,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Exportaciones - CORREGIDA (muestra flujo y acumulado correcto)
+// COMPONENTE: Tabla de Exportaciones - CORREGIDA (muestra flujo correcto)
 // ============================================================================
 function TablaExportacion({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2850,18 +2838,7 @@ export default function DashboardCompartido({ codigoBarco }) {
   const totalGlobalPorProducto = useMemo(() => {
     const mapa = new Map();
     productos.forEach(producto => {
-      const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
-      const ultimoAcumuladoPorBodega = new Map();
-      exportacionesProducto.forEach(exp => {
-        const bodegaId = exp.bodega_id;
-        const acumulado = exp.acumulado_tm || 0;
-        const existing = ultimoAcumuladoPorBodega.get(bodegaId);
-        if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
-          ultimoAcumuladoPorBodega.set(bodegaId, acumulado);
-        }
-      });
-      let total = 0;
-      ultimoAcumuladoPorBodega.forEach(val => { total += val; });
+      const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id);
       mapa.set(producto.id, total);
     });
     return mapa;
