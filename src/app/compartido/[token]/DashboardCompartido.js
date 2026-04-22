@@ -54,30 +54,49 @@ const COLORES_FALLBACK = [
 // ============================================================================
 // FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
 // ============================================================================
+// ============================================================================
+// FUNCIÓN CORREGIDA PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN
+// SUMA LOS APORTES REALES DE CADA BODEGA (NO SOLO EL ÚLTIMO VALOR)
+// ============================================================================
 function calcularTotalGlobalExportacion(exportaciones, productoId) {
   const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
   if (exportacionesProducto.length === 0) return 0;
   
-  // Agrupar por bodega y tomar el último acumulado de cada una
-  const ultimoAcumuladoPorBodega = new Map();
+  // Ordenar por fecha (ascendente) para procesar en orden cronológico
+  const ordenadas = [...exportacionesProducto].sort(
+    (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+  );
   
-  exportacionesProducto.forEach(exp => {
-    const bodegaId = exp.bodega_id;
-    const acumulado = exp.acumulado_tm || 0;
-    const existing = ultimoAcumuladoPorBodega.get(bodegaId);
+  // Mapa para almacenar el ÚLTIMO valor conocido de cada bodega
+  const ultimoValorPorBodega = new Map();
+  
+  // Acumulador real que suma TODOS los aportes
+  let totalReal = 0;
+  
+  ordenadas.forEach((lectura, index) => {
+    const bodegaId = lectura.bodega_id;
+    const valorActual = Number(lectura.acumulado_tm) || 0;
+    const ultimoValor = ultimoValorPorBodega.get(bodegaId);
     
-    if (!existing || new Date(exp.fecha_hora) > new Date(existing.fecha_hora)) {
-      ultimoAcumuladoPorBodega.set(bodegaId, { acumulado, fecha_hora: exp.fecha_hora });
+    if (ultimoValor === undefined) {
+      // PRIMERA VEZ que vemos esta bodega: sumamos el valor inicial
+      totalReal += valorActual;
+      ultimoValorPorBodega.set(bodegaId, valorActual);
+    } else if (valorActual >= ultimoValor) {
+      // CONTINUACIÓN normal: sumamos la diferencia
+      const diferencia = valorActual - ultimoValor;
+      totalReal += diferencia;
+      ultimoValorPorBodega.set(bodegaId, valorActual);
+    } else {
+      // ¡ES UN RETORNO! El valor bajó porque volvimos a esta bodega
+      // En un retorno, el valor en BD es el NUEVO acumulado de esa bodega
+      // pero el aporte real es el valor ACTUAL (no la diferencia)
+      totalReal += valorActual;
+      ultimoValorPorBodega.set(bodegaId, valorActual);
     }
   });
   
-  // Sumar todos los acumulados
-  let total = 0;
-  ultimoAcumuladoPorBodega.forEach(value => {
-    total += value.acumulado;
-  });
-  
-  return total;
+  return totalReal;
 }
 
 // ============================================================================
