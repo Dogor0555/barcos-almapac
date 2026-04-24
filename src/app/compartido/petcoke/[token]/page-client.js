@@ -113,7 +113,7 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
       if (productoError || !productoData) throw new Error('Producto PET COKE no encontrado')
 
       let query = supabase
-        .from('petcoke_registros')
+        .from('petcoke_viajes')
         .select('*')
         .eq('barco_id', barcoData.id)
         .order('correlativo', { ascending: true })
@@ -170,7 +170,7 @@ export default function ClientPage({ token }) {
 
         if (barcoData) {
           const { data: registrosGlobales } = await supabase
-            .from('petcoke_registros')
+            .from('petcoke_viajes')
             .select('*')
             .eq('barco_id', barcoData.id)
 
