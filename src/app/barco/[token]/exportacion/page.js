@@ -1,4 +1,4 @@
-// app/barco/[token]/exportacion/page.js - VERSIÓN CON GRÁFICA POR BODEGA
+// app/barco/[token]/exportacion/page.js - VERSIÓN CON MODAL DE CONFIRMACIÓN
 
 'use client'
 
@@ -13,7 +13,7 @@ import {
   Anchor, Play, StopCircle, Lock, Unlock, Coffee, CloudRain,
   Wrench, Truck, Zap, AlertTriangle, BarChart3, Flag,
   History, Filter, ChevronDown, ChevronRight, Info, Box, FileSpreadsheet,
-  Plus, PauseCircle, ClipboardList
+  Plus, PauseCircle, ClipboardList, HelpCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -114,6 +114,145 @@ const getTiposParoConfig = () => ({
   'CORTE DE ENERGÍA ELÉCTRICA': { icono: <Zap className="w-4 h-4" />, bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', grupo: 'OTRAS' },
   'OTROS': { icono: <AlertTriangle className="w-4 h-4" />, bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20', grupo: 'OTRAS' },
 })
+
+// =====================================================
+// MODAL DE CONFIRMACIÓN PARA REGISTRO DE CARGA
+// =====================================================
+const ModalConfirmacionCarga = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  datosCarga, 
+  acumuladoActual, 
+  faltaActual,
+  nuevoAcumulado,
+  nuevaFalta,
+  loading 
+}) => {
+  if (!isOpen) return null
+
+  const bodegaSeleccionada = BODEGAS_BARCO.find(b => b.id === parseInt(datosCarga.bodega_id))
+  
+  // Calcular el flujo de ESTE registro (lo que se está agregando ahora)
+  const flujoRegistro = parseFloat(datosCarga.acumulado_tm || 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Overlay */}
+      <div 
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-[#0f172a] rounded-2xl shadow-2xl border border-white/20 max-w-md w-full">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-t-2xl p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-500/20 p-2 rounded-xl">
+              <HelpCircle className="w-6 h-6 text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Confirmar Registro</h3>
+              <p className="text-sm text-slate-400">¿Estás seguro de agregar este registro?</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Contenido */}
+        <div className="p-5 space-y-4">
+          {/* Datos del registro actual */}
+          <div className="bg-slate-800/50 rounded-xl p-3 border border-white/10">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">📦 Registro actual</p>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Bodega:</span>
+                <span className="font-bold text-white flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodegaSeleccionada?.color }} />
+                  {bodegaSeleccionada?.nombre} ({bodegaSeleccionada?.codigo})
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">📊 Flujo de este registro:</span>
+                <span className="font-bold text-green-400 text-lg">{flujoRegistro.toFixed(3)} TM</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Resultado global */}
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">🌍 Resultado global después del registro</p>
+            
+            {/* Cuadro de ACUMULADO GLOBAL */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-4 mb-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-blue-200">Acumulado actual:</span>
+                <span className="font-bold text-blue-200">{acumuladoActual.toFixed(3)} TM</span>
+              </div>
+              <div className="flex justify-between items-center mt-2 pt-2 border-t border-blue-400/30">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-300 text-sm">+{flujoRegistro.toFixed(3)} TM</span>
+                  <ArrowRightLeft className="w-4 h-4 text-blue-300" />
+                </div>
+                <div className="text-right">
+                  <span className="text-xs text-blue-200 block">NUEVO ACUMULADO</span>
+                  <span className="text-2xl font-black text-white">{nuevoAcumulado.toFixed(3)} TM</span>
+                </div>
+              </div>
+            </div>
+
+          
+          </div>
+
+          {/* Advertencia si excede la meta */}
+          {nuevaFalta < 0 && (
+            <div className="bg-red-500/20 rounded-xl p-3 border border-red-500/30 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-400 font-medium">
+                ⚠️ ¡Alerta! Excedes la meta por {Math.abs(nuevaFalta).toFixed(3)} TM
+              </p>
+            </div>
+          )}
+
+          {/* Mensaje de éxito si cumple la meta */}
+          {nuevaFalta === 0 && (
+            <div className="bg-green-500/20 rounded-xl p-3 border border-green-500/30 flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <p className="text-sm text-green-400 font-medium">
+                🎉 ¡Meta alcanzada! Has completado exactamente la carga
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Botones */}
+        <div className="p-5 pt-0 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <CheckCircle className="w-5 h-5" />
+                Confirmar
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // =====================================================
 // FUNCIÓN PARA EXPORTAR A EXCEL
@@ -966,6 +1105,11 @@ export default function ExportacionPage() {
   const [showParosDashboard, setShowParosDashboard] = useState(false)
   const [paroEditando, setParoEditando] = useState(null)
   
+  // Estados para el modal de confirmación
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [confirmLoading, setConfirmLoading] = useState(false)
+  const [pendingExportacion, setPendingExportacion] = useState(null)
+  
   const [nuevaExportacion, setNuevaExportacion] = useState({
     fecha_hora: '',
     acumulado_tm: '',
@@ -1106,7 +1250,125 @@ export default function ExportacionPage() {
     await cargarDatos()
   }
 
-  const estadisticasProducto = useMemo(() => {
+  // Función para abrir el modal de confirmación
+  const abrirModalConfirmacion = () => {
+    if (!productoActivo) {
+      toast.error('Selecciona un producto')
+      return
+    }
+
+    if (!nuevaExportacion.acumulado_tm) {
+      toast.error('Ingresa el acumulado')
+      return
+    }
+
+    if (!nuevaExportacion.bodega_id) {
+      toast.error('Selecciona una bodega')
+      return
+    }
+
+    if (!nuevaExportacion.fecha_hora) {
+      toast.error('Ingresa fecha y hora')
+      return
+    }
+
+    // Guardar los datos pendientes y abrir el modal
+    setPendingExportacion({ ...nuevaExportacion })
+    setShowConfirmModal(true)
+  }
+
+  // Función para ejecutar el guardado después de confirmar
+  const ejecutarGuardadoExportacion = async () => {
+    setConfirmLoading(true)
+    
+    try {
+      const fechaUTC = svToUTC(pendingExportacion.fecha_hora)
+
+      const datos = {
+        barco_id: barco.id,
+        fecha_hora: fechaUTC,
+        producto_id: productoActivo.id,
+        acumulado_tm: parseFloat(pendingExportacion.acumulado_tm),
+        bodega_id: parseInt(pendingExportacion.bodega_id),
+        observaciones: pendingExportacion.observaciones || null,
+        created_by: user?.id || null
+      }
+
+      let result
+
+      if (editandoExportacion) {
+        result = await supabase
+          .from('exportacion_banda')
+          .update(datos)
+          .eq('id', editandoExportacion.id)
+
+        if (!result.error) {
+          toast.success('Exportación actualizada')
+          setEditandoExportacion(null)
+        }
+      } else {
+        result = await supabase
+          .from('exportacion_banda')
+          .insert([datos])
+
+        if (!result.error) {
+          toast.success('Exportación registrada')
+        }
+      }
+
+      if (result.error) {
+        console.error('Error:', result.error)
+        toast.error(`Error: ${result.error.message}`)
+        return
+      }
+
+      // Limpiar formulario
+      setNuevaExportacion({
+        fecha_hora: getCurrentSVTimeForInput(),
+        acumulado_tm: '',
+        bodega_id: '',
+        observaciones: ''
+      })
+
+      await cargarDatos()
+      
+      // Cerrar modal
+      setShowConfirmModal(false)
+      setPendingExportacion(null)
+
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error inesperado')
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+// Calcular acumulado actual y faltante para el modal
+const calcularAcumuladoActual = () => {
+  if (!productoActivo) return 0
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  if (exportacionesProd.length === 0) return 0
+  const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+  const ultimoRegistro = ordenadas[ordenadas.length - 1]
+  return Number(ultimoRegistro.acumulado_tm) || 0
+}
+
+const calcularFaltaActual = () => {
+  if (!productoActivo || !barco?.metas_json?.limites?.[productoActivo.codigo]) return 0
+  const limite = barco.metas_json.limites[productoActivo.codigo]
+  const cargado = calcularAcumuladoActual()
+  return Math.max(0, limite - cargado)
+}
+
+// Variables para el modal
+const acumuladoActualGlobal = calcularAcumuladoActual()
+const faltaActualGlobal = calcularFaltaActual()
+const nuevoAcumuladoGlobal = acumuladoActualGlobal + (parseFloat(pendingExportacion?.acumulado_tm) || 0)
+const nuevaFaltaGlobal = Math.max(0, (barco?.metas_json?.limites?.[productoActivo?.codigo] || 0) - nuevoAcumuladoGlobal)
+
+
+const estadisticasProducto = useMemo(() => {
     if (!productoActivo) return null
 
     const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
@@ -1350,83 +1612,6 @@ export default function ExportacionPage() {
   const handleBitacoraChange = (e) => {
     const { name, value } = e.target
     setBitacoraActual(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleGuardarExportacion = async () => {
-    try {
-      if (!productoActivo) {
-        toast.error('Selecciona un producto')
-        return
-      }
-
-      if (!nuevaExportacion.acumulado_tm) {
-        toast.error('Ingresa el acumulado')
-        return
-      }
-
-      if (!nuevaExportacion.bodega_id) {
-        toast.error('Selecciona una bodega')
-        return
-      }
-
-      if (!nuevaExportacion.fecha_hora) {
-        toast.error('Ingresa fecha y hora')
-        return
-      }
-
-      const fechaUTC = svToUTC(nuevaExportacion.fecha_hora)
-
-      const datos = {
-        barco_id: barco.id,
-        fecha_hora: fechaUTC,
-        producto_id: productoActivo.id,
-        acumulado_tm: parseFloat(nuevaExportacion.acumulado_tm),
-        bodega_id: parseInt(nuevaExportacion.bodega_id),
-        observaciones: nuevaExportacion.observaciones || null,
-        created_by: user?.id || null
-      }
-
-      let result
-
-      if (editandoExportacion) {
-        result = await supabase
-          .from('exportacion_banda')
-          .update(datos)
-          .eq('id', editandoExportacion.id)
-
-        if (!result.error) {
-          toast.success('Exportación actualizada')
-          setEditandoExportacion(null)
-        }
-      } else {
-        result = await supabase
-          .from('exportacion_banda')
-          .insert([datos])
-
-        if (!result.error) {
-          toast.success('Exportación registrada')
-        }
-      }
-
-      if (result.error) {
-        console.error('Error:', result.error)
-        toast.error(`Error: ${result.error.message}`)
-        return
-      }
-
-      setNuevaExportacion({
-        fecha_hora: getCurrentSVTimeForInput(),
-        acumulado_tm: '',
-        bodega_id: '',
-        observaciones: ''
-      })
-
-      await cargarDatos()
-
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error inesperado')
-    }
   }
 
   const handleGuardarBitacora = async () => {
@@ -2329,7 +2514,7 @@ export default function ExportacionPage() {
             </div>
             <div className="flex items-end col-span-full gap-2">
               <button
-                onClick={handleGuardarExportacion}
+                onClick={abrirModalConfirmacion}
                 className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
               >
                 <Save className="w-4 h-4" />
@@ -2741,6 +2926,22 @@ export default function ExportacionPage() {
           )}
         </div>
       </div>
+
+      {/* MODAL DE CONFIRMACIÓN */}
+      <ModalConfirmacionCarga
+        isOpen={showConfirmModal}
+        onClose={() => {
+          setShowConfirmModal(false)
+          setPendingExportacion(null)
+        }}
+        onConfirm={ejecutarGuardadoExportacion}
+        datosCarga={pendingExportacion || {}}
+        acumuladoActual={acumuladoActualGlobal}
+        faltaActual={faltaActualGlobal}
+        nuevoAcumulado={nuevoAcumuladoGlobal}
+        nuevaFalta={nuevaFaltaGlobal}
+        loading={confirmLoading}
+      />
 
       {showParoModal && barco && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
