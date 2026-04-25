@@ -217,8 +217,21 @@ export default function PetCokePage() {
     return Math.max(...viajes.map(v => v.correlativo)) + 1
   }, [viajes])
 
+  // Verificar si el correlativo ya existe
+  const verificarCorrelativoUnico = (correlativo, idExcluir = null) => {
+    const existe = viajes.some(v => v.correlativo === correlativo && v.id !== idExcluir)
+    if (existe) {
+      toast.error(`El correlativo #${correlativo} ya existe. Usa otro número.`)
+      return false
+    }
+    return true
+  }
+
+  // Solo establecer el valor inicial si es un nuevo viaje
   useEffect(() => {
-    setEntrada(prev => ({ ...prev, correlativo: siguienteCorrelativo }))
+    if (entrada.correlativo === 1 || entrada.correlativo === undefined || entrada.correlativo === null) {
+      setEntrada(prev => ({ ...prev, correlativo: siguienteCorrelativo }))
+    }
   }, [siguienteCorrelativo])
 
   useEffect(() => {
@@ -391,6 +404,17 @@ export default function PetCokePage() {
     if (!entrada.hora_entrada) return toast.error('La Hora Entrada es obligatoria')
     if (!entrada.patio) return toast.error('El Patio es obligatorio')
     if (!entrada.peso_bruto) return toast.error('El Peso Bruto es obligatorio')
+    
+    // Validar que el correlativo no sea nulo o vacío
+    if (!entrada.correlativo || entrada.correlativo <= 0) {
+      toast.error('El número de viaje (correlativo) es obligatorio y debe ser mayor a 0')
+      return
+    }
+
+    // Verificar que el correlativo sea único
+    if (!verificarCorrelativoUnico(entrada.correlativo)) {
+      return
+    }
 
     const tieneViajeActivo = viajes.some(v => v.placa === entrada.placa && v.estado === 'EN_PROGRESO')
     if (tieneViajeActivo) {
@@ -548,7 +572,16 @@ export default function PetCokePage() {
   
   const handleEntradaChange = (e) => {
     const { name, value } = e.target
-    setEntrada(prev => ({ ...prev, [name]: value }))
+    if (name === 'correlativo') {
+      const numValue = parseInt(value, 10)
+      if (isNaN(numValue)) {
+        setEntrada(prev => ({ ...prev, correlativo: '' }))
+      } else {
+        setEntrada(prev => ({ ...prev, correlativo: numValue }))
+      }
+    } else {
+      setEntrada(prev => ({ ...prev, [name]: value }))
+    }
   }
 
   const abrirModalEdicion = (viaje) => {
@@ -605,7 +638,13 @@ export default function PetCokePage() {
     const pesoNetoConvertido = tienePesoNeto ? convertirToneladas(viajeEnEdicion.peso_neto) : null
     const pesoBrutoConvertido = tienePesoBruto ? convertirToneladas(viajeEnEdicion.peso_bruto) : null
 
+    // Validar correlativo único en edición
+    if (viajeEnEdicion.correlativo && !verificarCorrelativoUnico(viajeEnEdicion.correlativo, viajeEnEdicion.id)) {
+      return
+    }
+
     const datosActualizar = {
+      correlativo: viajeEnEdicion.correlativo,
       placa: viajeEnEdicion.placa,
       tipo_unidad: viajeEnEdicion.tipo_unidad,
       transporte: viajeEnEdicion.transporte,
@@ -863,8 +902,14 @@ export default function PetCokePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs text-slate-400 mb-1">Viaje (Correlativo)</label>
-              <input type="number" value={entrada.correlativo} readOnly className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-yellow-400 font-bold" />
-              <p className="text-[10px] text-slate-500 mt-0.5">Se asigna automaticamente</p>
+              <input 
+                type="number" 
+                name="correlativo"
+                value={entrada.correlativo} 
+                onChange={handleEntradaChange}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-yellow-400 font-bold focus:outline-none focus:border-orange-500" 
+              />
+              <p className="text-[10px] text-slate-500 mt-0.5">Número de viaje (puede editarse)</p>
             </div>
             
             <div>
@@ -930,9 +975,9 @@ export default function PetCokePage() {
             </div>
             
             <div className="col-span-full">
-              <button onClick={handleRegistrarEntrada} disabled={!entrada.placa || !entrada.tipo_unidad || !entrada.hora_entrada || !entrada.patio || !entrada.peso_bruto}
-                className={`w-full font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all ${!entrada.placa || !entrada.tipo_unidad || !entrada.hora_entrada || !entrada.patio || !entrada.peso_bruto ? 'bg-slate-700 cursor-not-allowed text-slate-400' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
-                <PlayCircle className="w-4 h-4" /> Registrar ENTRADA #{entrada.correlativo}
+              <button onClick={handleRegistrarEntrada} disabled={!entrada.placa || !entrada.tipo_unidad || !entrada.hora_entrada || !entrada.patio || !entrada.peso_bruto || !entrada.correlativo}
+                className={`w-full font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all ${!entrada.placa || !entrada.tipo_unidad || !entrada.hora_entrada || !entrada.patio || !entrada.peso_bruto || !entrada.correlativo ? 'bg-slate-700 cursor-not-allowed text-slate-400' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
+                <PlayCircle className="w-4 h-4" /> Registrar ENTRADA #{entrada.correlativo || '?'}
               </button>
             </div>
           </div>
@@ -1159,7 +1204,7 @@ export default function PetCokePage() {
         <div className="bg-slate-800/30 border border-white/5 rounded-xl p-4">
           <div className="flex flex-col gap-2 text-sm text-slate-400">
             <p className="font-bold text-orange-400">PROCESO DE REGISTRO:</p>
-            <p>PASO 1: Registra Fecha (auto), Hora (manual o "Ahora"), PESO BRUTO, Placa, Tipo, Patio y Bodega</p>
+            <p>PASO 1: Registra N° Viaje (editable), Fecha (auto), Hora (manual o "Ahora"), PESO BRUTO, Placa, Tipo, Patio y Bodega</p>
             <p>PASO 2: Selecciona el viaje activo, registra Hora Salida y PESO NETO</p>
             <p className="text-xs">RANGO PERMITIDO: {PESO_MINIMO} - {PESO_MAXIMO} TM por viaje</p>
           </div>
@@ -1212,6 +1257,10 @@ export default function PetCokePage() {
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-green-400">DATOS DE ENTRADA</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Correlativo</label>
+                    <input type="number" value={viajeEnEdicion.correlativo} onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, correlativo: parseInt(e.target.value) || '' })} className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
+                  </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">Placa</label>
                     <input type="text" value={viajeEnEdicion.placa} onChange={(e) => setViajeEnEdicion({ ...viajeEnEdicion, placa: e.target.value.toUpperCase() })} className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
