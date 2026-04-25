@@ -82,6 +82,37 @@ const estaFueraDeRango = (pesoNeto, tipoUnidad) => {
   return pesoNeto < rango.min || pesoNeto > rango.max
 }
 
+// NORMALIZADOR: Transforma los datos del registro al formato que espera el dashboard
+const normalizarRegistro = (reg, index, registrosAnteriores) => {
+  // Calcular acumulado progresivo basado en correlativo o fecha_entrada
+  let acumulado = 0
+  if (registrosAnteriores) {
+    // Buscar registros con correlativo menor
+    const anteriores = registrosAnteriores.filter(r => r.correlativo < reg.correlativo)
+    acumulado = anteriores.reduce((sum, r) => sum + (Number(r.peso_neto) || 0), 0)
+    acumulado += (Number(reg.peso_neto) || 0)
+  }
+  
+  return {
+    id: reg.id,
+    correlativo: reg.correlativo,
+    placa: reg.placa,
+    transporte: reg.transporte || 'DESCONOCIDO',
+    tipo_unidad: reg.tipo_unidad || 'VOLQUETA',
+    fecha: reg.fecha_entrada || dayjs().format('YYYY-MM-DD'), // fecha_entrada es la fecha real
+    hora_entrada: reg.hora_entrada,
+    hora_salida: reg.hora_salida,
+    tiempo_atencion: reg.tiempo_atencion,
+    patio: reg.patio_entrada || 'SIN PATIO', // patio_entrada es el campo real
+    bodega_barco: reg.bodega_barco,
+    // Campos normalizados para el dashboard (sufijo _updp_tm)
+    peso_bruto_updp_tm: Number(reg.peso_bruto) || 0,
+    peso_neto_updp_tm: Number(reg.peso_neto) || 0,
+    acumulado_updp_tm: acumulado,
+    estado: reg.estado || 'COMPLETADO'
+  }
+}
+
 function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
   const [data, setData] = useState({
     barco: null,
@@ -112,27 +143,35 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
 
       if (productoError || !productoData) throw new Error('Producto PET COKE no encontrado')
 
+      // Consultar registros de la tabla petcoke_viajes (como se guardan en el registro)
       let query = supabase
         .from('petcoke_viajes')
         .select('*')
         .eq('barco_id', barcoData.id)
         .order('correlativo', { ascending: true })
 
+      const { data: registrosRaw, error: registrosError } = await query
+      if (registrosError) throw registrosError
+
+      // Filtrar solo registros COMPLETADOS (tienen peso_neto)
+      const completados = (registrosRaw || []).filter(r => r.estado === 'COMPLETADO')
+      
+      // Normalizar los registros al formato que espera el dashboard
+      let registrosNormalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados))
+
+      // Aplicar filtros después de normalizar
       if (transporteFiltro) {
-        query = query.eq('transporte', transporteFiltro)
+        registrosNormalizados = registrosNormalizados.filter(r => r.transporte === transporteFiltro)
       }
 
       if (diaFiltro) {
-        query = query.eq('fecha', diaFiltro)
+        registrosNormalizados = registrosNormalizados.filter(r => r.fecha === diaFiltro)
       }
-
-      const { data: registrosData, error: registrosError } = await query
-      if (registrosError) throw registrosError
 
       setData({
         barco: barcoData,
         producto: productoData,
-        registros: registrosData || [],
+        registros: registrosNormalizados,
         loading: false,
         error: null,
         lastUpdate: dayjs().tz(ZONA_HORARIA_SV)
@@ -159,6 +198,7 @@ export default function ClientPage({ token }) {
 
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
 
+  // Cargar todos los registros sin filtros para las estadísticas de transportistas
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -174,7 +214,11 @@ export default function ClientPage({ token }) {
             .select('*')
             .eq('barco_id', barcoData.id)
 
-          if (registrosGlobales) setTodosLosRegistros(registrosGlobales)
+          if (registrosGlobales) {
+            const completados = registrosGlobales.filter(r => r.estado === 'COMPLETADO')
+            const normalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados))
+            setTodosLosRegistros(normalizados)
+          }
         }
       } catch (error) {
         console.error('Error cargando todos los registros:', error)
@@ -385,19 +429,24 @@ export default function ClientPage({ token }) {
     const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad))
     const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length
     const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length
-    const porcentajeDentroRango = ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100
+    const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0
 
-    let acumulado = 0
-    const acumuladoPorCorrelativo = registros.map(r => {
-      acumulado += r.peso_neto_updp_tm || 0
-      return {
-        correlativo: r.correlativo,
-        peso: r.peso_neto_updp_tm,
-        acumulado,
-        estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
-        tipoUnidad: r.tipo_unidad
-      }
-    })
+    // Acumulado por correlativo (ordenado)
+    const acumuladoPorCorrelativo = [...registros]
+      .sort((a, b) => a.correlativo - b.correlativo)
+      .map((r, idx, arr) => {
+        let acum = 0
+        for (let i = 0; i <= idx; i++) {
+          acum += arr[i].peso_neto_updp_tm || 0
+        }
+        return {
+          correlativo: r.correlativo,
+          peso: r.peso_neto_updp_tm,
+          acumulado: acum,
+          estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
+          tipoUnidad: r.tipo_unidad
+        }
+      })
 
     return {
       totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
@@ -940,104 +989,103 @@ export default function ClientPage({ token }) {
               Flujo de Descarga por Hora
             </div>
             
-            {flujoPorHora.length > 0 && (
-              <div className="flujo-stats">
-                <div className="flujo-stat">
-                  <div className="flujo-stat-label">Pico Máximo por Hora</div>
-                  <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.maxPorHora, 1)} TM</div>
-                </div>
-                <div className="flujo-stat">
-                  <div className="flujo-stat-label">Promedio por Hora</div>
-                  <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM</div>
-                </div>
-                <div className="flujo-stat">
-                  <div className="flujo-stat-label">Periodos Activos</div>
-                  <div className="flujo-stat-value">{estadisticasFlujo.totalHoras} horas</div>
-                </div>
-              </div>
-            )}
-
             {flujoPorHora.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={flujoPorHora}>
-                  <defs>
-                    <linearGradient id="flujoGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis 
-                    dataKey="hora" 
-                    tick={{ fill: '#94a3b8', fontSize: 11 }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                    interval={Math.floor(flujoPorHora.length / 10)}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    tick={{ fill: '#94a3b8' }} 
-                    tickFormatter={(v) => fmtTM(v, 0)}
-                    label={{ value: 'Toneladas por Hora', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fill: '#94a3b8' }}
-                    tickFormatter={(v) => fmtTM(v, 0)}
-                    label={{ value: 'Acumulado Total', angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 11 }}
-                  />
-                  <Tooltip 
-                    formatter={(value, name) => {
-                      if (name === 'totalTM') return [`${fmtTM(value, 2)} TM`, 'Descarga por Hora']
-                      if (name === 'acumulado') return [`${fmtTM(value, 2)} TM`, 'Acumulado Total']
-                      if (name === 'viajes') return [`${value} viajes`, 'N° Viajes']
-                      if (name === 'promedio') return [`${fmtTM(value, 2)} TM`, 'Promedio por Viaje']
-                      return [value, name]
-                    }}
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                    labelStyle={{ color: '#f97316', fontWeight: 'bold' }}
-                  />
-                  
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="totalTM" 
-                    fill="#f97316" 
-                    opacity={0.8}
-                    radius={[4, 4, 0, 0]}
-                    name="Descarga por Hora"
-                  />
-                  
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="acumulado" 
-                    stroke="#4ade80" 
-                    strokeWidth={3}
-                    dot={{ r: 3, fill: '#4ade80' }}
-                    name="Acumulado Total"
-                  />
-                  
-                  <ReferenceLine 
-                    yAxisId="left"
-                    y={estadisticasFlujo.promedioPorHora} 
-                    stroke="#fb923c" 
-                    strokeDasharray="5 5"
-                    label={{ value: `Promedio: ${fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM/h`, fill: '#fb923c', fontSize: 10 }}
-                  />
-                  
-                  {meta > 0 && (
-                    <ReferenceLine 
-                      yAxisId="right"
-                      y={meta} 
-                      stroke="#22c55e" 
-                      strokeDasharray="3 3"
-                      label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#22c55e', fontSize: 10 }}
+              <>
+                <div className="flujo-stats">
+                  <div className="flujo-stat">
+                    <div className="flujo-stat-label">Pico Máximo por Hora</div>
+                    <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.maxPorHora, 1)} TM</div>
+                  </div>
+                  <div className="flujo-stat">
+                    <div className="flujo-stat-label">Promedio por Hora</div>
+                    <div className="flujo-stat-value">{fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM</div>
+                  </div>
+                  <div className="flujo-stat">
+                    <div className="flujo-stat-label">Periodos Activos</div>
+                    <div className="flujo-stat-value">{estadisticasFlujo.totalHoras} horas</div>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={flujoPorHora}>
+                    <defs>
+                      <linearGradient id="flujoGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis 
+                      dataKey="hora" 
+                      tick={{ fill: '#94a3b8', fontSize: 11 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      interval={Math.floor(flujoPorHora.length / 10)}
                     />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
+                    <YAxis 
+                      yAxisId="left"
+                      tick={{ fill: '#94a3b8' }} 
+                      tickFormatter={(v) => fmtTM(v, 0)}
+                      label={{ value: 'Toneladas por Hora', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
+                    />
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fill: '#94a3b8' }}
+                      tickFormatter={(v) => fmtTM(v, 0)}
+                      label={{ value: 'Acumulado Total', angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 11 }}
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        if (name === 'totalTM') return [`${fmtTM(value, 2)} TM`, 'Descarga por Hora']
+                        if (name === 'acumulado') return [`${fmtTM(value, 2)} TM`, 'Acumulado Total']
+                        if (name === 'viajes') return [`${value} viajes`, 'N° Viajes']
+                        if (name === 'promedio') return [`${fmtTM(value, 2)} TM`, 'Promedio por Viaje']
+                        return [value, name]
+                      }}
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                      labelStyle={{ color: '#f97316', fontWeight: 'bold' }}
+                    />
+                    
+                    <Bar 
+                      yAxisId="left"
+                      dataKey="totalTM" 
+                      fill="#f97316" 
+                      opacity={0.8}
+                      radius={[4, 4, 0, 0]}
+                      name="Descarga por Hora"
+                    />
+                    
+                    <Line 
+                      yAxisId="right"
+                      type="monotone" 
+                      dataKey="acumulado" 
+                      stroke="#4ade80" 
+                      strokeWidth={3}
+                      dot={{ r: 3, fill: '#4ade80' }}
+                      name="Acumulado Total"
+                    />
+                    
+                    <ReferenceLine 
+                      yAxisId="left"
+                      y={estadisticasFlujo.promedioPorHora} 
+                      stroke="#fb923c" 
+                      strokeDasharray="5 5"
+                      label={{ value: `Promedio: ${fmtTM(estadisticasFlujo.promedioPorHora, 1)} TM/h`, fill: '#fb923c', fontSize: 10 }}
+                    />
+                    
+                    {meta > 0 && (
+                      <ReferenceLine 
+                        yAxisId="right"
+                        y={meta} 
+                        stroke="#22c55e" 
+                        strokeDasharray="3 3"
+                        label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#22c55e', fontSize: 10 }}
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </>
             ) : (
               <div style={{ textAlign: 'center', color: '#64748b', padding: '80px 40px' }}>
                 <FiClock size={48} style={{ display: 'block', margin: '0 auto 16px', opacity: 0.5 }} />
