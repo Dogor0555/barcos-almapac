@@ -1213,31 +1213,48 @@ export default function PetCokePage() {
       </div>
 
       {/* Modal Agregar Unidad */}
-      {modalUnidadAbierto && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl w-full max-w-md">
-            <div className="flex justify-between p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">Agregar Nueva Unidad</h2>
-              <button onClick={() => setModalUnidadAbierto(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <input type="text" value={nuevaUnidad.placa} onChange={(e) => setNuevaUnidad({...nuevaUnidad, placa: e.target.value.toUpperCase()})} placeholder="Placa" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
-              <input type="text" value={nuevaUnidad.transporte} onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value.toUpperCase()})} placeholder="Transporte" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
-              <Select options={OPCIONES_TIPO_UNIDAD} onChange={(opt) => setNuevaUnidad({...nuevaUnidad, tipo: opt?.value || ''})} placeholder="Tipo Unidad" styles={selectStyles} />
-            </div>
-            <div className="flex gap-3 p-6 border-t border-white/10">
-              <button onClick={handleAgregarUnidad} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
-                Agregar
-              </button>
-              <button onClick={() => setModalUnidadAbierto(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+{modalUnidadAbierto && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <div className="bg-slate-800 rounded-2xl w-full max-w-md">
+      <div className="flex justify-between p-6 border-b border-white/10">
+        <h2 className="text-xl font-bold text-white">Agregar Nueva Unidad</h2>
+        <button onClick={() => setModalUnidadAbierto(false)} className="text-slate-400 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="p-6 space-y-4">
+        <input type="text" value={nuevaUnidad.placa} onChange={(e) => setNuevaUnidad({...nuevaUnidad, placa: e.target.value.toUpperCase()})} placeholder="Placa" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
+        <input type="text" value={nuevaUnidad.transporte} onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value.toUpperCase()})} placeholder="Transporte" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
+        
+        {/* SELECTOR DE TRANSPORTISTAS A LA BRAVA */}
+        <select 
+          value={nuevaUnidad.transportista || ''} 
+          onChange={(e) => setNuevaUnidad({...nuevaUnidad, transportista: e.target.value})}
+          className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+        >
+          <option value="">Seleccionar Transportista</option>
+          <option value="ALMAGESAL">ALMAGESAL</option>
+          <option value="CORPORIN">CORPORIN</option>
+          <option value="ESCOBAR">ESCOBAR</option>
+          <option value="ESMERALDA">ESMERALDA</option>
+          <option value="JOB">JOB</option>
+          <option value="MARTINEZ">MARTINEZ</option>
+          <option value="SANTIMONI">SANTIMONI</option>
+        </select>
+        
+        <Select options={OPCIONES_TIPO_UNIDAD} onChange={(opt) => setNuevaUnidad({...nuevaUnidad, tipo: opt?.value || ''})} placeholder="Tipo Unidad" styles={selectStyles} />
+      </div>
+      <div className="flex gap-3 p-6 border-t border-white/10">
+        <button onClick={handleAgregarUnidad} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
+          Agregar
+        </button>
+        <button onClick={() => setModalUnidadAbierto(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Modal Edicion */}
       {modalEdicionAbierto && viajeEnEdicion && (
