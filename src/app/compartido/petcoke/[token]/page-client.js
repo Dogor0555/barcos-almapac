@@ -19,7 +19,8 @@ import * as XLSX from 'xlsx'
 import { 
   FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
-  FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp
+  FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
+  FiChevronDown, FiChevronUp
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
@@ -99,17 +100,19 @@ const normalizarRegistro = (reg, index, registrosAnteriores) => {
     placa: reg.placa,
     transporte: reg.transporte || 'DESCONOCIDO',
     tipo_unidad: reg.tipo_unidad || 'VOLQUETA',
-    fecha: reg.fecha_entrada || dayjs().format('YYYY-MM-DD'), // fecha_entrada es la fecha real
+    fecha: reg.fecha_entrada || dayjs().format('YYYY-MM-DD'),
     hora_entrada: reg.hora_entrada,
     hora_salida: reg.hora_salida,
     tiempo_atencion: reg.tiempo_atencion,
-    patio: reg.patio_entrada || 'SIN PATIO', // patio_entrada es el campo real
+    patio: reg.patio_entrada || 'SIN PATIO',
     bodega_barco: reg.bodega_barco,
     // Campos normalizados para el dashboard (sufijo _updp_tm)
     peso_bruto_updp_tm: Number(reg.peso_bruto) || 0,
     peso_neto_updp_tm: Number(reg.peso_neto) || 0,
     acumulado_updp_tm: acumulado,
-    estado: reg.estado || 'COMPLETADO'
+    estado: reg.estado || 'COMPLETADO',
+    // Para ordenamiento
+    fechaHoraOrden: `${reg.fecha_entrada || ''} ${reg.hora_entrada || ''}`
   }
 }
 
@@ -143,7 +146,7 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
 
       if (productoError || !productoData) throw new Error('Producto PET COKE no encontrado')
 
-      // Consultar registros de la tabla petcoke_viajes (como se guardan en el registro)
+      // Consultar registros de la tabla petcoke_viajes
       let query = supabase
         .from('petcoke_viajes')
         .select('*')
@@ -153,13 +156,13 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
       const { data: registrosRaw, error: registrosError } = await query
       if (registrosError) throw registrosError
 
-      // Filtrar solo registros COMPLETADOS (tienen peso_neto)
+      // Filtrar solo registros COMPLETADOS
       const completados = (registrosRaw || []).filter(r => r.estado === 'COMPLETADO')
       
-      // Normalizar los registros al formato que espera el dashboard
+      // Normalizar los registros
       let registrosNormalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados))
 
-      // Aplicar filtros después de normalizar
+      // Aplicar filtros
       if (transporteFiltro) {
         registrosNormalizados = registrosNormalizados.filter(r => r.transporte === transporteFiltro)
       }
@@ -195,10 +198,37 @@ export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
+  const [ordenTabla, setOrdenTabla] = useState('reciente') // 'reciente' o 'antiguo'
 
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
 
-  // Cargar todos los registros sin filtros para las estadísticas de transportistas
+  // Ordenar registros para la tabla (más reciente al último o viceversa)
+  const registrosOrdenados = useMemo(() => {
+    if (!registros.length) return []
+    
+    const registrosConFecha = registros.map(reg => ({
+      ...reg,
+      fechaHoraValue: dayjs(`${reg.fecha} ${reg.hora_entrada || '00:00:00'}`)
+    }))
+    
+    if (ordenTabla === 'reciente') {
+      return [...registrosConFecha].sort((a, b) => {
+        if (b.fechaHoraValue.isValid() && a.fechaHoraValue.isValid()) {
+          return b.fechaHoraValue.valueOf() - a.fechaHoraValue.valueOf()
+        }
+        return b.correlativo - a.correlativo
+      })
+    } else {
+      return [...registrosConFecha].sort((a, b) => {
+        if (a.fechaHoraValue.isValid() && b.fechaHoraValue.isValid()) {
+          return a.fechaHoraValue.valueOf() - b.fechaHoraValue.valueOf()
+        }
+        return a.correlativo - b.correlativo
+      })
+    }
+  }, [registros, ordenTabla])
+
+  // Cargar todos los registros sin filtros
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -431,7 +461,6 @@ export default function ClientPage({ token }) {
     const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length
     const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0
 
-    // Acumulado por correlativo (ordenado)
     const acumuladoPorCorrelativo = [...registros]
       .sort((a, b) => a.correlativo - b.correlativo)
       .map((r, idx, arr) => {
@@ -522,7 +551,9 @@ export default function ClientPage({ token }) {
         .alm-excel-btn { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); border-radius: 8px; padding: 6px 12px; color: #4ade80; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
         .alm-excel-btn:hover { background: rgba(34, 197, 94, 0.25); transform: translateY(-1px); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-
+        .orden-boton { background: rgba(255,255,255,0.05); border: 1px solid #334155; border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .orden-boton:hover { background: rgba(249,115,22,0.15); border-color: #f97316; color: #f97316; }
+        .orden-boton-activo { background: rgba(249,115,22,0.2); border-color: #f97316; color: #f97316; }
         .alm-tarjetas-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -677,7 +708,7 @@ export default function ClientPage({ token }) {
         .alm-chart-wide { grid-column: 1 / -1; }
         .alm-chart-title { font-size: 14px; font-weight: 700; color: white; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .alm-table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 24px; }
-        .alm-table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: #0f172a; }
+        .alm-table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: #0f172a; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
         .alm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .alm-table th { padding: 12px 16px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid var(--border); }
         .alm-table td { padding: 12px 16px; color: #cbd5e1; border-bottom: 1px solid var(--border); }
@@ -1231,6 +1262,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
+          {/* TABLA DE VIAJES CON ORDENAMIENTO */}
           <div className="alm-table-card">
             <div className="alm-table-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1254,6 +1286,22 @@ export default function ClientPage({ token }) {
                   <span className="alm-badge alm-badge-filter">Día: {diaSeleccionado}</span>
                 )}
               </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`orden-boton ${ordenTabla === 'reciente' ? 'orden-boton-activo' : ''}`}
+                  onClick={() => setOrdenTabla('reciente')}
+                >
+                  <FiArrowDown size={12} />
+                  Más Reciente
+                </button>
+                <button 
+                  className={`orden-boton ${ordenTabla === 'antiguo' ? 'orden-boton-activo' : ''}`}
+                  onClick={() => setOrdenTabla('antiguo')}
+                >
+                  <FiArrowUp size={12} />
+                  Más Antiguo
+                </button>
+              </div>
             </div>
             <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
               <table className="alm-table">
@@ -1276,7 +1324,7 @@ export default function ClientPage({ token }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {registros.map((reg) => {
+                  {registrosOrdenados.map((reg) => {
                     const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
                     const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
                     let rowClass = ''
