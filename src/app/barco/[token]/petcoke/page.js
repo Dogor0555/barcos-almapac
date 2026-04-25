@@ -1212,7 +1212,7 @@ export default function PetCokePage() {
 
       </div>
 
-      {/* Modal Agregar Unidad */}
+    {/* Modal Agregar Unidad */}
 {modalUnidadAbierto && (
   <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
     <div className="bg-slate-800 rounded-2xl w-full max-w-md">
@@ -1224,15 +1224,14 @@ export default function PetCokePage() {
       </div>
       <div className="p-6 space-y-4">
         <input type="text" value={nuevaUnidad.placa} onChange={(e) => setNuevaUnidad({...nuevaUnidad, placa: e.target.value.toUpperCase()})} placeholder="Placa" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
-        <input type="text" value={nuevaUnidad.transporte} onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value.toUpperCase()})} placeholder="Transporte" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
         
-        {/* SELECTOR DE TRANSPORTISTAS A LA BRAVA */}
+        {/* SELECTOR DE TRANSPORTE A LA BRAVA */}
         <select 
-          value={nuevaUnidad.transportista || ''} 
-          onChange={(e) => setNuevaUnidad({...nuevaUnidad, transportista: e.target.value})}
+          value={nuevaUnidad.transporte || ''} 
+          onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value})}
           className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
         >
-          <option value="">Seleccionar Transportista</option>
+          <option value="">Seleccionar Transporte</option>
           <option value="ALMAGESAL">ALMAGESAL</option>
           <option value="CORPORIN">CORPORIN</option>
           <option value="ESCOBAR">ESCOBAR</option>
