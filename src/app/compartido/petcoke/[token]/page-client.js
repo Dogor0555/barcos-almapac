@@ -268,6 +268,12 @@ export default function ClientPage({ token }) {
   // Calcular estadísticas usando la función agregada
   const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
 
+  // Calcular faltante de descarga
+  const meta = barco?.metas_json?.limites?.['PC-001'] || 0
+  const faltante = Math.max(0, meta - estadisticas.totalNeto)
+  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
+  const metaCompletada = porcentajeMeta >= 100
+
   // Ordenar registros para la tabla (más reciente al último o viceversa)
   const registrosOrdenados = useMemo(() => {
     if (!registros.length) return []
@@ -538,9 +544,6 @@ export default function ClientPage({ token }) {
   const datosGraficoDia         = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
   const datosGraficoPatio       = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
 
-  const meta = barco.metas_json?.limites?.['PC-001'] || 0
-  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
-
   const filtroActivoTexto = [
     transporteSeleccionado && `Transporte: ${transporteSeleccionado}`,
     diaSeleccionado && `Día: ${diaSeleccionado}`
@@ -739,6 +742,7 @@ export default function ClientPage({ token }) {
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
         .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
+        .alm-progress-fill-complete { background: linear-gradient(90deg, #22c55e, #4ade80); }
         .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
 
@@ -879,6 +883,52 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
+          {/* KPI de META y FALTANTE */}
+          <div className="alm-kpis-row">
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon"><FiTrendingUp size={28} style={{ color: '#f97316' }} /></div>
+              <div>
+                <div className="alm-kpi-label">META MANIFESTADA</div>
+                <div className="alm-kpi-value" style={{ color: '#f97316' }}>{fmtTM(meta, 2)} TM</div>
+                <div className="alm-kpi-sub">Cantidad contratada</div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }} /></div>
+              <div>
+                <div className="alm-kpi-label">FALTANTE POR DESCARGAR</div>
+                <div className="alm-kpi-value" style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>{fmtTM(faltante, 2)} TM</div>
+                <div className="alm-kpi-sub">
+                  {metaCompletada 
+                    ? '✅ Meta completada' 
+                    : `${((faltante / meta) * 100).toFixed(1)}% restante`}
+                </div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon"><FiBarChart2 size={28} style={{ color: '#60a5fa' }} /></div>
+              <div>
+                <div className="alm-kpi-label">PORCENTAJE DE META</div>
+                <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{porcentajeMeta.toFixed(1)}%</div>
+                <div className="alm-kpi-sub">{fmtTM(estadisticas.totalNeto, 2)} TM de {fmtTM(meta, 2)} TM</div>
+              </div>
+            </div>
+            <div className="alm-kpi">
+              <div className="alm-kpi-icon"><GiWeightScale size={28} style={{ color: metaCompletada ? '#4ade80' : '#f97316' }} /></div>
+              <div>
+                <div className="alm-kpi-label">ESTADO</div>
+                <div className="alm-kpi-value" style={{ fontSize: '20px', color: metaCompletada ? '#4ade80' : '#f97316' }}>
+                  {metaCompletada ? 'META ALCANZADA' : 'EN PROCESO'}
+                </div>
+                <div className="alm-kpi-sub">
+                  {metaCompletada 
+                    ? '🎉 Descarga completada exitosamente' 
+                    : `Faltan ${fmtTM(faltante, 2)} TM para completar la meta`}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
               <div className="alm-alert-title">
@@ -921,25 +971,36 @@ export default function ClientPage({ token }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FiTrendingUp size={16} />
-                  Progreso de Descarga
+                  Progreso de Descarga vs Meta
                 </span>
-                <span style={{ color: porcentajeMeta >= 100 ? '#4ade80' : porcentajeMeta >= 90 ? '#fbbf24' : '#f97316', fontWeight: 'bold' }}>
+                <span style={{ color: metaCompletada ? '#4ade80' : (porcentajeMeta >= 90 ? '#fbbf24' : '#f97316'), fontWeight: 'bold' }}>
                   {porcentajeMeta.toFixed(1)}%
                 </span>
               </div>
               <div className="alm-progress-track">
-                <div className={`alm-progress-fill ${porcentajeMeta >= 100 ? 'alm-progress-fill-warning' : ''}`} style={{ width: `${Math.min(100, porcentajeMeta)}%` }} />
+                <div 
+                  className={`alm-progress-fill ${metaCompletada ? 'alm-progress-fill-complete' : (porcentajeMeta >= 90 ? 'alm-progress-fill-warning' : '')}`} 
+                  style={{ width: `${Math.min(100, porcentajeMeta)}%` }} 
+                />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8' }}>
                 <span>0 TM</span>
                 <span>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
-              {porcentajeMeta >= 100 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
+                <div style={{ fontSize: '11px', color: '#4ade80' }}>
+                  ✅ Descargado: {fmtTM(estadisticas.totalNeto, 2)} TM
+                </div>
+                <div style={{ fontSize: '11px', color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>
+                  {faltante > 0 ? `📦 Faltante: ${fmtTM(faltante, 2)} TM` : '🎉 META COMPLETADA'}
+                </div>
+              </div>
+              {metaCompletada && (
                 <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center' }}>
                   <span style={{ color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     <FiCheckCircle size={14} />
-                    ¡Meta alcanzada! Se ha completado la cantidad manifestada.
+                    ¡Meta alcanzada! Se ha completado la cantidad manifestada de {fmtTM(meta, 2)} TM.
                   </span>
                 </div>
               )}
@@ -1395,6 +1456,7 @@ export default function ClientPage({ token }) {
           <div className="alm-footer">
             <FiRefreshCw size={10} style={{ display: 'inline', marginRight: '4px' }} />
             auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
+            {meta > 0 && ` · Meta: ${fmtTM(meta, 2)} TM · Faltante: ${fmtTM(faltante, 2)} TM`}
             <br />
             <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiAlertCircle size={10} /> VOLQUETA: 14-18 TM</span> · 
             <span style={{ color: '#f97316', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FaTrailer size={10} /> TRAILETA: 22-25 TM</span> · 
