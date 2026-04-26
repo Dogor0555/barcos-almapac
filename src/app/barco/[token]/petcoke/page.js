@@ -242,19 +242,7 @@ export default function PetCokePage() {
     return true
   }
 
-  // Verificar si la placa ya fue registrada hoy (misma fecha) como completada
-  const verificarPlacaCompletadaHoy = (placa, fecha) => {
-    const viajeCompletadoHoy = viajes.some(v => 
-      v.placa === placa && 
-      v.estado === 'COMPLETADO' && 
-      v.fecha_entrada === fecha
-    )
-    if (viajeCompletadoHoy) {
-      toast.error(`La unidad ${placa} ya completó un viaje hoy (${fecha}). No puede registrar otra entrada el mismo día.`)
-      return false
-    }
-    return true
-  }
+ 
 
   useEffect(() => {
     if (entrada.correlativo === 1 || entrada.correlativo === undefined || entrada.correlativo === null) {
@@ -309,10 +297,13 @@ export default function PetCokePage() {
   const estaCerca = !estaCompleto && porcentajeCompletado >= 90 && meta > 0
 
   const viajesActivosFiltrados = useMemo(() => {
-    if (!buscarPlaca.trim()) return viajesActivos
-    const termino = buscarPlaca.trim().toLowerCase()
-    return viajesActivos.filter(v => v.placa.toLowerCase().includes(termino))
-  }, [viajesActivos, buscarPlaca])
+  if (!buscarPlaca.trim()) return viajesActivos
+  const termino = buscarPlaca.trim().toLowerCase()
+  return viajesActivos.filter(v => 
+    v.placa.toLowerCase().includes(termino) ||
+    v.correlativo?.toString().includes(termino)
+  )
+}, [viajesActivos, buscarPlaca])
 
   const previewAcumuladoSalida = viajeActivo && salida.peso_neto
     ? {
@@ -449,98 +440,39 @@ export default function PetCokePage() {
   }
 
   const handleRegistrarEntrada = async () => {
-    if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
-    if (!entrada.placa) return toast.error('La placa es obligatoria')
-    if (!entrada.tipo_unidad) return toast.error('Debes seleccionar el Tipo Unidad')
-    if (!entrada.hora_entrada) return toast.error('La Hora Entrada es obligatoria')
-    if (!entrada.patio) return toast.error('El Patio es obligatorio')
-    if (!entrada.peso_bruto) return toast.error('El Peso Bruto es obligatorio')
-    
-    if (!entrada.correlativo || entrada.correlativo <= 0) {
-      toast.error('El número de viaje (correlativo) es obligatorio y debe ser mayor a 0')
-      return
-    }
-
-    // VALIDACIÓN 1: Correlativo único (no puede repetirse)
-    if (!verificarCorrelativoUnico(entrada.correlativo)) {
-      return
-    }
-
-    // VALIDACIÓN 2: Placa no puede tener viaje activo
-    if (!verificarPlacaActiva(entrada.placa)) {
-      return
-    }
-
-    // VALIDACIÓN 3: Misma placa no puede tener dos viajes completados el mismo día
-    if (!verificarPlacaCompletadaHoy(entrada.placa, entrada.fecha_entrada)) {
-      return
-    }
-
-    const pesoBrutoConvertido = convertirToneladas(entrada.peso_bruto)
-    
-    if (!pesoBrutoConvertido) {
-      toast.error('El Peso Bruto no es válido')
-      return
-    }
-
-    const nuevoViaje = {
-      barco_id: barco.id,
-      producto_id: producto.id,
-      correlativo: entrada.correlativo,
-      fecha_entrada: entrada.fecha_entrada,
-      hora_entrada: entrada.hora_entrada,
-      peso_bruto: pesoBrutoConvertido,
-      placa: entrada.placa,
-      tipo_unidad: entrada.tipo_unidad,
-      transporte: entrada.transporte,
-      patio_entrada: entrada.patio,
-      bodega_barco: entrada.bodega_barco || null,
-      estado: 'EN_PROGRESO',
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('petcoke_viajes')
-        .insert([nuevoViaje])
-        .select()
-
-      if (error) {
-        // Manejar error de duplicado desde la base de datos
-        if (error.code === '23505') {
-          toast.error('Error: El número de viaje o placa ya existe en el sistema')
-          return
-        }
-        throw error
-      }
-
-      toast.success(
-        `ENTRADA registrada: Viaje #${entrada.correlativo} - ${entrada.placa} - Peso Bruto: ${pesoBrutoConvertido.toFixed(3)} TM`
-      )
-
-      setViajes(prev => [...prev, data[0]])
-
-      setEntrada({
-        correlativo: siguienteCorrelativo + 1,
-        fecha_entrada: getFechaActual(),
-        hora_entrada: '',
-        peso_bruto: '',
-        placa: '',
-        tipo_unidad: '',
-        transporte: '',
-        patio: '',
-        bodega_barco: '',
-      })
-      setTipoUnidadOptions(OPCIONES_TIPO_UNIDAD)
-
-      setTimeout(() => {
-        paso2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 100)
-
-    } catch (err) {
-      console.error('Error registrando entrada:', err)
-      toast.error('Error al registrar la entrada: ' + err.message)
-    }
+  if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
+  if (!entrada.placa) return toast.error('La placa es obligatoria')
+  if (!entrada.tipo_unidad) return toast.error('Debes seleccionar el Tipo Unidad')
+  if (!entrada.hora_entrada) return toast.error('La Hora Entrada es obligatoria')
+  if (!entrada.patio) return toast.error('El Patio es obligatorio')
+  if (!entrada.peso_bruto) return toast.error('El Peso Bruto es obligatorio')
+  
+  if (!entrada.correlativo || entrada.correlativo <= 0) {
+    toast.error('El número de viaje (correlativo) es obligatorio y debe ser mayor a 0')
+    return
   }
+
+  // VALIDACIÓN 1: Correlativo único (no puede repetirse)
+  if (!verificarCorrelativoUnico(entrada.correlativo)) {
+    return
+  }
+
+  // VALIDACIÓN 2: Placa no puede tener viaje activo
+  if (!verificarPlacaActiva(entrada.placa)) {
+    return
+  }
+
+  // ✅ VALIDACIÓN ELIMINADA: Ya no se verifica si la placa ya tuvo un viaje hoy
+
+  const pesoBrutoConvertido = convertirToneladas(entrada.peso_bruto)
+  
+  if (!pesoBrutoConvertido) {
+    toast.error('El Peso Bruto no es válido')
+    return
+  }
+
+  // ... resto del código igual
+}
 
   const handleRegistrarSalida = async () => {
     if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
@@ -854,7 +786,6 @@ export default function PetCokePage() {
               <ul className="list-disc list-inside space-y-0.5 text-xs">
                 <li>❌ No se puede repetir el mismo número de viaje (correlativo)</li>
                 <li>❌ No se puede registrar una misma placa con un viaje activo (debe salir primero)</li>
-                <li>❌ No se puede registrar la misma placa dos veces el mismo día (solo un viaje por día por unidad)</li>
                 <li>⚠️ Rango de peso neto permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM</li>
               </ul>
             </div>
@@ -1062,125 +993,149 @@ export default function PetCokePage() {
         </div>
 
         {/* PASO 2: SALIDA - REDISEÑADO */}
-        <div ref={paso2Ref} className="bg-slate-900/50 border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-              <StopCircle className="w-4 h-4 text-white" />
-            </div>
-            <h2 className="text-lg font-bold text-white">PASO 2: Registrar SALIDA (Peso Neto)</h2>
-            {viajeActivo && (
-              <span className="text-sm bg-yellow-500/30 text-yellow-400 px-3 py-1 rounded-full ml-2">
-                Completando: {viajeActivo.placa}
-              </span>
-            )}
-          </div>
-          
-          {!viajeActivo ? (
-            <div>
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-slate-400 mb-2">Buscar viaje activo por placa:</label>
-                <div className="relative">
-                  <input type="text" value={buscarPlaca} onChange={(e) => setBuscarPlaca(e.target.value)} placeholder="Ej: C-123456" className="w-full bg-slate-800 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white" />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  {buscarPlaca && (
-                    <button onClick={() => setBuscarPlaca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">{viajesActivosFiltrados.length} de {viajesActivos.length} viajes encontrados</p>
-              </div>
-              
-              {viajesActivosFiltrados.length === 0 ? (
-                <div className="bg-slate-800 rounded-lg p-8 text-center">
-                  <Search className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400">
-                    {viajesActivos.length === 0 ? 'No hay viajes activos. Registra una ENTRADA primero.' : `No se encontró la placa "${buscarPlaca}"`}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-2 max-h-60 overflow-y-auto">
-                  {viajesActivosFiltrados.map(viaje => (
-                    <div key={viaje.id} className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg p-4 cursor-pointer transition-all" onClick={() => setViajeActivo(viaje)}>
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-white">Viaje #{viaje.correlativo} - {viaje.placa}</p>
-                          <p className="text-sm text-slate-400 mt-1">
-                            Entrada: {viaje.hora_entrada} | Peso Bruto: {viaje.peso_bruto?.toFixed(3)} TM | Patio: {viaje.patio_entrada}
-                          </p>
-                        </div>
-                        <StopCircle className="w-5 h-5 text-red-400" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="bg-slate-800 rounded-lg p-4 mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <p className="text-sm text-slate-400">Completando Viaje #{viajeActivo.correlativo} - {viajeActivo.placa}</p>
-                  <button onClick={() => { setViajeActivo(null); setSalida({ hora_salida: '', peso_neto: '' }); }} className="text-xs text-blue-400 hover:text-blue-300">
-                    Cambiar viaje
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-slate-500 text-xs">Fecha Entrada</p>
-                    <p className="font-bold text-white">{viajeActivo.fecha_entrada}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-xs">Hora Entrada</p>
-                    <p className="font-bold text-white">{viajeActivo.hora_entrada}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-xs">Peso Bruto</p>
-                    <p className="font-bold text-white">{viajeActivo.peso_bruto?.toFixed(3)} TM</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 text-xs">Patio</p>
-                    <p className="font-bold text-white">{viajeActivo.patio_entrada}</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Hora Salida</label>
-                  <div className="flex gap-2">
-                    <input type="time" value={salida.hora_salida} onChange={(e) => setSalida(prev => ({ ...prev, hora_salida: e.target.value }))} step="1" className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white" />
-                    <button type="button" onClick={tomarHoraSalidaExacta} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap">
-                      Ahora
-                    </button>
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Peso Neto (TM)</label>
-                  <input 
-                    type="text" 
-                    value={salida.peso_neto} 
-                    onChange={handlePesoNetoChange} 
-                    placeholder="Ej: 23.456" 
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white" 
-                  />
-                  {salida.peso_neto && /^\d{5}$/.test(salida.peso_neto.replace('.', '')) && (
-                    <p className="text-[10px] text-green-400 mt-0.5">Convertido: {convertirToneladas(salida.peso_neto)?.toFixed(3)} TM</p>
-                  )}
-                  <p className="text-[10px] text-slate-500 mt-0.5">Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM</p>
-                </div>
-                
-                <div className="md:col-span-2">
-                  <button onClick={handleRegistrarSalida} disabled={!salida.hora_salida || !salida.peso_neto}
-                    className={`w-full font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all ${!salida.hora_salida || !salida.peso_neto ? 'bg-slate-700 cursor-not-allowed text-slate-400' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
-                    <StopCircle className="w-4 h-4" /> Registrar SALIDA
-                  </button>
-                </div>
-              </div>
-            </div>
+<div ref={paso2Ref} className="bg-slate-900/50 border border-white/10 rounded-2xl p-6">
+  <div className="flex items-center gap-3 mb-6">
+    <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+      <StopCircle className="w-4 h-4 text-white" />
+    </div>
+    <h2 className="text-lg font-bold text-white">PASO 2: Registrar SALIDA (Peso Neto)</h2>
+    {viajeActivo && (
+      <span className="text-sm bg-yellow-500/30 text-yellow-400 px-3 py-1 rounded-full ml-2">
+        Completando: {viajeActivo.placa}
+      </span>
+    )}
+  </div>
+  
+  {!viajeActivo ? (
+    <div>
+      <div className="mb-4">
+        <label className="block text-sm font-bold text-slate-400 mb-2">Buscar viaje activo por placa o número de viaje:</label>
+        <div className="relative">
+          <input 
+            type="text" 
+            value={buscarPlaca} 
+            onChange={(e) => setBuscarPlaca(e.target.value)} 
+            placeholder="Ej: C-123456 o 15" 
+            className="w-full bg-slate-800 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white" 
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          {buscarPlaca && (
+            <button onClick={() => setBuscarPlaca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
           )}
         </div>
+        <p className="text-xs text-slate-500 mt-1">
+          {viajesActivosFiltrados.length} de {viajesActivos.length} viajes encontrados 
+          (buscar por placa o #viaje)
+        </p>
+      </div>
+      
+      {viajesActivosFiltrados.length === 0 ? (
+        <div className="bg-slate-800 rounded-lg p-8 text-center">
+          <Search className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400">
+            {viajesActivos.length === 0 
+              ? 'No hay viajes activos. Registra una ENTRADA primero.' 
+              : `No se encontró "${buscarPlaca}" - busca por placa o número de viaje`}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-2 max-h-60 overflow-y-auto">
+          {viajesActivosFiltrados.map(viaje => (
+            <div 
+              key={viaje.id} 
+              className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg p-4 cursor-pointer transition-all" 
+              onClick={() => setViajeActivo(viaje)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-bold text-yellow-400">#{viaje.correlativo}</span>
+                    <span className="font-bold text-white">{viaje.placa}</span>
+                    <span className="text-xs text-slate-500">{viaje.transporte || 'Sin transporte'}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${viaje.patio_entrada === 'NORTE' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                      {viaje.patio_entrada}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Entrada: {viaje.hora_entrada} | Peso Bruto: {viaje.peso_bruto?.toFixed(3)} TM | Tipo: {viaje.tipo_unidad || 'N/A'}
+                  </p>
+                </div>
+                <StopCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : (
+    <div>
+      <div className="bg-slate-800 rounded-lg p-4 mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <p className="text-sm text-slate-400">Completando Viaje #{viajeActivo.correlativo} - {viajeActivo.placa}</p>
+          <button onClick={() => { setViajeActivo(null); setSalida({ hora_salida: '', peso_neto: '' }); }} className="text-xs text-blue-400 hover:text-blue-300">
+            Cambiar viaje
+          </button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-slate-500 text-xs">Fecha Entrada</p>
+            <p className="font-bold text-white">{viajeActivo.fecha_entrada}</p>
+          </div>
+          <div>
+            <p className="text-slate-500 text-xs">Hora Entrada</p>
+            <p className="font-bold text-white">{viajeActivo.hora_entrada}</p>
+          </div>
+          <div>
+            <p className="text-slate-500 text-xs">Peso Bruto</p>
+            <p className="font-bold text-white">{viajeActivo.peso_bruto?.toFixed(3)} TM</p>
+          </div>
+          <div>
+            <p className="text-slate-500 text-xs">Patio</p>
+            <p className="font-bold text-white">{viajeActivo.patio_entrada}</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Hora Salida</label>
+          <div className="flex gap-2">
+            <input type="time" value={salida.hora_salida} onChange={(e) => setSalida(prev => ({ ...prev, hora_salida: e.target.value }))} step="1" className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white" />
+            <button type="button" onClick={tomarHoraSalidaExacta} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap">
+              Ahora
+            </button>
+          </div>
+        </div>
+        
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Peso Neto (TM)</label>
+          <input 
+            type="text" 
+            value={salida.peso_neto} 
+            onChange={handlePesoNetoChange} 
+            placeholder="Ej: 23.456" 
+            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white" 
+          />
+          {salida.peso_neto && /^\d{5}$/.test(salida.peso_neto.replace('.', '')) && (
+            <p className="text-[10px] text-green-400 mt-0.5">Convertido: {convertirToneladas(salida.peso_neto)?.toFixed(3)} TM</p>
+          )}
+          <p className="text-[10px] text-slate-500 mt-0.5">Rango permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM</p>
+        </div>
+        
+        <div className="md:col-span-2">
+          <button onClick={handleRegistrarSalida} disabled={!salida.hora_salida || !salida.peso_neto}
+            className={`w-full font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all ${!salida.hora_salida || !salida.peso_neto ? 'bg-slate-700 cursor-not-allowed text-slate-400' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
+            <StopCircle className="w-4 h-4" /> Registrar SALIDA
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+</div>
+
+        
 
         {/* Tabla de Viajes Completados con Búsqueda y Paginación */}
         {viajesCompletados.length > 0 && (
