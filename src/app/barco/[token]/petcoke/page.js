@@ -6,7 +6,45 @@ import { supabase } from '../../../lib/supabase'
 import { 
   Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, 
   Plus, X, PlayCircle, StopCircle, Search, Edit2, Trash2, 
-  Package, Info, ArrowRight, ArrowLeft, ArrowUpDown, AlertTriangle, Loader2
+  Home, Building2, Package, Scale, Calendar, Timer, User, 
+  FileText, CheckSquare, AlertTriangle, Info, ArrowRight, 
+  ArrowLeft, Printer, Download, Filter, Settings, Users,
+  Navigation, MapPin, Box, Layers, ClipboardList, Activity,
+  TrendingUp, TrendingDown, Zap, Shield, CreditCard, DollarSign,
+  BarChart, PieChart, LineChart, Globe, Lock, Unlock, Eye,
+  EyeOff, Bell, BellOff, Star, Heart, ThumbsUp, ThumbsDown,
+  MessageCircle, Mail, Phone, Map, Flag, Compass, Wind,
+  Droplet, Sun, Moon, CloudRain, CloudSnow, CloudLightning,
+  ZapOff, Battery, BatteryCharging, Wifi, WifiOff, Bluetooth,
+  BluetoothConnected, Monitor, Smartphone, Tablet, Laptop, Cpu,
+  HardDrive, Database, Server, Cloud, CloudOff, Network, Share2,
+  Folder, File, FileText as FileTextIcon, Image, Video, Music,
+  Camera, Mic, MicOff, Volume2, VolumeX, Headphones, Speaker,
+  Tv, Radio, Podcast, Book, BookOpen, Newspaper, PenTool,
+  Brush, Palette, Scissors, Feather, Award, Medal, Trophy,
+  Crown, Diamond, Gem, Sparkles, MagicWand, Wand2, Atom,
+  Beaker, Flask, TestTube, Microscope, Telescope, Dna,
+  Activity as ActivityIcon, HeartPulse, Brain, Bone, Tooth,
+  Stethoscope, Ambulance, Pill, Syringe, Hospital, Building,
+  Church, Mosque, Temple, School, University, Library, Museum,
+  Theater, Music2, Film, Clapperboard, Camera as CameraIcon,
+  Video as VideoIcon, Mic2, Radio as RadioIcon, Podcast as PodcastIcon,
+  Tv2, Monitor as MonitorIcon, Smartphone as SmartphoneIcon,
+  Tablet as TabletIcon, Laptop as LaptopIcon, Cpu as CpuIcon,
+  HardDrive as HardDriveIcon, Database as DatabaseIcon,
+  Server as ServerIcon, Cloud as CloudIcon, Network as NetworkIcon,
+  Share2 as Share2Icon, Folder as FolderIcon, File as FileIcon,
+  Image as ImageIcon, Video as VideoIcon2, Music as MusicIcon,
+  Camera as CameraIcon2, Mic as MicIcon, Volume2 as Volume2Icon,
+  Headphones as HeadphonesIcon, Speaker as SpeakerIcon, Tv as TvIcon,
+  Radio as RadioIcon2, Book as BookIcon, BookOpen as BookOpenIcon,
+  Newspaper as NewspaperIcon, PenTool as PenToolIcon, Brush as BrushIcon,
+  Palette as PaletteIcon, Scissors as ScissorsIcon, Feather as FeatherIcon,
+  Award as AwardIcon, Medal as MedalIcon, Trophy as TrophyIcon,
+  Crown as CrownIcon, Diamond as DiamondIcon, Gem as GemIcon,
+  Sparkles as SparklesIcon, Atom as AtomIcon, Beaker as BeakerIcon,
+  Flask as FlaskIcon, TestTube as TestTubeIcon, Microscope as MicroscopeIcon,
+  Telescope as TelescopeIcon, Dna as DnaIcon, Activity as ActivityIcon2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -79,12 +117,6 @@ export default function PetCokePage() {
   const [buscarPlaca, setBuscarPlaca] = useState('')
   const [modalEdicionAbierto, setModalEdicionAbierto] = useState(false)
   const [viajeEnEdicion, setViajeEnEdicion] = useState(null)
-
-  // Estados para paginación y orden
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [buscarEnTabla, setBuscarEnTabla] = useState('')
-  const [ordenAscendente, setOrdenAscendente] = useState(true) // true = primero a último, false = último a primero
-  const viajesPorPagina = 10
 
   const getHoraActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('HH:mm:ss')
   const getFechaActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('YYYY-MM-DD')
@@ -185,24 +217,17 @@ export default function PetCokePage() {
     return Math.max(...viajes.map(v => v.correlativo)) + 1
   }, [viajes])
 
+  // Verificar si el correlativo ya existe
   const verificarCorrelativoUnico = (correlativo, idExcluir = null) => {
     const existe = viajes.some(v => v.correlativo === correlativo && v.id !== idExcluir)
     if (existe) {
-      toast.error(`El número de viaje #${correlativo} ya existe. Usa otro número.`)
+      toast.error(`El correlativo #${correlativo} ya existe. Usa otro número.`)
       return false
     }
     return true
   }
 
-  const verificarPlacaActiva = (placa) => {
-    const viajeActivoExistente = viajes.some(v => v.placa === placa && v.estado === 'EN_PROGRESO')
-    if (viajeActivoExistente) {
-      toast.error(`La unidad ${placa} ya tiene un viaje en curso. Debe registrar SALIDA primero.`)
-      return false
-    }
-    return true
-  }
-
+  // Solo establecer el valor inicial si es un nuevo viaje
   useEffect(() => {
     if (entrada.correlativo === 1 || entrada.correlativo === undefined || entrada.correlativo === null) {
       setEntrada(prev => ({ ...prev, correlativo: siguienteCorrelativo }))
@@ -221,42 +246,6 @@ export default function PetCokePage() {
     return viajes.filter(v => v.estado === 'COMPLETADO')
   }, [viajes])
 
-  // Filtrar y ordenar viajes completados
-  const viajesCompletadosFiltrados = useMemo(() => {
-    let filtrados = [...viajesCompletados]
-    
-    // Aplicar filtro de búsqueda
-    if (buscarEnTabla.trim()) {
-      const termino = buscarEnTabla.trim().toLowerCase()
-      filtrados = filtrados.filter(v => 
-        v.placa.toLowerCase().includes(termino) ||
-        v.correlativo?.toString().includes(termino) ||
-        v.transporte?.toLowerCase().includes(termino) ||
-        v.patio_entrada?.toLowerCase().includes(termino)
-      )
-    }
-    
-    // Aplicar orden (por correlativo que es el número de viaje)
-    filtrados.sort((a, b) => {
-      if (ordenAscendente) {
-        return a.correlativo - b.correlativo
-      } else {
-        return b.correlativo - a.correlativo
-      }
-    })
-    
-    return filtrados
-  }, [viajesCompletados, buscarEnTabla, ordenAscendente])
-
-  const totalPaginas = Math.ceil(viajesCompletadosFiltrados.length / viajesPorPagina)
-  const inicioIndex = (paginaActual - 1) * viajesPorPagina
-  const finIndex = inicioIndex + viajesPorPagina
-  const viajesPaginados = viajesCompletadosFiltrados.slice(inicioIndex, finIndex)
-
-  useEffect(() => {
-    setPaginaActual(1)
-  }, [buscarEnTabla, ordenAscendente])
-
   const totalDescargado = useMemo(() => {
     return viajesCompletados.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
   }, [viajesCompletados])
@@ -271,10 +260,7 @@ export default function PetCokePage() {
   const viajesActivosFiltrados = useMemo(() => {
     if (!buscarPlaca.trim()) return viajesActivos
     const termino = buscarPlaca.trim().toLowerCase()
-    return viajesActivos.filter(v => 
-      v.placa.toLowerCase().includes(termino) ||
-      v.correlativo?.toString().includes(termino)
-    )
+    return viajesActivos.filter(v => v.placa.toLowerCase().includes(termino))
   }, [viajesActivos, buscarPlaca])
 
   const previewAcumuladoSalida = viajeActivo && salida.peso_neto
@@ -419,16 +405,20 @@ export default function PetCokePage() {
     if (!entrada.patio) return toast.error('El Patio es obligatorio')
     if (!entrada.peso_bruto) return toast.error('El Peso Bruto es obligatorio')
     
+    // Validar que el correlativo no sea nulo o vacío
     if (!entrada.correlativo || entrada.correlativo <= 0) {
       toast.error('El número de viaje (correlativo) es obligatorio y debe ser mayor a 0')
       return
     }
 
+    // Verificar que el correlativo sea único
     if (!verificarCorrelativoUnico(entrada.correlativo)) {
       return
     }
 
-    if (!verificarPlacaActiva(entrada.placa)) {
+    const tieneViajeActivo = viajes.some(v => v.placa === entrada.placa && v.estado === 'EN_PROGRESO')
+    if (tieneViajeActivo) {
+      toast.error(`La unidad ${entrada.placa} ya tiene un viaje en curso. Debe registrar SALIDA primero.`)
       return
     }
 
@@ -460,13 +450,7 @@ export default function PetCokePage() {
         .insert([nuevoViaje])
         .select()
 
-      if (error) {
-        if (error.code === '23505') {
-          toast.error('Error: El número de viaje o placa ya existe en el sistema')
-          return
-        }
-        throw error
-      }
+      if (error) throw error
 
       toast.success(
         `ENTRADA registrada: Viaje #${entrada.correlativo} - ${entrada.placa} - Peso Bruto: ${pesoBrutoConvertido.toFixed(3)} TM`
@@ -654,6 +638,7 @@ export default function PetCokePage() {
     const pesoNetoConvertido = tienePesoNeto ? convertirToneladas(viajeEnEdicion.peso_neto) : null
     const pesoBrutoConvertido = tienePesoBruto ? convertirToneladas(viajeEnEdicion.peso_bruto) : null
 
+    // Validar correlativo único en edición
     if (viajeEnEdicion.correlativo && !verificarCorrelativoUnico(viajeEnEdicion.correlativo, viajeEnEdicion.id)) {
       return
     }
@@ -799,22 +784,6 @@ export default function PetCokePage() {
           </div>
         </div>
 
-        {/* Alertas de Validación */}
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-300">
-              <p className="font-bold mb-1">REGLAS DE VALIDACIÓN:</p>
-              <ul className="list-disc list-inside space-y-0.5 text-xs">
-                <li>❌ No se puede repetir el mismo número de viaje (correlativo)</li>
-                <li>❌ No se puede registrar una misma placa con un viaje activo (debe salir primero)</li>
-                <li>✅ Una misma placa puede hacer múltiples viajes el mismo día (sin restricción)</li>
-                <li>⚠️ Rango de peso neto permitido: {PESO_MINIMO} - {PESO_MAXIMO} TM</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
         {/* Viajes Activos */}
         {viajesActivos.length > 0 && (
           <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-2xl p-5">
@@ -921,7 +890,7 @@ export default function PetCokePage() {
           </div>
         </div>
 
-        {/* PASO 1: ENTRADA */}
+        {/* PASO 1: ENTRADA - REDISEÑADO */}
         <div ref={paso1Ref} className="bg-slate-900/50 border border-white/10 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
@@ -940,7 +909,7 @@ export default function PetCokePage() {
                 onChange={handleEntradaChange}
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-yellow-400 font-bold focus:outline-none focus:border-orange-500" 
               />
-              <p className="text-[10px] text-slate-500 mt-0.5">Número de viaje (único, no repetir)</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Número de viaje (puede editarse)</p>
             </div>
             
             <div>
@@ -983,7 +952,6 @@ export default function PetCokePage() {
                   <Plus className="w-4 h-4" /> Agregar
                 </button>
               </div>
-              <p className="text-[10px] text-yellow-500 mt-0.5">⚠️ Una misma placa solo puede tener un viaje activo a la vez</p>
             </div>
             
             <div>
@@ -1015,7 +983,7 @@ export default function PetCokePage() {
           </div>
         </div>
 
-        {/* PASO 2: SALIDA */}
+        {/* PASO 2: SALIDA - REDISEÑADO */}
         <div ref={paso2Ref} className="bg-slate-900/50 border border-white/10 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
@@ -1032,15 +1000,9 @@ export default function PetCokePage() {
           {!viajeActivo ? (
             <div>
               <div className="mb-4">
-                <label className="block text-sm font-bold text-slate-400 mb-2">Buscar viaje activo por placa o número de viaje:</label>
+                <label className="block text-sm font-bold text-slate-400 mb-2">Buscar viaje activo por placa:</label>
                 <div className="relative">
-                  <input 
-                    type="text" 
-                    value={buscarPlaca} 
-                    onChange={(e) => setBuscarPlaca(e.target.value)} 
-                    placeholder="Ej: C-123456 o 15" 
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white" 
-                  />
+                  <input type="text" value={buscarPlaca} onChange={(e) => setBuscarPlaca(e.target.value)} placeholder="Ej: C-123456" className="w-full bg-slate-800 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white" />
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   {buscarPlaca && (
                     <button onClick={() => setBuscarPlaca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
@@ -1048,44 +1010,28 @@ export default function PetCokePage() {
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {viajesActivosFiltrados.length} de {viajesActivos.length} viajes encontrados 
-                  (buscar por placa o #viaje)
-                </p>
+                <p className="text-xs text-slate-500 mt-1">{viajesActivosFiltrados.length} de {viajesActivos.length} viajes encontrados</p>
               </div>
               
               {viajesActivosFiltrados.length === 0 ? (
                 <div className="bg-slate-800 rounded-lg p-8 text-center">
                   <Search className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                   <p className="text-slate-400">
-                    {viajesActivos.length === 0 
-                      ? 'No hay viajes activos. Registra una ENTRADA primero.' 
-                      : `No se encontró "${buscarPlaca}" - busca por placa o número de viaje`}
+                    {viajesActivos.length === 0 ? 'No hay viajes activos. Registra una ENTRADA primero.' : `No se encontró la placa "${buscarPlaca}"`}
                   </p>
                 </div>
               ) : (
                 <div className="grid gap-2 max-h-60 overflow-y-auto">
                   {viajesActivosFiltrados.map(viaje => (
-                    <div 
-                      key={viaje.id} 
-                      className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg p-4 cursor-pointer transition-all" 
-                      onClick={() => setViajeActivo(viaje)}
-                    >
+                    <div key={viaje.id} className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg p-4 cursor-pointer transition-all" onClick={() => setViajeActivo(viaje)}>
                       <div className="flex justify-between items-center">
                         <div>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-bold text-yellow-400">#{viaje.correlativo}</span>
-                            <span className="font-bold text-white">{viaje.placa}</span>
-                            <span className="text-xs text-slate-500">{viaje.transporte || 'Sin transporte'}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded ${viaje.patio_entrada === 'NORTE' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                              {viaje.patio_entrada}
-                            </span>
-                          </div>
+                          <p className="font-bold text-white">Viaje #{viaje.correlativo} - {viaje.placa}</p>
                           <p className="text-sm text-slate-400 mt-1">
-                            Entrada: {viaje.hora_entrada} | Peso Bruto: {viaje.peso_bruto?.toFixed(3)} TM | Tipo: {viaje.tipo_unidad || 'N/A'}
+                            Entrada: {viaje.hora_entrada} | Peso Bruto: {viaje.peso_bruto?.toFixed(3)} TM | Patio: {viaje.patio_entrada}
                           </p>
                         </div>
-                        <StopCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                        <StopCircle className="w-5 h-5 text-red-400" />
                       </div>
                     </div>
                   ))}
@@ -1158,10 +1104,10 @@ export default function PetCokePage() {
           )}
         </div>
 
-        {/* Tabla de Viajes Completados con Orden */}
+        {/* Tabla de Viajes Completados */}
         {viajesCompletados.length > 0 && (
           <div className="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
                   <CheckCircle className="w-4 h-4 text-green-400" />
@@ -1171,38 +1117,6 @@ export default function PetCokePage() {
                   <p className="text-slate-500 text-xs">{viajesCompletados.length} registros</p>
                 </div>
               </div>
-              
-              <div className="flex gap-3">
-                {/* Botón de orden */}
-                <button
-                  onClick={() => setOrdenAscendente(!ordenAscendente)}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-white text-sm transition-all"
-                  title={ordenAscendente ? "Del 1 al último" : "Del último al 1"}
-                >
-                  <ArrowUpDown className="w-4 h-4" />
-                  <span className="hidden sm:inline">
-                    {ordenAscendente ? "Viaje #1 → Último" : "Último → Viaje #1"}
-                  </span>
-                </button>
-                
-                {/* Buscador */}
-                <div className="relative">
-                  <input 
-                    type="text" 
-                    value={buscarEnTabla} 
-                    onChange={(e) => setBuscarEnTabla(e.target.value)} 
-                    placeholder="Buscar por placa, viaje, transporte..." 
-                    className="w-full md:w-80 bg-slate-800 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
-                  />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  {buscarEnTabla && (
-                    <button onClick={() => setBuscarEnTabla('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              
               <div className="text-right">
                 <p className="text-[10px] text-slate-500 uppercase">Total descargado</p>
                 <p className="text-orange-400 font-bold text-lg">{totalDescargado.toFixed(3)} <span className="text-xs">TM</span></p>
@@ -1229,55 +1143,47 @@ export default function PetCokePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {viajesPaginados.length === 0 ? (
-                    <tr>
-                      <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
-                        No se encontraron viajes que coincidan con "{buscarEnTabla}"
-                      </td>
-                    </tr>
-                  ) : (
-                    viajesPaginados.map((viaje, idx) => {
-                      const fueraRango = estaFueraDeRango(viaje.peso_neto)
-                      return (
-                        <tr key={viaje.id} className={`border-b border-white/5 ${fueraRango ? 'bg-red-500/5' : idx % 2 === 0 ? 'bg-transparent' : 'bg-white/5'}`}>
-                          <td className="px-4 py-3 text-slate-500 text-sm">{viaje.correlativo}</td>
-                          <td className="px-4 py-3 text-orange-400 font-mono font-semibold">{viaje.placa}</td>
-                          <td className="px-4 py-3 text-slate-300 text-sm">{viaje.transporte || '—'}</td>
-                          <td className="px-4 py-3">
-                            {viaje.tipo_unidad && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${viaje.tipo_unidad === 'Traileta' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                {viaje.tipo_unidad}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {viaje.patio_entrada && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${viaje.patio_entrada === 'NORTE' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                {viaje.patio_entrada}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 text-sm">{viaje.bodega_barco || '—'}</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm font-mono">{viaje.fecha_entrada}</td>
-                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_entrada || '—'}</td>
-                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_salida || '—'}</td>
-                          <td className="px-4 py-3 text-blue-400 text-sm font-mono">{viaje.peso_bruto?.toFixed(3) || '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-sm font-mono font-bold ${fueraRango ? 'text-red-400' : 'text-green-400'}`}>
-                              {viaje.peso_neto?.toFixed(3) || '—'}
+                  {viajesCompletados.map((viaje, idx) => {
+                    const fueraRango = estaFueraDeRango(viaje.peso_neto)
+                    return (
+                      <tr key={viaje.id} className={`border-b border-white/5 ${fueraRango ? 'bg-red-500/5' : idx % 2 === 0 ? 'bg-transparent' : 'bg-white/5'}`}>
+                        <td className="px-4 py-3 text-slate-500 text-sm">{viaje.correlativo}</td>
+                        <td className="px-4 py-3 text-orange-400 font-mono font-semibold">{viaje.placa}</td>
+                        <td className="px-4 py-3 text-slate-300 text-sm">{viaje.transporte || '—'}</td>
+                        <td className="px-4 py-3">
+                          {viaje.tipo_unidad && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${viaje.tipo_unidad === 'Traileta' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                              {viaje.tipo_unidad}
                             </span>
-                            {fueraRango && <AlertTriangle className="w-3 h-3 text-red-400 inline ml-1" />}
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 text-sm">{viaje.tiempo_atencion || '—'}</td>
-                          <td className="px-4 py-3">
-                            <button onClick={() => abrirModalEdicion(viaje)} className="text-blue-400 hover:text-blue-300">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {viaje.patio_entrada && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${viaje.patio_entrada === 'NORTE' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                              {viaje.patio_entrada}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 text-sm">{viaje.bodega_barco || '—'}</td>
+                        <td className="px-4 py-3 text-slate-400 text-sm font-mono">{viaje.fecha_entrada}</td>
+                        <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_entrada || '—'}</td>
+                        <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_salida || '—'}</td>
+                        <td className="px-4 py-3 text-blue-400 text-sm font-mono">{viaje.peso_bruto?.toFixed(3) || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm font-mono font-bold ${fueraRango ? 'text-red-400' : 'text-green-400'}`}>
+                            {viaje.peso_neto?.toFixed(3) || '—'}
+                          </span>
+                          {fueraRango && <AlertTriangle className="w-3 h-3 text-red-400 inline ml-1" />}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 text-sm">{viaje.tiempo_atencion || '—'}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => abrirModalEdicion(viaje)} className="text-blue-400 hover:text-blue-300">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot className="bg-slate-800/30">
                   <tr className="border-t border-white/10">
@@ -1291,68 +1197,6 @@ export default function PetCokePage() {
                 </tfoot>
               </table>
             </div>
-
-            {totalPaginas > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 bg-slate-800/30">
-                <div className="text-sm text-slate-400">
-                  Mostrando {inicioIndex + 1} - {Math.min(finIndex, viajesCompletadosFiltrados.length)} de {viajesCompletadosFiltrados.length} viajes
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPaginaActual(prev => Math.max(1, prev - 1))}
-                    disabled={paginaActual === 1}
-                    className={`px-3 py-1 rounded-lg flex items-center gap-1 transition-all ${
-                      paginaActual === 1
-                        ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
-                        : 'bg-slate-700 hover:bg-slate-600 text-white'
-                    }`}
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Anterior
-                  </button>
-                  <div className="flex gap-1">
-                    {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
-                      let paginaNum
-                      if (totalPaginas <= 5) {
-                        paginaNum = i + 1
-                      } else if (paginaActual <= 3) {
-                        paginaNum = i + 1
-                      } else if (paginaActual >= totalPaginas - 2) {
-                        paginaNum = totalPaginas - 4 + i
-                      } else {
-                        paginaNum = paginaActual - 2 + i
-                      }
-                      if (paginaNum > totalPaginas) return null
-                      return (
-                        <button
-                          key={paginaNum}
-                          onClick={() => setPaginaActual(paginaNum)}
-                          className={`w-8 h-8 rounded-lg transition-all ${
-                            paginaActual === paginaNum
-                              ? 'bg-orange-600 text-white'
-                              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-                          }`}
-                        >
-                          {paginaNum}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <button
-                    onClick={() => setPaginaActual(prev => Math.min(totalPaginas, prev + 1))}
-                    disabled={paginaActual === totalPaginas}
-                    className={`px-3 py-1 rounded-lg flex items-center gap-1 transition-all ${
-                      paginaActual === totalPaginas
-                        ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
-                        : 'bg-slate-700 hover:bg-slate-600 text-white'
-                    }`}
-                  >
-                    Siguiente
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1368,47 +1212,48 @@ export default function PetCokePage() {
 
       </div>
 
-      {/* Modal Agregar Unidad */}
-      {modalUnidadAbierto && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl w-full max-w-md">
-            <div className="flex justify-between p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">Agregar Nueva Unidad</h2>
-              <button onClick={() => setModalUnidadAbierto(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <input type="text" value={nuevaUnidad.placa} onChange={(e) => setNuevaUnidad({...nuevaUnidad, placa: e.target.value.toUpperCase()})} placeholder="Placa" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
-              
-              <select 
-                value={nuevaUnidad.transporte || ''} 
-                onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value})}
-                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
-              >
-                <option value="">Seleccionar Transporte</option>
-                <option value="ALMAGESAL">ALMAGESAL</option>
-                <option value="CORPORIN">CORPORIN</option>
-                <option value="ESCOBAR">ESCOBAR</option>
-                <option value="ESMERALDA">ESMERALDA</option>
-                <option value="JOB">JOB</option>
-                <option value="MARTINEZ">MARTINEZ</option>
-                <option value="SANTIMONI">SANTIMONI</option>
-              </select>
-              
-              <Select options={OPCIONES_TIPO_UNIDAD} onChange={(opt) => setNuevaUnidad({...nuevaUnidad, tipo: opt?.value || ''})} placeholder="Tipo Unidad" styles={selectStyles} />
-            </div>
-            <div className="flex gap-3 p-6 border-t border-white/10">
-              <button onClick={handleAgregarUnidad} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
-                Agregar
-              </button>
-              <button onClick={() => setModalUnidadAbierto(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    {/* Modal Agregar Unidad */}
+{modalUnidadAbierto && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <div className="bg-slate-800 rounded-2xl w-full max-w-md">
+      <div className="flex justify-between p-6 border-b border-white/10">
+        <h2 className="text-xl font-bold text-white">Agregar Nueva Unidad</h2>
+        <button onClick={() => setModalUnidadAbierto(false)} className="text-slate-400 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="p-6 space-y-4">
+        <input type="text" value={nuevaUnidad.placa} onChange={(e) => setNuevaUnidad({...nuevaUnidad, placa: e.target.value.toUpperCase()})} placeholder="Placa" className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white" />
+        
+        {/* SELECTOR DE TRANSPORTE A LA BRAVA */}
+        <select 
+          value={nuevaUnidad.transporte || ''} 
+          onChange={(e) => setNuevaUnidad({...nuevaUnidad, transporte: e.target.value})}
+          className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+        >
+          <option value="">Seleccionar Transporte</option>
+          <option value="ALMAGESAL">ALMAGESAL</option>
+          <option value="CORPORIN">CORPORIN</option>
+          <option value="ESCOBAR">ESCOBAR</option>
+          <option value="ESMERALDA">ESMERALDA</option>
+          <option value="JOB">JOB</option>
+          <option value="MARTINEZ">MARTINEZ</option>
+          <option value="SANTIMONI">SANTIMONI</option>
+        </select>
+        
+        <Select options={OPCIONES_TIPO_UNIDAD} onChange={(opt) => setNuevaUnidad({...nuevaUnidad, tipo: opt?.value || ''})} placeholder="Tipo Unidad" styles={selectStyles} />
+      </div>
+      <div className="flex gap-3 p-6 border-t border-white/10">
+        <button onClick={handleAgregarUnidad} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
+          Agregar
+        </button>
+        <button onClick={() => setModalUnidadAbierto(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Modal Edicion */}
       {modalEdicionAbierto && viajeEnEdicion && (
