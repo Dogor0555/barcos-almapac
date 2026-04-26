@@ -6,7 +6,7 @@ import { supabase } from '../../../lib/supabase'
 import { 
   Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, 
   Plus, X, PlayCircle, StopCircle, Search, Edit2, Trash2, 
-  Package, Info, ArrowRight, ArrowLeft, AlertTriangle
+  Package, Info, ArrowRight, ArrowLeft, ArrowUpDown, AlertTriangle, Loader2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -80,9 +80,10 @@ export default function PetCokePage() {
   const [modalEdicionAbierto, setModalEdicionAbierto] = useState(false)
   const [viajeEnEdicion, setViajeEnEdicion] = useState(null)
 
-  // Estados para paginación
+  // Estados para paginación y orden
   const [paginaActual, setPaginaActual] = useState(1)
   const [buscarEnTabla, setBuscarEnTabla] = useState('')
+  const [ordenAscendente, setOrdenAscendente] = useState(true) // true = primero a último, false = último a primero
   const viajesPorPagina = 10
 
   const getHoraActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('HH:mm:ss')
@@ -220,16 +221,32 @@ export default function PetCokePage() {
     return viajes.filter(v => v.estado === 'COMPLETADO')
   }, [viajes])
 
+  // Filtrar y ordenar viajes completados
   const viajesCompletadosFiltrados = useMemo(() => {
-    if (!buscarEnTabla.trim()) return viajesCompletados
-    const termino = buscarEnTabla.trim().toLowerCase()
-    return viajesCompletados.filter(v => 
-      v.placa.toLowerCase().includes(termino) ||
-      v.correlativo?.toString().includes(termino) ||
-      v.transporte?.toLowerCase().includes(termino) ||
-      v.patio_entrada?.toLowerCase().includes(termino)
-    )
-  }, [viajesCompletados, buscarEnTabla])
+    let filtrados = [...viajesCompletados]
+    
+    // Aplicar filtro de búsqueda
+    if (buscarEnTabla.trim()) {
+      const termino = buscarEnTabla.trim().toLowerCase()
+      filtrados = filtrados.filter(v => 
+        v.placa.toLowerCase().includes(termino) ||
+        v.correlativo?.toString().includes(termino) ||
+        v.transporte?.toLowerCase().includes(termino) ||
+        v.patio_entrada?.toLowerCase().includes(termino)
+      )
+    }
+    
+    // Aplicar orden (por correlativo que es el número de viaje)
+    filtrados.sort((a, b) => {
+      if (ordenAscendente) {
+        return a.correlativo - b.correlativo
+      } else {
+        return b.correlativo - a.correlativo
+      }
+    })
+    
+    return filtrados
+  }, [viajesCompletados, buscarEnTabla, ordenAscendente])
 
   const totalPaginas = Math.ceil(viajesCompletadosFiltrados.length / viajesPorPagina)
   const inicioIndex = (paginaActual - 1) * viajesPorPagina
@@ -238,7 +255,7 @@ export default function PetCokePage() {
 
   useEffect(() => {
     setPaginaActual(1)
-  }, [buscarEnTabla])
+  }, [buscarEnTabla, ordenAscendente])
 
   const totalDescargado = useMemo(() => {
     return viajesCompletados.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
@@ -1141,7 +1158,7 @@ export default function PetCokePage() {
           )}
         </div>
 
-        {/* Tabla de Viajes Completados */}
+        {/* Tabla de Viajes Completados con Orden */}
         {viajesCompletados.length > 0 && (
           <div className="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1155,20 +1172,35 @@ export default function PetCokePage() {
                 </div>
               </div>
               
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={buscarEnTabla} 
-                  onChange={(e) => setBuscarEnTabla(e.target.value)} 
-                  placeholder="Buscar por placa, viaje, transporte o patio..." 
-                  className="w-full md:w-80 bg-slate-800 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
-                />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                {buscarEnTabla && (
-                  <button onClick={() => setBuscarEnTabla('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+              <div className="flex gap-3">
+                {/* Botón de orden */}
+                <button
+                  onClick={() => setOrdenAscendente(!ordenAscendente)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-white text-sm transition-all"
+                  title={ordenAscendente ? "Del 1 al último" : "Del último al 1"}
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">
+                    {ordenAscendente ? "Viaje #1 → Último" : "Último → Viaje #1"}
+                  </span>
+                </button>
+                
+                {/* Buscador */}
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={buscarEnTabla} 
+                    onChange={(e) => setBuscarEnTabla(e.target.value)} 
+                    placeholder="Buscar por placa, viaje, transporte..." 
+                    className="w-full md:w-80 bg-slate-800 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  {buscarEnTabla && (
+                    <button onClick={() => setBuscarEnTabla('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               
               <div className="text-right">
@@ -1201,7 +1233,7 @@ export default function PetCokePage() {
                     <tr>
                       <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
                         No se encontraron viajes que coincidan con "{buscarEnTabla}"
-                       </td>
+                      </td>
                     </tr>
                   ) : (
                     viajesPaginados.map((viaje, idx) => {
