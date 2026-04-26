@@ -194,69 +194,6 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
   return { ...data, refetch: cargar }
 }
 
-// ============================================
-// FUNCIÓN PARA CALCULAR ESTADÍSTICAS (AGREGADA)
-// ============================================
-const calcularEstadisticas = (registros) => {
-    if (!registros.length) return {
-        totalNeto: 0, totalBruto: 0, totalViajes: 0,
-        porTransporte: {}, porDia: {}, porPatio: {},
-        acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
-        totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0,
-        bajoPeso: 0, sobrePeso: 0
-    };
-
-    const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
-    const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0);
-    const totalViajes = registros.length;
-    const pesoPromedio = totalNeto / totalViajes;
-
-    const porTransporte = {};
-    registros.forEach(r => {
-        const t = r.transporte || 'DESCONOCIDO';
-        porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0);
-    });
-
-    const porDia = {};
-    registros.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + (r.peso_neto_updp_tm || 0); });
-
-    const porPatio = {};
-    registros.forEach(r => {
-        const p = r.patio || 'SIN PATIO';
-        porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0);
-    });
-
-    const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
-    const totalSur = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
-
-    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad));
-    const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length;
-    const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length;
-    const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0;
-
-    const acumuladoPorCorrelativo = [...registros]
-        .sort((a, b) => a.correlativo - b.correlativo)
-        .map((r, idx, arr) => {
-            let acum = 0;
-            for (let i = 0; i <= idx; i++) {
-                acum += arr[i].peso_neto_updp_tm || 0;
-            }
-            return {
-                correlativo: r.correlativo,
-                peso: r.peso_neto_updp_tm,
-                acumulado: acum,
-                estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
-                tipoUnidad: r.tipo_unidad
-            };
-        });
-
-    return {
-        totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
-        acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
-        pesoPromedio, porcentajeDentroRango, bajoPeso, sobrePeso
-    };
-};
-
 export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
@@ -264,15 +201,6 @@ export default function ClientPage({ token }) {
   const [ordenTabla, setOrdenTabla] = useState('reciente') // 'reciente' o 'antiguo'
 
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
-
-  // Calcular estadísticas usando la función agregada
-  const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
-
-  // Calcular faltante de descarga
-  const meta = barco?.metas_json?.limites?.['PC-001'] || 0
-  const faltante = Math.max(0, meta - estadisticas.totalNeto)
-  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
-  const metaCompletada = porcentajeMeta >= 100
 
   // Ordenar registros para la tabla (más reciente al último o viceversa)
   const registrosOrdenados = useMemo(() => {
@@ -383,15 +311,9 @@ export default function ClientPage({ token }) {
       { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
       { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
       { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
-      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
+      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') },
+      { 'Métrica': 'Filtro Aplicado', 'Valor': filtroActivoTexto }
     ]
-    
-    // Añadir info de filtros si existen
-    const filtrosActivos = []
-    if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
-    if (diaSeleccionado) filtrosActivos.push(`Día: ${diaSeleccionado}`)
-    const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
-    resumenData.push({ 'Métrica': 'Filtro Aplicado', 'Valor': filtroTexto })
     
     const wsResumen = XLSX.utils.json_to_sheet(resumenData)
     wsResumen['!cols'] = [{ wch: 25 }, { wch: 35 }]
@@ -502,6 +424,66 @@ export default function ClientPage({ token }) {
     return { maxPorHora, promedioPorHora, totalHoras }
   }, [flujoPorHora])
 
+  const estadisticas = useMemo(() => {
+    if (!registros.length) return {
+      totalNeto: 0, totalBruto: 0, totalViajes: 0,
+      porTransporte: {}, porDia: {}, porPatio: {},
+      acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
+      totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0,
+      bajoPeso: 0, sobrePeso: 0
+    }
+
+    const totalNeto  = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0)
+    const totalViajes = registros.length
+    const pesoPromedio = totalNeto / totalViajes
+
+    const porTransporte = {}
+    registros.forEach(r => {
+      const t = r.transporte || 'DESCONOCIDO'
+      porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0)
+    })
+
+    const porDia = {}
+    registros.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + (r.peso_neto_updp_tm || 0) })
+
+    const porPatio = {}
+    registros.forEach(r => {
+      const p = r.patio || 'SIN PATIO'
+      porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0)
+    })
+
+    const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+    const totalSur   = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+
+    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad))
+    const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length
+    const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length
+    const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0
+
+    const acumuladoPorCorrelativo = [...registros]
+      .sort((a, b) => a.correlativo - b.correlativo)
+      .map((r, idx, arr) => {
+        let acum = 0
+        for (let i = 0; i <= idx; i++) {
+          acum += arr[i].peso_neto_updp_tm || 0
+        }
+        return {
+          correlativo: r.correlativo,
+          peso: r.peso_neto_updp_tm,
+          acumulado: acum,
+          estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
+          tipoUnidad: r.tipo_unidad
+        }
+      })
+
+    return {
+      totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
+      acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
+      pesoPromedio, porcentajeDentroRango, bajoPeso, sobrePeso
+    }
+  }, [registros])
+
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
   }
@@ -543,6 +525,9 @@ export default function ClientPage({ token }) {
   const datosGraficoTransporte  = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
   const datosGraficoDia         = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
   const datosGraficoPatio       = Object.entries(estadisticas.porPatio).map(([name, value]) => ({ name, value }))
+
+  const meta = barco.metas_json?.limites?.['PC-001'] || 0
+  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
 
   const filtroActivoTexto = [
     transporteSeleccionado && `Transporte: ${transporteSeleccionado}`,
@@ -742,7 +727,6 @@ export default function ClientPage({ token }) {
         .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
         .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #f97316, #fb923c); border-radius: 999px; transition: width 1s ease; }
         .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
-        .alm-progress-fill-complete { background: linear-gradient(90deg, #22c55e, #4ade80); }
         .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
         .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
 
@@ -883,52 +867,6 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPI de META y FALTANTE */}
-          <div className="alm-kpis-row">
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiTrendingUp size={28} style={{ color: '#f97316' }} /></div>
-              <div>
-                <div className="alm-kpi-label">META MANIFESTADA</div>
-                <div className="alm-kpi-value" style={{ color: '#f97316' }}>{fmtTM(meta, 2)} TM</div>
-                <div className="alm-kpi-sub">Cantidad contratada</div>
-              </div>
-            </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }} /></div>
-              <div>
-                <div className="alm-kpi-label">FALTANTE POR DESCARGAR</div>
-                <div className="alm-kpi-value" style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>{fmtTM(faltante, 2)} TM</div>
-                <div className="alm-kpi-sub">
-                  {metaCompletada 
-                    ? '✅ Meta completada' 
-                    : `${((faltante / meta) * 100).toFixed(1)}% restante`}
-                </div>
-              </div>
-            </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiBarChart2 size={28} style={{ color: '#60a5fa' }} /></div>
-              <div>
-                <div className="alm-kpi-label">PORCENTAJE DE META</div>
-                <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{porcentajeMeta.toFixed(1)}%</div>
-                <div className="alm-kpi-sub">{fmtTM(estadisticas.totalNeto, 2)} TM de {fmtTM(meta, 2)} TM</div>
-              </div>
-            </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><GiWeightScale size={28} style={{ color: metaCompletada ? '#4ade80' : '#f97316' }} /></div>
-              <div>
-                <div className="alm-kpi-label">ESTADO</div>
-                <div className="alm-kpi-value" style={{ fontSize: '20px', color: metaCompletada ? '#4ade80' : '#f97316' }}>
-                  {metaCompletada ? 'META ALCANZADA' : 'EN PROCESO'}
-                </div>
-                <div className="alm-kpi-sub">
-                  {metaCompletada 
-                    ? '🎉 Descarga completada exitosamente' 
-                    : `Faltan ${fmtTM(faltante, 2)} TM para completar la meta`}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
               <div className="alm-alert-title">
@@ -971,36 +909,25 @@ export default function ClientPage({ token }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FiTrendingUp size={16} />
-                  Progreso de Descarga vs Meta
+                  Progreso de Descarga
                 </span>
-                <span style={{ color: metaCompletada ? '#4ade80' : (porcentajeMeta >= 90 ? '#fbbf24' : '#f97316'), fontWeight: 'bold' }}>
+                <span style={{ color: porcentajeMeta >= 100 ? '#4ade80' : porcentajeMeta >= 90 ? '#fbbf24' : '#f97316', fontWeight: 'bold' }}>
                   {porcentajeMeta.toFixed(1)}%
                 </span>
               </div>
               <div className="alm-progress-track">
-                <div 
-                  className={`alm-progress-fill ${metaCompletada ? 'alm-progress-fill-complete' : (porcentajeMeta >= 90 ? 'alm-progress-fill-warning' : '')}`} 
-                  style={{ width: `${Math.min(100, porcentajeMeta)}%` }} 
-                />
+                <div className={`alm-progress-fill ${porcentajeMeta >= 100 ? 'alm-progress-fill-warning' : ''}`} style={{ width: `${Math.min(100, porcentajeMeta)}%` }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8' }}>
                 <span>0 TM</span>
                 <span>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
-                <div style={{ fontSize: '11px', color: '#4ade80' }}>
-                  ✅ Descargado: {fmtTM(estadisticas.totalNeto, 2)} TM
-                </div>
-                <div style={{ fontSize: '11px', color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>
-                  {faltante > 0 ? `📦 Faltante: ${fmtTM(faltante, 2)} TM` : '🎉 META COMPLETADA'}
-                </div>
-              </div>
-              {metaCompletada && (
+              {porcentajeMeta >= 100 && (
                 <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center' }}>
                   <span style={{ color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     <FiCheckCircle size={14} />
-                    ¡Meta alcanzada! Se ha completado la cantidad manifestada de {fmtTM(meta, 2)} TM.
+                    ¡Meta alcanzada! Se ha completado la cantidad manifestada.
                   </span>
                 </div>
               )}
@@ -1456,7 +1383,6 @@ export default function ClientPage({ token }) {
           <div className="alm-footer">
             <FiRefreshCw size={10} style={{ display: 'inline', marginRight: '4px' }} />
             auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
-            {meta > 0 && ` · Meta: ${fmtTM(meta, 2)} TM · Faltante: ${fmtTM(faltante, 2)} TM`}
             <br />
             <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiAlertCircle size={10} /> VOLQUETA: 14-18 TM</span> · 
             <span style={{ color: '#f97316', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FaTrailer size={10} /> TRAILETA: 22-25 TM</span> · 
