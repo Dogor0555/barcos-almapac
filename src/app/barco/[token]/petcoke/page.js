@@ -505,65 +505,66 @@ export default function PetCokePage() {
   }
 
   const handleRegistrarSalida = async () => {
-    if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
-    if (!viajeActivo) return toast.error('No hay un viaje activo seleccionado')
-    if (!salida.hora_salida) return toast.error('La Hora Salida es obligatoria')
-    if (!salida.peso_neto) return toast.error('El Peso Neto es obligatorio')
+  if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
+  if (!viajeActivo) return toast.error('No hay un viaje activo seleccionado')
+  if (!salida.hora_salida) return toast.error('La Hora Salida es obligatoria')
+  if (!salida.peso_neto) return toast.error('El Peso Neto es obligatorio')
 
-    let pesoNeto = convertirToneladas(salida.peso_neto)
+  let pesoNeto = convertirToneladas(salida.peso_neto)
 
-    if (!pesoNeto || pesoNeto <= 0)
-      return toast.error('El Peso Neto debe ser un número válido mayor a 0')
+  if (!pesoNeto || pesoNeto <= 0)
+    return toast.error('El Peso Neto debe ser un número válido mayor a 0')
 
-    // SOLO ADVERTENCIA VISUAL - NO BLOQUEA EL REGISTRO
-    const tipoUnidad = viajeActivo.tipo_unidad
-    const rango = tipoUnidad === 'Traileta' ? RANGOS.TRAILETA : RANGOS.VOLQUETA
-    
-    if (pesoNeto < rango.min || pesoNeto > rango.max) {
-      toast.warning(
-        `⚠️ Atención: El peso (${pesoNeto.toFixed(3)} TM) está fuera del rango recomendado para ${tipoUnidad} (${rango.min}-${rango.max} TM). El registro se guardará igual.`,
-        { duration: 5000 }
-      )
-    }
-
-    const fechaSalida = getFechaActual()
-    const tiempoAtencion = calcularTiempoAtencion(viajeActivo.hora_entrada, salida.hora_salida)
-
-    const datosActualizar = {
-      fecha_salida: fechaSalida,
-      hora_salida: salida.hora_salida,
-      peso_neto: pesoNeto,
-      tiempo_atencion: tiempoAtencion,
-      estado: 'COMPLETADO',
-    }
-
-    try {
-      const { error } = await supabase
-        .from('petcoke_viajes')
-        .update(datosActualizar)
-        .eq('id', viajeActivo.id)
-
-      if (error) throw error
-
-      toast.success(
-        `SALIDA registrada: ${viajeActivo.placa} - ${salida.hora_salida} - Peso Neto: ${pesoNeto.toFixed(3)} TM`
-      )
-
-      setViajes(prev => prev.map(v => 
-        v.id === viajeActivo.id 
-          ? { ...v, ...datosActualizar }
-          : v
-      ))
-
-      setViajeActivo(null)
-      setSalida({ hora_salida: '', peso_neto: '' })
-      setBuscarPlaca('')
-
-    } catch (err) {
-      console.error('Error registrando salida:', err)
-      toast.error('Error al registrar la salida: ' + err.message)
-    }
+  // SOLO ADVERTENCIA VISUAL - NO BLOQUEA EL REGISTRO
+  const tipoUnidad = viajeActivo.tipo_unidad
+  const rango = tipoUnidad === 'Traileta' ? RANGOS.TRAILETA : RANGOS.VOLQUETA
+  
+  if (pesoNeto < rango.min || pesoNeto > rango.max) {
+    // Usar toast.error con un mensaje de advertencia en lugar de toast.warning
+    toast.error(
+      `⚠️ Atención: El peso (${pesoNeto.toFixed(3)} TM) está fuera del rango recomendado para ${tipoUnidad} (${rango.min}-${rango.max} TM). El registro se guardará igual.`,
+      { duration: 5000 }
+    )
   }
+
+  const fechaSalida = getFechaActual()
+  const tiempoAtencion = calcularTiempoAtencion(viajeActivo.hora_entrada, salida.hora_salida)
+
+  const datosActualizar = {
+    fecha_salida: fechaSalida,
+    hora_salida: salida.hora_salida,
+    peso_neto: pesoNeto,
+    tiempo_atencion: tiempoAtencion,
+    estado: 'COMPLETADO',
+  }
+
+  try {
+    const { error } = await supabase
+      .from('petcoke_viajes')
+      .update(datosActualizar)
+      .eq('id', viajeActivo.id)
+
+    if (error) throw error
+
+    toast.success(
+      `SALIDA registrada: ${viajeActivo.placa} - ${salida.hora_salida} - Peso Neto: ${pesoNeto.toFixed(3)} TM`
+    )
+
+    setViajes(prev => prev.map(v => 
+      v.id === viajeActivo.id 
+        ? { ...v, ...datosActualizar }
+        : v
+    ))
+
+    setViajeActivo(null)
+    setSalida({ hora_salida: '', peso_neto: '' })
+    setBuscarPlaca('')
+
+  } catch (err) {
+    console.error('Error registrando salida:', err)
+    toast.error('Error al registrar la salida: ' + err.message)
+  }
+}
 
   const handlePesoBrutoChange = (e) => {
     const valorFormateado = formatearMientrasEscribe(e.target.value)
