@@ -194,6 +194,69 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
   return { ...data, refetch: cargar }
 }
 
+// ============================================
+// FUNCIÓN PARA CALCULAR ESTADÍSTICAS (AGREGADA)
+// ============================================
+const calcularEstadisticas = (registros) => {
+    if (!registros.length) return {
+        totalNeto: 0, totalBruto: 0, totalViajes: 0,
+        porTransporte: {}, porDia: {}, porPatio: {},
+        acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
+        totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0,
+        bajoPeso: 0, sobrePeso: 0
+    };
+
+    const totalNeto = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
+    const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0);
+    const totalViajes = registros.length;
+    const pesoPromedio = totalNeto / totalViajes;
+
+    const porTransporte = {};
+    registros.forEach(r => {
+        const t = r.transporte || 'DESCONOCIDO';
+        porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0);
+    });
+
+    const porDia = {};
+    registros.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + (r.peso_neto_updp_tm || 0); });
+
+    const porPatio = {};
+    registros.forEach(r => {
+        const p = r.patio || 'SIN PATIO';
+        porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0);
+    });
+
+    const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
+    const totalSur = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0);
+
+    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad));
+    const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length;
+    const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length;
+    const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0;
+
+    const acumuladoPorCorrelativo = [...registros]
+        .sort((a, b) => a.correlativo - b.correlativo)
+        .map((r, idx, arr) => {
+            let acum = 0;
+            for (let i = 0; i <= idx; i++) {
+                acum += arr[i].peso_neto_updp_tm || 0;
+            }
+            return {
+                correlativo: r.correlativo,
+                peso: r.peso_neto_updp_tm,
+                acumulado: acum,
+                estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
+                tipoUnidad: r.tipo_unidad
+            };
+        });
+
+    return {
+        totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
+        acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
+        pesoPromedio, porcentajeDentroRango, bajoPeso, sobrePeso
+    };
+};
+
 export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
@@ -201,6 +264,9 @@ export default function ClientPage({ token }) {
   const [ordenTabla, setOrdenTabla] = useState('reciente') // 'reciente' o 'antiguo'
 
   const { barco, producto, registros, loading, error, lastUpdate, refetch } = usePetCokeData(token, transporteSeleccionado, diaSeleccionado)
+
+  // Calcular estadísticas usando la función agregada
+  const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
 
   // Ordenar registros para la tabla (más reciente al último o viceversa)
   const registrosOrdenados = useMemo(() => {
@@ -311,9 +377,15 @@ export default function ClientPage({ token }) {
       { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
       { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
       { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
-      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') },
-      { 'Métrica': 'Filtro Aplicado', 'Valor': filtroActivoTexto }
+      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
     ]
+    
+    // Añadir info de filtros si existen
+    const filtrosActivos = []
+    if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
+    if (diaSeleccionado) filtrosActivos.push(`Día: ${diaSeleccionado}`)
+    const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
+    resumenData.push({ 'Métrica': 'Filtro Aplicado', 'Valor': filtroTexto })
     
     const wsResumen = XLSX.utils.json_to_sheet(resumenData)
     wsResumen['!cols'] = [{ wch: 25 }, { wch: 35 }]
@@ -423,66 +495,6 @@ export default function ClientPage({ token }) {
     
     return { maxPorHora, promedioPorHora, totalHoras }
   }, [flujoPorHora])
-
-  const estadisticas = useMemo(() => {
-    if (!registros.length) return {
-      totalNeto: 0, totalBruto: 0, totalViajes: 0,
-      porTransporte: {}, porDia: {}, porPatio: {},
-      acumuladoPorCorrelativo: [], unidadesFueraDeRango: [],
-      totalNorte: 0, totalSur: 0, pesoPromedio: 0, porcentajeDentroRango: 0,
-      bajoPeso: 0, sobrePeso: 0
-    }
-
-    const totalNeto  = registros.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-    const totalBruto = registros.reduce((s, r) => s + (r.peso_bruto_updp_tm || 0), 0)
-    const totalViajes = registros.length
-    const pesoPromedio = totalNeto / totalViajes
-
-    const porTransporte = {}
-    registros.forEach(r => {
-      const t = r.transporte || 'DESCONOCIDO'
-      porTransporte[t] = (porTransporte[t] || 0) + (r.peso_neto_updp_tm || 0)
-    })
-
-    const porDia = {}
-    registros.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + (r.peso_neto_updp_tm || 0) })
-
-    const porPatio = {}
-    registros.forEach(r => {
-      const p = r.patio || 'SIN PATIO'
-      porPatio[p] = (porPatio[p] || 0) + (r.peso_neto_updp_tm || 0)
-    })
-
-    const totalNorte = registros.filter(r => r.patio === 'NORTE').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-    const totalSur   = registros.filter(r => r.patio === 'SUR').reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-
-    const unidadesFueraDeRango = registros.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad))
-    const bajoPeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'bajo').length
-    const sobrePeso = registros.filter(r => getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad) === 'sobre').length
-    const porcentajeDentroRango = totalViajes > 0 ? ((totalViajes - unidadesFueraDeRango.length) / totalViajes) * 100 : 0
-
-    const acumuladoPorCorrelativo = [...registros]
-      .sort((a, b) => a.correlativo - b.correlativo)
-      .map((r, idx, arr) => {
-        let acum = 0
-        for (let i = 0; i <= idx; i++) {
-          acum += arr[i].peso_neto_updp_tm || 0
-        }
-        return {
-          correlativo: r.correlativo,
-          peso: r.peso_neto_updp_tm,
-          acumulado: acum,
-          estado: getEstadoPeso(r.peso_neto_updp_tm, r.tipo_unidad),
-          tipoUnidad: r.tipo_unidad
-        }
-      })
-
-    return {
-      totalNeto, totalBruto, totalViajes, porTransporte, porDia, porPatio,
-      acumuladoPorCorrelativo, unidadesFueraDeRango, totalNorte, totalSur,
-      pesoPromedio, porcentajeDentroRango, bajoPeso, sobrePeso
-    }
-  }, [registros])
 
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
