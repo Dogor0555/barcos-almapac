@@ -87,7 +87,7 @@ export default function PetCokePage() {
   // Estados para paginación y orden
   const [paginaActual, setPaginaActual] = useState(1)
   const [buscarEnTabla, setBuscarEnTabla] = useState('')
-  const [ordenAscendente, setOrdenAscendente] = useState(true)
+  const [ordenDescendente, setOrdenDescendente] = useState(true) // true = mayor a menor, false = menor a mayor
   const viajesPorPagina = 10
 
   const getHoraActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('HH:mm:ss')
@@ -231,6 +231,7 @@ export default function PetCokePage() {
     return viajes.filter(v => v.estado === 'COMPLETADO')
   }, [viajes])
 
+  // Filtrar viajes
   const viajesCompletadosFiltrados = useMemo(() => {
     let filtrados = [...viajesCompletados]
     
@@ -244,25 +245,48 @@ export default function PetCokePage() {
       )
     }
     
-    filtrados.sort((a, b) => {
-      if (ordenAscendente) {
-        return a.correlativo - b.correlativo
-      } else {
-        return b.correlativo - a.correlativo
-      }
+    return filtrados
+  }, [viajesCompletados, buscarEnTabla])
+
+  // Calcular acumulado y ordenar según el botón
+  const viajesConAcumulado = useMemo(() => {
+    // Primero ordenar de menor a mayor para calcular acumulado correctamente
+    const ordenadosAscendente = [...viajesCompletadosFiltrados].sort((a, b) => a.correlativo - b.correlativo)
+    
+    let acumulado = 0
+    const mapaAcumulado = new Map()
+    
+    ordenadosAscendente.forEach(viaje => {
+      const pesoNeto = Number(viaje.peso_neto) || 0
+      acumulado += pesoNeto
+      mapaAcumulado.set(viaje.id, acumulado)
     })
     
-    return filtrados
-  }, [viajesCompletados, buscarEnTabla, ordenAscendente])
+    // Ordenar según el estado del botón (descendente o ascendente)
+    const resultado = [...viajesCompletadosFiltrados].map(viaje => ({
+      ...viaje,
+      acumulado: mapaAcumulado.get(viaje.id) || 0
+    }))
+    
+    if (ordenDescendente) {
+      // Mayor a menor
+      resultado.sort((a, b) => b.correlativo - a.correlativo)
+    } else {
+      // Menor a mayor
+      resultado.sort((a, b) => a.correlativo - b.correlativo)
+    }
+    
+    return resultado
+  }, [viajesCompletadosFiltrados, ordenDescendente])
 
-  const totalPaginas = Math.ceil(viajesCompletadosFiltrados.length / viajesPorPagina)
+  const totalPaginas = Math.ceil(viajesConAcumulado.length / viajesPorPagina)
   const inicioIndex = (paginaActual - 1) * viajesPorPagina
   const finIndex = inicioIndex + viajesPorPagina
-  const viajesPaginados = viajesCompletadosFiltrados.slice(inicioIndex, finIndex)
+  const viajesPaginados = viajesConAcumulado.slice(inicioIndex, finIndex)
 
   useEffect(() => {
     setPaginaActual(1)
-  }, [buscarEnTabla, ordenAscendente])
+  }, [buscarEnTabla, ordenDescendente])
 
   const totalDescargado = useMemo(() => {
     return viajesCompletados.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
@@ -1176,7 +1200,7 @@ export default function PetCokePage() {
           )}
         </div>
 
-        {/* Tabla de Viajes Completados con Orden */}
+        {/* Tabla de Viajes Completados con Orden y Acumulado */}
         {viajesCompletados.length > 0 && (
           <div className="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1191,14 +1215,15 @@ export default function PetCokePage() {
               </div>
               
               <div className="flex gap-3">
+                {/* BOTÓN PARA CAMBIAR ORDEN */}
                 <button
-                  onClick={() => setOrdenAscendente(!ordenAscendente)}
+                  onClick={() => setOrdenDescendente(!ordenDescendente)}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-white text-sm transition-all"
-                  title={ordenAscendente ? "Del 1 al último" : "Del último al 1"}
+                  title={ordenDescendente ? "Cambiar a orden ascendente (menor a mayor)" : "Cambiar a orden descendente (mayor a menor)"}
                 >
                   <ArrowUpDown className="w-4 h-4" />
                   <span className="hidden sm:inline">
-                    {ordenAscendente ? "Viaje #1 → Último" : "Último → Viaje #1"}
+                    {ordenDescendente ? "Viaje # → Mayor a Menor" : "Viaje # → Menor a Mayor"}
                   </span>
                 </button>
                 
@@ -1229,25 +1254,25 @@ export default function PetCokePage() {
               <table className="w-full">
                 <thead className="bg-slate-800/50">
                   <tr className="border-b border-white/5">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500"># Viaje</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Placa</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Transporte</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Tipo</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Patio</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Bodega</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Fecha</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Entrada</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Salida</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Peso Bruto</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Peso Neto</th>
+                    
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Fecha Entrada</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Hora Entrada</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Hora Salida</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Tiempo</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 bg-blue-500/10">ACUMULADO</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {viajesPaginados.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={12} className="px-4 py-8 text-center text-slate-500">
                         No se encontraron viajes que coincidan con "{buscarEnTabla}"
                       </td>
                     </tr>
@@ -1259,7 +1284,7 @@ export default function PetCokePage() {
                                      idx % 2 === 0 ? 'bg-transparent' : 'bg-white/5'
                       return (
                         <tr key={viaje.id} className={`border-b border-white/5 ${bgColor}`}>
-                          <td className="px-4 py-3 text-slate-500 text-sm">{viaje.correlativo}</td>
+                          <td className="px-4 py-3 text-slate-500 text-sm font-mono font-semibold">#{viaje.correlativo}</td>
                           <td className="px-4 py-3 text-orange-400 font-mono font-semibold">{viaje.placa}</td>
                           <td className="px-4 py-3 text-slate-300 text-sm">{viaje.transporte || '—'}</td>
                           <td className="px-4 py-3">
@@ -1276,22 +1301,26 @@ export default function PetCokePage() {
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-400 text-sm">{viaje.bodega_barco || '—'}</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm font-mono">{viaje.fecha_entrada}</td>
-                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_entrada || '—'}</td>
-                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_salida || '—'}</td>
-                          <td className="px-4 py-3 text-blue-400 text-sm font-mono">{viaje.peso_bruto?.toFixed(3) || '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`text-sm font-mono font-bold ${
                               estadoPeso === 'bajo' ? 'text-yellow-400' : 
                               estadoPeso === 'sobre' ? 'text-red-400' : 'text-green-400'
                             }`}>
-                              {viaje.peso_neto?.toFixed(3) || '—'}
+                              {viaje.peso_neto?.toFixed(3) || '—'} TM
                             </span>
                             {estadoPeso === 'bajo' && <AlertTriangle className="w-3 h-3 text-yellow-400 inline ml-1" />}
                             {estadoPeso === 'sobre' && <AlertTriangle className="w-3 h-3 text-red-400 inline ml-1" />}
                           </td>
+                          
+                          <td className="px-4 py-3 text-slate-400 text-sm font-mono">{viaje.fecha_entrada}</td>
+                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_entrada || '—'}</td>
+                          <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_salida || '—'}</td>
                           <td className="px-4 py-3 text-slate-400 text-sm">{viaje.tiempo_atencion || '—'}</td>
+                          <td className="px-4 py-3 bg-blue-500/5">
+                            <span className="text-sm font-mono font-bold text-blue-400">
+                              {viaje.acumulado?.toFixed(3) || '0.000'} TM
+                            </span>
+                          </td>
                           <td className="px-4 py-3">
                             <button onClick={() => abrirModalEdicion(viaje)} className="text-blue-400 hover:text-blue-300">
                               <Edit2 className="w-4 h-4" />
@@ -1304,12 +1333,9 @@ export default function PetCokePage() {
                 </tbody>
                 <tfoot className="bg-slate-800/30">
                   <tr className="border-t border-white/10">
-                    <td colSpan={9} className="px-4 py-3 text-slate-500 text-sm font-medium">Total · {viajesCompletados.length} viajes</td>
-                    <td className="px-4 py-3 text-blue-400/70 text-sm font-mono">
-                      {viajesCompletados.reduce((s, v) => s + (Number(v.peso_bruto) || 0), 0).toFixed(3)}
-                    </td>
-                    <td className="px-4 py-3 text-green-400 text-sm font-mono font-bold">{totalDescargado.toFixed(3)}</td>
-                    <td colSpan={2}></td>
+                    <td colSpan={5} className="px-4 py-3 text-slate-500 text-sm font-medium">Total · {viajesCompletados.length} viajes</td>
+                    <td className="px-4 py-3 text-green-400 text-sm font-mono font-bold">{totalDescargado.toFixed(3)} TM</td>
+                    <td colSpan={5}></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1318,7 +1344,7 @@ export default function PetCokePage() {
             {totalPaginas > 1 && (
               <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 bg-slate-800/30">
                 <div className="text-sm text-slate-400">
-                  Mostrando {inicioIndex + 1} - {Math.min(finIndex, viajesCompletadosFiltrados.length)} de {viajesCompletadosFiltrados.length} viajes
+                  Mostrando {inicioIndex + 1} - {Math.min(finIndex, viajesConAcumulado.length)} de {viajesConAcumulado.length} viajes
                 </div>
                 <div className="flex gap-2">
                   <button
