@@ -349,7 +349,7 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Resumen de Paros para Dashboard de Exportación - CORREGIDO
+// COMPONENTE: Resumen de Paros para Dashboard de Exportación - CORREGIDO TOTALMENTE
 // ============================================================================
 function ResumenParosDashboard({ barcoId }) {
   const [resumenParos, setResumenParos] = useState({
@@ -359,9 +359,9 @@ function ResumenParosDashboard({ barcoId }) {
     total: { minutos: 0, cantidad: 0, loading: true }
   });
 
-  // ✅ CONFIGURACIÓN CORREGIDA - IGUAL QUE EN EL INGRESO DE DATOS
+  // ✅ CONFIGURACIÓN DE TIPOS DE PARO (exactamente igual al ingreso de datos)
   const TIPOS_PARO_CONFIG = {
-    // PAROS ALMAPAC (imputables a ALMAPAC)
+    // PAROS ALMAPAC
     'BANDA 7': { grupo: 'ALMAPAC' },
     'MOVIMIENTO DEL CARRO DE BANDA 7': { grupo: 'ALMAPAC' },
     'ELEVADOR 23': { grupo: 'ALMAPAC' },
@@ -386,7 +386,7 @@ function ResumenParosDashboard({ barcoId }) {
     'DESATORANDO ELEVADOR 23.': { grupo: 'ALMAPAC' },
     'OTROS': { grupo: 'ALMAPAC' },
     
-    // PAROS UPDP (NO IMPUTABLES A ALMAPAC)
+    // PAROS UPDP
     'TRANSPORTADOR No:': { grupo: 'UPDP' },
     'REBALSE EN EL BUM': { grupo: 'UPDP' },
     'FALLAS EN UNIDAD DE CARGA': { grupo: 'UPDP' },
@@ -421,50 +421,56 @@ function ResumenParosDashboard({ barcoId }) {
     if (!barcoId) return;
 
     try {
-      // 1. Obtener catálogo de tipos de paro
-      const { data: catalogos, error: errorCat } = await supabase
-        .from('catalogos_paros')
-        .select('*')
-        .eq('activo', true);
-
-      if (errorCat) throw errorCat;
-
-      // Crear mapa de tipo_paro_id -> grupo
-      const tipoAGrupo = {};
-      catalogos.forEach(catalogo => {
-        const config = TIPOS_PARO_CONFIG[catalogo.nombre];
-        if (config) {
-          tipoAGrupo[catalogo.id] = config.grupo;
-        } else {
-          // ✅ CORREGIDO: Los tipos no reconocidos van a OTRAS, NO a ALMAPAC
-          tipoAGrupo[catalogo.id] = 'OTRAS';
-        }
-      });
-
-      // 2. Obtener registros de paros del barco
-      const { data: paros, error: errorParos } = await supabase
+      // 🔥 CORRECCIÓN CLAVE: Hacer JOIN para obtener el nombre del tipo de paro directamente
+      const { data: parosConTipo, error: errorParos } = await supabase
         .from('registro_paros')
-        .select('*')
+        .select(`
+          *,
+          tipo_paro:catalogos_paros(id, nombre, activo)
+        `)
         .eq('barco_id', barcoId);
 
       if (errorParos) throw errorParos;
 
-      // 3. Calcular resumen por grupo
+      console.log("📊 Paros encontrados:", parosConTipo?.length || 0);
+      
+      // Mostrar cada paro con su tipo para depuración
+      parosConTipo?.forEach(paro => {
+        const tipoNombre = paro.tipo_paro?.nombre || 'DESCONOCIDO';
+        const config = TIPOS_PARO_CONFIG[tipoNombre];
+        console.log(`Paro: ${tipoNombre} -> Grupo: ${config?.grupo || 'OTRAS'}, Duración: ${paro.duracion_minutos || 0}min`);
+      });
+
+      // 3. Calcular resumen por grupo usando el nombre del tipo de paro
       const resumen = {
         ALMAPAC: { minutos: 0, cantidad: 0 },
         UPDP: { minutos: 0, cantidad: 0 },
         OTRAS: { minutos: 0, cantidad: 0 }
       };
 
-      paros.forEach(paro => {
-        const grupo = tipoAGrupo[paro.tipo_paro_id] || 'OTRAS'; // ✅ Por defecto OTRAS
+      (parosConTipo || []).forEach(paro => {
+        // Obtener el nombre del tipo de paro del JOIN
+        const tipoNombre = paro.tipo_paro?.nombre || 'DESCONOCIDO';
+        
+        // Buscar en la configuración
+        const config = TIPOS_PARO_CONFIG[tipoNombre];
+        
+        let grupo = 'OTRAS'; // Por defecto OTRAS
+        
+        if (config) {
+          grupo = config.grupo;
+        } else {
+          // Si no está en la configuración, log para depuración
+          console.warn(`Tipo de paro no reconocido: "${tipoNombre}" - Asignando a OTRAS`);
+        }
+        
         const duracion = paro.duracion_minutos || 0;
         
         if (resumen[grupo]) {
           resumen[grupo].minutos += duracion;
           resumen[grupo].cantidad++;
         } else {
-          // Si por algún motivo el grupo no existe, va a OTRAS
+          // Fallback a OTRAS
           resumen.OTRAS.minutos += duracion;
           resumen.OTRAS.cantidad++;
         }
@@ -472,6 +478,13 @@ function ResumenParosDashboard({ barcoId }) {
 
       const totalMinutos = resumen.ALMAPAC.minutos + resumen.UPDP.minutos + resumen.OTRAS.minutos;
       const totalCantidad = resumen.ALMAPAC.cantidad + resumen.UPDP.cantidad + resumen.OTRAS.cantidad;
+
+      console.log("📊 Resumen final:", {
+        ALMAPAC: `${resumen.ALMAPAC.minutos}min (${resumen.ALMAPAC.cantidad} paros)`,
+        UPDP: `${resumen.UPDP.minutos}min (${resumen.UPDP.cantidad} paros)`,
+        OTRAS: `${resumen.OTRAS.minutos}min (${resumen.OTRAS.cantidad} paros)`,
+        TOTAL: `${totalMinutos}min (${totalCantidad} paros)`
+      });
 
       setResumenParos({
         almapac: { 
@@ -571,7 +584,7 @@ function ResumenParosDashboard({ barcoId }) {
         gap: '16px'
       }}>
         
-        {/* ALMAPAC - IMPUTABLES */}
+        {/* ALMAPAC */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
@@ -592,7 +605,7 @@ function ResumenParosDashboard({ barcoId }) {
           </div>
         </div>
 
-        {/* UPDP - NO IMPUTABLES */}
+        {/* UPDP */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
@@ -613,7 +626,7 @@ function ResumenParosDashboard({ barcoId }) {
           </div>
         </div>
 
-        {/* OTRAS CAUSAS */}
+        {/* OTRAS */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
