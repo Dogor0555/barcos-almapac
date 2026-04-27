@@ -55,6 +55,39 @@ const fmtTM = (tm, d = 3) => {
   return partes.join(".")
 }
 
+// 🔥 FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
+const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor) => {
+  let todosLosRegistros = []
+  let desde = 0
+  const limite = 1000
+  let hayMas = true
+
+  while (hayMas) {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select('*')
+      .eq(filtro, valor)
+      .order('correlativo', { ascending: true })
+      .range(desde, desde + limite - 1)
+
+    if (error) {
+      console.error('Error cargando página:', error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      todosLosRegistros = [...todosLosRegistros, ...data]
+      desde += limite
+      hayMas = data.length === limite
+    } else {
+      hayMas = false
+    }
+  }
+
+  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+  return todosLosRegistros
+}
+
 // Función para obtener el estado del peso según tipo de unidad
 const getEstadoPeso = (pesoNeto, tipoUnidad) => {
   if (!pesoNeto || !tipoUnidad) return null
@@ -146,15 +179,8 @@ function usePetCokeData(token, transporteFiltro = null, diaFiltro = null) {
 
       if (productoError || !productoData) throw new Error('Producto PET COKE no encontrado')
 
-      // Consultar registros de la tabla petcoke_viajes
-      let query = supabase
-        .from('petcoke_viajes')
-        .select('*')
-        .eq('barco_id', barcoData.id)
-        .order('correlativo', { ascending: true })
-
-      const { data: registrosRaw, error: registrosError } = await query
-      if (registrosError) throw registrosError
+      // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS REGISTROS
+      const registrosRaw = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', 'barco_id', barcoData.id)
 
       // Filtrar solo registros COMPLETADOS
       const completados = (registrosRaw || []).filter(r => r.estado === 'COMPLETADO')
@@ -300,7 +326,7 @@ export default function ClientPage({ token }) {
     }
   }, [registros, ordenTabla])
 
-  // Cargar todos los registros sin filtros
+  // 🔥 Cargar todos los registros sin límite para estadísticas globales
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -311,15 +337,14 @@ export default function ClientPage({ token }) {
           .single()
 
         if (barcoData) {
-          const { data: registrosGlobales } = await supabase
-            .from('petcoke_viajes')
-            .select('*')
-            .eq('barco_id', barcoData.id)
+          // 🔥 Usar la función sin límite
+          const registrosGlobales = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', 'barco_id', barcoData.id)
 
           if (registrosGlobales) {
             const completados = registrosGlobales.filter(r => r.estado === 'COMPLETADO')
             const normalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados))
             setTodosLosRegistros(normalizados)
+            console.log(`📊 Dashboard: ${normalizados.length} registros globales cargados`)
           }
         }
       } catch (error) {
