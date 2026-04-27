@@ -349,7 +349,7 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Resumen de Paros para Dashboard de Exportación - CORREGIDO TOTALMENTE
+// COMPONENTE: Resumen de Paros para Dashboard de Exportación - USANDO GRUPO DE BD
 // ============================================================================
 function ResumenParosDashboard({ barcoId }) {
   const [resumenParos, setResumenParos] = useState({
@@ -358,55 +358,6 @@ function ResumenParosDashboard({ barcoId }) {
     otras: { minutos: 0, cantidad: 0, loading: true },
     total: { minutos: 0, cantidad: 0, loading: true }
   });
-
-  // ✅ CONFIGURACIÓN DE TIPOS DE PARO (exactamente igual al ingreso de datos)
-  const TIPOS_PARO_CONFIG = {
-    // PAROS ALMAPAC
-    'BANDA 7': { grupo: 'ALMAPAC' },
-    'MOVIMIENTO DEL CARRO DE BANDA 7': { grupo: 'ALMAPAC' },
-    'ELEVADOR 23': { grupo: 'ALMAPAC' },
-    'ELEVADOR 13': { grupo: 'ALMAPAC' },
-    'BÁSCULA DE EXPORTACIÓN': { grupo: 'ALMAPAC' },
-    'COMPUERTA DE LLENADO': { grupo: 'ALMAPAC' },
-    'COMPUERTA DE DESCARGA': { grupo: 'ALMAPAC' },
-    'HEL ALTO': { grupo: 'ALMAPAC' },
-    'DRAFT MASTER': { grupo: 'ALMAPAC' },
-    'COMPRESOR A': { grupo: 'ALMAPAC' },
-    'COMPRESOR B': { grupo: 'ALMAPAC' },
-    'BANDA 15': { grupo: 'ALMAPAC' },
-    'BANDA 19': { grupo: 'ALMAPAC' },
-    'BANDA 72': { grupo: 'ALMAPAC' },
-    'BANDA 73': { grupo: 'ALMAPAC' },
-    'FALLA DE PAYD LOADER': { grupo: 'ALMAPAC' },
-    'PLC': { grupo: 'ALMAPAC' },
-    'FALTA DE AZÚCAR': { grupo: 'ALMAPAC' },
-    'BANDA 21': { grupo: 'ALMAPAC' },
-    'BANDA 2': { grupo: 'ALMAPAC' },
-    'BANDA 1': { grupo: 'ALMAPAC' },
-    'DESATORANDO ELEVADOR 23.': { grupo: 'ALMAPAC' },
-    'OTROS': { grupo: 'ALMAPAC' },
-    
-    // PAROS UPDP
-    'TRANSPORTADOR No:': { grupo: 'UPDP' },
-    'REBALSE EN EL BUM': { grupo: 'UPDP' },
-    'FALLAS EN UNIDAD DE CARGA': { grupo: 'UPDP' },
-    'FALLAS EN EL APILADOR': { grupo: 'UPDP' },
-    'MANTENIMINETO DEL APILADOR': { grupo: 'UPDP' },
-    'LIMPIEZA DEL APILADOR': { grupo: 'UPDP' },
-    'MOVIMIENTO DEL APILADOR': { grupo: 'UPDP' },
-    'CAMBIO DE BODEGA EN EL BARCO': { grupo: 'UPDP' },
-    'CORTE DE ENERGÍA ELÉCTRICA UPDP': { grupo: 'UPDP' },
-    
-    // PAROS POR OTRAS CAUSAS
-    'VERIFICACIÓN DE CALIDAD DEL AZÚCAR A BORDO': { grupo: 'OTRAS' },
-    'VERIFICACIÓN DE CALADO (INICIAL)': { grupo: 'OTRAS' },
-    'VERIFICACIÓN DE CALADO (FINAL)': { grupo: 'OTRAS' },
-    'MAREA FUERTE': { grupo: 'OTRAS' },
-    'MOVIMIENTO DEL BARCO': { grupo: 'OTRAS' },
-    'AMENAZA DE LLUVIA': { grupo: 'OTRAS' },
-    'PARO POR LLUVIA': { grupo: 'OTRAS' },
-    'CORTE DE ENERGÍA ELÉCTRICA': { grupo: 'OTRAS' },
-  };
 
   const formatearTiempo = (minutos) => {
     if (minutos === 0) return '0m';
@@ -421,65 +372,65 @@ function ResumenParosDashboard({ barcoId }) {
     if (!barcoId) return;
 
     try {
-      // 🔥 CORRECCIÓN CLAVE: Hacer JOIN para obtener el nombre del tipo de paro directamente
-      const { data: parosConTipo, error: errorParos } = await supabase
+      // 🔥 HACER JOIN para obtener el grupo directamente desde catalogos_paros
+      const { data: parosConGrupo, error: errorParos } = await supabase
         .from('registro_paros')
         .select(`
-          *,
-          tipo_paro:catalogos_paros(id, nombre, activo)
+          id,
+          duracion_minutos,
+          fecha,
+          hora_inicio,
+          hora_fin,
+          tipo_paro:catalogos_paros!inner(
+            id,
+            nombre,
+            grupo
+          )
         `)
         .eq('barco_id', barcoId);
 
-      if (errorParos) throw errorParos;
+      if (errorParos) {
+        console.error('Error cargando paros:', errorParos);
+        throw errorParos;
+      }
 
-      console.log("📊 Paros encontrados:", parosConTipo?.length || 0);
+      console.log("📊 Paros encontrados con grupo:", parosConGrupo?.length || 0);
       
-      // Mostrar cada paro con su tipo para depuración
-      parosConTipo?.forEach(paro => {
-        const tipoNombre = paro.tipo_paro?.nombre || 'DESCONOCIDO';
-        const config = TIPOS_PARO_CONFIG[tipoNombre];
-        console.log(`Paro: ${tipoNombre} -> Grupo: ${config?.grupo || 'OTRAS'}, Duración: ${paro.duracion_minutos || 0}min`);
+      // Mostrar cada paro con su grupo para depuración
+      parosConGrupo?.forEach(paro => {
+        const grupo = paro.tipo_paro?.grupo || 'OTRAS';
+        console.log(`Paro: ${paro.tipo_paro?.nombre} -> Grupo: ${grupo}, Duración: ${paro.duracion_minutos || 0}min`);
       });
 
-      // 3. Calcular resumen por grupo usando el nombre del tipo de paro
+      // 3. Calcular resumen por grupo usando el campo grupo de la BD
       const resumen = {
         ALMAPAC: { minutos: 0, cantidad: 0 },
         UPDP: { minutos: 0, cantidad: 0 },
         OTRAS: { minutos: 0, cantidad: 0 }
       };
 
-      (parosConTipo || []).forEach(paro => {
-        // Obtener el nombre del tipo de paro del JOIN
-        const tipoNombre = paro.tipo_paro?.nombre || 'DESCONOCIDO';
+      (parosConGrupo || []).forEach(paro => {
+        // Obtener el grupo directamente del JOIN (ya viene de catalogos_paros)
+        let grupo = paro.tipo_paro?.grupo || 'OTRAS';
         
-        // Buscar en la configuración
-        const config = TIPOS_PARO_CONFIG[tipoNombre];
+        // Normalizar a mayúsculas para consistencia
+        grupo = grupo.toUpperCase();
         
-        let grupo = 'OTRAS'; // Por defecto OTRAS
-        
-        if (config) {
-          grupo = config.grupo;
-        } else {
-          // Si no está en la configuración, log para depuración
-          console.warn(`Tipo de paro no reconocido: "${tipoNombre}" - Asignando a OTRAS`);
+        // Validar que sea uno de los grupos esperados
+        if (grupo !== 'ALMAPAC' && grupo !== 'UPDP') {
+          grupo = 'OTRAS';
         }
         
         const duracion = paro.duracion_minutos || 0;
         
-        if (resumen[grupo]) {
-          resumen[grupo].minutos += duracion;
-          resumen[grupo].cantidad++;
-        } else {
-          // Fallback a OTRAS
-          resumen.OTRAS.minutos += duracion;
-          resumen.OTRAS.cantidad++;
-        }
+        resumen[grupo].minutos += duracion;
+        resumen[grupo].cantidad++;
       });
 
       const totalMinutos = resumen.ALMAPAC.minutos + resumen.UPDP.minutos + resumen.OTRAS.minutos;
       const totalCantidad = resumen.ALMAPAC.cantidad + resumen.UPDP.cantidad + resumen.OTRAS.cantidad;
 
-      console.log("📊 Resumen final:", {
+      console.log("📊 Resumen final desde BD:", {
         ALMAPAC: `${resumen.ALMAPAC.minutos}min (${resumen.ALMAPAC.cantidad} paros)`,
         UPDP: `${resumen.UPDP.minutos}min (${resumen.UPDP.cantidad} paros)`,
         OTRAS: `${resumen.OTRAS.minutos}min (${resumen.OTRAS.cantidad} paros)`,
