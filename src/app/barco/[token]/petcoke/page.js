@@ -6,7 +6,7 @@ import { supabase } from '../../../lib/supabase'
 import { 
   Save, RefreshCw, Truck, Clock, AlertCircle, Target, CheckCircle, 
   Plus, X, PlayCircle, StopCircle, Search, Edit2, Trash2, 
-  Package, Info, ArrowRight, ArrowLeft, ArrowUpDown, AlertTriangle
+  Package, Info, ArrowRight, ArrowLeft, ArrowUpDown, AlertTriangle, Bug
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -43,6 +43,39 @@ const OPCIONES_BODEGA = [
   { value: 'Bodega 4', label: 'Bodega 4' },
   { value: 'Bodega 5', label: 'Bodega 5' },
 ]
+
+// 🔥 FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
+const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor) => {
+  let todosLosRegistros = []
+  let desde = 0
+  const limite = 1000
+  let hayMas = true
+
+  while (hayMas) {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select('*')
+      .eq(filtro, valor)
+      .order('correlativo', { ascending: true })
+      .range(desde, desde + limite - 1)
+
+    if (error) {
+      console.error('Error cargando página:', error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      todosLosRegistros = [...todosLosRegistros, ...data]
+      desde += limite
+      hayMas = data.length === limite
+    } else {
+      hayMas = false
+    }
+  }
+
+  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+  return todosLosRegistros
+}
 
 export default function PetCokePage() {
   const { token } = useParams()
@@ -87,8 +120,144 @@ export default function PetCokePage() {
   // Estados para paginación y orden
   const [paginaActual, setPaginaActual] = useState(1)
   const [buscarEnTabla, setBuscarEnTabla] = useState('')
-  const [ordenDescendente, setOrdenDescendente] = useState(true) // true = mayor a menor, false = menor a mayor
+  const [ordenDescendente, setOrdenDescendente] = useState(true)
   const viajesPorPagina = 10
+
+  // Estado para errores de correlativos
+  const [erroresCorrelativos, setErroresCorrelativos] = useState(null)
+  const [modalErroresAbierto, setModalErroresAbierto] = useState(false)
+
+  // 🔥 FUNCIÓN MEJORADA PARA CARGAR DATOS SIEMPRE FRESCOS (SIN LÍMITE DE 1000)
+  const cargarDatos = useCallback(async (mostrarToast = false) => {
+    if (!token) return
+    
+    try {
+      // Primero obtener el barco
+      const { data: barcoData, error: barcoError } = await supabase
+        .from('barcos')
+        .select('*')
+        .eq('token_compartido', token)
+        .single()
+
+      if (barcoError || !barcoData) {
+        if (mostrarToast) toast.error('Barco no encontrado')
+        return
+      }
+      
+      if (!barco || barco.id !== barcoData.id) {
+        setBarco(barcoData)
+      }
+
+      // Obtener producto
+      const { data: productoData, error: productoError } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('codigo', 'PC-001')
+        .single()
+
+      if (productoError || !productoData) {
+        if (mostrarToast) toast.error('Producto PET COKE no encontrado')
+        return
+      }
+      
+      if (!producto || producto.id !== productoData.id) {
+        setProducto(productoData)
+      }
+
+      // Meta del producto
+      const metaProducto = barcoData.metas_json?.limites?.['PC-001'] || 0
+      setMeta(metaProducto)
+
+      // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS REGISTROS
+      const viajesData = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', 'barco_id', barcoData.id)
+      
+      console.log('✅ Datos cargados desde DB:', viajesData?.length, 'viajes')
+      console.log('Correlativos:', viajesData?.map(v => v.correlativo).sort((a,b) => a-b))
+      console.log('Total de viajes en DB:', viajesData?.length)
+      
+      setViajes(viajesData || [])
+      
+      if (mostrarToast) {
+        toast.success(`Datos actualizados: ${viajesData?.length || 0} viajes`)
+      }
+      
+    } catch (err) {
+      console.error('Error cargando datos:', err)
+      if (mostrarToast) toast.error('Error al cargar datos')
+    }
+  }, [token, barco, producto])
+
+  // 🔥 SUPABASE REALTIME - SINCRONIZACIÓN EN VIVO
+  useEffect(() => {
+    if (!barco?.id) return
+
+    console.log('🔄 Activando Realtime para barco:', barco.id)
+
+    const channel = supabase
+      .channel(`realtime-viajes-${barco.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'petcoke_viajes',
+          filter: `barco_id=eq.${barco.id}`
+        },
+        (payload) => {
+          console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.correlativo || payload.old?.correlativo)
+          cargarDatos(false)
+          
+          if (payload.eventType === 'INSERT') {
+            toast.success(`🚚 Nuevo viaje #${payload.new.correlativo} registrado`, { duration: 2000 })
+          } else if (payload.eventType === 'UPDATE') {
+            toast.info(`✏️ Viaje #${payload.new.correlativo} actualizado`, { duration: 2000 })
+          } else if (payload.eventType === 'DELETE') {
+            toast.warning(`🗑️ Viaje #${payload.old.correlativo} eliminado`, { duration: 2000 })
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime status:', status)
+      })
+
+    return () => {
+      console.log('🔌 Desconectando Realtime')
+      supabase.removeChannel(channel)
+    }
+  }, [barco?.id, cargarDatos])
+
+  // Carga inicial
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true)
+      await cargarDatos(false)
+      await cargarUnidades()
+      setLoading(false)
+    }
+    init()
+  }, [token])
+
+  const cargarUnidades = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('unidades')
+        .select('*')
+        .order('placa', { ascending: true })
+      if (error) throw error
+      setUnidades(data || [])
+      setOpcionesPlacas(
+        (data || []).map(u => ({
+          value: u.placa,
+          label: `${u.placa} - ${u.transporte}`,
+          transporte: u.transporte,
+          tipoPredeterminado: u.tipo,
+        }))
+      )
+    } catch (err) {
+      console.error('Error cargando unidades:', err)
+      toast.error('Error al cargar las unidades')
+    }
+  }
 
   const getHoraActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('HH:mm:ss')
   const getFechaActual = () => dayjs().tz(TIMEZONA_EL_SALVADOR).format('YYYY-MM-DD')
@@ -152,7 +321,75 @@ export default function PetCokePage() {
     return val
   }
 
-  // Obtener estado del peso según tipo de unidad (solo visual, NO bloquea)
+  const detectarSaltosCorrelativos = useCallback(() => {
+    const viajesCompletados = viajes.filter(v => v.estado === 'COMPLETADO')
+    
+    if (viajesCompletados.length === 0) {
+      return {
+        tieneError: false,
+        mensaje: 'No hay viajes completados para verificar.',
+        saltos: []
+      }
+    }
+
+    const correlativos = viajesCompletados
+      .map(v => v.correlativo)
+      .sort((a, b) => a - b)
+    
+    const saltos = []
+    let minCorrelativo = correlativos[0]
+    let maxCorrelativo = correlativos[correlativos.length - 1]
+    
+    if (minCorrelativo > 1) {
+      saltos.push({
+        tipo: 'inicio',
+        desde: 1,
+        hasta: minCorrelativo - 1,
+        cantidad: minCorrelativo - 1,
+        descripcion: `Faltan los viajes desde el #1 hasta el #${minCorrelativo - 1}`
+      })
+    }
+    
+    for (let i = 0; i < correlativos.length - 1; i++) {
+      const actual = correlativos[i]
+      const siguiente = correlativos[i + 1]
+      const diferencia = siguiente - actual
+      
+      if (diferencia > 1) {
+        saltos.push({
+          tipo: 'salto',
+          desde: actual + 1,
+          hasta: siguiente - 1,
+          cantidad: diferencia - 1,
+          descripcion: `Salto entre #${actual} y #${siguiente}: faltan ${diferencia - 1} viaje(s) (#${actual + 1} al #${siguiente - 1})`
+        })
+      }
+    }
+    
+    const tieneError = saltos.length > 0
+    
+    return {
+      tieneError,
+      saltos,
+      totalViajes: viajesCompletados.length,
+      minCorrelativo,
+      maxCorrelativo,
+      correlativosExistentes: correlativos
+    }
+  }, [viajes])
+
+  const comprobarErrores = () => {
+    const resultado = detectarSaltosCorrelativos()
+    setErroresCorrelativos(resultado)
+    setModalErroresAbierto(true)
+    
+    if (resultado.tieneError) {
+      toast.error(`Se encontraron ${resultado.saltos.length} problema(s) con los correlativos!`, { duration: 4000 })
+    } else {
+      toast.success('✅ No se encontraron saltos entre correlativos. Todos los números de viaje están en secuencia!', { duration: 3000 })
+    }
+  }
+
   const getEstadoPeso = (pesoNeto, tipoUnidad) => {
     if (!pesoNeto || !tipoUnidad) return null
     const tipo = tipoUnidad === 'Traileta' ? 'TRAILETA' : 'VOLQUETA'
@@ -231,7 +468,6 @@ export default function PetCokePage() {
     return viajes.filter(v => v.estado === 'COMPLETADO')
   }, [viajes])
 
-  // Filtrar viajes
   const viajesCompletadosFiltrados = useMemo(() => {
     let filtrados = [...viajesCompletados]
     
@@ -248,9 +484,7 @@ export default function PetCokePage() {
     return filtrados
   }, [viajesCompletados, buscarEnTabla])
 
-  // Calcular acumulado y ordenar según el botón
   const viajesConAcumulado = useMemo(() => {
-    // Primero ordenar de menor a mayor para calcular acumulado correctamente
     const ordenadosAscendente = [...viajesCompletadosFiltrados].sort((a, b) => a.correlativo - b.correlativo)
     
     let acumulado = 0
@@ -262,17 +496,14 @@ export default function PetCokePage() {
       mapaAcumulado.set(viaje.id, acumulado)
     })
     
-    // Ordenar según el estado del botón (descendente o ascendente)
     const resultado = [...viajesCompletadosFiltrados].map(viaje => ({
       ...viaje,
       acumulado: mapaAcumulado.get(viaje.id) || 0
     }))
     
     if (ordenDescendente) {
-      // Mayor a menor
       resultado.sort((a, b) => b.correlativo - a.correlativo)
     } else {
-      // Menor a mayor
       resultado.sort((a, b) => a.correlativo - b.correlativo)
     }
     
@@ -316,131 +547,6 @@ export default function PetCokePage() {
     : null
 
   const tipoUnidadSeleccionado = OPCIONES_TIPO_UNIDAD.find(opt => opt.value === entrada.tipo_unidad)
-
-  const cargarUnidades = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('unidades')
-        .select('*')
-        .order('placa', { ascending: true })
-      if (error) throw error
-      setUnidades(data || [])
-      setOpcionesPlacas(
-        (data || []).map(u => ({
-          value: u.placa,
-          label: `${u.placa} - ${u.transporte}`,
-          transporte: u.transporte,
-          tipoPredeterminado: u.tipo,
-        }))
-      )
-    } catch (err) {
-      console.error('Error cargando unidades:', err)
-      toast.error('Error al cargar las unidades')
-    }
-  }
-
-  const cargarDatos = async (mostrarToast = false) => {
-    if (!barco && !token) return
-    
-    try {
-      const { data: barcoData, error: barcoError } = await supabase
-        .from('barcos')
-        .select('*')
-        .eq('token_compartido', token)
-        .single()
-
-      if (barcoError || !barcoData) {
-        if (mostrarToast) toast.error('Barco no encontrado')
-        return
-      }
-      
-      if (!barco || barco.id !== barcoData.id) {
-        setBarco(barcoData)
-      }
-
-      const { data: productoData, error: productoError } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('codigo', 'PC-001')
-        .single()
-
-      if (productoError || !productoData) {
-        if (mostrarToast) toast.error('Producto PET COKE no encontrado')
-        return
-      }
-      
-      if (!producto || producto.id !== productoData.id) {
-        setProducto(productoData)
-      }
-
-      const metaProducto = barcoData.metas_json?.limites?.['PC-001'] || 0
-      setMeta(metaProducto)
-
-      const { data: viajesData, error: viajesError } = await supabase
-        .from('petcoke_viajes')
-        .select('*')
-        .eq('barco_id', barcoData.id)
-        .order('correlativo', { ascending: true })
-
-      if (viajesError) throw viajesError
-      
-      setViajes(viajesData || [])
-      
-    } catch (err) {
-      console.error('Error cargando datos:', err)
-      if (mostrarToast) toast.error('Error al cargar datos')
-    }
-  }
-
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true)
-      await cargarDatos()
-      await cargarUnidades()
-      setLoading(false)
-    }
-    init()
-  }, [token])
-
-  const handleAgregarUnidad = async () => {
-    if (!nuevaUnidad.placa.trim()) return toast.error('La placa es obligatoria')
-    if (!nuevaUnidad.transporte.trim()) return toast.error('El transporte es obligatorio')
-    if (!nuevaUnidad.tipo) return toast.error('Debes seleccionar un tipo de unidad')
-
-    try {
-      const { data, error } = await supabase
-        .from('unidades')
-        .insert([{
-          placa: nuevaUnidad.placa.toUpperCase(),
-          transporte: nuevaUnidad.transporte.toUpperCase(),
-          tipo: nuevaUnidad.tipo,
-        }])
-        .select()
-        .single()
-
-      if (error) {
-        if (error.code === '23505') toast.error('Esta placa ya existe')
-        else throw error
-        return
-      }
-
-      toast.success(`Unidad ${data.placa} agregada correctamente`)
-      setModalUnidadAbierto(false)
-      setNuevaUnidad({ placa: '', transporte: '', tipo: '' })
-      
-      setUnidades(prev => [...prev, data])
-      setOpcionesPlacas(prev => [...prev, {
-        value: data.placa,
-        label: `${data.placa} - ${data.transporte}`,
-        transporte: data.transporte,
-        tipoPredeterminado: data.tipo,
-      }])
-      
-    } catch (err) {
-      console.error('Error agregando unidad:', err)
-      toast.error('Error al agregar la unidad')
-    }
-  }
 
   const handleRegistrarEntrada = async () => {
     if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
@@ -486,10 +592,9 @@ export default function PetCokePage() {
     }
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('petcoke_viajes')
         .insert([nuevoViaje])
-        .select()
 
       if (error) {
         if (error.code === '23505') {
@@ -503,7 +608,7 @@ export default function PetCokePage() {
         `ENTRADA registrada: Viaje #${entrada.correlativo} - ${entrada.placa} - Peso Bruto: ${pesoBrutoConvertido.toFixed(3)} TM`
       )
 
-      setViajes(prev => [...prev, data[0]])
+      await cargarDatos(false)
 
       setEntrada({
         correlativo: siguienteCorrelativo + 1,
@@ -529,66 +634,60 @@ export default function PetCokePage() {
   }
 
   const handleRegistrarSalida = async () => {
-  if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
-  if (!viajeActivo) return toast.error('No hay un viaje activo seleccionado')
-  if (!salida.hora_salida) return toast.error('La Hora Salida es obligatoria')
-  if (!salida.peso_neto) return toast.error('El Peso Neto es obligatorio')
+    if (!barco || !producto) return toast.error('Faltan datos del barco o producto')
+    if (!viajeActivo) return toast.error('No hay un viaje activo seleccionado')
+    if (!salida.hora_salida) return toast.error('La Hora Salida es obligatoria')
+    if (!salida.peso_neto) return toast.error('El Peso Neto es obligatorio')
 
-  let pesoNeto = convertirToneladas(salida.peso_neto)
+    let pesoNeto = convertirToneladas(salida.peso_neto)
 
-  if (!pesoNeto || pesoNeto <= 0)
-    return toast.error('El Peso Neto debe ser un número válido mayor a 0')
+    if (!pesoNeto || pesoNeto <= 0)
+      return toast.error('El Peso Neto debe ser un número válido mayor a 0')
 
-  // SOLO ADVERTENCIA VISUAL - NO BLOQUEA EL REGISTRO
-  const tipoUnidad = viajeActivo.tipo_unidad
-  const rango = tipoUnidad === 'Traileta' ? RANGOS.TRAILETA : RANGOS.VOLQUETA
-  
-  if (pesoNeto < rango.min || pesoNeto > rango.max) {
-    // Usar toast.error con un mensaje de advertencia en lugar de toast.warning
-    toast.error(
-      `⚠️ Atención: El peso (${pesoNeto.toFixed(3)} TM) está fuera del rango recomendado para ${tipoUnidad} (${rango.min}-${rango.max} TM). El registro se guardará igual.`,
-      { duration: 5000 }
-    )
+    const tipoUnidad = viajeActivo.tipo_unidad
+    const rango = tipoUnidad === 'Traileta' ? RANGOS.TRAILETA : RANGOS.VOLQUETA
+    
+    if (pesoNeto < rango.min || pesoNeto > rango.max) {
+      toast.error(
+        `⚠️ Atención: El peso (${pesoNeto.toFixed(3)} TM) está fuera del rango recomendado para ${tipoUnidad} (${rango.min}-${rango.max} TM). El registro se guardará igual.`,
+        { duration: 5000 }
+      )
+    }
+
+    const fechaSalida = getFechaActual()
+    const tiempoAtencion = calcularTiempoAtencion(viajeActivo.hora_entrada, salida.hora_salida)
+
+    const datosActualizar = {
+      fecha_salida: fechaSalida,
+      hora_salida: salida.hora_salida,
+      peso_neto: pesoNeto,
+      tiempo_atencion: tiempoAtencion,
+      estado: 'COMPLETADO',
+    }
+
+    try {
+      const { error } = await supabase
+        .from('petcoke_viajes')
+        .update(datosActualizar)
+        .eq('id', viajeActivo.id)
+
+      if (error) throw error
+
+      toast.success(
+        `SALIDA registrada: ${viajeActivo.placa} - ${salida.hora_salida} - Peso Neto: ${pesoNeto.toFixed(3)} TM`
+      )
+
+      await cargarDatos(false)
+
+      setViajeActivo(null)
+      setSalida({ hora_salida: '', peso_neto: '' })
+      setBuscarPlaca('')
+
+    } catch (err) {
+      console.error('Error registrando salida:', err)
+      toast.error('Error al registrar la salida: ' + err.message)
+    }
   }
-
-  const fechaSalida = getFechaActual()
-  const tiempoAtencion = calcularTiempoAtencion(viajeActivo.hora_entrada, salida.hora_salida)
-
-  const datosActualizar = {
-    fecha_salida: fechaSalida,
-    hora_salida: salida.hora_salida,
-    peso_neto: pesoNeto,
-    tiempo_atencion: tiempoAtencion,
-    estado: 'COMPLETADO',
-  }
-
-  try {
-    const { error } = await supabase
-      .from('petcoke_viajes')
-      .update(datosActualizar)
-      .eq('id', viajeActivo.id)
-
-    if (error) throw error
-
-    toast.success(
-      `SALIDA registrada: ${viajeActivo.placa} - ${salida.hora_salida} - Peso Neto: ${pesoNeto.toFixed(3)} TM`
-    )
-
-    setViajes(prev => prev.map(v => 
-      v.id === viajeActivo.id 
-        ? { ...v, ...datosActualizar }
-        : v
-    ))
-
-    setViajeActivo(null)
-    setSalida({ hora_salida: '', peso_neto: '' })
-    setBuscarPlaca('')
-
-  } catch (err) {
-    console.error('Error registrando salida:', err)
-    toast.error('Error al registrar la salida: ' + err.message)
-  }
-}
 
   const handlePesoBrutoChange = (e) => {
     const valorFormateado = formatearMientrasEscribe(e.target.value)
@@ -718,14 +817,9 @@ export default function PetCokePage() {
         .eq('id', viajeEnEdicion.id)
 
       if (error) throw error
+      
       toast.success('Viaje actualizado correctamente')
-      
-      setViajes(prev => prev.map(v => 
-        v.id === viajeEnEdicion.id 
-          ? { ...v, ...datosActualizar }
-          : v
-      ))
-      
+      await cargarDatos(false)
       setModalEdicionAbierto(false)
     } catch (err) {
       console.error('Error guardando edición:', err)
@@ -738,8 +832,9 @@ export default function PetCokePage() {
     try {
       const { error } = await supabase.from('petcoke_viajes').delete().eq('id', id)
       if (error) throw error
+      
       toast.success('Viaje eliminado')
-      setViajes(prev => prev.filter(v => v.id !== id))
+      await cargarDatos(false)
       setModalEdicionAbierto(false)
     } catch (err) {
       console.error('Error eliminando:', err)
@@ -819,11 +914,18 @@ export default function PetCokePage() {
                 Registro de descarga de carbon - {new Date().toLocaleDateString()}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <div className="bg-orange-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
                 <Truck className="w-4 h-4" />
                 Total Descargado: {totalDescargado.toFixed(3)} TM
               </div>
+              <button
+                onClick={comprobarErrores}
+                className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
+              >
+                <Bug className="w-4 h-4" />
+                Comprobar Errores
+              </button>
               <button
                 onClick={() => cargarDatos(true)}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -1200,7 +1302,7 @@ export default function PetCokePage() {
           )}
         </div>
 
-        {/* Tabla de Viajes Completados con Orden y Acumulado */}
+        {/* Tabla de Viajes Completados */}
         {viajesCompletados.length > 0 && (
           <div className="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1215,7 +1317,6 @@ export default function PetCokePage() {
               </div>
               
               <div className="flex gap-3">
-                {/* BOTÓN PARA CAMBIAR ORDEN */}
                 <button
                   onClick={() => setOrdenDescendente(!ordenDescendente)}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-white text-sm transition-all"
@@ -1260,7 +1361,6 @@ export default function PetCokePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Tipo</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Patio</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Peso Neto</th>
-                    
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Fecha Entrada</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Hora Entrada</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Hora Salida</th>
@@ -1311,7 +1411,6 @@ export default function PetCokePage() {
                             {estadoPeso === 'bajo' && <AlertTriangle className="w-3 h-3 text-yellow-400 inline ml-1" />}
                             {estadoPeso === 'sobre' && <AlertTriangle className="w-3 h-3 text-red-400 inline ml-1" />}
                           </td>
-                          
                           <td className="px-4 py-3 text-slate-400 text-sm font-mono">{viaje.fecha_entrada}</td>
                           <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_entrada || '—'}</td>
                           <td className="px-4 py-3 text-slate-300 text-sm font-mono">{viaje.hora_salida || '—'}</td>
@@ -1335,7 +1434,7 @@ export default function PetCokePage() {
                   <tr className="border-t border-white/10">
                     <td colSpan={5} className="px-4 py-3 text-slate-500 text-sm font-medium">Total · {viajesCompletados.length} viajes</td>
                     <td className="px-4 py-3 text-green-400 text-sm font-mono font-bold">{totalDescargado.toFixed(3)} TM</td>
-                    <td colSpan={5}></td>
+                    <td colSpan={5}> </td>
                   </tr>
                 </tfoot>
               </table>
@@ -1573,6 +1672,117 @@ export default function PetCokePage() {
                   <Save className="w-4 h-4" /> Guardar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ERRORES DE CORRELATIVOS */}
+      {modalErroresAbierto && erroresCorrelativos && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className={`px-6 py-4 flex items-center justify-between sticky top-0 ${
+              erroresCorrelativos.tieneError ? 'bg-red-600' : 'bg-green-600'
+            }`}>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-white" />
+                <h2 className="text-lg font-bold text-white">
+                  {erroresCorrelativos.tieneError ? 'ERRORES EN CORRELATIVOS' : 'VERIFICACIÓN DE CORRELATIVOS'}
+                </h2>
+              </div>
+              <button onClick={() => setModalErroresAbierto(false)} className="text-white/80 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {!erroresCorrelativos.tieneError ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-green-400 mb-2">¡TODO CORRECTO!</h3>
+                  <p className="text-slate-300">
+                    No se encontraron saltos entre los números correlativos.
+                  </p>
+                  <p className="text-slate-400 text-sm mt-2">
+                    Total de viajes completados: {erroresCorrelativos.totalViajes}
+                    <br />
+                    Rango de correlativos: #{erroresCorrelativos.minCorrelativo} al #{erroresCorrelativos.maxCorrelativo}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle className="w-5 h-5 text-red-400" />
+                      <h3 className="font-bold text-red-400">Se encontraron {erroresCorrelativos.saltos.length} problema(s)</h3>
+                    </div>
+                    <p className="text-slate-300 text-sm">
+                      Total de viajes completados: {erroresCorrelativos.totalViajes}
+                      <br />
+                      Rango actual: #{erroresCorrelativos.minCorrelativo} al #{erroresCorrelativos.maxCorrelativo}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-white">Detalle de problemas:</h4>
+                    {erroresCorrelativos.saltos.map((salto, index) => (
+                      <div key={index} className="bg-slate-900 rounded-lg p-4 border-l-4 border-red-500">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center">
+                              <span className="text-red-400 font-bold">{salto.cantidad}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-red-400 font-mono font-bold">{salto.descripcion}</p>
+                            {salto.tipo === 'salto' && (
+                              <p className="text-sm text-slate-400 mt-1">
+                                Faltan registrar los viajes con número(s): 
+                                <span className="text-yellow-400 ml-1">
+                                  #{Array.from({ length: salto.cantidad }, (_, i) => salto.desde + i).join(', #')}
+                                </span>
+                              </p>
+                            )}
+                            {salto.tipo === 'inicio' && (
+                              <p className="text-sm text-slate-400 mt-1">
+                                El primer viaje registrado es el #{erroresCorrelativos.minCorrelativo}. 
+                                Faltan los viajes desde el #1.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mt-4">
+                    <h4 className="font-bold text-yellow-400 mb-2">📋 Correlativos existentes:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {erroresCorrelativos.correlativosExistentes.map(num => (
+                        <span key={num} className="px-2 py-1 bg-slate-700 rounded text-sm font-mono text-green-400">
+                          #{num}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                    <p className="text-sm text-blue-300">
+                      ⚠️ Los saltos en correlativos pueden afectar el cálculo del acumulado y el seguimiento de viajes.
+                      Se recomienda mantener la secuencia numérica para mejor control.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end p-6 border-t border-white/10">
+              <button
+                onClick={() => setModalErroresAbierto(false)}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-lg font-bold"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
