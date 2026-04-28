@@ -294,11 +294,13 @@ export default function ClientPage({ token }) {
   // Calcular estadísticas usando la función agregada
   const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
 
-  // Calcular faltante de descarga
+  // Calcular faltante de descarga y excedente
   const meta = barco?.metas_json?.limites?.['PC-001'] || 0
   const faltante = Math.max(0, meta - estadisticas.totalNeto)
+  const excedente = Math.max(0, estadisticas.totalNeto - meta)  // 🔥 EXCEDENTE: lo que sobrepasa la meta
   const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
   const metaCompletada = porcentajeMeta >= 100
+  const tieneExcedente = excedente > 0
 
   // Ordenar registros para la tabla (más reciente al último o viceversa)
   const registrosOrdenados = useMemo(() => {
@@ -408,6 +410,10 @@ export default function ClientPage({ token }) {
       { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
       { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
       { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
+      { 'Métrica': 'META MANIFESTADA (TM)', 'Valor': fmtTM(meta, 2) },
+      { 'Métrica': 'FALTANTE (TM)', 'Valor': fmtTM(faltante, 2) },
+      { 'Métrica': 'EXCEDENTE (TM)', 'Valor': fmtTM(excedente, 2) },
+      { 'Métrica': 'Porcentaje de Meta', 'Valor': `${porcentajeMeta.toFixed(1)}%` },
       { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
     ]
     
@@ -835,6 +841,40 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
+          {/* 🔥 SECCIÓN DE EXCEDENTE - AGREGADA EN EL HEADER DE KPI */}
+          {tieneExcedente && (
+            <div style={{ 
+              marginBottom: '24px', 
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)', 
+              borderRadius: '16px', 
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              animation: 'pulse 2s infinite',
+              boxShadow: '0 4px 12px -2px rgba(239,68,68,0.4)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <FiAlertCircle size={28} style={{ color: 'white' }} />
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>EXCEDENTE DE DESCARGA</div>
+                  <div style={{ fontSize: '28px', fontWeight: '900', color: 'white', fontFamily: 'monospace' }}>
+                    +{fmtTM(excedente, 2)} TM
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', textAlign: 'right' }}>
+                La cantidad descargada supera la meta manifestada
+                <br />
+                <span style={{ fontSize: '10px', opacity: 0.7 }}>
+                  Meta: {fmtTM(meta, 2)} TM · Descargado: {fmtTM(estadisticas.totalNeto, 2)} TM
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="alm-kpis-row">
             <div className="alm-kpi">
               <div className="alm-kpi-icon"><GiWeightScale size={28} /></div>
@@ -908,7 +948,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPI de META y FALTANTE */}
+          {/* KPI de META, FALTANTE y EXCEDENTE */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
               <div className="alm-kpi-icon"><FiTrendingUp size={28} style={{ color: '#f97316' }} /></div>
@@ -919,14 +959,18 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }} /></div>
+              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: faltante > 0 && !tieneExcedente ? '#fbbf24' : (tieneExcedente ? '#ef4444' : '#4ade80') }} /></div>
               <div>
-                <div className="alm-kpi-label">FALTANTE POR DESCARGAR</div>
-                <div className="alm-kpi-value" style={{ color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>{fmtTM(faltante, 2)} TM</div>
+                <div className="alm-kpi-label">{tieneExcedente ? 'EXCEDENTE' : 'FALTANTE POR DESCARGAR'}</div>
+                <div className="alm-kpi-value" style={{ color: tieneExcedente ? '#ef4444' : (faltante > 0 ? '#fbbf24' : '#4ade80') }}>
+                  {tieneExcedente ? `+${fmtTM(excedente, 2)}` : fmtTM(faltante, 2)} TM
+                </div>
                 <div className="alm-kpi-sub">
-                  {metaCompletada 
-                    ? '✅ Meta completada' 
-                    : `${((faltante / meta) * 100).toFixed(1)}% restante`}
+                  {tieneExcedente 
+                    ? `⚠️ Supera la meta en ${fmtTM(excedente, 2)} TM` 
+                    : (metaCompletada 
+                      ? '✅ Meta completada exactamente' 
+                      : `${((faltante / meta) * 100).toFixed(1)}% restante`)}
                 </div>
               </div>
             </div>
@@ -934,25 +978,42 @@ export default function ClientPage({ token }) {
               <div className="alm-kpi-icon"><FiBarChart2 size={28} style={{ color: '#60a5fa' }} /></div>
               <div>
                 <div className="alm-kpi-label">PORCENTAJE DE META</div>
-                <div className="alm-kpi-value" style={{ color: '#60a5fa' }}>{porcentajeMeta.toFixed(1)}%</div>
+                <div className="alm-kpi-value" style={{ color: tieneExcedente ? '#ef4444' : (metaCompletada ? '#4ade80' : '#60a5fa') }}>
+                  {porcentajeMeta.toFixed(1)}%
+                </div>
                 <div className="alm-kpi-sub">{fmtTM(estadisticas.totalNeto, 2)} TM de {fmtTM(meta, 2)} TM</div>
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><GiWeightScale size={28} style={{ color: metaCompletada ? '#4ade80' : '#f97316' }} /></div>
+              <div className="alm-kpi-icon"><GiWeightScale size={28} style={{ color: tieneExcedente ? '#ef4444' : (metaCompletada ? '#4ade80' : '#f97316') }} /></div>
               <div>
                 <div className="alm-kpi-label">ESTADO</div>
-                <div className="alm-kpi-value" style={{ fontSize: '20px', color: metaCompletada ? '#4ade80' : '#f97316' }}>
-                  {metaCompletada ? 'META ALCANZADA' : 'EN PROCESO'}
+                <div className="alm-kpi-value" style={{ fontSize: '20px', color: tieneExcedente ? '#ef4444' : (metaCompletada ? '#4ade80' : '#f97316') }}>
+                  {tieneExcedente ? 'EXCEDENTE' : (metaCompletada ? 'META ALCANZADA' : 'EN PROCESO')}
                 </div>
                 <div className="alm-kpi-sub">
-                  {metaCompletada 
-                    ? '🎉 Descarga completada exitosamente' 
-                    : `Faltan ${fmtTM(faltante, 2)} TM para completar la meta`}
+                  {tieneExcedente 
+                    ? `🚨 Se superó la meta en ${fmtTM(excedente, 2)} TM` 
+                    : (metaCompletada 
+                      ? '🎉 Descarga completada exitosamente' 
+                      : `Faltan ${fmtTM(faltante, 2)} TM para completar la meta`)}
                 </div>
               </div>
             </div>
           </div>
+
+          {tieneExcedente && (
+            <div className="alm-alert-card" style={{ background: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.4)' }}>
+              <div className="alm-alert-title" style={{ color: '#f87171' }}>
+                <FiAlertCircle size={16} />
+                ⚠️ EXCEDENTE DE DESCARGA DETECTADO
+              </div>
+              <div style={{ fontSize: '13px', color: '#fca5a5' }}>
+                La cantidad total descargada ({fmtTM(estadisticas.totalNeto, 2)} TM) supera la meta manifestada de {fmtTM(meta, 2)} TM en {fmtTM(excedente, 2)} TM.
+                Esto representa un {(porcentajeMeta - 100).toFixed(1)}% por encima de lo contratado.
+              </div>
+            </div>
+          )}
 
           {estadisticas.unidadesFueraDeRango.length > 0 && (
             <div className="alm-alert-card">
@@ -998,34 +1059,60 @@ export default function ClientPage({ token }) {
                   <FiTrendingUp size={16} />
                   Progreso de Descarga vs Meta
                 </span>
-                <span style={{ color: metaCompletada ? '#4ade80' : (porcentajeMeta >= 90 ? '#fbbf24' : '#f97316'), fontWeight: 'bold' }}>
+                <span style={{ color: tieneExcedente ? '#ef4444' : (metaCompletada ? '#4ade80' : (porcentajeMeta >= 90 ? '#fbbf24' : '#f97316')), fontWeight: 'bold' }}>
                   {porcentajeMeta.toFixed(1)}%
                 </span>
               </div>
               <div className="alm-progress-track">
                 <div 
-                  className={`alm-progress-fill ${metaCompletada ? 'alm-progress-fill-complete' : (porcentajeMeta >= 90 ? 'alm-progress-fill-warning' : '')}`} 
-                  style={{ width: `${Math.min(100, porcentajeMeta)}%` }} 
+                  className={`alm-progress-fill ${tieneExcedente ? 'alm-progress-fill-warning' : (metaCompletada ? 'alm-progress-fill-complete' : (porcentajeMeta >= 90 ? 'alm-progress-fill-warning' : ''))}`} 
+                  style={{ width: `${Math.min(porcentajeMeta, 100)}%` }} 
                 />
+                {tieneExcedente && (
+                  <div 
+                    style={{ 
+                      position: 'relative',
+                      width: `${Math.min(porcentajeMeta - 100, 100)}%`,
+                      height: '12px',
+                      background: '#ef4444',
+                      borderRadius: '0 999px 999px 0',
+                      marginTop: '-12px',
+                      marginLeft: '100%',
+                      transition: 'width 1s ease'
+                    }} 
+                  />
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8' }}>
                 <span>0 TM</span>
                 <span>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ fontSize: '11px', color: '#4ade80' }}>
                   ✅ Descargado: {fmtTM(estadisticas.totalNeto, 2)} TM
                 </div>
-                <div style={{ fontSize: '11px', color: faltante > 0 ? '#fbbf24' : '#4ade80' }}>
-                  {faltante > 0 ? `📦 Faltante: ${fmtTM(faltante, 2)} TM` : '🎉 META COMPLETADA'}
+                <div style={{ fontSize: '11px', color: tieneExcedente ? '#ef4444' : (faltante > 0 ? '#fbbf24' : '#4ade80') }}>
+                  {tieneExcedente 
+                    ? `⚠️ EXCEDENTE: +${fmtTM(excedente, 2)} TM` 
+                    : (faltante > 0 
+                      ? `📦 Faltante: ${fmtTM(faltante, 2)} TM` 
+                      : '🎉 META COMPLETADA EXACTAMENTE')}
                 </div>
               </div>
-              {metaCompletada && (
+              {tieneExcedente && (
+                <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(239,68,68,0.15)', borderRadius: '8px', textAlign: 'center' }}>
+                  <span style={{ color: '#f87171', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <FiAlertCircle size={14} />
+                    ¡ATENCIÓN! Se ha superado la meta en {fmtTM(excedente, 2)} TM ({((porcentajeMeta - 100).toFixed(1))}% adicional)
+                  </span>
+                </div>
+              )}
+              {metaCompletada && !tieneExcedente && (
                 <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center' }}>
                   <span style={{ color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                     <FiCheckCircle size={14} />
-                    ¡Meta alcanzada! Se ha completado la cantidad manifestada de {fmtTM(meta, 2)} TM.
+                    ¡Meta alcanzada exactamente! Se ha completado la cantidad manifestada de {fmtTM(meta, 2)} TM.
                   </span>
                 </div>
               )}
@@ -1210,6 +1297,15 @@ export default function ClientPage({ token }) {
                         stroke="#22c55e" 
                         strokeDasharray="3 3"
                         label={{ value: `Meta: ${fmtTM(meta, 0)} TM`, fill: '#22c55e', fontSize: 10 }}
+                      />
+                    )}
+                    {tieneExcedente && (
+                      <ReferenceLine 
+                        yAxisId="right"
+                        y={estadisticas.totalNeto} 
+                        stroke="#ef4444" 
+                        strokeDasharray="2 2"
+                        label={{ value: `Total: ${fmtTM(estadisticas.totalNeto, 0)} TM`, fill: '#ef4444', fontSize: 10 }}
                       />
                     )}
                   </LineChart>
@@ -1468,9 +1564,9 @@ export default function ClientPage({ token }) {
                           {reg.peso_neto_updp_tm?.toFixed(3)}
                           {estado === 'bajo' && <FiArrowDown size={12} />}
                           {estado === 'sobre' && <FiArrowUp size={12} />}
-                        </td>
+                         </td>
                         <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3) || '—'}</td>
-                      </tr>
+                       </tr>
                     )
                   })}
                 </tbody>
@@ -1481,7 +1577,7 @@ export default function ClientPage({ token }) {
           <div className="alm-footer">
             <FiRefreshCw size={10} style={{ display: 'inline', marginRight: '4px' }} />
             auto-refresh 30s · {barco.nombre} · ALMAPAC · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
-            {meta > 0 && ` · Meta: ${fmtTM(meta, 2)} TM · Faltante: ${fmtTM(faltante, 2)} TM`}
+            {meta > 0 && ` · Meta: ${fmtTM(meta, 2)} TM · ${tieneExcedente ? `Excedente: +${fmtTM(excedente, 2)} TM` : `Faltante: ${fmtTM(faltante, 2)} TM`}`}
             <br />
             <span style={{ color: '#fbbf24', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FiAlertCircle size={10} /> VOLQUETA: 14-18 TM</span> · 
             <span style={{ color: '#f97316', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FaTrailer size={10} /> TRAILETA: 22-25 TM</span> · 
