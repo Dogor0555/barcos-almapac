@@ -357,81 +357,150 @@ export default function ClientPage({ token }) {
   }, [token])
 
   const descargarExcel = () => {
-    if (!registros.length) {
-      alert('No hay datos para exportar')
-      return
-    }
-
-    const datosExportar = registros.map(reg => {
-      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-      const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
-      
-      return {
-        'Correlativo': reg.correlativo,
-        'Placa': reg.placa,
-        'Transporte': reg.transporte || '—',
-        'Tipo Unidad': reg.tipo_unidad || '—',
-        'Rango Mínimo (TM)': rango.min,
-        'Rango Máximo (TM)': rango.max,
-        'Estado Peso': estado === 'bajo' ? 'Bajo peso' : (estado === 'sobre' ? 'Sobrepeso' : 'En rango'),
-        'Fecha': reg.fecha,
-        'Hora Entrada': reg.hora_entrada || '—',
-        'Hora Salida': reg.hora_salida || '—',
-        'Tiempo Atención': reg.tiempo_atencion || '—',
-        'Patio': reg.patio || '—',
-        'Bodega Barco': reg.bodega_barco || '—',
-        'Peso Bruto (TM)': reg.peso_bruto_updp_tm || 0,
-        'Peso Neto (TM)': reg.peso_neto_updp_tm || 0,
-        'Acumulado (TM)': reg.acumulado_updp_tm || 0
-      }
-    })
-
-    const ws = XLSX.utils.json_to_sheet(datosExportar)
-    
-    const colWidths = [
-      { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
-      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
-      { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
-    ]
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    const nombreArchivo = `PetCoke_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
-    
-    const resumenData = [
-      { 'Métrica': 'Barco', 'Valor': barco?.nombre || 'N/A' },
-      { 'Métrica': 'Código Barco', 'Valor': barco?.codigo_barco || 'N/A' },
-      { 'Métrica': 'Total Descargado (TM)', 'Valor': fmtTM(estadisticas.totalNeto, 2) },
-      { 'Métrica': 'Total Viajes', 'Valor': estadisticas.totalViajes },
-      { 'Métrica': 'Promedio por Viaje (TM)', 'Valor': fmtTM(estadisticas.pesoPromedio, 2) },
-      { 'Métrica': 'Viajes en Rango', 'Valor': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
-      { 'Métrica': 'Viajes Bajo Peso', 'Valor': estadisticas.bajoPeso },
-      { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
-      { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
-      { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
-      { 'Métrica': 'META MANIFESTADA (TM)', 'Valor': fmtTM(meta, 2) },
-      { 'Métrica': 'FALTANTE (TM)', 'Valor': fmtTM(faltante, 2) },
-      { 'Métrica': 'EXCEDENTE (TM)', 'Valor': fmtTM(excedente, 2) },
-      { 'Métrica': 'Porcentaje de Meta', 'Valor': `${porcentajeMeta.toFixed(1)}%` },
-      { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
-    ]
-    
-    // Añadir info de filtros si existen
-    const filtrosActivos = []
-    if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
-    if (diaSeleccionado) filtrosActivos.push(`Día: ${diaSeleccionado}`)
-    const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
-    resumenData.push({ 'Métrica': 'Filtro Aplicado', 'Valor': filtroTexto })
-    
-    const wsResumen = XLSX.utils.json_to_sheet(resumenData)
-    wsResumen['!cols'] = [{ wch: 25 }, { wch: 35 }]
-    
-    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
-    XLSX.utils.book_append_sheet(wb, ws, 'Registros')
-    
-    XLSX.writeFile(wb, nombreArchivo)
+  if (!registros.length) {
+    alert('No hay datos para exportar')
+    return
   }
+
+  // ============================================
+  // NUEVO: CALCULAR RESUMEN POR TRANSPORTE
+  // ============================================
+  const transporteMap = new Map()
+  
+  registros.forEach(reg => {
+    const nombreTransporte = reg.transporte || 'DESCONOCIDO'
+    const peso = reg.peso_neto_updp_tm || 0
+    const tipo = (reg.tipo_unidad || '').toUpperCase()
+    const fueraRango = estaFueraDeRango(peso, reg.tipo_unidad)
+    
+    if (!transporteMap.has(nombreTransporte)) {
+      transporteMap.set(nombreTransporte, {
+        transporte: nombreTransporte,
+        totalDescargado: 0,
+        totalViajes: 0,
+        viajesTraileta: 0,
+        viajesVolqueta: 0,
+        pesoTraileta: 0,
+        pesoVolqueta: 0,
+        fueraDeRango: 0
+      })
+    }
+    
+    const stat = transporteMap.get(nombreTransporte)
+    stat.totalDescargado += peso
+    stat.totalViajes++
+    
+    if (tipo === 'TRAILETA') {
+      stat.viajesTraileta++
+      stat.pesoTraileta += peso
+    } else if (tipo === 'VOLQUETA') {
+      stat.viajesVolqueta++
+      stat.pesoVolqueta += peso
+    }
+    
+    if (fueraRango) stat.fueraDeRango++
+  })
+  
+  // Convertir a array y calcular promedios
+  const resumenTransporte = Array.from(transporteMap.values()).map(stat => ({
+    'TRANSPORTE': stat.transporte,
+    'TOTAL DESCARGADO (TM)': stat.totalDescargado,
+    'VIAJES TOTALES': stat.totalViajes,
+    'VIAJES TRAILETA': stat.viajesTraileta,
+    'VIAJES VOLQUETA': stat.viajesVolqueta,
+    'PROMEDIO TRAILETA (TM)': stat.viajesTraileta > 0 ? stat.pesoTraileta / stat.viajesTraileta : 0,
+    'PROMEDIO VOLQUETA (TM)': stat.viajesVolqueta > 0 ? stat.pesoVolqueta / stat.viajesVolqueta : 0,
+    '% DEL TOTAL': (stat.totalDescargado / estadisticas.totalNeto) * 100,
+    'FUERA DE RANGO': stat.fueraDeRango
+  })).sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
+
+  // Datos de registros (tu código original)
+  const datosExportar = registros.map(reg => {
+    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+    
+    return {
+      'Correlativo': reg.correlativo,
+      'Placa': reg.placa,
+      'Transporte': reg.transporte || '—',
+      'Tipo Unidad': reg.tipo_unidad || '—',
+      'Rango Mínimo (TM)': rango.min,
+      'Rango Máximo (TM)': rango.max,
+      'Estado Peso': estado === 'bajo' ? 'Bajo peso' : (estado === 'sobre' ? 'Sobrepeso' : 'En rango'),
+      'Fecha': reg.fecha,
+      'Hora Entrada': reg.hora_entrada || '—',
+      'Hora Salida': reg.hora_salida || '—',
+      'Tiempo Atención': reg.tiempo_atencion || '—',
+      'Patio': reg.patio || '—',
+      'Bodega Barco': reg.bodega_barco || '—',
+      'Peso Bruto (TM)': reg.peso_bruto_updp_tm || 0,
+      'Peso Neto (TM)': reg.peso_neto_updp_tm || 0,
+      'Acumulado (TM)': reg.acumulado_updp_tm || 0
+    }
+  })
+
+  // Crear libro de Excel
+  const wb = XLSX.utils.book_new()
+  
+  // HOJA 1: Resumen por Transporte (NUEVA)
+  const wsTransporte = XLSX.utils.json_to_sheet(resumenTransporte)
+  wsTransporte['!cols'] = [
+    { wch: 25 },  // Transporte
+    { wch: 18 },  // Total Descargado
+    { wch: 12 },  // Viajes Totales
+    { wch: 12 },  // Viajes Traileta
+    { wch: 12 },  // Viajes Volqueta
+    { wch: 18 },  // Promedio Traileta
+    { wch: 18 },  // Promedio Volqueta
+    { wch: 12 },  // % del Total
+    { wch: 12 }   // Fuera de Rango
+  ]
+  XLSX.utils.book_append_sheet(wb, wsTransporte, 'Resumen por Transporte')
+  
+  // HOJA 2: Resumen General (tu código original)
+  const resumenData = [
+    { 'Métrica': 'Barco', 'Valor': barco?.nombre || 'N/A' },
+    { 'Métrica': 'Código Barco', 'Valor': barco?.codigo_barco || 'N/A' },
+    { 'Métrica': 'Total Descargado (TM)', 'Valor': fmtTM(estadisticas.totalNeto, 2) },
+    { 'Métrica': 'Total Viajes', 'Valor': estadisticas.totalViajes },
+    { 'Métrica': 'Promedio por Viaje (TM)', 'Valor': fmtTM(estadisticas.pesoPromedio, 2) },
+    { 'Métrica': 'Viajes en Rango', 'Valor': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
+    { 'Métrica': 'Viajes Bajo Peso', 'Valor': estadisticas.bajoPeso },
+    { 'Métrica': 'Viajes Sobrepeso', 'Valor': estadisticas.sobrePeso },
+    { 'Métrica': 'Total Patio NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
+    { 'Métrica': 'Total Patio SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
+    { 'Métrica': 'META MANIFESTADA (TM)', 'Valor': fmtTM(meta, 2) },
+    { 'Métrica': 'FALTANTE (TM)', 'Valor': fmtTM(faltante, 2) },
+    { 'Métrica': 'EXCEDENTE (TM)', 'Valor': fmtTM(excedente, 2) },
+    { 'Métrica': 'Porcentaje de Meta', 'Valor': `${porcentajeMeta.toFixed(1)}%` },
+    { 'Métrica': 'Fecha Exportación', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
+  ]
+  
+  const filtrosActivos = []
+  if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
+  if (diaSeleccionado) filtrosActivos.push(`Día: ${diaSeleccionado}`)
+  const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
+  resumenData.push({ 'Métrica': 'Filtro Aplicado', 'Valor': filtroTexto })
+  
+  const wsResumen = XLSX.utils.json_to_sheet(resumenData)
+  wsResumen['!cols'] = [{ wch: 25 }, { wch: 35 }]
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
+  
+  // HOJA 3: Registros (tu código original)
+  const ws = XLSX.utils.json_to_sheet(datosExportar)
+  const colWidths = [
+    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
+    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+    { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+  ]
+  ws['!cols'] = colWidths
+  XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+  
+  // Guardar archivo
+  const nombreArchivo = `PetCoke_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
+  XLSX.writeFile(wb, nombreArchivo)
+}
 
   const promediosPorTransporte = useMemo(() => {
     const mapa = {}
