@@ -127,6 +127,41 @@ export default function PetCokePage() {
   const [erroresCorrelativos, setErroresCorrelativos] = useState(null)
   const [modalErroresAbierto, setModalErroresAbierto] = useState(false)
 
+  const handleAgregarUnidad = async () => {
+    if (!nuevaUnidad.placa) {
+      toast.error('La placa es obligatoria')
+      return
+    }
+    if (!nuevaUnidad.transporte) {
+      toast.error('Debes seleccionar un transporte')
+      return
+    }
+    if (!nuevaUnidad.tipo) {
+      toast.error('Debes seleccionar un tipo de unidad')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('unidades')
+        .insert([{
+          placa: nuevaUnidad.placa.toUpperCase(),
+          transporte: nuevaUnidad.transporte,
+          tipo: nuevaUnidad.tipo
+        }])
+
+      if (error) throw error
+
+      toast.success('Unidad agregada correctamente')
+      await cargarUnidades()
+      setModalUnidadAbierto(false)
+      setNuevaUnidad({ placa: '', transporte: '', tipo: '' })
+    } catch (err) {
+      console.error('Error agregando unidad:', err)
+      toast.error('Error al agregar la unidad')
+    }
+  }
+
   // 🔥 FUNCIÓN MEJORADA PARA CARGAR DATOS SIEMPRE FRESCOS (SIN LÍMITE DE 1000)
   const cargarDatos = useCallback(async (mostrarToast = false) => {
     if (!token) return
@@ -527,6 +562,8 @@ export default function PetCokePage() {
 
   const porcentajeCompletado = meta > 0 ? (totalDescargado / meta) * 100 : 0
   const faltante = Math.max(0, meta - totalDescargado)
+  // CÁLCULO DEL EXCEDENTE (lo que sobrepasa la meta)
+  const excedente = Math.max(0, totalDescargado - meta)
   const estaCompleto = faltante <= 0 && meta > 0
   const estaCerca = !estaCompleto && porcentajeCompletado >= 90 && meta > 0
 
@@ -919,6 +956,25 @@ export default function PetCokePage() {
                 <Truck className="w-4 h-4" />
                 Total Descargado: {totalDescargado.toFixed(3)} TM
               </div>
+              {/* SECCIÓN DE EXCEDENTE - AGREGADA */}
+              {excedente > 0 && (
+                <div className="bg-red-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2 animate-pulse">
+                  <AlertCircle className="w-4 h-4" />
+                  EXCEDENTE: +{excedente.toFixed(3)} TM
+                </div>
+              )}
+              {excedente === 0 && meta > 0 && !estaCompleto && (
+                <div className="bg-yellow-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  FALTANTE: {faltante.toFixed(3)} TM
+                </div>
+              )}
+              {excedente === 0 && meta > 0 && estaCompleto && (
+                <div className="bg-green-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  META ALCANZADA
+                </div>
+              )}
               <button
                 onClick={comprobarErrores}
                 className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -1013,6 +1069,11 @@ export default function PetCokePage() {
                 }`}>
                   {estaCompleto ? '0.000 TM' : `${faltante.toFixed(3)} TM`}
                 </p>
+                {excedente > 0 && (
+                  <p className="text-xs text-red-400 mt-1 font-bold">
+                    EXCEDENTE: +{excedente.toFixed(3)} TM
+                  </p>
+                )}
                 {!estaCompleto && <p className="text-xs text-slate-500 mt-1">{porcentajeCompletado.toFixed(1)}% completado</p>}
               </div>
             </div>
