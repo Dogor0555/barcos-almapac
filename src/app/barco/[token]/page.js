@@ -1548,6 +1548,9 @@ export default function BarcoPesadorPage() {
         prod.tipo_registro === 'viajes' ? totalViajesTM :
           totalViajesTM + totalBandaTM
 
+      // Calcular faltante UPDP (solo la meta - acumulado UPDP, sin incluir pendientes)
+      const faltanteUPDP = Math.max(0, metaTM - acumuladoUPDP)
+
       resumen[prod.id] = {
         id: prod.id,
         codigo: prod.codigo,
@@ -1561,6 +1564,7 @@ export default function BarcoPesadorPage() {
         acumuladoUPDP: acumuladoUPDP,
         acumuladoAlmapac: acumuladoAlmapac,
         acumuladoSistema: acumuladoSistema,
+        faltanteUPDP: faltanteUPDP,
         viajes: viajesCompletos.length,
         incompletos: incompletosProd.length,
         lecturas: lecturasProd.length,
@@ -2328,6 +2332,25 @@ export default function BarcoPesadorPage() {
                   </p>
                 </div>
 
+                {/* Faltante UPDP - NUEVO */}
+                <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl p-4 col-span-1">
+                  <div className="flex items-center gap-3">
+                    <TrendingDown className="w-6 h-6 text-amber-200" />
+                    <div>
+                      <p className="text-xs text-amber-200 uppercase font-bold">FALTANTE UPDP</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-white">
+                          {productoSeleccionado.faltanteUPDP.toFixed(3)}
+                        </span>
+                        <span className="text-sm text-amber-200">TM</span>
+                      </div>
+                      <p className="text-[10px] text-amber-300 mt-1">
+                        Meta - Acumulado UPDP
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className={`bg-slate-900 rounded-xl p-4 ${productoSeleccionado.faltanteTM > 0
                     ? 'border-l-4 border-amber-500'
                     : 'border-l-4 border-green-500'
@@ -2395,33 +2418,6 @@ export default function BarcoPesadorPage() {
                 )}
               </div>
             )}
-
-            {/* 👇 NUEVO: Mostrar límites configurados para este producto 
-            {(() => {
-              const limitesProductoDestino = barco?.metas_json?.limites_por_producto_destino || {}
-              const limitesProductoActivo = limitesProductoDestino[productoActivo?.codigo] || {}
-              const limitesActivos = Object.entries(limitesProductoActivo).filter(([_, limite]) => limite > 0)
-              
-              if (limitesActivos.length > 0) {
-                return (
-                  <div className="mt-4 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-                    <p className="text-xs text-amber-400 font-bold mb-2">📊 Límites configurados para {productoActivo.nombre}:</p>
-                    <div className="flex flex-wrap gap-3">
-                      {limitesActivos.map(([destinoId, limite]) => {
-                        const destino = destinos.find(d => d.id === parseInt(destinoId))
-                        return (
-                          <div key={destinoId} className="bg-slate-800 rounded-lg px-3 py-1">
-                            <span className="text-xs text-slate-400">{destino?.nombre || `Destino ${destinoId}`}:</span>
-                            <span className="text-sm font-bold text-amber-400 ml-2">{Number(limite).toFixed(3)} TM</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              }
-              return null
-            })()} */}
 
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -3901,7 +3897,7 @@ export default function BarcoPesadorPage() {
                                 </button>
                               </div>
                              </td>
-                           </tr>
+                            </tr>
                         )
                       })}
                     </tbody>
@@ -4071,8 +4067,8 @@ export default function BarcoPesadorPage() {
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                           </td>
+                         </tr>
                       ))}
                     </tbody>
                   </table>
