@@ -401,99 +401,20 @@ const descargarExcel = () => {
     if (fueraRango) stat.fueraDeRango++
   })
   
-  // Convertir a array y calcular promedios
   const resumenTransporte = Array.from(transporteMap.values()).map(stat => ({
     'TRANSPORTE': stat.transporte,
     'TOTAL DESCARGADO (TM)': stat.totalDescargado,
     'VIAJES TOTALES': stat.totalViajes,
     'VIAJES TRAILETA': stat.viajesTraileta,
     'VIAJES VOLQUETA': stat.viajesVolqueta,
-    'PROMEDIO TRAILETA (TM)': stat.viajesTraileta > 0 ? stat.pesoTraileta / stat.viajesTraileta : 0,
-    'PROMEDIO VOLQUETA (TM)': stat.viajesVolqueta > 0 ? stat.pesoVolqueta / stat.viajesVolqueta : 0,
-    '% DEL TOTAL': (stat.totalDescargado / estadisticas.totalNeto) * 100,
+    'PROMEDIO TRAILETA': (stat.viajesTraileta > 0 ? stat.pesoTraileta / stat.viajesTraileta : 0).toFixed(2),
+    'PROMEDIO VOLQUETA': (stat.viajesVolqueta > 0 ? stat.pesoVolqueta / stat.viajesVolqueta : 0).toFixed(2),
+    '% DEL TOTAL': ((stat.totalDescargado / estadisticas.totalNeto) * 100).toFixed(2),
     'FUERA DE RANGO': stat.fueraDeRango
   })).sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
 
   // ============================================
-  // DATOS POR TRANSPORTE (una hoja por cada transporte)
-  // ============================================
-  const datosExportar = registros.map(reg => {
-    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
-    
-    return {
-      'Correlativo': reg.correlativo,
-      'Placa': reg.placa,
-      'Transporte': reg.transporte || '—',
-      'Tipo Unidad': reg.tipo_unidad || '—',
-      'Rango Mínimo (TM)': rango.min,
-      'Rango Máximo (TM)': rango.max,
-      'Estado Peso': estado === 'bajo' ? 'Bajo peso' : (estado === 'sobre' ? 'Sobrepeso' : 'En rango'),
-      'Fecha': reg.fecha,
-      'Hora Entrada': reg.hora_entrada || '—',
-      'Hora Salida': reg.hora_salida || '—',
-      'Tiempo Atención': reg.tiempo_atencion || '—',
-      'Patio': reg.patio || '—',
-      'Bodega Barco': reg.bodega_barco || '—',
-      'Peso Bruto (TM)': reg.peso_bruto_updp_tm || 0,
-      'Peso Neto (TM)': reg.peso_neto_updp_tm || 0,
-      'Acumulado (TM)': reg.acumulado_updp_tm || 0
-    }
-  })
-
-  // Crear libro de Excel
-  const wb = XLSX.utils.book_new()
-  
-  // ============================================
-  // HOJA 1: Resumen por Transporte
-  // ============================================
-  const wsTransporte = XLSX.utils.json_to_sheet(resumenTransporte)
-  wsTransporte['!cols'] = [
-    { wch: 25 },  // Transporte
-    { wch: 22 },  // Total Descargado
-    { wch: 15 },  // Viajes Totales
-    { wch: 15 },  // Viajes Traileta
-    { wch: 15 },  // Viajes Volqueta
-    { wch: 22 },  // Promedio Traileta
-    { wch: 22 },  // Promedio Volqueta
-    { wch: 15 },  // % del Total
-    { wch: 15 }   // Fuera de Rango
-  ]
-  XLSX.utils.book_append_sheet(wb, wsTransporte, 'RESUMEN TRANSPORTES')
-  
-  // ============================================
-  // HOJA 2: Resumen General
-  // ============================================
-  const resumenData = [
-    { 'Métrica': '🚢 BARCO', 'Valor': barco?.nombre || 'N/A' },
-    { 'Métrica': '📋 CÓDIGO BARCO', 'Valor': barco?.codigo_barco || 'N/A' },
-    { 'Métrica': '⚖️ TOTAL DESCARGADO (TM)', 'Valor': fmtTM(estadisticas.totalNeto, 2) },
-    { 'Métrica': '🚛 TOTAL VIAJES', 'Valor': estadisticas.totalViajes },
-    { 'Métrica': '📊 PROMEDIO POR VIAJE (TM)', 'Valor': fmtTM(estadisticas.pesoPromedio, 2) },
-    { 'Métrica': '✅ VIAJES EN RANGO', 'Valor': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
-    { 'Métrica': '⚠️ VIAJES BAJO PESO', 'Valor': estadisticas.bajoPeso },
-    { 'Métrica': '⚠️ VIAJES SOBREPESO', 'Valor': estadisticas.sobrePeso },
-    { 'Métrica': '📍 TOTAL PATIO NORTE (TM)', 'Valor': fmtTM(estadisticas.totalNorte, 2) },
-    { 'Métrica': '📍 TOTAL PATIO SUR (TM)', 'Valor': fmtTM(estadisticas.totalSur, 2) },
-    { 'Métrica': '🎯 META MANIFESTADA (TM)', 'Valor': fmtTM(meta, 2) },
-    { 'Métrica': '📉 FALTANTE (TM)', 'Valor': fmtTM(faltante, 2) },
-    { 'Métrica': '📈 EXCEDENTE (TM)', 'Valor': fmtTM(excedente, 2) },
-    { 'Métrica': '📊 PORCENTAJE DE META', 'Valor': `${porcentajeMeta.toFixed(1)}%` },
-    { 'Métrica': '🕐 FECHA EXPORTACIÓN', 'Valor': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
-  ]
-  
-  const filtrosActivos = []
-  if (transporteSeleccionado) filtrosActivos.push(`🚚 Transporte: ${transporteSeleccionado}`)
-  if (diaSeleccionado) filtrosActivos.push(`📅 Día: ${diaSeleccionado}`)
-  const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : '📌 Todos los datos'
-  resumenData.push({ 'Métrica': '🔍 FILTRO APLICADO', 'Valor': filtroTexto })
-  
-  const wsResumen = XLSX.utils.json_to_sheet(resumenData)
-  wsResumen['!cols'] = [{ wch: 28 }, { wch: 40 }]
-  XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN GENERAL')
-  
-  // ============================================
-  // HOJA 3: Resumen por Placa (Descargo por placa)
+  // RESUMEN POR PLACA
   // ============================================
   const placaMap = new Map()
   
@@ -519,120 +440,222 @@ const descargarExcel = () => {
       'PLACA': stat.placa,
       'TOTAL DESCARGADO (TM)': stat.totalDescargado,
       'CANTIDAD VIAJES': stat.cantidadViajes,
-      'PROMEDIO POR VIAJE (TM)': stat.totalDescargado / stat.cantidadViajes
+      'PROMEDIO POR VIAJE': (stat.totalDescargado / stat.cantidadViajes).toFixed(2)
     }))
     .sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
-  
-  const wsPlaca = XLSX.utils.json_to_sheet(resumenPlaca)
-  wsPlaca['!cols'] = [
-    { wch: 15 },  // Placa
-    { wch: 22 },  // Total Descargado
-    { wch: 18 },  // Cantidad Viajes
-    { wch: 22 }   // Promedio por viaje
-  ]
-  XLSX.utils.book_append_sheet(wb, wsPlaca, 'RESUMEN POR PLACA')
+
+  // ============================================
+  // DATOS DE REGISTROS
+  // ============================================
+  const datosExportar = registros.map(reg => {
+    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+    
+    let estadoTexto = ''
+    if (estado === 'bajo') {
+      estadoTexto = 'BAJO PESO'
+    } else if (estado === 'sobre') {
+      estadoTexto = 'SOBREPESO'
+    } else {
+      estadoTexto = 'EN RANGO'
+    }
+    
+    return {
+      'CORRELATIVO': reg.correlativo,
+      'PLACA': reg.placa,
+      'TRANSPORTE': reg.transporte || '—',
+      'TIPO UNIDAD': reg.tipo_unidad || '—',
+      'RANGO MINIMO (TM)': rango.min,
+      'RANGO MAXIMO (TM)': rango.max,
+      'ESTADO': estadoTexto,
+      'FECHA': reg.fecha,
+      'HORA ENTRADA': reg.hora_entrada || '—',
+      'HORA SALIDA': reg.hora_salida || '—',
+      'TIEMPO ATENCION': reg.tiempo_atencion || '—',
+      'PATIO': reg.patio || '—',
+      'BODEGA BARCO': reg.bodega_barco || '—',
+      'PESO BRUTO (TM)': (reg.peso_bruto_updp_tm || 0).toFixed(2),
+      'PESO NETO (TM)': (reg.peso_neto_updp_tm || 0).toFixed(2),
+      'ACUMULADO (TM)': (reg.acumulado_updp_tm || 0).toFixed(2)
+    }
+  })
+
+  // Crear libro de Excel
+  const wb = XLSX.utils.book_new()
   
   // ============================================
-  // HOJAS POR CADA TRANSPORTE
+  // HOJA 1: RESUMEN POR TRANSPORTE
+  // ============================================
+  const wsTransporte = XLSX.utils.json_to_sheet(resumenTransporte)
+  wsTransporte['!cols'] = [
+    { wch: 28 },  // TRANSPORTE
+    { wch: 22 },  // TOTAL DESCARGADO
+    { wch: 16 },  // VIAJES TOTALES
+    { wch: 18 },  // VIAJES TRAILETA
+    { wch: 18 },  // VIAJES VOLQUETA
+    { wch: 18 },  // PROMEDIO TRAILETA
+    { wch: 18 },  // PROMEDIO VOLQUETA
+    { wch: 14 },  // % DEL TOTAL
+    { wch: 16 }   // FUERA DE RANGO
+  ]
+  XLSX.utils.book_append_sheet(wb, wsTransporte, 'RESUMEN_TRANSPORTES')
+  
+  // ============================================
+  // HOJA 2: RESUMEN POR PLACA
+  // ============================================
+  const wsPlaca = XLSX.utils.json_to_sheet(resumenPlaca)
+  wsPlaca['!cols'] = [
+    { wch: 18 },  // PLACA
+    { wch: 25 },  // TOTAL DESCARGADO
+    { wch: 20 },  // CANTIDAD VIAJES
+    { wch: 22 }   // PROMEDIO POR VIAJE
+  ]
+  XLSX.utils.book_append_sheet(wb, wsPlaca, 'RESUMEN_POR_PLACA')
+  
+  // ============================================
+  // HOJA 3: RESUMEN GENERAL
+  // ============================================
+  const resumenData = [
+    { 'METRICA': 'BARCO', 'VALOR': barco?.nombre || 'N/A' },
+    { 'METRICA': 'CODIGO BARCO', 'VALOR': barco?.codigo_barco || 'N/A' },
+    { 'METRICA': 'TOTAL DESCARGADO (TM)', 'VALOR': fmtTM(estadisticas.totalNeto, 2) },
+    { 'METRICA': 'TOTAL VIAJES', 'VALOR': estadisticas.totalViajes },
+    { 'METRICA': 'PROMEDIO POR VIAJE (TM)', 'VALOR': fmtTM(estadisticas.pesoPromedio, 2) },
+    { 'METRICA': 'VIAJES EN RANGO', 'VALOR': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
+    { 'METRICA': 'VIAJES BAJO PESO', 'VALOR': estadisticas.bajoPeso },
+    { 'METRICA': 'VIAJES SOBREPESO', 'VALOR': estadisticas.sobrePeso },
+    { 'METRICA': 'TOTAL PATIO NORTE (TM)', 'VALOR': fmtTM(estadisticas.totalNorte, 2) },
+    { 'METRICA': 'TOTAL PATIO SUR (TM)', 'VALOR': fmtTM(estadisticas.totalSur, 2) },
+    { 'METRICA': 'META MANIFESTADA (TM)', 'VALOR': fmtTM(meta, 2) },
+    { 'METRICA': 'FALTANTE (TM)', 'VALOR': fmtTM(faltante, 2) },
+    { 'METRICA': 'EXCEDENTE (TM)', 'VALOR': fmtTM(excedente, 2) },
+    { 'METRICA': 'PORCENTAJE DE META', 'VALOR': `${porcentajeMeta.toFixed(1)}%` },
+    { 'METRICA': 'FECHA EXPORTACION', 'VALOR': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
+  ]
+  
+  const filtrosActivos = []
+  if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
+  if (diaSeleccionado) filtrosActivos.push(`Dia: ${diaSeleccionado}`)
+  const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
+  resumenData.push({ 'METRICA': 'FILTRO APLICADO', 'VALOR': filtroTexto })
+  
+  const wsResumen = XLSX.utils.json_to_sheet(resumenData)
+  wsResumen['!cols'] = [{ wch: 32 }, { wch: 45 }]
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
+  
+  // ============================================
+  // HOJAS POR CADA TRANSPORTE (SANTIMONI)
   // ============================================
   const transportesUnicos = [...new Set(registros.map(reg => reg.transporte || 'DESCONOCIDO'))]
   
   transportesUnicos.forEach(transporteNombre => {
-    const viajesTransporte = datosExportar.filter(dato => dato.Transporte === transporteNombre)
+    // Filtrar viajes de este transporte con los datos originales
+    const viajesTransporteFiltrados = registros.filter(reg => (reg.transporte || 'DESCONOCIDO') === transporteNombre)
+    const totalDescargadoTransporte = viajesTransporteFiltrados.reduce((sum, v) => sum + (v.peso_neto_updp_tm || 0), 0)
     
-    if (viajesTransporte.length > 0) {
-      // Calcular total descargado para este transporte
-      const totalDescargadoTransporte = viajesTransporte.reduce((sum, viaje) => sum + (viaje['Peso Neto (TM)'] || 0), 0)
+    // Crear hoja con encabezado de resumen
+    const datosHojaTransporte = [
+      {
+        'SANTIMONI': 'TRANSPORTE: ' + transporteNombre,
+        'DETALLE DE VIAJES': '',
+        'TOTAL DESCARGADO (TM)': totalDescargadoTransporte.toFixed(2),
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': ''
+      },
+      {
+        'SANTIMONI': '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        'DETALLE DE VIAJES': '',
+        'TOTAL DESCARGADO (TM)': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': ''
+      }
+    ]
+    
+    // Agregar cada viaje formateado
+    viajesTransporteFiltrados.forEach(reg => {
+      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+      let estadoTexto = ''
+      if (estado === 'bajo') estadoTexto = 'BAJO PESO'
+      else if (estado === 'sobre') estadoTexto = 'SOBREPESO'
+      else estadoTexto = 'EN RANGO'
       
-      // Agregar fila de resumen al inicio
-      const hojaTransporte = [
-        {
-          '': '📊 RESUMEN SANTIMONI',
-          'Correlativo': `TRANSPORTE: ${transporteNombre}`,
-          'Placa': '',
-          'Tipo Unidad': '',
-          'Rango Mínimo (TM)': '',
-          'Rango Máximo (TM)': '',
-          'Estado Peso': '',
-          'Fecha': '',
-          'Hora Entrada': '',
-          'Hora Salida': '',
-          'Tiempo Atención': '',
-          'Patio': '',
-          'Bodega Barco': '',
-          'Peso Bruto (TM)': '',
-          'Peso Neto (TM)': '',
-          'Acumulado (TM)': ''
-        },
-        {
-          '': '📋 DETALLE DE VIAJES',
-          'Correlativo': `TOTAL DESCARGADO: ${fmtTM(totalDescargadoTransporte, 2)} TM`,
-          'Placa': '',
-          'Tipo Unidad': '',
-          'Rango Mínimo (TM)': '',
-          'Rango Máximo (TM)': '',
-          'Estado Peso': '',
-          'Fecha': '',
-          'Hora Entrada': '',
-          'Hora Salida': '',
-          'Tiempo Atención': '',
-          'Patio': '',
-          'Bodega Barco': '',
-          'Peso Bruto (TM)': '',
-          'Peso Neto (TM)': '',
-          'Acumulado (TM)': ''
-        },
-        {
-          '': '',
-          'Correlativo': `VIAJES TOTALES: ${viajesTransporte.length}`,
-          'Placa': '',
-          'Tipo Unidad': '',
-          'Rango Mínimo (TM)': '',
-          'Rango Máximo (TM)': '',
-          'Estado Peso': '',
-          'Fecha': '',
-          'Hora Entrada': '',
-          'Hora Salida': '',
-          'Tiempo Atención': '',
-          'Patio': '',
-          'Bodega Barco': '',
-          'Peso Bruto (TM)': '',
-          'Peso Neto (TM)': '',
-          'Acumulado (TM)': ''
-        },
-        {} // Fila en blanco separadora
-      ]
-      
-      // Agregar los registros
-      const hojaCompleta = [...hojaTransporte, ...viajesTransporte]
-      const wsTransporteIndividual = XLSX.utils.json_to_sheet(hojaCompleta, { skipHeader: true })
-      
-      // Definir anchos de columnas
-      wsTransporteIndividual['!cols'] = [
-        { wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
-        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
-        { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
-      ]
-      
-      // Limpiar nombre de la hoja (máximo 31 caracteres)
-      let nombreHoja = transporteNombre.substring(0, 31)
-      XLSX.utils.book_append_sheet(wb, wsTransporteIndividual, nombreHoja)
-    }
+      datosHojaTransporte.push({
+        'SANTIMONI': reg.correlativo || '',
+        'DETALLE DE VIAJES': reg.placa || '',
+        'TOTAL DESCARGADO (TM)': (reg.peso_neto_updp_tm || 0).toFixed(2),
+        'TIPO UNIDAD': reg.tipo_unidad || '',
+        'ESTADO': estadoTexto,
+        'FECHA': reg.fecha || '',
+        'HORA ENTRADA': reg.hora_entrada || '',
+        'HORA SALIDA': reg.hora_salida || '',
+        'PATIO': reg.patio || '',
+        'BODEGA BARCO': reg.bodega_barco || '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': '',
+        '': ''
+      })
+    })
+    
+    const wsTransporteIndividual = XLSX.utils.json_to_sheet(datosHojaTransporte, { skipHeader: true })
+    wsTransporteIndividual['!cols'] = [
+      { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      { wch: 12 }, { wch: 16 }
+    ]
+    
+    // Limpiar nombre de la hoja (max 31 caracteres)
+    let nombreHoja = transporteNombre.replace(/[\\/*?:[\]]/g, '').substring(0, 31)
+    XLSX.utils.book_append_sheet(wb, wsTransporteIndividual, nombreHoja)
   })
   
   // ============================================
-  // HOJA DE REGISTROS COMPLETOS
+  // HOJA 4: TODOS LOS REGISTROS
   // ============================================
-  const ws = XLSX.utils.json_to_sheet(datosExportar)
-  const colWidths = [
-    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
-    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
-    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
-    { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+  const wsRegistros = XLSX.utils.json_to_sheet(datosExportar)
+  wsRegistros['!cols'] = [
+    { wch: 12 },  // CORRELATIVO
+    { wch: 12 },  // PLACA
+    { wch: 20 },  // TRANSPORTE
+    { wch: 12 },  // TIPO UNIDAD
+    { wch: 16 },  // RANGO MINIMO
+    { wch: 16 },  // RANGO MAXIMO
+    { wch: 14 },  // ESTADO
+    { wch: 12 },  // FECHA
+    { wch: 14 },  // HORA ENTRADA
+    { wch: 14 },  // HORA SALIDA
+    { wch: 14 },  // TIEMPO ATENCION
+    { wch: 10 },  // PATIO
+    { wch: 14 },  // BODEGA BARCO
+    { wch: 15 },  // PESO BRUTO
+    { wch: 15 },  // PESO NETO
+    { wch: 15 }   // ACUMULADO
   ]
-  ws['!cols'] = colWidths
-  XLSX.utils.book_append_sheet(wb, ws, 'TODOS LOS REGISTROS')
+  XLSX.utils.book_append_sheet(wb, wsRegistros, 'TODOS_LOS_REGISTROS')
   
   // Guardar archivo
   const nombreArchivo = `PetCoke_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
