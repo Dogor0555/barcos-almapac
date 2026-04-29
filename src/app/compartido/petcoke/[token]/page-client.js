@@ -414,20 +414,28 @@ const descargarExcel = () => {
   })).sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
 
   // ============================================
-  // RESUMEN POR PLACA
+  // RESUMEN POR PLACA (INCLUYE TRANSPORTE)
   // ============================================
   const placaMap = new Map()
   
   registros.forEach(reg => {
     const placa = reg.placa || 'SIN PLACA'
     const peso = reg.peso_neto_updp_tm || 0
+    const transporte = reg.transporte || 'DESCONOCIDO'
     
     if (!placaMap.has(placa)) {
       placaMap.set(placa, {
         placa: placa,
+        transporte: transporte,
         totalDescargado: 0,
         cantidadViajes: 0
       })
+    } else {
+      // Si la misma placa aparece con diferente transporte (no debería pasar, pero por si acaso)
+      const existing = placaMap.get(placa)
+      if (existing.transporte !== transporte && existing.transporte !== 'DESCONOCIDO') {
+        existing.transporte = 'MULTIPLE'
+      }
     }
     
     const stat = placaMap.get(placa)
@@ -438,11 +446,12 @@ const descargarExcel = () => {
   const resumenPlaca = Array.from(placaMap.values())
     .map(stat => ({
       'PLACA': stat.placa,
-      'TOTAL DESCARGADO (TM)': stat.totalDescargado,
+      'TRANSPORTE': stat.transporte,
+      'TOTAL DESCARGADO (TM)': stat.totalDescargado.toFixed(2),
       'CANTIDAD VIAJES': stat.cantidadViajes,
       'PROMEDIO POR VIAJE': (stat.totalDescargado / stat.cantidadViajes).toFixed(2)
     }))
-    .sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
+    .sort((a, b) => parseFloat(b['TOTAL DESCARGADO (TM)']) - parseFloat(a['TOTAL DESCARGADO (TM)']))
 
   // ============================================
   // DATOS DE REGISTROS
@@ -501,13 +510,14 @@ const descargarExcel = () => {
   XLSX.utils.book_append_sheet(wb, wsTransporte, 'RESUMEN_TRANSPORTES')
   
   // ============================================
-  // HOJA 2: RESUMEN POR PLACA
+  // HOJA 2: RESUMEN POR PLACA (CON TRANSPORTE)
   // ============================================
   const wsPlaca = XLSX.utils.json_to_sheet(resumenPlaca)
   wsPlaca['!cols'] = [
     { wch: 18 },  // PLACA
+    { wch: 28 },  // TRANSPORTE
     { wch: 25 },  // TOTAL DESCARGADO
-    { wch: 20 },  // CANTIDAD VIAJES
+    { wch: 18 },  // CANTIDAD VIAJES
     { wch: 22 }   // PROMEDIO POR VIAJE
   ]
   XLSX.utils.book_append_sheet(wb, wsPlaca, 'RESUMEN_POR_PLACA')
@@ -574,7 +584,7 @@ const descargarExcel = () => {
         '': ''
       },
       {
-        'SANTIMONI': '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        'SANTIMONI': '----------------------------------------------------------------------------------------------------',
         'DETALLE DE VIAJES': '',
         'TOTAL DESCARGADO (TM)': '',
         '': '',
