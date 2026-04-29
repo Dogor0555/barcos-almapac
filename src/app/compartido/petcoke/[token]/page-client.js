@@ -13,8 +13,7 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
-import * as XLSX from 'xlsx'
-
+import * as XLSX from 'xlsx-js-style'
 // Importación de iconos de react-icons
 import { 
   FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
@@ -356,231 +355,385 @@ export default function ClientPage({ token }) {
     cargarTodosRegistros()
   }, [token])
 
+// ============================================================
+// 1. PRIMERO: cambia el import en la parte superior del archivo
+//    de:  import * as XLSX from 'xlsx'
+//    a:   import * as XLSX from 'xlsx-js-style'
+//
+// 2. Instala el paquete:
+//    npm install xlsx-js-style
+//
+// 3. Reemplaza TODA la función descargarExcel con esto:
+// ============================================================
+
 const descargarExcel = () => {
   if (!registros.length) {
     alert('No hay datos para exportar')
     return
   }
 
-  // ============================================
-  // CALCULAR RESUMEN POR TRANSPORTE
-  // ============================================
-  const transporteMap = new Map()
-  
-  registros.forEach(reg => {
-    const nombreTransporte = reg.transporte || 'DESCONOCIDO'
-    const peso = reg.peso_neto_updp_tm || 0
-    const tipo = (reg.tipo_unidad || '').toUpperCase()
-    const fueraRango = estaFueraDeRango(peso, reg.tipo_unidad)
-    
-    if (!transporteMap.has(nombreTransporte)) {
-      transporteMap.set(nombreTransporte, {
-        transporte: nombreTransporte,
-        totalDescargado: 0,
-        totalViajes: 0,
-        viajesTraileta: 0,
-        viajesVolqueta: 0,
-        pesoTraileta: 0,
-        pesoVolqueta: 0,
-        fueraDeRango: 0
-      })
-    }
-    
-    const stat = transporteMap.get(nombreTransporte)
-    stat.totalDescargado += peso
-    stat.totalViajes++
-    
-    if (tipo === 'TRAILETA') {
-      stat.viajesTraileta++
-      stat.pesoTraileta += peso
-    } else if (tipo === 'VOLQUETA') {
-      stat.viajesVolqueta++
-      stat.pesoVolqueta += peso
-    }
-    
-    if (fueraRango) stat.fueraDeRango++
-  })
-  
-  const resumenTransporte = Array.from(transporteMap.values()).map(stat => ({
-    'TRANSPORTE': stat.transporte,
-    'TOTAL DESCARGADO (TM)': stat.totalDescargado,
-    'VIAJES TOTALES': stat.totalViajes,
-    'VIAJES TRAILETA': stat.viajesTraileta,
-    'VIAJES VOLQUETA': stat.viajesVolqueta,
-    'PROMEDIO TRAILETA': (stat.viajesTraileta > 0 ? stat.pesoTraileta / stat.viajesTraileta : 0).toFixed(2),
-    'PROMEDIO VOLQUETA': (stat.viajesVolqueta > 0 ? stat.pesoVolqueta / stat.viajesVolqueta : 0).toFixed(2),
-    '% DEL TOTAL': ((stat.totalDescargado / estadisticas.totalNeto) * 100).toFixed(2),
-    'FUERA DE RANGO': stat.fueraDeRango
-  })).sort((a, b) => b['TOTAL DESCARGADO (TM)'] - a['TOTAL DESCARGADO (TM)'])
-
-  // ============================================
-  // RESUMEN POR PLACA (INCLUYE TRANSPORTE)
-  // ============================================
-  const placaMap = new Map()
-  
-  registros.forEach(reg => {
-    const placa = reg.placa || 'SIN PLACA'
-    const peso = reg.peso_neto_updp_tm || 0
-    const transporte = reg.transporte || 'DESCONOCIDO'
-    
-    if (!placaMap.has(placa)) {
-      placaMap.set(placa, {
-        placa: placa,
-        transporte: transporte,
-        totalDescargado: 0,
-        cantidadViajes: 0
-      })
-    } else {
-      const existing = placaMap.get(placa)
-      if (existing.transporte !== transporte && existing.transporte !== 'DESCONOCIDO') {
-        existing.transporte = 'MULTIPLE'
+  // ─────────────────────────────────────────────────────────────
+  // HELPERS DE ESTILO
+  // ─────────────────────────────────────────────────────────────
+  const S = {
+    // Encabezado naranja (hojas principales)
+    header: (align = 'center') => ({
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FF6600' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center', wrapText: false },
+      border: {
+        top:    { style: 'thin', color: { rgb: 'CC4400' } },
+        bottom: { style: 'thin', color: { rgb: 'CC4400' } },
+        left:   { style: 'thin', color: { rgb: 'CC4400' } },
+        right:  { style: 'thin', color: { rgb: 'CC4400' } },
       }
-    }
-    
-    const stat = placaMap.get(placa)
-    stat.totalDescargado += peso
-    stat.cantidadViajes++
-  })
-  
-  const resumenPlaca = Array.from(placaMap.values())
-    .map(stat => ({
-      'PLACA': stat.placa,
-      'TRANSPORTE': stat.transporte,
-      'TOTAL DESCARGADO (TM)': stat.totalDescargado.toFixed(2),
-      'CANTIDAD VIAJES': stat.cantidadViajes,
-      'PROMEDIO POR VIAJE': (stat.totalDescargado / stat.cantidadViajes).toFixed(2)
-    }))
-    .sort((a, b) => parseFloat(b['TOTAL DESCARGADO (TM)']) - parseFloat(a['TOTAL DESCARGADO (TM)']))
+    }),
+    // Fila de dato normal (blanco)
+    data: (align = 'left', bold = false) => ({
+      font: { bold, color: { rgb: '000000' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left:   { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right:  { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    // Fila de TOTAL en amarillo (como en la imagen)
+    total: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFFF00' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top:    { style: 'medium', color: { rgb: '999900' } },
+        bottom: { style: 'medium', color: { rgb: '999900' } },
+        left:   { style: 'thin',   color: { rgb: '999900' } },
+        right:  { style: 'thin',   color: { rgb: '999900' } },
+      }
+    }),
+    // Título de transportista (azul claro, como en la imagen)
+    transportTitle: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 12, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'ADD8E6' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top:    { style: 'medium', color: { rgb: '4A90C4' } },
+        bottom: { style: 'medium', color: { rgb: '4A90C4' } },
+        left:   { style: 'medium', color: { rgb: '4A90C4' } },
+        right:  { style: 'medium', color: { rgb: '4A90C4' } },
+      }
+    }),
+    // Subtítulo TRAILETAS / VOLQUETAS (azul medio)
+    subtypeTitle: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'BDD7EE' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: '4A90C4' } },
+        bottom: { style: 'thin', color: { rgb: '4A90C4' } },
+        left:   { style: 'thin', color: { rgb: '4A90C4' } },
+        right:  { style: 'thin', color: { rgb: '4A90C4' } },
+      }
+    }),
+    // Encabezado de columnas dentro de cada sección (gris claro)
+    colHeader: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: '999999' } },
+        bottom: { style: 'thin', color: { rgb: '999999' } },
+        left:   { style: 'thin', color: { rgb: '999999' } },
+        right:  { style: 'thin', color: { rgb: '999999' } },
+      }
+    }),
+    // Celda vacía de relleno
+    empty: () => ({
+      fill: { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' }
+    }),
+    // Separador entre secciones (fila en blanco con fondo gris suave)
+    separator: () => ({
+      fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' }
+    }),
+    // Estado BAJO PESO (amarillo suave)
+    bajoPeso: () => ({
+      font: { bold: true, color: { rgb: '7D5100' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFF2CC' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left:   { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right:  { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    // Estado SOBREPESO (rojo suave)
+    sobrePeso: () => ({
+      font: { bold: true, color: { rgb: '9C0006' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFCCCC' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left:   { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right:  { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    // Estado EN RANGO (verde suave)
+    enRango: () => ({
+      font: { bold: false, color: { rgb: '276221' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'E2EFDA' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top:    { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left:   { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right:  { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+  }
 
-  // ============================================
-  // DATOS DE REGISTROS
-  // ============================================
-  const datosExportar = registros.map(reg => {
-    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
-    
-    let estadoTexto = ''
-    if (estado === 'bajo') {
-      estadoTexto = 'BAJO PESO'
-    } else if (estado === 'sobre') {
-      estadoTexto = 'SOBREPESO'
-    } else {
-      estadoTexto = 'EN RANGO'
-    }
-    
-    return {
-      'CORRELATIVO': reg.correlativo,
-      'PLACA': reg.placa,
-      'TRANSPORTE': reg.transporte || '—',
-      'TIPO UNIDAD': reg.tipo_unidad || '—',
-      'RANGO MINIMO (TM)': rango.min,
-      'RANGO MAXIMO (TM)': rango.max,
-      'ESTADO': estadoTexto,
-      'FECHA': reg.fecha,
-      'HORA ENTRADA': reg.hora_entrada || '—',
-      'HORA SALIDA': reg.hora_salida || '—',
-      'TIEMPO ATENCION': reg.tiempo_atencion || '—',
-      'PATIO': reg.patio || '—',
-      'BODEGA BARCO': reg.bodega_barco || '—',
-      'PESO BRUTO (TM)': (reg.peso_bruto_updp_tm || 0).toFixed(2),
-      'PESO NETO (TM)': (reg.peso_neto_updp_tm || 0).toFixed(2),
-      'ACUMULADO (TM)': (reg.acumulado_updp_tm || 0).toFixed(2)
-    }
-  })
+  // Helper: crea una celda con valor y estilo
+  const C = (v, style) => ({ v, s: style, t: typeof v === 'number' ? 'n' : 's' })
 
-  // ============================================
-  // FUNCION PARA APLICAR ESTILOS (NARANJA + BLANCO)
-  // ============================================
+  // Helper: aplica estilos a hoja generada con json_to_sheet (naranja headers)
   const aplicarEstilosExcel = (ws) => {
-    if (!ws || !ws['!ref']) return
-    
+    if (!ws?.['!ref']) return
     const range = XLSX.utils.decode_range(ws['!ref'])
-    
-    // Aplicar estilos a la primera fila (encabezados) - Naranja con letra blanca
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C })
-      if (!ws[cellAddress]) continue
-      
-      ws[cellAddress].s = {
-        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
-        fill: { fgColor: { rgb: "FF6600" }, patternType: "solid" },  // Naranja
-        alignment: { horizontal: "center", vertical: "center" },
-        border: {
-          top: { style: "thin", color: { rgb: "CCCCCC" } },
-          bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-          left: { style: "thin", color: { rgb: "CCCCCC" } },
-          right: { style: "thin", color: { rgb: "CCCCCC" } }
-        }
-      }
+    for (let C_ = range.s.c; C_ <= range.e.c; ++C_) {
+      const ca = XLSX.utils.encode_cell({ r: range.s.r, c: C_ })
+      if (ws[ca]) ws[ca].s = S.header()
     }
-    
-    // Aplicar estilos a las filas de datos (fondo blanco, letra negra)
     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-        if (!ws[cellAddress]) continue
-        
-        ws[cellAddress].s = {
-          font: { color: { rgb: "000000" }, sz: 10, name: "Calibri" },
-          fill: { fgColor: { rgb: "FFFFFF" }, patternType: "solid" },
-          alignment: { horizontal: "left", vertical: "center" },
-          border: {
-            top: { style: "thin", color: { rgb: "EEEEEE" } },
-            bottom: { style: "thin", color: { rgb: "EEEEEE" } },
-            left: { style: "thin", color: { rgb: "EEEEEE" } },
-            right: { style: "thin", color: { rgb: "EEEEEE" } }
-          }
-        }
+      for (let C_ = range.s.c; C_ <= range.e.c; ++C_) {
+        const ca = XLSX.utils.encode_cell({ r: R, c: C_ })
+        if (ws[ca]) ws[ca].s = S.data('left')
       }
     }
-    
-    // Altura de la fila de encabezado
     ws['!rows'] = ws['!rows'] || []
     ws['!rows'][range.s.r] = { hpt: 22 }
   }
 
-  // ============================================
-  // FUNCION PARA APLICAR ESTILOS A HOJAS DE TRANSPORTE
-  // ============================================
-  const aplicarEstilosTransporte = (ws) => {
-    if (!ws || !ws['!ref']) return
-    
-    const range = XLSX.utils.decode_range(ws['!ref'])
-    
-    // Aplicar estilos a la fila de encabezados (fila 3 generalmente)
-    const headerRow = range.s.r + 2  // Porque las primeras 2 filas son resumen
-    
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: headerRow, c: C })
-      if (!ws[cellAddress]) continue
-      
-      ws[cellAddress].s = {
-        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
-        fill: { fgColor: { rgb: "FF6600" }, patternType: "solid" },
-        alignment: { horizontal: "center", vertical: "center" }
-      }
-    }
-    
-    // Aplicar estilos a las filas de datos
-    for (let R = headerRow + 1; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-        if (!ws[cellAddress]) continue
-        
-        ws[cellAddress].s = {
-          font: { color: { rgb: "000000" }, sz: 10, name: "Calibri" },
-          fill: { fgColor: { rgb: "FFFFFF" }, patternType: "solid" }
-        }
-      }
+  // Helper: escribe una fila de celdas en la hoja
+  const writeRow = (ws, rowIdx, cols, cells) => {
+    cells.forEach((cell, c) => {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx, c })
+      ws[addr] = cell
+    })
+    // Actualizar !ref
+    if (!ws['!ref']) {
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rowIdx, c: cols - 1 } })
+    } else {
+      const cur = XLSX.utils.decode_range(ws['!ref'])
+      cur.e.r = Math.max(cur.e.r, rowIdx)
+      cur.e.c = Math.max(cur.e.c, cols - 1)
+      ws['!ref'] = XLSX.utils.encode_range(cur)
     }
   }
 
-  // Crear libro de Excel
   const wb = XLSX.utils.book_new()
-  
-  // ============================================
-  // HOJA 1: RESUMEN POR TRANSPORTE
-  // ============================================
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 1: RESUMEN_POR_UNIDAD  (la que faltaba — como en la imagen)
+  // Estructura por transportista:
+  //   [NOMBRE TRANSPORTE]         ← azul claro, span 3 cols
+  //   [TRAILETAS]                 ← azul medio, span 3 cols
+  //   UNIDAD | VIAJES | TONELADAS ← headers grises
+  //   placa  |  n     |  xxx      ← filas blancas
+  //   TOTAL  |  n     |  xxx      ← fila amarilla
+  //   [fila vacía separadora]
+  //   [VOLQUETAS]                 ← azul medio, span 3 cols
+  //   UNIDAD | VIAJES | TONELADAS
+  //   ...
+  //   TOTAL
+  //   [fila vacía]
+  //   [TOTAL VOLQUETAS Y TRAILETAS] ← azul claro span 3
+  //   VIAJES | TONELADAS (TM)       ← headers grises 2 cols
+  //   n      | xxx                  ← fila blanca
+  //   [2 filas vacías entre transportistas]
+  // ─────────────────────────────────────────────────────────────
+
+  // Agrupar registros por transportista → tipo → placa
+  const porTransporte = {}
+  registros.forEach(reg => {
+    const t = reg.transporte || 'DESCONOCIDO'
+    const tipo = (reg.tipo_unidad || 'VOLQUETA').toUpperCase()
+    const placa = reg.placa || 'SIN PLACA'
+    const peso = reg.peso_neto_updp_tm || 0
+
+    if (!porTransporte[t]) porTransporte[t] = { TRAILETA: {}, VOLQUETA: {} }
+    const bucket = tipo === 'TRAILETA' ? porTransporte[t].TRAILETA : porTransporte[t].VOLQUETA
+    if (!bucket[placa]) bucket[placa] = { viajes: 0, toneladas: 0 }
+    bucket[placa].viajes++
+    bucket[placa].toneladas += peso
+  })
+
+  const COLS_UNIDAD = 3   // UNIDAD | VIAJES | TONELADAS
+  const ws1 = { '!ref': 'A1:C1', '!cols': [{ wch: 18 }, { wch: 10 }, { wch: 16 }], '!rows': [] }
+  let row = 0
+
+  Object.entries(porTransporte)
+    .sort((a, b) => {
+      const sumA = Object.values(a[1].TRAILETA).reduce((s, v) => s + v.toneladas, 0)
+                 + Object.values(a[1].VOLQUETA).reduce((s, v) => s + v.toneladas, 0)
+      const sumB = Object.values(b[1].TRAILETA).reduce((s, v) => s + v.toneladas, 0)
+                 + Object.values(b[1].VOLQUETA).reduce((s, v) => s + v.toneladas, 0)
+      return sumB - sumA
+    })
+    .forEach(([transporteName, tipos]) => {
+
+      const trailetas = Object.entries(tipos.TRAILETA).sort((a,b) => b[1].toneladas - a[1].toneladas)
+      const volquetas  = Object.entries(tipos.VOLQUETA).sort((a,b) => b[1].toneladas - a[1].toneladas)
+      const totalTraiVj = trailetas.reduce((s,[,v]) => s + v.viajes,    0)
+      const totalTraiTm = trailetas.reduce((s,[,v]) => s + v.toneladas, 0)
+      const totalVolvj  = volquetas.reduce((s,[,v])  => s + v.viajes,    0)
+      const totalVolTm  = volquetas.reduce((s,[,v])  => s + v.toneladas, 0)
+      const totalVj     = totalTraiVj + totalVolvj
+      const totalTm     = totalTraiTm + totalVolTm
+
+      // Fila: NOMBRE TRANSPORTISTA (span 3, azul claro)
+      ws1['!rows'][row] = { hpt: 22 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C(transporteName, S.transportTitle('center')),
+        C('',             S.transportTitle('center')),
+        C('',             S.transportTitle('center')),
+      ])
+      row++
+
+      // ── SECCIÓN TRAILETAS ──
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TRAILETAS', S.subtypeTitle()),
+        C('',          S.subtypeTitle()),
+        C('',          S.subtypeTitle()),
+      ])
+      row++
+
+      // Headers de columna
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('UNIDAD',    S.colHeader('left')),
+        C('VIAJES',    S.colHeader('center')),
+        C('TONELADAS', S.colHeader('center')),
+      ])
+      row++
+
+      if (trailetas.length === 0) {
+        writeRow(ws1, row, COLS_UNIDAD, [
+          C('Sin registros', S.data('center')),
+          C('',              S.data('center')),
+          C('',              S.data('center')),
+        ])
+        row++
+      } else {
+        trailetas.forEach(([placa, v]) => {
+          writeRow(ws1, row, COLS_UNIDAD, [
+            C(placa,                              S.data('left')),
+            C(v.viajes,                           S.data('center')),
+            C(Math.round(v.toneladas),            S.data('right')),
+          ])
+          row++
+        })
+      }
+
+      // Fila TOTAL trailetas (amarilla)
+      ws1['!rows'][row] = { hpt: 20 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL',                   S.total('left')),
+        C(totalTraiVj,               S.total('center')),
+        C(Math.round(totalTraiTm),   S.total('right')),
+      ])
+      row++
+
+      // Fila separadora
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.separator()), C('', S.separator()), C('', S.separator())])
+      row++
+
+      // ── SECCIÓN VOLQUETAS ──
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('VOLQUETAS', S.subtypeTitle()),
+        C('',          S.subtypeTitle()),
+        C('',          S.subtypeTitle()),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('UNIDAD',    S.colHeader('left')),
+        C('VIAJES',    S.colHeader('center')),
+        C('TONELADAS', S.colHeader('center')),
+      ])
+      row++
+
+      if (volquetas.length === 0) {
+        writeRow(ws1, row, COLS_UNIDAD, [
+          C('Sin registros', S.data('center')),
+          C('',              S.data('center')),
+          C('',              S.data('center')),
+        ])
+        row++
+      } else {
+        volquetas.forEach(([placa, v]) => {
+          writeRow(ws1, row, COLS_UNIDAD, [
+            C(placa,                   S.data('left')),
+            C(v.viajes,                S.data('center')),
+            C(Math.round(v.toneladas), S.data('right')),
+          ])
+          row++
+        })
+      }
+
+      // Fila TOTAL volquetas (amarilla)
+      ws1['!rows'][row] = { hpt: 20 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL',                  S.total('left')),
+        C(totalVolvj,               S.total('center')),
+        C(Math.round(totalVolTm),   S.total('right')),
+      ])
+      row++
+
+      // Separador
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.separator()), C('', S.separator()), C('', S.separator())])
+      row++
+
+      // ── TOTAL VOLQUETAS Y TRAILETAS ──
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL VOLQUETAS Y TRAILETAS', S.transportTitle('center')),
+        C('',                            S.transportTitle('center')),
+        C('',                            S.transportTitle('center')),
+      ])
+      row++
+
+      // Solo 2 columnas: VIAJES | TONELADAS (TM)
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('VIAJES',         S.colHeader('center')),
+        C('TONELADAS (TM)', S.colHeader('center')),
+        C('',               S.colHeader('center')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C(totalVj,               S.data('center')),
+        C(Math.round(totalTm),   S.data('right')),
+        C('',                    S.data('center')),
+      ])
+      row++
+
+      // 2 filas vacías de separación entre transportistas
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.empty()), C('', S.empty()), C('', S.empty())])
+      row++
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.empty()), C('', S.empty()), C('', S.empty())])
+      row++
+    })
+
+  // Actualizar !ref final
+  ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: COLS_UNIDAD - 1 } })
+  XLSX.utils.book_append_sheet(wb, ws1, 'RESUMEN_POR_UNIDAD')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 2: RESUMEN_TRANSPORTES (con colores naranja)
+  // ─────────────────────────────────────────────────────────────
   const wsTransporte = XLSX.utils.json_to_sheet(resumenTransporte)
   wsTransporte['!cols'] = [
     { wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 18 },
@@ -588,149 +741,174 @@ const descargarExcel = () => {
   ]
   aplicarEstilosExcel(wsTransporte)
   XLSX.utils.book_append_sheet(wb, wsTransporte, 'RESUMEN_TRANSPORTES')
-  
-  // ============================================
-  // HOJA 2: RESUMEN POR PLACA
-  // ============================================
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 3: RESUMEN_POR_PLACA
+  // ─────────────────────────────────────────────────────────────
   const wsPlaca = XLSX.utils.json_to_sheet(resumenPlaca)
-  wsPlaca['!cols'] = [
-    { wch: 18 }, { wch: 28 }, { wch: 25 }, { wch: 18 }, { wch: 22 }
-  ]
+  wsPlaca['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 25 }, { wch: 18 }, { wch: 22 }]
   aplicarEstilosExcel(wsPlaca)
   XLSX.utils.book_append_sheet(wb, wsPlaca, 'RESUMEN_POR_PLACA')
-  
-  // ============================================
-  // HOJA 3: RESUMEN GENERAL
-  // ============================================
-  const resumenData = [
-    { 'METRICA': 'BARCO', 'VALOR': barco?.nombre || 'N/A' },
-    { 'METRICA': 'CODIGO BARCO', 'VALOR': barco?.codigo_barco || 'N/A' },
-    { 'METRICA': 'TOTAL DESCARGADO (TM)', 'VALOR': fmtTM(estadisticas.totalNeto, 2) },
-    { 'METRICA': 'TOTAL VIAJES', 'VALOR': estadisticas.totalViajes },
-    { 'METRICA': 'PROMEDIO POR VIAJE (TM)', 'VALOR': fmtTM(estadisticas.pesoPromedio, 2) },
-    { 'METRICA': 'VIAJES EN RANGO', 'VALOR': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
-    { 'METRICA': 'VIAJES BAJO PESO', 'VALOR': estadisticas.bajoPeso },
-    { 'METRICA': 'VIAJES SOBREPESO', 'VALOR': estadisticas.sobrePeso },
-    { 'METRICA': 'TOTAL PATIO NORTE (TM)', 'VALOR': fmtTM(estadisticas.totalNorte, 2) },
-    { 'METRICA': 'TOTAL PATIO SUR (TM)', 'VALOR': fmtTM(estadisticas.totalSur, 2) },
-    { 'METRICA': 'META MANIFESTADA (TM)', 'VALOR': fmtTM(meta, 2) },
-    { 'METRICA': 'FALTANTE (TM)', 'VALOR': fmtTM(faltante, 2) },
-    { 'METRICA': 'EXCEDENTE (TM)', 'VALOR': fmtTM(excedente, 2) },
-    { 'METRICA': 'PORCENTAJE DE META', 'VALOR': `${porcentajeMeta.toFixed(1)}%` },
-    { 'METRICA': 'FECHA EXPORTACION', 'VALOR': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') }
-  ]
-  
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 4: RESUMEN_GENERAL
+  // ─────────────────────────────────────────────────────────────
   const filtrosActivos = []
   if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
   if (diaSeleccionado) filtrosActivos.push(`Dia: ${diaSeleccionado}`)
   const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
-  resumenData.push({ 'METRICA': 'FILTRO APLICADO', 'VALOR': filtroTexto })
-  
+
+  const resumenData = [
+    { 'METRICA': 'BARCO',                    'VALOR': barco?.nombre || 'N/A' },
+    { 'METRICA': 'CODIGO BARCO',             'VALOR': barco?.codigo_barco || 'N/A' },
+    { 'METRICA': 'TOTAL DESCARGADO (TM)',    'VALOR': fmtTM(estadisticas.totalNeto, 2) },
+    { 'METRICA': 'TOTAL VIAJES',             'VALOR': estadisticas.totalViajes },
+    { 'METRICA': 'PROMEDIO POR VIAJE (TM)',  'VALOR': fmtTM(estadisticas.pesoPromedio, 2) },
+    { 'METRICA': 'VIAJES EN RANGO',          'VALOR': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
+    { 'METRICA': 'VIAJES BAJO PESO',         'VALOR': estadisticas.bajoPeso },
+    { 'METRICA': 'VIAJES SOBREPESO',         'VALOR': estadisticas.sobrePeso },
+    { 'METRICA': 'TOTAL PATIO NORTE (TM)',   'VALOR': fmtTM(estadisticas.totalNorte, 2) },
+    { 'METRICA': 'TOTAL PATIO SUR (TM)',     'VALOR': fmtTM(estadisticas.totalSur, 2) },
+    { 'METRICA': 'META MANIFESTADA (TM)',    'VALOR': fmtTM(meta, 2) },
+    { 'METRICA': 'FALTANTE (TM)',            'VALOR': fmtTM(faltante, 2) },
+    { 'METRICA': 'EXCEDENTE (TM)',           'VALOR': fmtTM(excedente, 2) },
+    { 'METRICA': 'PORCENTAJE DE META',       'VALOR': `${porcentajeMeta.toFixed(1)}%` },
+    { 'METRICA': 'FILTRO APLICADO',          'VALOR': filtroTexto },
+    { 'METRICA': 'FECHA EXPORTACION',        'VALOR': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') },
+  ]
   const wsResumen = XLSX.utils.json_to_sheet(resumenData)
   wsResumen['!cols'] = [{ wch: 32 }, { wch: 45 }]
   aplicarEstilosExcel(wsResumen)
   XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
-  
-  // ============================================
-  // HOJAS POR CADA TRANSPORTE
-  // ============================================
-  const transportesUnicos = [...new Set(registros.map(reg => reg.transporte || 'DESCONOCIDO'))]
-  
-  transportesUnicos.forEach(transporteNombre => {
-    const viajesTransporteFiltrados = registros.filter(reg => (reg.transporte || 'DESCONOCIDO') === transporteNombre)
-    const totalDescargadoTransporte = viajesTransporteFiltrados.reduce((sum, v) => sum + (v.peso_neto_updp_tm || 0), 0)
-    
-    // Crear array con encabezados de columna
-    const headers = {
-      'CORRELATIVO': 'CORRELATIVO',
-      'PLACA': 'PLACA',
-      'PESO NETO (TM)': 'PESO NETO (TM)',
-      'TIPO UNIDAD': 'TIPO UNIDAD',
-      'ESTADO': 'ESTADO',
-      'FECHA': 'FECHA',
-      'HORA ENTRADA': 'HORA ENTRADA',
-      'HORA SALIDA': 'HORA SALIDA',
-      'PATIO': 'PATIO',
-      'BODEGA BARCO': 'BODEGA BARCO'
-    }
-    
-    // Datos de la hoja
-    const datosHoja = [
-      { 'CORRELATIVO': `TRANSPORTE: ${transporteNombre}`, 'PLACA': '', 'PESO NETO (TM)': '', 'TIPO UNIDAD': '', 'ESTADO': '', 'FECHA': '', 'HORA ENTRADA': '', 'HORA SALIDA': '', 'PATIO': '', 'BODEGA BARCO': '' },
-      { 'CORRELATIVO': `TOTAL DESCARGADO: ${totalDescargadoTransporte.toFixed(2)} TM`, 'PLACA': '', 'PESO NETO (TM)': '', 'TIPO UNIDAD': '', 'ESTADO': '', 'FECHA': '', 'HORA ENTRADA': '', 'HORA SALIDA': '', 'PATIO': '', 'BODEGA BARCO': '' },
-      { 'CORRELATIVO': `VIAJES TOTALES: ${viajesTransporteFiltrados.length}`, 'PLACA': '', 'PESO NETO (TM)': '', 'TIPO UNIDAD': '', 'ESTADO': '', 'FECHA': '', 'HORA ENTRADA': '', 'HORA SALIDA': '', 'PATIO': '', 'BODEGA BARCO': '' },
-      { 'CORRELATIVO': '', 'PLACA': '', 'PESO NETO (TM)': '', 'TIPO UNIDAD': '', 'ESTADO': '', 'FECHA': '', 'HORA ENTRADA': '', 'HORA SALIDA': '', 'PATIO': '', 'BODEGA BARCO': '' },
-      headers,  // Encabezados de columna
-      ...viajesTransporteFiltrados.map(reg => {
-        const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-        let estadoTexto = estado === 'bajo' ? 'BAJO PESO' : (estado === 'sobre' ? 'SOBREPESO' : 'EN RANGO')
-        return {
-          'CORRELATIVO': reg.correlativo || '',
-          'PLACA': reg.placa || '',
-          'PESO NETO (TM)': (reg.peso_neto_updp_tm || 0).toFixed(2),
-          'TIPO UNIDAD': reg.tipo_unidad || '',
-          'ESTADO': estadoTexto,
-          'FECHA': reg.fecha || '',
-          'HORA ENTRADA': reg.hora_entrada || '',
-          'HORA SALIDA': reg.hora_salida || '',
-          'PATIO': reg.patio || '',
-          'BODEGA BARCO': reg.bodega_barco || ''
-        }
-      })
-    ]
-    
-    const wsTransporteIndividual = XLSX.utils.json_to_sheet(datosHoja, { skipHeader: true })
-    wsTransporteIndividual['!cols'] = [
-      { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
-      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }
-    ]
-    
-    // Aplicar estilos a esta hoja
-    const range = XLSX.utils.decode_range(wsTransporteIndividual['!ref'])
-    const headerRowIndex = 4  // Fila 5 en base 0
-    
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: headerRowIndex, c: C })
-      if (wsTransporteIndividual[cellAddress]) {
-        wsTransporteIndividual[cellAddress].s = {
-          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11, name: "Calibri" },
-          fill: { fgColor: { rgb: "FF6600" }, patternType: "solid" },
-          alignment: { horizontal: "center", vertical: "center" }
-        }
-      }
-    }
-    
-    // Estilo para filas de datos
-    for (let R = headerRowIndex + 1; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C })
-        if (wsTransporteIndividual[cellAddress]) {
-          wsTransporteIndividual[cellAddress].s = {
-            font: { color: { rgb: "000000" }, sz: 10, name: "Calibri" },
-            fill: { fgColor: { rgb: "FFFFFF" }, patternType: "solid" }
-          }
-        }
-      }
-    }
-    
-    let nombreHoja = transporteNombre.replace(/[\\/*?:[\]]/g, '').substring(0, 31)
-    XLSX.utils.book_append_sheet(wb, wsTransporteIndividual, nombreHoja)
-  })
-  
-  // ============================================
-  // HOJA 4: TODOS LOS REGISTROS
-  // ============================================
-  const wsRegistros = XLSX.utils.json_to_sheet(datosExportar)
-  wsRegistros['!cols'] = [
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 5: TODOS_LOS_REGISTROS — con colores por estado
+  // ─────────────────────────────────────────────────────────────
+  const wsRegistros = { '!ref': 'A1:P1', '!rows': [], '!cols': [
     { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
     { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
     { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
     { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+  ]}
+  const COLS_REG = 16
+  const HEADERS_REG = [
+    'CORRELATIVO','PLACA','TRANSPORTE','TIPO UNIDAD',
+    'RANGO MIN','RANGO MAX','ESTADO','FECHA',
+    'HORA ENTRADA','HORA SALIDA','TIEMPO','PATIO',
+    'BODEGA','PESO BRUTO (TM)','PESO NETO (TM)','ACUMULADO (TM)'
   ]
-  aplicarEstilosExcel(wsRegistros)
+  let rRow = 0
+  wsRegistros['!rows'][rRow] = { hpt: 22 }
+  writeRow(wsRegistros, rRow, COLS_REG, HEADERS_REG.map(h => C(h, S.header('center'))))
+  rRow++
+
+  registros.forEach(reg => {
+    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+    const estadoTexto = estado === 'bajo' ? 'BAJO PESO' : estado === 'sobre' ? 'SOBREPESO' : 'EN RANGO'
+    const estadoStyle = estado === 'bajo' ? S.bajoPeso() : estado === 'sobre' ? S.sobrePeso() : S.enRango()
+    const rowBase = estado === 'bajo' ? S.data('left') : estado === 'sobre' ? {
+      ...S.data('left'),
+      fill: { fgColor: { rgb: 'FFF0F0' }, patternType: 'solid' }
+    } : S.data('left')
+
+    writeRow(wsRegistros, rRow, COLS_REG, [
+      C(reg.correlativo,                          { ...rowBase, alignment: { horizontal: 'center' } }),
+      C(reg.placa || '',                          rowBase),
+      C(reg.transporte || '—',                   rowBase),
+      C(reg.tipo_unidad || '—',                  rowBase),
+      C(rango.min,                                rowBase),
+      C(rango.max,                                rowBase),
+      C(estadoTexto,                              estadoStyle),
+      C(reg.fecha || '—',                         rowBase),
+      C(reg.hora_entrada || '—',                  rowBase),
+      C(reg.hora_salida || '—',                   rowBase),
+      C(reg.tiempo_atencion || '—',               rowBase),
+      C(reg.patio || '—',                         rowBase),
+      C(reg.bodega_barco || '—',                  rowBase),
+      C(parseFloat((reg.peso_bruto_updp_tm || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.peso_neto_updp_tm  || 0).toFixed(2)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.acumulado_updp_tm  || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
+    ])
+    rRow++
+  })
+  wsRegistros['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rRow - 1, c: COLS_REG - 1 } })
   XLSX.utils.book_append_sheet(wb, wsRegistros, 'TODOS_LOS_REGISTROS')
-  
-  // Guardar archivo
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJAS POR CADA TRANSPORTE (con colores)
+  // ─────────────────────────────────────────────────────────────
+  const transportesUnicos = [...new Set(registros.map(reg => reg.transporte || 'DESCONOCIDO'))]
+
+  transportesUnicos.forEach(transporteNombre => {
+    const viajes = registros.filter(r => (r.transporte || 'DESCONOCIDO') === transporteNombre)
+    const totalTm = viajes.reduce((s, v) => s + (v.peso_neto_updp_tm || 0), 0)
+
+    const COLS_T = 10
+    const wsTr = {
+      '!ref': 'A1:J1',
+      '!rows': [],
+      '!cols': [
+        { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }
+      ]
+    }
+    let tRow = 0
+
+    // Título transportista
+    wsTr['!rows'][tRow] = { hpt: 22 }
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `TRANSPORTE: ${transporteNombre}` : '', S.transportTitle(i === 0 ? 'left' : 'center'))
+    ))
+    tRow++
+
+    // Resumen
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `TOTAL: ${totalTm.toFixed(2)} TM` : '', S.data('left'))
+    ))
+    tRow++
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `VIAJES: ${viajes.length}` : '', S.data('left'))
+    ))
+    tRow++
+
+    // Separador
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map(() => C('', S.separator())))
+    tRow++
+
+    // Headers
+    const hdrLabels = ['CORRELATIVO','PLACA','PESO NETO (TM)','TIPO UNIDAD','ESTADO','FECHA','HORA ENTRADA','HORA SALIDA','PATIO','BODEGA']
+    wsTr['!rows'][tRow] = { hpt: 20 }
+    writeRow(wsTr, tRow, COLS_T, hdrLabels.map(h => C(h, S.header('center'))))
+    tRow++
+
+    viajes.forEach(reg => {
+      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+      const estadoTexto = estado === 'bajo' ? 'BAJO PESO' : estado === 'sobre' ? 'SOBREPESO' : 'EN RANGO'
+      const estadoStyle = estado === 'bajo' ? S.bajoPeso() : estado === 'sobre' ? S.sobrePeso() : S.enRango()
+      writeRow(wsTr, tRow, COLS_T, [
+        C(reg.correlativo,                                            S.data('center')),
+        C(reg.placa || '',                                            S.data('center')),
+        C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(2)),       { ...estadoStyle, alignment: { horizontal: 'right' } }),
+        C(reg.tipo_unidad || '',                                      S.data('center')),
+        C(estadoTexto,                                                estadoStyle),
+        C(reg.fecha || '',                                            S.data('center')),
+        C(reg.hora_entrada || '—',                                    S.data('center')),
+        C(reg.hora_salida  || '—',                                    S.data('center')),
+        C(reg.patio || '—',                                           S.data('center')),
+        C(reg.bodega_barco || '—',                                    S.data('center')),
+      ])
+      tRow++
+    })
+
+    wsTr['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tRow - 1, c: COLS_T - 1 } })
+    const nombreHoja = transporteNombre.replace(/[\\/*?:[\]]/g, '').substring(0, 31)
+    XLSX.utils.book_append_sheet(wb, wsTr, nombreHoja)
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // GUARDAR
+  // ─────────────────────────────────────────────────────────────
   const nombreArchivo = `PetCoke_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
   XLSX.writeFile(wb, nombreArchivo)
 }
