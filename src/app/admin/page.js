@@ -1,4 +1,4 @@
-// admin/page.js - Panel de administración completo con soporte para importación/exportación y edición de barcos
+// admin/page.js - Panel de administración completo con NUEVO REPORTE GENERAL DE BARCOS
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -10,11 +10,11 @@ import {
   ExternalLink, Truck, Download, Database, Edit2, Grid, 
   Scale, Activity, Clock, AlertCircle, X, BookOpen, 
   MessageSquare, Calendar, QrCode, CheckCircle, Import, 
-  Upload as Export,
+  Upload as ExportIcon,
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
   Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus,
-  User, FolderOpen, RotateCw, Gauge
+  User, FolderOpen, RotateCw, Gauge, FileSpreadsheet
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
@@ -27,10 +27,435 @@ import OperativoForm from '../components/adminC/OperativoForm'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import * as XLSX from 'xlsx'
 
 import AccionesBarcoMenu from '../components/adminC/AccionesBarcoMenu'
 
 dayjs.locale('es')
+
+// =====================================================
+// MODAL PARA REPORTE GENERAL DE BARCOS
+// =====================================================
+const ReporteGeneralBarcosModal = ({ onClose }) => {
+  const [fechaInicio, setFechaInicio] = useState(dayjs().startOf('month').format('YYYY-MM-DD'))
+  const [fechaFin, setFechaFin] = useState(dayjs().format('YYYY-MM-DD'))
+  const [tipoOperacion, setTipoOperacion] = useState('todos')
+  const [loading, setLoading] = useState(false)
+  const [barcos, setBarcos] = useState([])
+  const [productosCatalogo, setProductosCatalogo] = useState([])
+
+  useEffect(() => {
+    cargarCatalogos()
+  }, [])
+
+  const cargarCatalogos = async () => {
+    try {
+      const { data: productosData } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('activo', true)
+      setProductosCatalogo(productosData || [])
+    } catch (error) {
+      console.error('Error cargando catálogos:', error)
+    }
+  }
+
+  const cargarDatosBarcos = async () => {
+    setLoading(true)
+    try {
+      let query = supabase.from('barcos').select('*')
+      
+      if (tipoOperacion !== 'todos') {
+        query = query.eq('tipo_operacion', tipoOperacion)
+      }
+
+      const { data: barcosData, error } = await query.order('created_at', { ascending: false })
+      if (error) throw error
+
+      const barcosConDatos = await Promise.all((barcosData || []).map(async (barco) => {
+        const fechaLlegada = barco.fecha_llegada ? dayjs(barco.fecha_llegada) : null
+        const estaEnRango = !fechaLlegada || (fechaLlegada.isAfter(dayjs(fechaInicio).subtract(1, 'day')) && fechaLlegada.isBefore(dayjs(fechaFin).add(1, 'day')))
+        
+        if (!estaEnRango) {
+          return { ...barco, dentroRango: false, resumen: null }
+        }
+
+        const productosBarco = barco.metas_json?.productos || []
+        const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
+
+        let resumenProductos = []
+
+        if (barco.tipo_operacion !== 'exportacion') {
+          for (const prod of productosInfo) {
+            const { data: viajesData } = await supabase
+              .from('viajes')
+              .select('peso_destino_tm, peso_neto_updp_tm, estado')
+              .eq('barco_id', barco.id)
+              .eq('producto_id', prod.id)
+              .eq('estado', 'completo')
+              .gte('fecha', fechaInicio)
+              .lte('fecha', fechaFin)
+
+            const totalViajesTM = viajesData?.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0) || 0
+
+            let totalBandaTM = 0
+            if (prod.tipo_registro === 'banda' || prod.tipo_registro === 'mixto') {
+              const { data: bandaData } = await supabase
+                .from('lecturas_banda')
+                .select('acumulado_tm')
+                .eq('barco_id', barco.id)
+                .eq('producto_id', prod.id)
+                .order('fecha_hora', { ascending: false })
+                .limit(1)
+              
+              if (bandaData && bandaData.length > 0) {
+                totalBandaTM = Number(bandaData[0].acumulado_tm) || 0
+              }
+            }
+
+            const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
+            const totalTM = totalViajesTM + totalBandaTM
+
+            resumenProductos.push({
+              nombre: prod.nombre,
+              codigo: prod.codigo,
+              icono: prod.icono,
+              tipo: 'IMPORTACIÓN',
+              metodo: prod.tipo_registro === 'banda' ? 'Banda' : (prod.tipo_registro === 'viajes' ? 'Viajes' : 'Mixto'),
+              descargadoTM: totalTM,
+              metaTM: metaTM,
+              viajesCount: viajesData?.length || 0,
+              completado: metaTM > 0 ? totalTM >= metaTM : false
+            })
+          }
+        } else {
+          for (const prod of productosInfo) {
+            const { data: exportData } = await supabase
+              .from('exportacion_banda')
+              .select('acumulado_tm, fecha_hora')
+              .eq('barco_id', barco.id)
+              .eq('producto_id', prod.id)
+              .gte('fecha_hora', `${fechaInicio}T00:00:00`)
+              .lte('fecha_hora', `${fechaFin}T23:59:59`)
+              .order('fecha_hora', { ascending: true })
+
+            let totalRecibidoTM = 0
+            if (exportData && exportData.length > 0) {
+              totalRecibidoTM = Number(exportData[exportData.length - 1].acumulado_tm) || 0
+            }
+
+            const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
+
+            resumenProductos.push({
+              nombre: prod.nombre,
+              codigo: prod.codigo,
+              icono: prod.icono,
+              tipo: 'EXPORTACIÓN',
+              metodo: 'Recepción por Banda',
+              descargadoTM: totalRecibidoTM,
+              metaTM: metaTM,
+              lecturasCount: exportData?.length || 0,
+              completado: metaTM > 0 ? totalRecibidoTM >= metaTM : false
+            })
+          }
+        }
+
+        return {
+          ...barco,
+          dentroRango: true,
+          resumen: {
+            productos: resumenProductos,
+            totalTM: resumenProductos.reduce((sum, p) => sum + p.descargadoTM, 0)
+          }
+        }
+      }))
+
+      setBarcos(barcosConDatos)
+    } catch (error) {
+      console.error('Error cargando datos:', error)
+      toast.error('Error al cargar los datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const exportarAExcel = () => {
+    try {
+      const barcosFiltrados = barcos.filter(b => b.dentroRango)
+      
+      if (barcosFiltrados.length === 0) {
+        toast.error('No hay barcos en el rango seleccionado')
+        return
+      }
+
+      const wb = XLSX.utils.book_new()
+      
+      const resumenData = [
+        ['REPORTE GENERAL DE BARCOS'],
+        [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
+        [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+        [`Tipo de operación: ${tipoOperacion === 'todos' ? 'Todos' : (tipoOperacion === 'importacion' ? 'Importación' : 'Exportación')}`],
+        [],
+        ['RESUMEN GENERAL'],
+        ['Barco', 'Tipo', 'Fecha Llegada', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
+      ]
+
+      barcosFiltrados.forEach(barco => {
+        const detalleProductos = barco.resumen.productos.map(p => 
+          `${p.nombre}: ${p.descargadoTM.toFixed(3)} TM${p.metaTM > 0 ? ` (Meta: ${p.metaTM.toFixed(3)} TM)` : ''}`
+        ).join(' | ')
+        
+        resumenData.push([
+          barco.nombre,
+          barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
+          barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
+          barco.estado,
+          barco.resumen.totalTM.toFixed(3),
+          barco.resumen.productos.map(p => p.nombre).join(', '),
+          detalleProductos
+        ])
+      })
+
+      const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+      XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
+
+      const detalleData = [
+        ['DETALLE POR BARCO Y PRODUCTO'],
+        [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
+        [],
+        ['Barco', 'Tipo', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
+      ]
+
+      barcosFiltrados.forEach(barco => {
+        barco.resumen.productos.forEach(prod => {
+          const porcentaje = prod.metaTM > 0 ? (prod.descargadoTM / prod.metaTM) * 100 : 0
+          detalleData.push([
+            barco.nombre,
+            barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
+            prod.nombre,
+            prod.codigo,
+            prod.tipo,
+            prod.metodo,
+            prod.descargadoTM.toFixed(3),
+            prod.metaTM.toFixed(3),
+            porcentaje.toFixed(1) + '%',
+            prod.completado ? 'COMPLETADO' : (prod.descargadoTM > 0 ? 'EN PROCESO' : 'PENDIENTE')
+          ])
+        })
+      })
+
+      const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
+      XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle por Producto')
+
+      wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 60 }]
+      wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
+
+      const nombreArchivo = `Reporte_Barcos_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
+      XLSX.writeFile(wb, nombreArchivo)
+      
+      toast.success(`✅ Reporte exportado: ${nombreArchivo}`)
+    } catch (error) {
+      console.error('Error exportando:', error)
+      toast.error('Error al exportar el reporte')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-500/20 p-2 rounded-xl">
+              <FileSpreadsheet className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-white">Reporte General de Barcos</h2>
+              <p className="text-blue-200 text-xs">Genera un reporte completo de todos los barcos en el período seleccionado</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Fecha Inicio</label>
+              <input
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Fecha Final</label>
+              <input
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Tipo de Operación</label>
+              <select
+                value={tipoOperacion}
+                onChange={(e) => setTipoOperacion(e.target.value)}
+                className="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white"
+              >
+                <option value="todos">Todos</option>
+                <option value="importacion">Solo Importación</option>
+                <option value="exportacion">Solo Exportación</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mb-6">
+            <button
+              onClick={cargarDatosBarcos}
+              disabled={loading}
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all"
+            >
+              {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+              {loading ? 'Cargando...' : 'Consultar Barcos'}
+            </button>
+            <button
+              onClick={exportarAExcel}
+              disabled={loading || !barcos.some(b => b.dentroRango)}
+              className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Exportar a Excel
+            </button>
+          </div>
+
+          {barcos.length > 0 && !loading && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-white">Resultados ({barcos.filter(b => b.dentroRango).length} barcos en rango)</h3>
+                <span className="text-xs text-slate-400">Click en barco para ver detalle</span>
+              </div>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {barcos.filter(b => b.dentroRango).map(barco => (
+                  <div key={barco.id} className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <Ship className="w-5 h-5 text-blue-400" />
+                        <div>
+                          <p className="font-bold text-white">{barco.nombre}</p>
+                          <div className="flex gap-3 text-xs">
+                            <span className="text-slate-400">{barco.codigo_barco || 'Sin código'}</span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                              barco.tipo_operacion === 'importacion' 
+                                ? 'bg-green-500/20 text-green-400' 
+                                : 'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN'}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                              barco.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
+                              barco.estado === 'finalizado' ? 'bg-red-500/20 text-red-400' :
+                              'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {barco.estado}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-black text-blue-400">{barco.resumen.totalTM.toFixed(3)} TM</p>
+                        <p className="text-[10px] text-slate-500">{barco.resumen.productos.length} producto(s)</p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 border-t border-white/10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {barco.resumen.productos.map((prod, idx) => (
+                          <div key={idx} className="bg-slate-800/50 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-2xl">{prod.icono}</span>
+                              <div>
+                                <p className="font-bold text-white">{prod.nombre}</p>
+                                <p className="text-xs text-slate-500">{prod.codigo}</p>
+                              </div>
+                              <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+                                prod.tipo === 'IMPORTACIÓN' 
+                                  ? 'bg-green-500/20 text-green-400' 
+                                  : 'bg-blue-500/20 text-blue-400'
+                              }`}>
+                                {prod.tipo}
+                              </span>
+                            </div>
+                            
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-400">
+                                {prod.tipo === 'IMPORTACIÓN' ? 'Descargado:' : 'Recibido:'}
+                              </span>
+                              <span className="font-bold text-blue-400">{prod.descargadoTM.toFixed(3)} TM</span>
+                            </div>
+                            
+                            {prod.metaTM > 0 && (
+                              <>
+                                <div className="flex justify-between text-xs mt-1">
+                                  <span className="text-slate-400">Meta:</span>
+                                  <span className="text-slate-300">{prod.metaTM.toFixed(3)} TM</span>
+                                </div>
+                                <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full transition-all ${prod.completado ? 'bg-green-500' : 'bg-blue-500'}`}
+                                    style={{ width: `${Math.min(100, (prod.descargadoTM / prod.metaTM) * 100)}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                                  <span>0%</span>
+                                  <span>{prod.completado ? '✓ COMPLETADO' : `${((prod.descargadoTM / prod.metaTM) * 100).toFixed(1)}%`}</span>
+                                  <span>100%</span>
+                                </div>
+                              </>
+                            )}
+                            
+                            <div className="flex justify-between text-xs text-slate-500 mt-2 pt-2 border-t border-white/10">
+                              <span>Método: {prod.metodo}</span>
+                              {prod.viajesCount !== undefined && <span>{prod.viajesCount} viaje(s)</span>}
+                              {prod.lecturasCount !== undefined && <span>{prod.lecturasCount} lectura(s)</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && barcos.filter(b => b.dentroRango).length === 0 && barcos.length > 0 && (
+            <div className="text-center py-12">
+              <Ship className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-400">No hay barcos en el rango de fechas seleccionado</p>
+            </div>
+          )}
+
+          {!loading && barcos.length === 0 && (
+            <div className="text-center py-12">
+              <FileSpreadsheet className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-400">Haz click en "Consultar Barcos" para generar el reporte</p>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 p-4 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // =====================================================
 // MODAL PARA VER EXPORTACIONES POR PRODUCTO (RECIBIDAS)
@@ -72,17 +497,6 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         await cargarExportaciones(barco.id, productosData[0].id)
       }
 
-      const barcosOrigenIds = [...new Set(exportaciones.map(e => e.destino_barco_id).filter(Boolean))]
-      if (barcosOrigenIds.length > 0) {
-        const { data: barcosData } = await supabase
-          .from('barcos')
-          .select('id, nombre, codigo_barco')
-          .in('id', barcosOrigenIds)
-
-        const mapa = {}
-        barcosData?.forEach(b => { mapa[b.id] = b })
-        setBarcosOrigen(mapa)
-      }
     } catch (error) {
       console.error('Error cargando datos:', error)
       toast.error('Error al cargar datos')
@@ -104,6 +518,18 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
 
       if (error) throw error
       setExportaciones(data || [])
+      
+      const barcosOrigenIds = [...new Set((data || []).map(e => e.destino_barco_id).filter(Boolean))]
+      if (barcosOrigenIds.length > 0) {
+        const { data: barcosData } = await supabase
+          .from('barcos')
+          .select('id, nombre, codigo_barco')
+          .in('id', barcosOrigenIds)
+
+        const mapa = {}
+        barcosData?.forEach(b => { mapa[b.id] = b })
+        setBarcosOrigen(mapa)
+      }
     } catch (error) {
       console.error('Error cargando exportaciones:', error)
       toast.error('Error al cargar exportaciones')
@@ -126,7 +552,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-blue-500/20 p-3 rounded-xl">
-              <Export className="w-8 h-8 text-blue-400" />
+              <ExportIcon className="w-8 h-8 text-blue-400" />
             </div>
             <div>
               <h2 className="text-2xl font-black text-white flex items-center gap-2">
@@ -148,7 +574,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {productos.length === 0 ? (
             <div className="bg-slate-900 rounded-2xl p-12 text-center">
-              <Export className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+              <ExportIcon className="w-16 h-16 text-slate-700 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-white mb-2">No hay productos configurados</h3>
               <p className="text-slate-400">Este barco no tiene productos asociados para exportación</p>
             </div>
@@ -225,7 +651,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                   </div>
                 ) : exportaciones.length === 0 ? (
                   <div className="p-12 text-center">
-                    <Export className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                    <ExportIcon className="w-12 h-12 text-slate-700 mx-auto mb-3" />
                     <p className="text-slate-400">No hay registros de exportación para este producto</p>
                   </div>
                 ) : (
@@ -281,7 +707,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                           <td className="px-4 py-3 font-bold text-blue-400">
                             {exportaciones[0]?.acumulado_tm?.toFixed(3) || '0.000'} TM
                           </td>
-                          <td colSpan="3"></td>
+                          <td colSpan="3"> </td>
                         </tr>
                       </tfoot>
                     </table>
@@ -332,7 +758,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
 
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-sm text-blue-400 flex items-center gap-2">
-                  <Export className="w-4 h-4 flex-shrink-0" />
+                  <ExportIcon className="w-4 h-4 flex-shrink-0" />
                   Este barco RECIBE producto por banda desde otros barcos (origen). 
                   Cada lectura muestra el acumulado total recibido hasta ese momento.
                 </p>
@@ -1155,6 +1581,8 @@ export default function AdminPage() {
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [showGenerarDashboardModal, setShowGenerarDashboardModal] = useState(false)
   const [showGenerarDashboardSacosModal, setShowGenerarDashboardSacosModal] = useState(false)
+  
+  const [showReporteGeneralModal, setShowReporteGeneralModal] = useState(false)
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -1348,6 +1776,10 @@ export default function AdminPage() {
     }
     setBarcoSeleccionado(barco)
     setShowGenerarDashboardSacosModal(true)
+  }
+  
+  const handleAbrirReporteGeneral = () => {
+    setShowReporteGeneralModal(true)
   }
 
   const handleGuardarProducto = async (productoData) => {
@@ -1681,8 +2113,6 @@ export default function AdminPage() {
                 Envasados
               </Link>
 
-              
-              
               <button
                 onClick={cargarDatos}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all"
@@ -1818,17 +2248,20 @@ export default function AdminPage() {
               </div>
             </div>
             
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+            <button
+              onClick={handleAbrirReporteGeneral}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-all group"
+            >
               <div className="flex items-center gap-3">
-                <div className="bg-yellow-500/30 p-3 rounded-lg">
-                  <Activity className="w-5 h-5 text-white" />
+                <div className="bg-green-500/30 p-3 rounded-lg group-hover:bg-green-500/40 transition-all">
+                  <FileSpreadsheet className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Total Barcos</p>
-                  <p className="text-2xl font-black text-white">{barcos.length}</p>
+                <div className="text-left">
+                  <p className="text-blue-200 text-xs">Reporte General</p>
+                  <p className="text-md font-black text-white">📊 Barcos</p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -1873,7 +2306,7 @@ export default function AdminPage() {
               <div className="bg-slate-900 rounded-xl p-5 border border-blue-500/20">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-blue-500/20 p-2 rounded-lg">
-                    <Export className="w-5 h-5 text-blue-400" />
+                    <ExportIcon className="w-5 h-5 text-blue-400" />
                   </div>
                   <h3 className="font-bold text-white">Exportación</h3>
                 </div>
@@ -2058,7 +2491,7 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Registros</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Token</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {barcosFiltrados.map((barco) => {
@@ -2076,7 +2509,7 @@ export default function AdminPage() {
                               <span>{barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}</span>
                             </div>
                           </div>
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           {barco.codigo_barco ? (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-mono">
@@ -2085,11 +2518,11 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-slate-600">—</span>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           {barco.tipo_operacion === 'exportacion' ? (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
-                              <Export className="w-3 h-3" />
+                              <ExportIcon className="w-3 h-3" />
                               EXPORTACIÓN
                             </span>
                           ) : (
@@ -2098,7 +2531,7 @@ export default function AdminPage() {
                               IMPORTACIÓN
                             </span>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                             barco.estado === 'activo' ? 'bg-green-500/20 text-green-400' :
@@ -2107,7 +2540,7 @@ export default function AdminPage() {
                           }`}>
                             {barco.estado}
                           </span>
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           {barco.pesador ? (
                             <div>
@@ -2117,7 +2550,7 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-slate-500">No asignado</span>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             {barco.tipo_operacion !== 'exportacion' && (
@@ -2133,7 +2566,7 @@ export default function AdminPage() {
                               </span>
                             )}
                           </div>
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <code className="text-xs bg-slate-900 px-2 py-1 rounded border border-white/10 font-mono">
@@ -2147,7 +2580,7 @@ export default function AdminPage() {
                               <Copy className="w-4 h-4" />
                             </button>
                           </div>
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <AccionesBarcoMenu
                             barco={barco}
@@ -2165,8 +2598,8 @@ export default function AdminPage() {
                             onExportarBarco={handleExportarBarco}
                             onEliminarBarco={handleEliminarBarco}
                           />
-                         </td>
-                       </tr>
+                        </td>
+                      </tr>
                     )
                   })}
                 </tbody>
@@ -2227,22 +2660,22 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Colores</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {productos.map((prod) => (
                     <tr key={prod.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <span className="text-3xl">{prod.icono}</span>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <code className="bg-slate-900 px-2 py-1 rounded text-sm font-mono text-blue-400">
                           {prod.codigo}
                         </code>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <p className="font-bold text-white">{prod.nombre}</p>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${
                           prod.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
@@ -2253,20 +2686,20 @@ export default function AdminPage() {
                           {prod.tipo_registro === 'banda' && <><Scale className="w-3 h-3" /> Banda</>}
                           {prod.tipo_registro === 'viajes' && <><Truck className="w-3 h-3" /> Viajes</>}
                         </span>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded" style={{ backgroundColor: prod.color_accent }} />
                           <span className="text-xs text-slate-400">{prod.color_from} → {prod.color_to}</span>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                           prod.activo ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                         }`}>
                           {prod.activo ? 'Activo' : 'Inactivo'}
                         </span>
-                       </td>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
@@ -2288,7 +2721,7 @@ export default function AdminPage() {
                           </button>
                         </div>
                        </td>
-                     </tr>
+                      </tr>
                   ))}
                 </tbody>
               </table>
@@ -2327,7 +2760,7 @@ export default function AdminPage() {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Estado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Creado</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {operativos.map((op) => (
@@ -2380,8 +2813,8 @@ export default function AdminPage() {
                             <Trash2 className="w-4 h-4 text-red-400" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                       </td>
+                      </tr>
                   ))}
                 </tbody>
               </table>
@@ -2558,6 +2991,12 @@ export default function AdminPage() {
           onSuccess={(updatedUser) => {
             setUser(updatedUser)
           }}
+        />
+      )}
+
+      {showReporteGeneralModal && (
+        <ReporteGeneralBarcosModal
+          onClose={() => setShowReporteGeneralModal(false)}
         />
       )}
     </div>
