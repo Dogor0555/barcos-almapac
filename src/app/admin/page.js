@@ -186,7 +186,7 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         console.log(`📦 Total TM calculado: ${totalTM.toFixed(3)}`)
 
         resumenProductos.push({
-          nombre: 'Sacos / Envasado',
+          nombre: 'Azucar en Sacos ',
           codigo: 'SACOS',
           icono: '📦',
           tipo: 'IMPORTACIÓN',
