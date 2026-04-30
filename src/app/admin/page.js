@@ -114,7 +114,7 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
   return todosLosRegistros
 }
 
-  const cargarDatosBarcos = async () => {
+ const cargarDatosBarcos = async () => {
   setLoading(true)
   try {
     let query = supabase.from('barcos').select('*')
@@ -132,27 +132,77 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         return { ...barco, dentroRango: false, resumen: null }
       }
 
-      // Obtener productos del barco
+      // 🔥 PRIMERO: Verificar si es un barco de SACOS (tiene registros en registros_sacos)
+      const { count: sacosCount, error: sacosCountError } = await supabase
+        .from('registros_sacos')
+        .select('id', { count: 'exact', head: true })
+        .eq('barco_id', barco.id)
+        .limit(1)
+
+      const esBarcoSacos = !sacosCountError && sacosCount > 0
+
+      // 🔥 SEGUNDO: Verificar si es un barco de PET COKE (tiene registros en petcoke_viajes)
+      const { count: petCount, error: petCountError } = await supabase
+        .from('petcoke_viajes')
+        .select('id', { count: 'exact', head: true })
+        .eq('barco_id', barco.id)
+        .limit(1)
+
+      const esBarcoPetCoke = !petCountError && petCount > 0
+
+      // Obtener productos del barco (para barcos normales)
       const productosBarco = barco.metas_json?.productos || []
       const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
 
       let resumenProductos = []
 
-      // --- DETECCIÓN DE SACOS ---
-      // Buscar si el barco tiene un producto cuyo código contenga "SACO" o sea "ENVASADO"
-      const esBarcoSacos = productosBarco.some(codigo => 
-        codigo === 'SACOS' || 
-        codigo === 'SACO' || 
-        codigo === 'ENVASADO' ||
-        codigo === 'ENVASE' ||
-        productosInfo.some(p => p.nombre?.toLowerCase().includes('saco'))
-      )
-      
-      // --- DETECCIÓN DE PET COKE ---
-      const esBarcoPetCoke = productosBarco.includes('PC-001')
+      // =====================================================
+      // CASO 1: BARCO DE SACOS
+      // =====================================================
+      if (esBarcoSacos) {
+        console.log(`📦 BARCO DE SACOS detectado: ${barco.nombre} (ID: ${barco.id})`)
+        
+        // Cargar TODOS los registros de sacos
+        const sacosViajes = await cargarTodosLosRegistros('registros_sacos', { barco_id: barco.id })
+        
+        console.log(`📦 Registros totales en sacos: ${sacosViajes.length}`)
+        
+        // Filtrar por fecha
+        const sacosFiltrados = sacosViajes.filter(v => 
+          v.fecha && 
+          dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
+          dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
+        )
 
-      if (esBarcoPetCoke) {
-        console.log(`🛢️ Barco de Pet Coke detectado: ${barco.nombre}`)
+        console.log(`📦 Registros en rango de fechas: ${sacosFiltrados.length}`)
+
+        // Calcular total TM (usando sacos buenos)
+        const totalTM = sacosFiltrados.reduce((sum, v) => {
+          const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
+          const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
+          return sum + tm
+        }, 0)
+
+        console.log(`📦 Total TM calculado: ${totalTM.toFixed(3)}`)
+
+        resumenProductos.push({
+          nombre: 'Sacos / Envasado',
+          codigo: 'SACOS',
+          icono: '📦',
+          tipo: 'IMPORTACIÓN',
+          metodo: 'Registro de Sacos',
+          descargadoTM: totalTM,
+          metaTM: barco.metas_json?.limites?.SACOS || 0,
+          viajesCount: sacosFiltrados.length,
+          completado: false
+        })
+      } 
+      // =====================================================
+      // CASO 2: BARCO DE PET COKE
+      // =====================================================
+      else if (esBarcoPetCoke) {
+        console.log(`🛢️ BARCO DE PET COKE detectado: ${barco.nombre} (ID: ${barco.id})`)
+        
         const petViajes = await cargarTodosLosRegistros('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
         
         const petViajesFiltrados = petViajes.filter(v => 
@@ -176,44 +226,10 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
           completado: metaTM > 0 ? totalTM >= metaTM : false
         })
       } 
-      else if (esBarcoSacos) {
-        console.log(`📦 Barco de Sacos detectado: ${barco.nombre}`)
-        // Cargar TODOS los registros de sacos
-        const sacosViajes = await cargarTodosLosRegistros('registros_sacos', { barco_id: barco.id })
-        
-        console.log(`📦 Registros encontrados en sacos: ${sacosViajes.length}`)
-        
-        // Filtrar por fecha
-        const sacosFiltrados = sacosViajes.filter(v => 
-          v.fecha && 
-          dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
-          dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
-        )
-
-        console.log(`📦 Registros filtrados por fecha: ${sacosFiltrados.length}`)
-
-        const totalTM = sacosFiltrados.reduce((sum, v) => {
-          const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
-          const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
-          return sum + tm
-        }, 0)
-
-        console.log(`📦 Total TM calculado: ${totalTM.toFixed(3)}`)
-
-        resumenProductos.push({
-          nombre: 'Sacos / Envasado',
-          codigo: 'SACOS',
-          icono: '📦',
-          tipo: 'IMPORTACIÓN',
-          metodo: 'Registro de Sacos',
-          descargadoTM: totalTM,
-          metaTM: 0,
-          viajesCount: sacosFiltrados.length,
-          completado: false
-        })
-      } 
+      // =====================================================
+      // CASO 3: IMPORTACIÓN NORMAL (Viajes/Banda)
+      // =====================================================
       else if (barco.tipo_operacion !== 'exportacion') {
-        // IMPORTACIÓN NORMAL
         for (const prod of productosInfo) {
           const viajesData = await cargarTodosLosRegistros('viajes', {
             barco_id: barco.id,
@@ -257,8 +273,10 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
           })
         }
       } 
+      // =====================================================
+      // CASO 4: EXPORTACIÓN NORMAL
+      // =====================================================
       else {
-        // EXPORTACIÓN NORMAL
         for (const prod of productosInfo) {
           const exportData = await cargarTodosLosRegistros('exportacion_banda', {
             barco_id: barco.id,
