@@ -27,7 +27,7 @@ import OperativoForm from '../components/adminC/OperativoForm'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 
 import AccionesBarcoMenu from '../components/adminC/AccionesBarcoMenu'
 
