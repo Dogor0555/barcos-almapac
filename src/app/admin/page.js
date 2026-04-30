@@ -114,7 +114,10 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
   return todosLosRegistros
 }
 
- const cargarDatosBarcos = async () => {
+// =====================================================
+// FUNCIÓN PARA CARGAR DATOS DE BARCOS (CON FECHA FIN = ÚLTIMO REGISTRO)
+// =====================================================
+const cargarDatosBarcos = async () => {
   setLoading(true)
   try {
     let query = supabase.from('barcos').select('*')
@@ -132,7 +135,7 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         return { ...barco, dentroRango: false, resumen: null }
       }
 
-      // 🔥 PRIMERO: Verificar si es un barco de SACOS (tiene registros en registros_sacos)
+      // Verificar si es barco de SACOS (tiene registros en registros_sacos)
       const { count: sacosCount, error: sacosCountError } = await supabase
         .from('registros_sacos')
         .select('id', { count: 'exact', head: true })
@@ -141,7 +144,7 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
 
       const esBarcoSacos = !sacosCountError && sacosCount > 0
 
-      // 🔥 SEGUNDO: Verificar si es un barco de PET COKE (tiene registros en petcoke_viajes)
+      // Verificar si es barco de PET COKE (tiene registros en petcoke_viajes)
       const { count: petCount, error: petCountError } = await supabase
         .from('petcoke_viajes')
         .select('id', { count: 'exact', head: true })
@@ -150,43 +153,44 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
 
       const esBarcoPetCoke = !petCountError && petCount > 0
 
-      // Obtener productos del barco (para barcos normales)
       const productosBarco = barco.metas_json?.productos || []
       const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
 
       let resumenProductos = []
+      let ultimoRegistro = null
 
       // =====================================================
       // CASO 1: BARCO DE SACOS
       // =====================================================
       if (esBarcoSacos) {
-        console.log(`📦 BARCO DE SACOS detectado: ${barco.nombre} (ID: ${barco.id})`)
-        
-        // Cargar TODOS los registros de sacos
         const sacosViajes = await cargarTodosLosRegistros('registros_sacos', { barco_id: barco.id })
         
-        console.log(`📦 Registros totales en sacos: ${sacosViajes.length}`)
-        
-        // Filtrar por fecha
         const sacosFiltrados = sacosViajes.filter(v => 
           v.fecha && 
           dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
           dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
         )
 
-        console.log(`📦 Registros en rango de fechas: ${sacosFiltrados.length}`)
-
-        // Calcular total TM (usando sacos buenos)
         const totalTM = sacosFiltrados.reduce((sum, v) => {
           const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
           const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
           return sum + tm
         }, 0)
 
-        console.log(`📦 Total TM calculado: ${totalTM.toFixed(3)}`)
+        // Obtener fecha del último registro
+        const { data: ultimoSaco } = await supabase
+          .from('registros_sacos')
+          .select('fecha')
+          .eq('barco_id', barco.id)
+          .order('fecha', { ascending: false })
+          .limit(1)
+        
+        if (ultimoSaco && ultimoSaco.length > 0) {
+          ultimoRegistro = ultimoSaco[0].fecha
+        }
 
         resumenProductos.push({
-          nombre: 'Azucar en Sacos ',
+          nombre: 'Sacos / Envasado',
           codigo: 'SACOS',
           icono: '📦',
           tipo: 'IMPORTACIÓN',
@@ -201,8 +205,6 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
       // CASO 2: BARCO DE PET COKE
       // =====================================================
       else if (esBarcoPetCoke) {
-        console.log(`🛢️ BARCO DE PET COKE detectado: ${barco.nombre} (ID: ${barco.id})`)
-        
         const petViajes = await cargarTodosLosRegistros('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
         
         const petViajesFiltrados = petViajes.filter(v => 
@@ -213,6 +215,19 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
 
         const totalTM = petViajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
         const metaTM = barco.metas_json?.limites?.['PC-001'] || 0
+
+        // Obtener fecha del último registro
+        const { data: ultimoPet } = await supabase
+          .from('petcoke_viajes')
+          .select('fecha_entrada')
+          .eq('barco_id', barco.id)
+          .eq('estado', 'COMPLETADO')
+          .order('fecha_entrada', { ascending: false })
+          .limit(1)
+        
+        if (ultimoPet && ultimoPet.length > 0) {
+          ultimoRegistro = ultimoPet[0].fecha_entrada
+        }
 
         resumenProductos.push({
           nombre: 'Pet Coke',
@@ -272,6 +287,19 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
             completado: metaTM > 0 ? totalTM >= metaTM : false
           })
         }
+
+        // Obtener fecha del último viaje completo
+        const { data: ultimoViaje } = await supabase
+          .from('viajes')
+          .select('fecha')
+          .eq('barco_id', barco.id)
+          .eq('estado', 'completo')
+          .order('fecha', { ascending: false })
+          .limit(1)
+        
+        if (ultimoViaje && ultimoViaje.length > 0) {
+          ultimoRegistro = ultimoViaje[0].fecha
+        }
       } 
       // =====================================================
       // CASO 4: EXPORTACIÓN NORMAL
@@ -308,6 +336,18 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
             completado: metaTM > 0 ? totalRecibidoTM >= metaTM : false
           })
         }
+
+        // Obtener fecha de la última exportación
+        const { data: ultimaExport } = await supabase
+          .from('exportacion_banda')
+          .select('fecha_hora')
+          .eq('barco_id', barco.id)
+          .order('fecha_hora', { ascending: false })
+          .limit(1)
+        
+        if (ultimaExport && ultimaExport.length > 0) {
+          ultimoRegistro = ultimaExport[0].fecha_hora
+        }
       }
 
       return {
@@ -315,7 +355,8 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         dentroRango: true,
         resumen: {
           productos: resumenProductos,
-          totalTM: resumenProductos.reduce((sum, p) => sum + p.descargadoTM, 0)
+          totalTM: resumenProductos.reduce((sum, p) => sum + p.descargadoTM, 0),
+          ultimoRegistro: ultimoRegistro
         }
       }
     }))
@@ -329,6 +370,9 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
   }
 }
 
+// =====================================================
+// FUNCIÓN PARA EXPORTAR A EXCEL (CON COLORES NARANJA Y FECHA FIN)
+// =====================================================
 const exportarAExcel = () => {
   try {
     const barcosFiltrados = barcos.filter(b => b.dentroRango)
@@ -350,7 +394,7 @@ const exportarAExcel = () => {
       [`Tipo de operación: ${tipoOperacion === 'todos' ? 'Todos' : (tipoOperacion === 'importacion' ? 'Importación' : 'Exportación')}`],
       [],
       ['RESUMEN GENERAL'],
-      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
+      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin (Último Registro)', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
     ]
 
     barcosFiltrados.forEach(barco => {
@@ -358,11 +402,16 @@ const exportarAExcel = () => {
         `${p.nombre}: ${p.descargadoTM.toFixed(3)} TM${p.metaTM > 0 ? ` (Meta: ${p.metaTM.toFixed(3)} TM)` : ''}`
       ).join(' | ')
       
+      let fechaFin = '—'
+      if (barco.resumen?.ultimoRegistro) {
+        fechaFin = dayjs(barco.resumen.ultimoRegistro).format('DD/MM/YYYY')
+      }
+      
       resumenData.push([
         barco.nombre,
         barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
         barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
-        barco.fecha_salida ? dayjs(barco.fecha_salida).format('DD/MM/YYYY') : '—',
+        fechaFin,
         barco.estado,
         barco.resumen.totalTM.toFixed(3),
         barco.resumen.productos.map(p => p.nombre).join(', '),
@@ -372,17 +421,14 @@ const exportarAExcel = () => {
 
     const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
     
-    // Ajustar anchos de columnas
-    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
+    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 22 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
     
-    // Estilo para encabezados (naranja, letra blanca)
     const headerStyle = {
       fill: { fgColor: { rgb: "FF6B00" } },
       font: { color: { rgb: "FFFFFF" }, bold: true, sz: 12 },
       alignment: { horizontal: "center", vertical: "center" }
     }
     
-    // Aplicar estilo a los encabezados (fila 6)
     for (let col = 0; col <= 7; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 6, c: col })
       if (!wsResumen[cellRef]) wsResumen[cellRef] = {}
@@ -398,17 +444,22 @@ const exportarAExcel = () => {
       ['DETALLE POR BARCO Y PRODUCTO'],
       [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
       [],
-      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
+      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin (Último Registro)', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
     ]
 
     barcosFiltrados.forEach(barco => {
+      let fechaFin = '—'
+      if (barco.resumen?.ultimoRegistro) {
+        fechaFin = dayjs(barco.resumen.ultimoRegistro).format('DD/MM/YYYY')
+      }
+      
       barco.resumen.productos.forEach(prod => {
         const porcentaje = prod.metaTM > 0 ? (prod.descargadoTM / prod.metaTM) * 100 : 0
         detalleData.push([
           barco.nombre,
           barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
           barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
-          barco.fecha_salida ? dayjs(barco.fecha_salida).format('DD/MM/YYYY') : '—',
+          fechaFin,
           prod.nombre,
           prod.codigo,
           prod.tipo,
@@ -422,9 +473,8 @@ const exportarAExcel = () => {
     })
 
     const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
-    wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
+    wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
     
-    // Aplicar estilo a los encabezados de detalle (fila 3)
     for (let col = 0; col <= 11; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 3, c: col })
       if (!wsDetalle[cellRef]) wsDetalle[cellRef] = {}
