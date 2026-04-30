@@ -350,7 +350,7 @@ const exportarAExcel = () => {
       [`Tipo de operación: ${tipoOperacion === 'todos' ? 'Todos' : (tipoOperacion === 'importacion' ? 'Importación' : 'Exportación')}`],
       [],
       ['RESUMEN GENERAL'],
-      ['Barco', 'Tipo', 'Fecha Llegada', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
+      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
     ]
 
     barcosFiltrados.forEach(barco => {
@@ -362,6 +362,7 @@ const exportarAExcel = () => {
         barco.nombre,
         barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
         barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
+        barco.fecha_salida ? dayjs(barco.fecha_salida).format('DD/MM/YYYY') : '—',
         barco.estado,
         barco.resumen.totalTM.toFixed(3),
         barco.resumen.productos.map(p => p.nombre).join(', '),
@@ -372,7 +373,7 @@ const exportarAExcel = () => {
     const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
     
     // Ajustar anchos de columnas
-    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
+    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
     
     // Estilo para encabezados (naranja, letra blanca)
     const headerStyle = {
@@ -381,8 +382,8 @@ const exportarAExcel = () => {
       alignment: { horizontal: "center", vertical: "center" }
     }
     
-    // Aplicar estilo a los encabezados
-    for (let col = 0; col <= 6; col++) {
+    // Aplicar estilo a los encabezados (fila 6)
+    for (let col = 0; col <= 7; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 6, c: col })
       if (!wsResumen[cellRef]) wsResumen[cellRef] = {}
       wsResumen[cellRef].s = headerStyle
@@ -397,7 +398,7 @@ const exportarAExcel = () => {
       ['DETALLE POR BARCO Y PRODUCTO'],
       [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
       [],
-      ['Barco', 'Tipo', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
+      ['Barco', 'Tipo', 'Fecha Llegada', 'Fecha Fin', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
     ]
 
     barcosFiltrados.forEach(barco => {
@@ -406,6 +407,8 @@ const exportarAExcel = () => {
         detalleData.push([
           barco.nombre,
           barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
+          barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
+          barco.fecha_salida ? dayjs(barco.fecha_salida).format('DD/MM/YYYY') : '—',
           prod.nombre,
           prod.codigo,
           prod.tipo,
@@ -419,10 +422,10 @@ const exportarAExcel = () => {
     })
 
     const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
-    wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
+    wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
     
-    // Aplicar estilo a los encabezados de detalle
-    for (let col = 0; col <= 9; col++) {
+    // Aplicar estilo a los encabezados de detalle (fila 3)
+    for (let col = 0; col <= 11; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 3, c: col })
       if (!wsDetalle[cellRef]) wsDetalle[cellRef] = {}
       wsDetalle[cellRef].s = headerStyle
