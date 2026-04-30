@@ -132,21 +132,29 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         return { ...barco, dentroRango: false, resumen: null }
       }
 
+      // Obtener productos del barco
       const productosBarco = barco.metas_json?.productos || []
       const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
 
       let resumenProductos = []
-      const esPetCoke = productosBarco.includes('PC-001')
-      const esSacos = barco.metas_json?.tipo === 'sacos' || productosBarco.includes('SACOS')
 
-      if (esPetCoke) {
-        // 🔥 Cargar TODOS los viajes de Pet Coke sin límite
-        const petViajes = await cargarTodosLosRegistros('petcoke_viajes', {
-          barco_id: barco.id,
-          estado: 'COMPLETADO'
-        })
+      // --- DETECCIÓN DE SACOS ---
+      // Buscar si el barco tiene un producto cuyo código contenga "SACO" o sea "ENVASADO"
+      const esBarcoSacos = productosBarco.some(codigo => 
+        codigo === 'SACOS' || 
+        codigo === 'SACO' || 
+        codigo === 'ENVASADO' ||
+        codigo === 'ENVASE' ||
+        productosInfo.some(p => p.nombre?.toLowerCase().includes('saco'))
+      )
+      
+      // --- DETECCIÓN DE PET COKE ---
+      const esBarcoPetCoke = productosBarco.includes('PC-001')
+
+      if (esBarcoPetCoke) {
+        console.log(`🛢️ Barco de Pet Coke detectado: ${barco.nombre}`)
+        const petViajes = await cargarTodosLosRegistros('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
         
-        // Filtrar por fecha en JavaScript (ya que la consulta no tiene filtro de fecha)
         const petViajesFiltrados = petViajes.filter(v => 
           v.fecha_entrada && 
           dayjs(v.fecha_entrada).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
@@ -168,11 +176,12 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
           completado: metaTM > 0 ? totalTM >= metaTM : false
         })
       } 
-      else if (esSacos) {
-        // 🔥 Cargar TODOS los registros de sacos sin límite
-        const sacosViajes = await cargarTodosLosRegistros('registros_sacos', {
-          barco_id: barco.id
-        })
+      else if (esBarcoSacos) {
+        console.log(`📦 Barco de Sacos detectado: ${barco.nombre}`)
+        // Cargar TODOS los registros de sacos
+        const sacosViajes = await cargarTodosLosRegistros('registros_sacos', { barco_id: barco.id })
+        
+        console.log(`📦 Registros encontrados en sacos: ${sacosViajes.length}`)
         
         // Filtrar por fecha
         const sacosFiltrados = sacosViajes.filter(v => 
@@ -181,11 +190,15 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
           dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
         )
 
+        console.log(`📦 Registros filtrados por fecha: ${sacosFiltrados.length}`)
+
         const totalTM = sacosFiltrados.reduce((sum, v) => {
           const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
           const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
           return sum + tm
         }, 0)
+
+        console.log(`📦 Total TM calculado: ${totalTM.toFixed(3)}`)
 
         resumenProductos.push({
           nombre: 'Sacos / Envasado',
@@ -200,15 +213,14 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         })
       } 
       else if (barco.tipo_operacion !== 'exportacion') {
+        // IMPORTACIÓN NORMAL
         for (const prod of productosInfo) {
-          // 🔥 Cargar TODOS los viajes del producto sin límite
           const viajesData = await cargarTodosLosRegistros('viajes', {
             barco_id: barco.id,
             producto_id: prod.id,
             estado: 'completo'
           })
           
-          // Filtrar por fecha
           const viajesFiltrados = viajesData.filter(v => 
             v.fecha && 
             dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
@@ -219,7 +231,6 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
 
           let totalBandaTM = 0
           if (prod.tipo_registro === 'banda' || prod.tipo_registro === 'mixto') {
-            // 🔥 Cargar TODAS las lecturas de banda sin límite
             const bandaData = await cargarTodosLosRegistros('lecturas_banda', {
               barco_id: barco.id,
               producto_id: prod.id
@@ -247,14 +258,13 @@ const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
         }
       } 
       else {
+        // EXPORTACIÓN NORMAL
         for (const prod of productosInfo) {
-          // 🔥 Cargar TODAS las exportaciones sin límite
           const exportData = await cargarTodosLosRegistros('exportacion_banda', {
             barco_id: barco.id,
             producto_id: prod.id
           }, { field: 'fecha_hora', ascending: true })
           
-          // Filtrar por fecha
           const exportFiltrados = exportData.filter(e => 
             e.fecha_hora && 
             dayjs(e.fecha_hora).isAfter(dayjs(`${fechaInicio}T00:00:00`)) &&
