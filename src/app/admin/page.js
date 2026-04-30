@@ -180,85 +180,118 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
   }
 
   const exportarAExcel = () => {
-    try {
-      const barcosFiltrados = barcos.filter(b => b.dentroRango)
-      
-      if (barcosFiltrados.length === 0) {
-        toast.error('No hay barcos en el rango seleccionado')
-        return
-      }
+  try {
+    const barcosFiltrados = barcos.filter(b => b.dentroRango)
+    
+    if (barcosFiltrados.length === 0) {
+      toast.error('No hay barcos en el rango seleccionado')
+      return
+    }
 
-      const wb = XLSX.utils.book_new()
-      
-      const resumenData = [
-        ['REPORTE GENERAL DE BARCOS'],
-        [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
-        [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
-        [`Tipo de operación: ${tipoOperacion === 'todos' ? 'Todos' : (tipoOperacion === 'importacion' ? 'Importación' : 'Exportación')}`],
-        [],
-        ['RESUMEN GENERAL'],
-        ['Barco', 'Tipo', 'Fecha Llegada', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
-      ]
+    const wb = XLSX.utils.book_new()
+    
+    // =====================================================
+    // HOJA 1: RESUMEN GENERAL
+    // =====================================================
+    const resumenData = [
+      ['REPORTE GENERAL DE BARCOS'],
+      [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
+      [`Fecha de generación: ${dayjs().format('DD/MM/YYYY HH:mm:ss')}`],
+      [`Tipo de operación: ${tipoOperacion === 'todos' ? 'Todos' : (tipoOperacion === 'importacion' ? 'Importación' : 'Exportación')}`],
+      [],
+      ['RESUMEN GENERAL'],
+      ['Barco', 'Tipo', 'Fecha Llegada', 'Estado', 'Total Descargado/Recibido (TM)', 'Productos', 'Detalle']
+    ]
 
-      barcosFiltrados.forEach(barco => {
-        const detalleProductos = barco.resumen.productos.map(p => 
-          `${p.nombre}: ${p.descargadoTM.toFixed(3)} TM${p.metaTM > 0 ? ` (Meta: ${p.metaTM.toFixed(3)} TM)` : ''}`
-        ).join(' | ')
-        
-        resumenData.push([
+    barcosFiltrados.forEach(barco => {
+      const detalleProductos = barco.resumen.productos.map(p => 
+        `${p.nombre}: ${p.descargadoTM.toFixed(3)} TM${p.metaTM > 0 ? ` (Meta: ${p.metaTM.toFixed(3)} TM)` : ''}`
+      ).join(' | ')
+      
+      resumenData.push([
+        barco.nombre,
+        barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
+        barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
+        barco.estado,
+        barco.resumen.totalTM.toFixed(3),
+        barco.resumen.productos.map(p => p.nombre).join(', '),
+        detalleProductos
+      ])
+    })
+
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+    
+    // Aplicar estilos a la hoja de resumen
+    wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
+    
+    // Estilo para encabezados (naranja, letra blanca)
+    const headerStyle = {
+      fill: { fgColor: { rgb: "FF6B00" } }, // Naranja
+      font: { color: { rgb: "FFFFFF" }, bold: true, sz: 12 }, // Letra blanca
+      alignment: { horizontal: "center", vertical: "center" }
+    }
+    
+    // Aplicar estilo a los encabezados de la hoja de resumen (fila 7, columnas A-G)
+    for (let col = 0; col <= 6; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 6, c: col })
+      if (!wsResumen[cellRef]) wsResumen[cellRef] = {}
+      wsResumen[cellRef].s = headerStyle
+    }
+    
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
+
+    // =====================================================
+    // HOJA 2: DETALLE POR BARCO Y PRODUCTO
+    // =====================================================
+    const detalleData = [
+      ['DETALLE POR BARCO Y PRODUCTO'],
+      [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
+      [],
+      ['Barco', 'Tipo', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
+    ]
+
+    barcosFiltrados.forEach(barco => {
+      barco.resumen.productos.forEach(prod => {
+        const porcentaje = prod.metaTM > 0 ? (prod.descargadoTM / prod.metaTM) * 100 : 0
+        detalleData.push([
           barco.nombre,
           barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
-          barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—',
-          barco.estado,
-          barco.resumen.totalTM.toFixed(3),
-          barco.resumen.productos.map(p => p.nombre).join(', '),
-          detalleProductos
+          prod.nombre,
+          prod.codigo,
+          prod.tipo,
+          prod.metodo,
+          prod.descargadoTM.toFixed(3),
+          prod.metaTM.toFixed(3),
+          porcentaje.toFixed(1) + '%',
+          prod.completado ? 'COMPLETADO' : (prod.descargadoTM > 0 ? 'EN PROCESO' : 'PENDIENTE')
         ])
       })
+    })
 
-      const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
-      XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
-
-      const detalleData = [
-        ['DETALLE POR BARCO Y PRODUCTO'],
-        [`Período: ${dayjs(fechaInicio).format('DD/MM/YYYY')} - ${dayjs(fechaFin).format('DD/MM/YYYY')}`],
-        [],
-        ['Barco', 'Tipo', 'Producto', 'Código', 'Operación', 'Método', 'Cantidad (TM)', 'Meta (TM)', '% Cumplimiento', 'Estado']
-      ]
-
-      barcosFiltrados.forEach(barco => {
-        barco.resumen.productos.forEach(prod => {
-          const porcentaje = prod.metaTM > 0 ? (prod.descargadoTM / prod.metaTM) * 100 : 0
-          detalleData.push([
-            barco.nombre,
-            barco.tipo_operacion === 'importacion' ? 'IMPORTACIÓN' : 'EXPORTACIÓN',
-            prod.nombre,
-            prod.codigo,
-            prod.tipo,
-            prod.metodo,
-            prod.descargadoTM.toFixed(3),
-            prod.metaTM.toFixed(3),
-            porcentaje.toFixed(1) + '%',
-            prod.completado ? 'COMPLETADO' : (prod.descargadoTM > 0 ? 'EN PROCESO' : 'PENDIENTE')
-          ])
-        })
-      })
-
-      const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
-      XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle por Producto')
-
-      wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 60 }]
-      wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
-
-      const nombreArchivo = `Reporte_Barcos_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
-      XLSX.writeFile(wb, nombreArchivo)
-      
-      toast.success(`✅ Reporte exportado: ${nombreArchivo}`)
-    } catch (error) {
-      console.error('Error exportando:', error)
-      toast.error('Error al exportar el reporte')
+    const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
+    wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
+    
+    // Aplicar estilo a los encabezados de la hoja de detalle (fila 3, columnas A-J)
+    for (let col = 0; col <= 9; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 3, c: col })
+      if (!wsDetalle[cellRef]) wsDetalle[cellRef] = {}
+      wsDetalle[cellRef].s = headerStyle
     }
+    
+    XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle por Producto')
+
+    // =====================================================
+    // GENERAR ARCHIVO
+    // =====================================================
+    const nombreArchivo = `Reporte_Barcos_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
+    XLSX.writeFile(wb, nombreArchivo)
+    
+    toast.success(`✅ Reporte exportado: ${nombreArchivo}`)
+  } catch (error) {
+    console.error('Error exportando:', error)
+    toast.error('Error al exportar el reporte')
   }
+}
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
