@@ -64,11 +64,9 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
     setLoading(true)
     try {
       let query = supabase.from('barcos').select('*')
-      
       if (tipoOperacion !== 'todos') {
         query = query.eq('tipo_operacion', tipoOperacion)
       }
-
       const { data: barcosData, error } = await query.order('created_at', { ascending: false })
       if (error) throw error
 
@@ -76,20 +74,73 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
         const fechaLlegada = barco.fecha_llegada ? dayjs(barco.fecha_llegada) : null
         const estaEnRango = !fechaLlegada || (fechaLlegada.isAfter(dayjs(fechaInicio).subtract(1, 'day')) && fechaLlegada.isBefore(dayjs(fechaFin).add(1, 'day')))
         
-        if (!estaEnRango) {
-          return { ...barco, dentroRango: false, resumen: null }
-        }
+        if (!estaEnRango) return { ...barco, dentroRango: false, resumen: null }
 
         const productosBarco = barco.metas_json?.productos || []
-        const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
-
         let resumenProductos = []
 
-        if (barco.tipo_operacion !== 'exportacion') {
+        // --- LÓGICA PARA PET COKE (Producto PC-001) ---
+        const esPetCoke = productosBarco.includes('PC-001')
+        const esSacos = barco.metas_json?.tipo === 'sacos' || productosBarco.includes('SACOS')
+
+        if (esPetCoke) {
+          // Obtener datos de la tabla petcoke_viajes
+          const { data: petViajes } = await supabase
+            .from('petcoke_viajes')
+            .select('peso_neto, fecha_entrada, estado')
+            .eq('barco_id', barco.id)
+            .eq('estado', 'COMPLETADO')
+            .gte('fecha_entrada', fechaInicio)
+            .lte('fecha_entrada', fechaFin)
+
+          const totalTM = petViajes?.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0) || 0
+          const metaTM = barco.metas_json?.limites?.['PC-001'] || 0
+
+          resumenProductos.push({
+            nombre: 'Pet Coke',
+            codigo: 'PC-001',
+            icono: '🛢️',
+            tipo: 'IMPORTACIÓN',
+            metodo: 'Viajes (Pet Coke)',
+            descargadoTM: totalTM,
+            metaTM: metaTM,
+            viajesCount: petViajes?.length || 0,
+            completado: metaTM > 0 ? totalTM >= metaTM : false
+          })
+        } 
+        // --- LÓGICA PARA SACOS ---
+        else if (esSacos) {
+          const { data: sacosViajes } = await supabase
+            .from('registros_sacos')
+            .select('cantidad_paquetes, paquetes_danados, peso_saco_kg, fecha')
+            .eq('barco_id', barco.id)
+            .gte('fecha', fechaInicio)
+            .lte('fecha', fechaFin)
+
+          const totalTM = sacosViajes?.reduce((sum, v) => {
+            const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
+            const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
+            return sum + tm
+          }, 0) || 0
+
+          resumenProductos.push({
+            nombre: 'Sacos / Envasado',
+            codigo: 'SACOS',
+            icono: '📦',
+            tipo: 'IMPORTACIÓN',
+            metodo: 'Registro de Sacos',
+            descargadoTM: totalTM,
+            metaTM: 0, // Los sacos generalmente no tienen meta
+            viajesCount: sacosViajes?.length || 0,
+            completado: false
+          })
+        } 
+        // --- LÓGICA PARA IMPORTACIÓN NORMAL (Viajes/Banda) ---
+        else if (barco.tipo_operacion !== 'exportacion') {
           for (const prod of productosInfo) {
             const { data: viajesData } = await supabase
               .from('viajes')
-              .select('peso_destino_tm, peso_neto_updp_tm, estado')
+              .select('peso_destino_tm')
               .eq('barco_id', barco.id)
               .eq('producto_id', prod.id)
               .eq('estado', 'completo')
@@ -97,24 +148,7 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
               .lte('fecha', fechaFin)
 
             const totalViajesTM = viajesData?.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0) || 0
-
-            let totalBandaTM = 0
-            if (prod.tipo_registro === 'banda' || prod.tipo_registro === 'mixto') {
-              const { data: bandaData } = await supabase
-                .from('lecturas_banda')
-                .select('acumulado_tm')
-                .eq('barco_id', barco.id)
-                .eq('producto_id', prod.id)
-                .order('fecha_hora', { ascending: false })
-                .limit(1)
-              
-              if (bandaData && bandaData.length > 0) {
-                totalBandaTM = Number(bandaData[0].acumulado_tm) || 0
-              }
-            }
-
             const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
-            const totalTM = totalViajesTM + totalBandaTM
 
             resumenProductos.push({
               nombre: prod.nombre,
@@ -122,28 +156,26 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
               icono: prod.icono,
               tipo: 'IMPORTACIÓN',
               metodo: prod.tipo_registro === 'banda' ? 'Banda' : (prod.tipo_registro === 'viajes' ? 'Viajes' : 'Mixto'),
-              descargadoTM: totalTM,
+              descargadoTM: totalViajesTM,
               metaTM: metaTM,
               viajesCount: viajesData?.length || 0,
-              completado: metaTM > 0 ? totalTM >= metaTM : false
+              completado: metaTM > 0 ? totalViajesTM >= metaTM : false
             })
           }
-        } else {
+        } 
+        // --- LÓGICA PARA EXPORTACIÓN NORMAL ---
+        else {
           for (const prod of productosInfo) {
             const { data: exportData } = await supabase
               .from('exportacion_banda')
-              .select('acumulado_tm, fecha_hora')
+              .select('acumulado_tm')
               .eq('barco_id', barco.id)
               .eq('producto_id', prod.id)
               .gte('fecha_hora', `${fechaInicio}T00:00:00`)
               .lte('fecha_hora', `${fechaFin}T23:59:59`)
               .order('fecha_hora', { ascending: true })
 
-            let totalRecibidoTM = 0
-            if (exportData && exportData.length > 0) {
-              totalRecibidoTM = Number(exportData[exportData.length - 1].acumulado_tm) || 0
-            }
-
+            let totalRecibidoTM = exportData?.length > 0 ? Number(exportData[exportData.length - 1].acumulado_tm) || 0 : 0
             const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
 
             resumenProductos.push({
@@ -177,9 +209,9 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
     } finally {
       setLoading(false)
     }
-  }
+}
 
-  const exportarAExcel = () => {
+const exportarAExcel = () => {
   try {
     const barcosFiltrados = barcos.filter(b => b.dentroRango)
     
@@ -221,17 +253,17 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
 
     const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
     
-    // Aplicar estilos a la hoja de resumen
+    // Ajustar anchos de columnas
     wsResumen['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 60 }]
     
     // Estilo para encabezados (naranja, letra blanca)
     const headerStyle = {
-      fill: { fgColor: { rgb: "FF6B00" } }, // Naranja
-      font: { color: { rgb: "FFFFFF" }, bold: true, sz: 12 }, // Letra blanca
+      fill: { fgColor: { rgb: "FF6B00" } },
+      font: { color: { rgb: "FFFFFF" }, bold: true, sz: 12 },
       alignment: { horizontal: "center", vertical: "center" }
     }
     
-    // Aplicar estilo a los encabezados de la hoja de resumen (fila 7, columnas A-G)
+    // Aplicar estilo a los encabezados
     for (let col = 0; col <= 6; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 6, c: col })
       if (!wsResumen[cellRef]) wsResumen[cellRef] = {}
@@ -271,7 +303,7 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
     const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData)
     wsDetalle['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 }]
     
-    // Aplicar estilo a los encabezados de la hoja de detalle (fila 3, columnas A-J)
+    // Aplicar estilo a los encabezados de detalle
     for (let col = 0; col <= 9; col++) {
       const cellRef = XLSX.utils.encode_cell({ r: 3, c: col })
       if (!wsDetalle[cellRef]) wsDetalle[cellRef] = {}
