@@ -60,6 +60,60 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
     }
   }
 
+
+  // =====================================================
+// FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
+// =====================================================
+const cargarTodosLosRegistros = async (tabla, filtros = {}, orderBy = null) => {
+  let todosLosRegistros = []
+  let desde = 0
+  const limite = 1000
+  let hayMas = true
+
+  while (hayMas) {
+    let query = supabase.from(tabla).select('*')
+    
+    // Aplicar filtros
+    Object.entries(filtros).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        query = query.in(key, value)
+      } else if (typeof value === 'object') {
+        if (value.operator) {
+          query = query.filter(key, value.operator, value.value)
+        }
+      } else {
+        query = query.eq(key, value)
+      }
+    })
+    
+    // Aplicar ordenamiento
+    if (orderBy) {
+      query = query.order(orderBy.field, { ascending: orderBy.ascending !== false })
+    }
+    
+    // Paginación
+    query = query.range(desde, desde + limite - 1)
+    
+    const { data, error } = await query
+
+    if (error) {
+      console.error(`Error cargando ${tabla}:`, error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      todosLosRegistros = [...todosLosRegistros, ...data]
+      desde += limite
+      hayMas = data.length === limite
+    } else {
+      hayMas = false
+    }
+  }
+
+  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+  return todosLosRegistros
+}
+
   const cargarDatosBarcos = async () => {
   setLoading(true)
   try {
@@ -78,28 +132,28 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
         return { ...barco, dentroRango: false, resumen: null }
       }
 
-      // Obtener productos del barco
       const productosBarco = barco.metas_json?.productos || []
-      // 🔥 DEFINIR productosInfo aquí (filtra los productos del catálogo)
       const productosInfo = productosCatalogo.filter(p => productosBarco.includes(p.codigo))
 
       let resumenProductos = []
-
-      // --- LÓGICA PARA PET COKE (Producto PC-001) ---
       const esPetCoke = productosBarco.includes('PC-001')
       const esSacos = barco.metas_json?.tipo === 'sacos' || productosBarco.includes('SACOS')
 
       if (esPetCoke) {
-        // Obtener datos de la tabla petcoke_viajes
-        const { data: petViajes } = await supabase
-          .from('petcoke_viajes')
-          .select('peso_neto, fecha_entrada, estado')
-          .eq('barco_id', barco.id)
-          .eq('estado', 'COMPLETADO')
-          .gte('fecha_entrada', fechaInicio)
-          .lte('fecha_entrada', fechaFin)
+        // 🔥 Cargar TODOS los viajes de Pet Coke sin límite
+        const petViajes = await cargarTodosLosRegistros('petcoke_viajes', {
+          barco_id: barco.id,
+          estado: 'COMPLETADO'
+        })
+        
+        // Filtrar por fecha en JavaScript (ya que la consulta no tiene filtro de fecha)
+        const petViajesFiltrados = petViajes.filter(v => 
+          v.fecha_entrada && 
+          dayjs(v.fecha_entrada).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
+          dayjs(v.fecha_entrada).isBefore(dayjs(fechaFin).add(1, 'day'))
+        )
 
-        const totalTM = petViajes?.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0) || 0
+        const totalTM = petViajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
         const metaTM = barco.metas_json?.limites?.['PC-001'] || 0
 
         resumenProductos.push({
@@ -110,24 +164,28 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
           metodo: 'Viajes (Pet Coke)',
           descargadoTM: totalTM,
           metaTM: metaTM,
-          viajesCount: petViajes?.length || 0,
+          viajesCount: petViajesFiltrados.length,
           completado: metaTM > 0 ? totalTM >= metaTM : false
         })
       } 
-      // --- LÓGICA PARA SACOS ---
       else if (esSacos) {
-        const { data: sacosViajes } = await supabase
-          .from('registros_sacos')
-          .select('cantidad_paquetes, paquetes_danados, peso_saco_kg, fecha')
-          .eq('barco_id', barco.id)
-          .gte('fecha', fechaInicio)
-          .lte('fecha', fechaFin)
+        // 🔥 Cargar TODOS los registros de sacos sin límite
+        const sacosViajes = await cargarTodosLosRegistros('registros_sacos', {
+          barco_id: barco.id
+        })
+        
+        // Filtrar por fecha
+        const sacosFiltrados = sacosViajes.filter(v => 
+          v.fecha && 
+          dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
+          dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
+        )
 
-        const totalTM = sacosViajes?.reduce((sum, v) => {
+        const totalTM = sacosFiltrados.reduce((sum, v) => {
           const sacosBuenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
           const tm = (sacosBuenos * (v.peso_saco_kg || 50)) / 1000
           return sum + tm
-        }, 0) || 0
+        }, 0)
 
         resumenProductos.push({
           nombre: 'Sacos / Envasado',
@@ -137,35 +195,35 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
           metodo: 'Registro de Sacos',
           descargadoTM: totalTM,
           metaTM: 0,
-          viajesCount: sacosViajes?.length || 0,
+          viajesCount: sacosFiltrados.length,
           completado: false
         })
       } 
-      // --- LÓGICA PARA IMPORTACIÓN NORMAL (Viajes/Banda) ---
       else if (barco.tipo_operacion !== 'exportacion') {
         for (const prod of productosInfo) {
-          // Viajes completos en el rango de fechas
-          const { data: viajesData } = await supabase
-            .from('viajes')
-            .select('peso_destino_tm, peso_neto_updp_tm')
-            .eq('barco_id', barco.id)
-            .eq('producto_id', prod.id)
-            .eq('estado', 'completo')
-            .gte('fecha', fechaInicio)
-            .lte('fecha', fechaFin)
+          // 🔥 Cargar TODOS los viajes del producto sin límite
+          const viajesData = await cargarTodosLosRegistros('viajes', {
+            barco_id: barco.id,
+            producto_id: prod.id,
+            estado: 'completo'
+          })
+          
+          // Filtrar por fecha
+          const viajesFiltrados = viajesData.filter(v => 
+            v.fecha && 
+            dayjs(v.fecha).isAfter(dayjs(fechaInicio).subtract(1, 'day')) &&
+            dayjs(v.fecha).isBefore(dayjs(fechaFin).add(1, 'day'))
+          )
 
-          const totalViajesTM = viajesData?.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0) || 0
+          const totalViajesTM = viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
 
-          // Lecturas de banda
           let totalBandaTM = 0
           if (prod.tipo_registro === 'banda' || prod.tipo_registro === 'mixto') {
-            const { data: bandaData } = await supabase
-              .from('lecturas_banda')
-              .select('acumulado_tm')
-              .eq('barco_id', barco.id)
-              .eq('producto_id', prod.id)
-              .order('fecha_hora', { ascending: false })
-              .limit(1)
+            // 🔥 Cargar TODAS las lecturas de banda sin límite
+            const bandaData = await cargarTodosLosRegistros('lecturas_banda', {
+              barco_id: barco.id,
+              producto_id: prod.id
+            }, { field: 'fecha_hora', ascending: false })
             
             if (bandaData && bandaData.length > 0) {
               totalBandaTM = Number(bandaData[0].acumulado_tm) || 0
@@ -183,26 +241,29 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
             metodo: prod.tipo_registro === 'banda' ? 'Banda' : (prod.tipo_registro === 'viajes' ? 'Viajes' : 'Mixto'),
             descargadoTM: totalTM,
             metaTM: metaTM,
-            viajesCount: viajesData?.length || 0,
+            viajesCount: viajesFiltrados.length,
             completado: metaTM > 0 ? totalTM >= metaTM : false
           })
         }
       } 
-      // --- LÓGICA PARA EXPORTACIÓN NORMAL ---
       else {
         for (const prod of productosInfo) {
-          const { data: exportData } = await supabase
-            .from('exportacion_banda')
-            .select('acumulado_tm, fecha_hora')
-            .eq('barco_id', barco.id)
-            .eq('producto_id', prod.id)
-            .gte('fecha_hora', `${fechaInicio}T00:00:00`)
-            .lte('fecha_hora', `${fechaFin}T23:59:59`)
-            .order('fecha_hora', { ascending: true })
+          // 🔥 Cargar TODAS las exportaciones sin límite
+          const exportData = await cargarTodosLosRegistros('exportacion_banda', {
+            barco_id: barco.id,
+            producto_id: prod.id
+          }, { field: 'fecha_hora', ascending: true })
+          
+          // Filtrar por fecha
+          const exportFiltrados = exportData.filter(e => 
+            e.fecha_hora && 
+            dayjs(e.fecha_hora).isAfter(dayjs(`${fechaInicio}T00:00:00`)) &&
+            dayjs(e.fecha_hora).isBefore(dayjs(`${fechaFin}T23:59:59`))
+          )
 
           let totalRecibidoTM = 0
-          if (exportData && exportData.length > 0) {
-            totalRecibidoTM = Number(exportData[exportData.length - 1].acumulado_tm) || 0
+          if (exportFiltrados.length > 0) {
+            totalRecibidoTM = Number(exportFiltrados[exportFiltrados.length - 1].acumulado_tm) || 0
           }
 
           const metaTM = barco.metas_json?.limites?.[prod.codigo] || 0
@@ -215,7 +276,7 @@ const ReporteGeneralBarcosModal = ({ onClose }) => {
             metodo: 'Recepción por Banda',
             descargadoTM: totalRecibidoTM,
             metaTM: metaTM,
-            lecturasCount: exportData?.length || 0,
+            lecturasCount: exportFiltrados.length,
             completado: metaTM > 0 ? totalRecibidoTM >= metaTM : false
           })
         }
