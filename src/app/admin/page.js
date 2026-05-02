@@ -14,7 +14,7 @@ import {
   Anchor, BarChart3, TrendingUp, Filter, Search,
   Eye, RefreshCw, FileText, Settings, UserCog, Shield,
   Play, Pause, Power, MoreVertical, Edit2 as Edit, UserPlus,
-  User, FolderOpen, RotateCw, Gauge, FileSpreadsheet, Warehouse
+  User, FolderOpen, RotateCw, Gauge, FileSpreadsheet
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BarcoForm from '../components/adminC/BarcoForm'
@@ -29,268 +29,9 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import * as XLSX from 'xlsx-js-style'
 
+import AccionesBarcoMenu from '../components/adminC/AccionesBarcoMenu'
+
 dayjs.locale('es')
-
-// =====================================================
-// MODAL PARA VER PLAN DE ALMACENAJE (LÍMITES POR DESTINO)
-// =====================================================
-const PlanAlmacenajeModal = ({ barco, onClose }) => {
-  const [destinos, setDestinos] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [limitesPorDestino, setLimitesPorDestino] = useState({})
-
-  useEffect(() => {
-    if (barco) {
-      cargarDestinosYLimites()
-    }
-  }, [barco])
-
-  const cargarDestinosYLimites = async () => {
-    try {
-      setLoading(true)
-      
-      // Obtener los destinos configurados en el barco
-      const destinosConfigurados = barco.metas_json?.destinos || []
-      
-      if (destinosConfigurados.length === 0) {
-        setDestinos([])
-        setLimitesPorDestino({})
-        return
-      }
-
-      // Obtener información de los destinos
-      const { data: destinosData } = await supabase
-        .from('destinos')
-        .select('*')
-        .in('id', destinosConfigurados)
-
-      setDestinos(destinosData || [])
-      
-      // Cargar los límites por destino desde las metas del barco
-      const limites = barco.metas_json?.limites_por_destino || {}
-      setLimitesPorDestino(limites)
-
-      // También podemos cargar los viajes que ya han sido registrados para calcular uso actual
-      await cargarUsoActual(destinosConfigurados)
-      
-    } catch (error) {
-      console.error('Error cargando destinos:', error)
-      toast.error('Error al cargar plan de almacenaje')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const [usoActual, setUsoActual] = useState({})
-
-  const cargarUsoActual = async (destinosIds) => {
-    try {
-      const uso = {}
-      
-      for (const destinoId of destinosIds) {
-        // Sumar todos los viajes completados a este destino
-        const { data: viajes, error } = await supabase
-          .from('viajes')
-          .select('peso_destino_tm')
-          .eq('barco_id', barco.id)
-          .eq('destino_id', destinoId)
-          .eq('estado', 'completo')
-
-        if (!error && viajes) {
-          const totalTM = viajes.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
-          uso[destinoId] = totalTM
-        } else {
-          uso[destinoId] = 0
-        }
-      }
-      
-      setUsoActual(uso)
-    } catch (error) {
-      console.error('Error cargando uso actual:', error)
-    }
-  }
-
-  const obtenerPorcentaje = (destinoId) => {
-    const limite = limitesPorDestino[destinoId] || 0
-    const usado = usoActual[destinoId] || 0
-    if (limite === 0) return 0
-    return (usado / limite) * 100
-  }
-
-  const obtenerEstado = (porcentaje) => {
-    if (porcentaje >= 100) return { texto: 'COMPLETADO', color: 'bg-red-500/20 text-red-400' }
-    if (porcentaje >= 80) return { texto: 'CRÍTICO', color: 'bg-orange-500/20 text-orange-400' }
-    if (porcentaje >= 50) return { texto: 'ATENCIÓN', color: 'bg-yellow-500/20 text-yellow-400' }
-    return { texto: 'OK', color: 'bg-green-500/20 text-green-400' }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-500/20 p-2 rounded-xl">
-              <Warehouse className="w-6 h-6 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-white">Plan de Almacenaje</h2>
-              <p className="text-emerald-200 text-xs">{barco.nombre} - Límites por destino</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
-            <X className="w-5 h-5 text-white" />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>
-            </div>
-          ) : destinos.length === 0 ? (
-            <div className="text-center py-12">
-              <Warehouse className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400">No hay destinos configurados para este barco</p>
-              <p className="text-slate-500 text-sm mt-2">Configura los destinos en la edición del barco</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Resumen general */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div className="bg-slate-900 rounded-xl p-4 border border-emerald-500/20">
-                  <p className="text-xs text-slate-400">Destinos configurados</p>
-                  <p className="text-2xl font-black text-emerald-400">{destinos.length}</p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4 border border-emerald-500/20">
-                  <p className="text-xs text-slate-400">Capacidad total planificada</p>
-                  <p className="text-2xl font-black text-emerald-400">
-                    {Object.values(limitesPorDestino).reduce((a, b) => a + (Number(b) || 0), 0).toFixed(3)} TM
-                  </p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4 border border-emerald-500/20">
-                  <p className="text-xs text-slate-400">Total despachado</p>
-                  <p className="text-2xl font-black text-blue-400">
-                    {Object.values(usoActual).reduce((a, b) => a + (Number(b) || 0), 0).toFixed(3)} TM
-                  </p>
-                </div>
-              </div>
-
-              {/* Lista de destinos con sus límites */}
-              <h3 className="font-bold text-white flex items-center gap-2 mt-4">
-                <Warehouse className="w-4 h-4 text-emerald-400" />
-                Límites por Destino
-              </h3>
-
-              {destinos.map((destino) => {
-                const limite = limitesPorDestino[destino.id] || 0
-                const usado = usoActual[destino.id] || 0
-                const porcentaje = obtenerPorcentaje(destino.id)
-                const estado = obtenerEstado(porcentaje)
-                const disponible = Math.max(0, limite - usado)
-                
-                return (
-                  <div key={destino.id} className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-emerald-500/20 p-2 rounded-lg">
-                          <Warehouse className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-white">{destino.nombre}</p>
-                          <p className="text-xs text-slate-500">Código: {destino.codigo || '—'}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${estado.color}`}>
-                        {estado.texto}
-                      </span>
-                    </div>
-
-                    <div className="p-4">
-                      <div className="grid grid-cols-3 gap-4 mb-3">
-                        <div className="text-center">
-                          <p className="text-xs text-slate-500">Límite</p>
-                          <p className="text-lg font-bold text-emerald-400">{limite.toFixed(3)} TM</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-slate-500">Despachado</p>
-                          <p className="text-lg font-bold text-blue-400">{usado.toFixed(3)} TM</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-slate-500">Disponible</p>
-                          <p className={`text-lg font-bold ${disponible <= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                            {disponible.toFixed(3)} TM
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-400">Progreso</span>
-                          <span className={porcentaje >= 100 ? 'text-red-400 font-bold' : 'text-slate-300'}>
-                            {porcentaje.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all ${
-                              porcentaje >= 100 ? 'bg-red-500' :
-                              porcentaje >= 80 ? 'bg-orange-500' :
-                              porcentaje >= 50 ? 'bg-yellow-500' :
-                              'bg-emerald-500'
-                            }`}
-                            style={{ width: `${Math.min(100, porcentaje)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* Leyenda de colores */}
-              <div className="bg-slate-900 border border-white/10 rounded-xl p-4 mt-4">
-                <h4 className="text-sm font-bold text-white mb-2">Leyenda de Estados</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <span className="text-slate-400">&lt; 50% - OK</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <span className="text-slate-400">50% - 79% - Atención</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                    <span className="text-slate-400">80% - 99% - Crítico</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <span className="text-slate-400">≥ 100% - Completado</span>
-                  </div>
-                </div>
-              </div>
-
-              {Object.keys(limitesPorDestino).length === 0 && destinos.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
-                  <p className="text-yellow-400 text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    No se han definido límites de almacenaje para los destinos. Edita el barco para configurarlos.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-white/10 p-4 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold">
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // =====================================================
 // MODAL PARA REPORTE GENERAL DE BARCOS
@@ -1202,7 +943,7 @@ const ExportacionesProductoModal = ({ barco, onClose }) => {
                           <td className="px-4 py-3 font-bold text-blue-400">
                             {exportaciones[0]?.acumulado_tm?.toFixed(3) || '0.000'} TM
                           </td>
-                          <td colSpan="3"></td>
+                          <td colSpan="3"> </td>
                         </tr>
                       </tfoot>
                     </table>
@@ -2076,7 +1817,7 @@ export default function AdminPage() {
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [showGenerarDashboardModal, setShowGenerarDashboardModal] = useState(false)
   const [showGenerarDashboardSacosModal, setShowGenerarDashboardSacosModal] = useState(false)
-  const [showPlanAlmacenajeModal, setShowPlanAlmacenajeModal] = useState(false)
+  
   const [showReporteGeneralModal, setShowReporteGeneralModal] = useState(false)
 
   useEffect(() => {
@@ -2253,11 +1994,6 @@ export default function AdminPage() {
   const handleVerDetalle = (barco) => {
     setBarcoSeleccionado(barco)
     setShowDetalleModal(true)
-  }
-
-  const handleVerPlanAlmacenaje = (barco) => {
-    setBarcoSeleccionado(barco)
-    setShowPlanAlmacenajeModal(true)
   }
 
   const handleGenerarDashboard = (barco) => {
@@ -2697,7 +2433,7 @@ export default function AdminPage() {
           </div>
 
           {/* Stats rápidas */}
-          <div className="grid grid-cols-6 gap-4 mt-6">
+          <div className="grid grid-cols-5 gap-4 mt-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-500/30 p-3 rounded-lg">
@@ -2744,20 +2480,6 @@ export default function AdminPage() {
                 <div>
                   <p className="text-blue-200 text-xs">Operativos</p>
                   <p className="text-2xl font-black text-white">{operativos.length}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-500/30 p-3 rounded-lg">
-                  <Warehouse className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-blue-200 text-xs">Destinos</p>
-                  <p className="text-2xl font-black text-white">
-                    {barcos.filter(b => b.metas_json?.destinos?.length > 0).length} barcos
-                  </p>
                 </div>
               </div>
             </div>
@@ -2901,32 +2623,9 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
-
-              <div className="bg-slate-900 rounded-xl p-5 border border-emerald-500/20">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-emerald-500/20 p-2 rounded-lg">
-                    <Warehouse className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <h3 className="font-bold text-white">Plan de Almacenaje</h3>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Barcos con destinos:</span>
-                    <span className="font-bold text-white">
-                      {barcos.filter(b => b.metas_json?.destinos?.length > 0).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Total destinos configurados:</span>
-                    <span className="font-bold text-white">
-                      {barcos.reduce((acc, b) => acc + (b.metas_json?.destinos?.length || 0), 0)}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
               <Link
                 href="/admin/usuarios"
                 className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
@@ -2973,20 +2672,6 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <Plus className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={handleAbrirReporteGeneral}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 text-white hover:shadow-lg transition-all flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <FileSpreadsheet className="w-6 h-6" />
-                  <div>
-                    <p className="font-bold">Reporte General</p>
-                    <p className="text-xs opacity-90">Exportar reporte de barcos</p>
-                  </div>
-                </div>
-                <span>→</span>
               </button>
             </div>
           </div>
@@ -3145,7 +2830,6 @@ export default function AdminPage() {
                             onVerViajesPaso1={handleVerViajesPaso1}
                             onVerExportaciones={handleVerExportaciones}
                             onVerBitacora={handleVerBitacora}
-                            onVerPlanAlmacenaje={handleVerPlanAlmacenaje}
                             onCambiarEstado={handleCambiarEstado}
                             onExportarBarco={handleExportarBarco}
                             onEliminarBarco={handleEliminarBarco}
@@ -3512,16 +3196,6 @@ export default function AdminPage() {
           barco={barcoSeleccionado}
           onClose={() => {
             setShowDetalleModal(false)
-            setBarcoSeleccionado(null)
-          }}
-        />
-      )}
-
-      {showPlanAlmacenajeModal && barcoSeleccionado && (
-        <PlanAlmacenajeModal
-          barco={barcoSeleccionado}
-          onClose={() => {
-            setShowPlanAlmacenajeModal(false)
             setBarcoSeleccionado(null)
           }}
         />
