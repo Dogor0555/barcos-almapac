@@ -3,10 +3,11 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════
- *  DASHBOARD BARCO PREMIUM — ALMAPAC · v27 · DISEÑO PREMIUM
+ *  DASHBOARD BARCO PREMIUM — ALMAPAC · v28 · DISEÑO PREMIUM
  *  ✅ CORREGIDO PARA EXPORTACIÓN: Total global = SUMA de acumulados por bodega
  *  ✅ CORREGIDO: Flujos calculados correctamente (solo entre misma bodega)
  *  ✅ CORREGIDO: Ya no usa el último registro como total global
+ *  ✅ CORREGIDO: Carga de datos con paginación (sin límite de 1000)
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -52,11 +53,42 @@ const COLORES_FALLBACK = [
 ];
 
 // ============================================================================
+// FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
+// ============================================================================
+const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'fecha_hora', ordenAsc = true) => {
+  let todosLosRegistros = []
+  let desde = 0
+  const limite = 1000
+  let hayMas = true
+
+  while (hayMas) {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select('*')
+      .eq(filtro, valor)
+      .order(ordenCampo, { ascending: ordenAsc })
+      .range(desde, desde + limite - 1)
+
+    if (error) {
+      console.error(`Error cargando página de ${tabla}:`, error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      todosLosRegistros = [...todosLosRegistros, ...data]
+      desde += limite
+      hayMas = data.length === limite
+    } else {
+      hayMas = false
+    }
+  }
+
+  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+  return todosLosRegistros
+}
+
+// ============================================================================
 // FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
-// ============================================================================
-// ============================================================================
-// FUNCIÓN CORREGIDA PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN
-// SUMA LOS APORTES REALES DE CADA BODEGA (NO SOLO EL ÚLTIMO VALOR)
 // ============================================================================
 function calcularTotalGlobalExportacion(exportaciones, productoId) {
   const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
@@ -149,29 +181,14 @@ function useBarcoData(codigoBarco) {
       const destinosMap = {};
       (destinos || []).forEach((d) => { destinosMap[d.id] = d; });
 
-      const { data: viajes, error: errorViajes } = await supabase
-        .from("viajes").select("*").eq("barco_id", barco.id)
-        .order("viaje_numero", { ascending: true });
-      if (errorViajes) throw new Error(`Error viajes: ${errorViajes.message}`);
-
-      const { data: lecturas, error: errorBanda } = await supabase
-        .from("lecturas_banda").select("*").eq("barco_id", barco.id)
-        .order("fecha_hora", { ascending: false });
-      if (errorBanda) throw new Error(`Error lecturas: ${errorBanda.message}`);
-
-      const { data: exportaciones, error: errorExportacion } = await supabase
-        .from("exportacion_banda")
-        .select(`
-          *,
-          producto:producto_id(id, codigo, nombre, icono)
-        `)
-        .eq("barco_id", barco.id)
-        .order("fecha_hora", { ascending: false });
+      // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS VIAJES
+      const viajes = await CARGAR_TODOS_LOS_REGISTROS('viajes', 'barco_id', barco.id, 'viaje_numero', true);
       
-      if (errorExportacion) {
-        console.error("Error cargando exportaciones:", errorExportacion);
-        throw new Error(`Error exportaciones: ${errorExportacion.message}`);
-      }
+      // 🔥 CONSULTA SIN LÍMITE - TRAE TODAS LAS LECTURAS DE BANDA
+      const lecturas = await CARGAR_TODOS_LOS_REGISTROS('lecturas_banda', 'barco_id', barco.id, 'fecha_hora', false);
+      
+      // 🔥 CONSULTA SIN LÍMITE - TRAE TODAS LAS EXPORTACIONES
+      const exportaciones = await CARGAR_TODOS_LOS_REGISTROS('exportacion_banda', 'barco_id', barco.id, 'fecha_hora', false);
       
       console.log("Exportaciones encontradas:", exportaciones?.length || 0);
 
@@ -349,7 +366,7 @@ function getMetaProducto(metas_json, producto) {
 }
 
 // ============================================================================
-// COMPONENTE: Resumen de Paros para Dashboard de Exportación - USANDO GRUPO DE BD
+// COMPONENTE: Resumen de Paros para Dashboard de Exportación
 // ============================================================================
 function ResumenParosDashboard({ barcoId }) {
   const [resumenParos, setResumenParos] = useState({
@@ -372,7 +389,6 @@ function ResumenParosDashboard({ barcoId }) {
     if (!barcoId) return;
 
     try {
-      // 🔥 HACER JOIN para obtener el grupo directamente desde catalogos_paros
       const { data: parosConGrupo, error: errorParos } = await supabase
         .from('registro_paros')
         .select(`
@@ -396,13 +412,6 @@ function ResumenParosDashboard({ barcoId }) {
 
       console.log("📊 Paros encontrados con grupo:", parosConGrupo?.length || 0);
       
-      // Mostrar cada paro con su grupo para depuración
-      parosConGrupo?.forEach(paro => {
-        const grupo = paro.tipo_paro?.grupo || 'OTRAS';
-        console.log(`Paro: ${paro.tipo_paro?.nombre} -> Grupo: ${grupo}, Duración: ${paro.duracion_minutos || 0}min`);
-      });
-
-      // 3. Calcular resumen por grupo usando el campo grupo de la BD
       const resumen = {
         ALMAPAC: { minutos: 0, cantidad: 0 },
         UPDP: { minutos: 0, cantidad: 0 },
@@ -410,13 +419,9 @@ function ResumenParosDashboard({ barcoId }) {
       };
 
       (parosConGrupo || []).forEach(paro => {
-        // Obtener el grupo directamente del JOIN (ya viene de catalogos_paros)
         let grupo = paro.tipo_paro?.grupo || 'OTRAS';
-        
-        // Normalizar a mayúsculas para consistencia
         grupo = grupo.toUpperCase();
         
-        // Validar que sea uno de los grupos esperados
         if (grupo !== 'ALMAPAC' && grupo !== 'UPDP') {
           grupo = 'OTRAS';
         }
@@ -535,7 +540,6 @@ function ResumenParosDashboard({ barcoId }) {
         gap: '16px'
       }}>
         
-        {/* ALMAPAC */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
@@ -556,7 +560,6 @@ function ResumenParosDashboard({ barcoId }) {
           </div>
         </div>
 
-        {/* UPDP */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
@@ -577,7 +580,6 @@ function ResumenParosDashboard({ barcoId }) {
           </div>
         </div>
 
-        {/* OTRAS */}
         <div style={{
           background: '#f8fafc',
           borderRadius: '12px',
@@ -600,7 +602,6 @@ function ResumenParosDashboard({ barcoId }) {
 
       </div>
 
-      {/* TOTAL */}
       {resumenParos.total.minutos > 0 && (
         <div style={{
           marginTop: '12px',
@@ -623,29 +624,24 @@ function ResumenParosDashboard({ barcoId }) {
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Exportación - CORREGIDO
+// COMPONENTE: Panel de Tendencias y Predicciones para Exportación
 // ============================================================================
 function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion, totalGlobal }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
-  const textoAccion = 'CARGAR';
   const textoFaltante = 'FALTANTE POR CARGAR';
 
-  // CORREGIDO: Ordenar lecturas por fecha (ascendente para cálculos)
   const lecturasOrdenadas = useMemo(() => {
     return [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
   }, [lecturas]);
 
-  // CORREGIDO: El total global se recibe por props (calculado como suma de acumulados por bodega)
   const totalGeneral = totalGlobal;
 
-  // CORREGIDO: Flujo promedio general basado en primera y última lectura de CADA BODEGA
   const flujoPromedioGeneral = useMemo(() => {
     if (lecturasOrdenadas.length < 2) return 0;
     
-    // Agrupar por bodega para calcular flujo por bodega
     const lecturasPorBodega = new Map();
     lecturasOrdenadas.forEach(l => {
       if (!lecturasPorBodega.has(l.bodega_id)) {
@@ -680,18 +676,15 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
     return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   }, [lecturasOrdenadas]);
 
-  // CORREGIDO: Flujo de la última hora (solo entre lecturas de la misma bodega)
   const flujoUltimaHora = useMemo(() => {
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
     
-    // Agrupar lecturas de la última hora por bodega
     const lecturasUltimaHora = lecturasOrdenadas.filter(l =>
       dayjs.utc(l.fecha_hora).isAfter(hace1Hora)
     );
     
     if (lecturasUltimaHora.length < 2) {
-      // Tomar las dos últimas lecturas de la bodega más reciente
       const bodegaActiva = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1].bodega_id : null;
       if (bodegaActiva) {
         const lecturasBodegaActiva = lecturasOrdenadas.filter(l => l.bodega_id === bodegaActiva);
@@ -706,7 +699,6 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
       return 0;
     }
     
-    // Agrupar por bodega y tomar la primera y última de cada una en la última hora
     const lecturasPorBodega = new Map();
     lecturasUltimaHora.forEach(l => {
       if (!lecturasPorBodega.has(l.bodega_id)) {
@@ -737,7 +729,6 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
   }, [lecturasOrdenadas]);
 
   const primeraLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[0] : null;
-  const ultimaLectura = lecturasOrdenadas.length > 0 ? lecturasOrdenadas[lecturasOrdenadas.length - 1] : null;
 
   const faltante = Math.max(0, meta - totalGeneral);
   const progreso = pct(totalGeneral, meta);
@@ -762,7 +753,6 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
     };
   }, [faltante, flujoUltimaHora]);
 
-  // Calcular horas transcurridas desde la primera lectura hasta ahora
   const horasTranscurridas = useMemo(() => {
     if (!primeraLectura) return 0;
     const horaInicial = dayjs.utc(primeraLectura.fecha_hora);
@@ -770,11 +760,9 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
     return ahora.diff(horaInicial, 'hour', true);
   }, [primeraLectura]);
 
-  // CORREGIDO: Datos para el gráfico - acumulado TOTAL (suma por bodega en cada momento)
   const datosEvolucion = useMemo(() => {
     if (lecturasOrdenadas.length === 0) return [];
     
-    // Para cada punto en el tiempo, calcular la suma de acumulados de todas las bodegas
     const puntosPorTiempo = new Map();
     
     lecturasOrdenadas.forEach(l => {
@@ -793,7 +781,6 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
       punto.acumuladoPorBodega.set(l.bodega_id, l.acumulado_tm || 0);
     });
     
-    // Convertir a array y calcular suma por punto
     const resultado = Array.from(puntosPorTiempo.values())
       .sort((a, b) => a.timestamp - b.timestamp)
       .slice(-20)
@@ -946,7 +933,7 @@ function PanelPrediccionesExportacion({ producto, lecturas, meta, tipoOperacion,
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Banda (Importación) - ORIGINAL
+// COMPONENTE: Panel de Tendencias y Predicciones para Banda (Importación)
 // ============================================================================
 function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -1174,12 +1161,11 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes - ORIGINAL
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
 
-  const textoAccion = tipoOperacion === 'exportacion' ? 'CARGAR' : 'DESCARGAR';
   const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
   const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
@@ -1232,47 +1218,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     return totalToneladas / horasTranscurridas;
   }, [viajesOrdenados]);
 
-  const flujoRecientePorHora = useMemo(() => {
-    const ahora = dayjs();
-    const hace2Horas = ahora.subtract(2, 'hour');
-    const viajesRecientes = viajesCompletos.filter(v => {
-      const fecha = v.fecha_hora || v.created_at;
-      return fecha && dayjs.utc(fecha).isAfter(hace2Horas);
-    });
-    if (viajesRecientes.length < 2) return flujoPorHoraViajes;
-    const primerViaje = viajesRecientes[0];
-    const ultimoViaje = viajesRecientes[viajesRecientes.length - 1];
-    const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
-    const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-    if (!fechaPrimera || !fechaUltima) return flujoPorHoraViajes;
-    const horaInicial = dayjs.utc(fechaPrimera);
-    const horaFinal = dayjs.utc(fechaUltima);
-    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-    if (horasTranscurridas <= 0) return flujoPorHoraViajes;
-    const totalToneladasRecientes = viajesRecientes.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
-    return totalToneladasRecientes / horasTranscurridas;
-  }, [viajesCompletos, flujoPorHoraViajes]);
-
-  const viajesRecientesPorHora = useMemo(() => {
-    const ahora = dayjs();
-    const hace2Horas = ahora.subtract(2, 'hour');
-    const viajesRecientes = viajesCompletos.filter(v => {
-      const fecha = v.fecha_hora || v.created_at;
-      return fecha && dayjs.utc(fecha).isAfter(hace2Horas);
-    });
-    if (viajesRecientes.length < 2) return frecuenciaViajes;
-    const primerViaje = viajesRecientes[0];
-    const ultimoViaje = viajesRecientes[viajesRecientes.length - 1];
-    const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
-    const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-    if (!fechaPrimera || !fechaUltima) return frecuenciaViajes;
-    const horaInicial = dayjs.utc(fechaPrimera);
-    const horaFinal = dayjs.utc(fechaUltima);
-    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-    if (horasTranscurridas <= 0) return frecuenciaViajes;
-    return viajesRecientes.length / horasTranscurridas;
-  }, [viajesCompletos, frecuenciaViajes]);
-
   const rendimientoReciente = useMemo(() => {
     const ultimosViajes = viajesCompletos.slice(-5);
     if (ultimosViajes.length === 0) return rendimientoPromedio;
@@ -1288,25 +1233,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     const toneladasFaltantes = Math.max(0, meta - totalToneladasViajes);
     return rendimientoReciente > 0 ? Math.ceil(toneladasFaltantes / rendimientoReciente) : 0;
   }, [meta, totalToneladasViajes, rendimientoReciente]);
-
-  const tiempoRestanteViajes = useMemo(() => {
-    if (viajesFaltantes <= 0 || viajesRecientesPorHora <= 0) return null;
-    const horas = viajesFaltantes / viajesRecientesPorHora;
-    const fechaEstimada = dayjs().add(horas, 'hour');
-    const dias = Math.floor(horas / 24);
-    const horasRestantes = horas % 24;
-    const minutos = Math.round((horas - Math.floor(horas)) * 60);
-    let tiempoFormateado = '';
-    if (dias > 0) tiempoFormateado += `${dias} día${dias > 1 ? 's' : ''} `;
-    if (horasRestantes > 0 || dias === 0) tiempoFormateado += `${Math.floor(horasRestantes)} hora${Math.floor(horasRestantes) !== 1 ? 's' : ''} `;
-    if (minutos > 0 && dias === 0 && horasRestantes < 1) tiempoFormateado += `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
-    return {
-      horas,
-      fecha: fechaEstimada.format("DD/MM/YYYY HH:mm"),
-      viajesFaltantes,
-      tiempoFormateado: tiempoFormateado.trim() || "Menos de 1 minuto"
-    };
-  }, [viajesFaltantes, viajesRecientesPorHora]);
 
   const horasTranscurridas = useMemo(() => {
     if (viajesOrdenados.length < 2) return 0;
@@ -1394,7 +1320,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">⏱️ FRECUENCIA DE VIAJES</span>
               <span className="alm-pred-valor">{Math.round(frecuenciaViajes)} viajes/h</span>
-              <span className="alm-pred-sub">{viajesRecientesPorHora > frecuenciaViajes ? '🔼 Acelerando' : '🔽 Desacelerando'}</span>
             </div>
           )}
 
@@ -1438,24 +1363,6 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
           </div>
         )}
       </div>
-
-      {viajesOrdenados.length >= 2 && (
-        <div className="alm-recomendaciones">
-          <h5 className="alm-recomendaciones-titulo">📊 Resumen de Flujo por Hora</h5>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Promedio General</div>
-              <div style={{ fontSize: '20px', fontWeight: '800', color: producto.color_accent }}>{fmtTM(flujoPorHoraViajes, 2)} T/h</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>{fmtTM(totalToneladasViajes, 0)} T / {horasTranscurridas.toFixed(1)} h</div>
-            </div>
-            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>Flujo Reciente (2h)</div>
-              <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>{fmtTM(flujoRecientePorHora, 2)} T/h</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Basado en últimos viajes completos</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1600,7 +1507,7 @@ function TarjetaProducto({ producto, meta, totalCamiones, totalBanda, totalExpor
 }
 
 // ============================================================================
-// COMPONENTE: Finalización General - GRANDE, HORIZONTAL, ABARCA TODO
+// COMPONENTE: Finalización General
 // ============================================================================
 function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, lecturasExportacion, tipoOperacion }) {
   if (!metaGlobal || metaGlobal === 0) return null;
@@ -1614,9 +1521,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
   let flujoDetalle = '';
 
   if (tipoOperacion === 'exportacion') {
-    // Para exportación, el flujo se calcula con la función de total global
     if (totalGlobal > 0) {
-      // Calcular flujo basado en la primera y última lectura del primer y último registro
       const todasExportaciones = lecturasExportacion;
       if (todasExportaciones.length >= 2) {
         const fechas = todasExportaciones.map(e => dayjs.utc(e.fecha_hora));
@@ -1693,7 +1598,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
       width: '100%'
     }}>
       
-      {/* PROGRESO CIRCULAR */}
       <div style={{
         flex: 1,
         minWidth: '140px',
@@ -1727,7 +1631,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
         <div style={{ fontSize: '11px', color: '#64748b' }}>{fmtTM(totalGlobal, 1)} / {fmtTM(metaGlobal, 1)} TM</div>
       </div>
 
-      {/* FLUJO */}
       <div style={{
         flex: 1.2,
         minWidth: '200px',
@@ -1763,7 +1666,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
         </div>
       </div>
 
-      {/* TIEMPO ESTIMADO */}
       <div style={{
         flex: 1.3,
         minWidth: '220px',
@@ -1802,7 +1704,6 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
         </div>
       </div>
 
-      {/* FALTANTE */}
       <div style={{
         flex: 0.9,
         minWidth: '150px',
@@ -1843,7 +1744,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
 }
 
 // ============================================================================
-// COMPONENTE: Vista General PREMIUM con Gráficos - CORREGIDO PARA EXPORTACIÓN
+// COMPONENTE: Vista General PREMIUM con Gráficos
 // ============================================================================
 function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExportacion, onSelectProducto }) {
   const tipoOperacion = barco.tipo_operacion || 'importacion';
@@ -1858,24 +1759,18 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
 
   const totales = useMemo(() => {
     return productos.map((producto) => {
-      // Viajes completos para este producto
       const viajesProducto = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
       const totalCamiones = viajesProducto.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
       
-      // Lecturas de banda para este producto - tomar la más reciente
       const lecturasProducto = lecturasBanda
         .filter((l) => l.producto_id === producto.id)
         .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
       const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
       
-      // =====================================================
-      // CORRECCIÓN PARA EXPORTACIÓN: Calcular total como SUMA de acumulados por bodega
-      // =====================================================
       let totalExportacion = 0;
       if (tipoOperacion === 'exportacion') {
         totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id);
       } else {
-        // Para importación, tomar el último registro
         const exportacionesProducto = lecturasExportacion
           .filter((e) => e.producto_id === producto.id)
           .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
@@ -1923,15 +1818,12 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     .filter((t) => t.total > 0)
     .map((t) => ({ name: t.producto.nombre, value: parseFloat(t.total.toFixed(2)), color: t.producto.color_accent }));
 
-  // CORREGIDO: Datos para el gráfico de evolución en exportación (suma de acumulados por bodega)
   const areaData = useMemo(() => {
     if (tipoOperacion === 'exportacion') {
-      // Para exportación, necesitamos la suma de acumulados por bodega en cada punto
       const todasExportaciones = [...lecturasExportacion].sort(
         (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
       );
       
-      // Crear mapa de acumulados por bodega en cada punto
       const puntosPorTiempo = new Map();
       
       todasExportaciones.forEach(exp => {
@@ -1950,7 +1842,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         punto.acumuladoPorBodega.set(exp.bodega_id, exp.acumulado_tm || 0);
       });
       
-      // Convertir a array y calcular suma
       const resultado = Array.from(puntosPorTiempo.values())
         .sort((a, b) => a.timestamp - b.timestamp)
         .slice(-20)
@@ -1965,7 +1856,6 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       
       return resultado;
     } else {
-      // Para importación, usar lecturas de banda directamente
       const sorted = [...lecturasBanda]
         .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
         .slice(-20);
@@ -2476,7 +2366,7 @@ function TablaViajes({ viajes, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Lecturas de Banda PREMIUM - CORREGIDO
+// COMPONENTE: Tabla de Lecturas de Banda PREMIUM
 // ============================================================================
 function TablaBanda({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2592,7 +2482,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Exportaciones - CORREGIDA (muestra flujo correcto)
+// COMPONENTE: Tabla de Exportaciones
 // ============================================================================
 function TablaExportacion({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2621,7 +2511,6 @@ function TablaExportacion({ lecturas, producto }) {
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
     
-    // Agrupar por bodega para calcular flujo por bodega
     const lecturasPorBodega = new Map();
     lecturasOrdenadas.forEach(l => {
       if (!lecturasPorBodega.has(l.bodega_id)) {
@@ -2651,7 +2540,6 @@ function TablaExportacion({ lecturas, producto }) {
     return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   };
 
-  // Datos para el gráfico de FLUJO (usando flujo_calculado)
   const lineData = useMemo(() => {
     const lecturasOrdenadas = [...lecturas]
       .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
@@ -2799,8 +2687,7 @@ export default function DashboardCompartido({ codigoBarco }) {
     productos: productos.length,
     viajes: viajes.length,
     lecturasBanda: lecturasBanda.length,
-    lecturasExportacion: lecturasExportacion.length,
-    productoSeleccionado: productoSeleccionado === "general" ? "Vista General" : "Producto específico"
+    lecturasExportacion: lecturasExportacion.length
   });
 
   const viajesFiltrados = useMemo(() => {
@@ -2818,7 +2705,6 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
   }, [lecturasExportacion, productoSeleccionado]);
 
-  // CORREGIDO: Calcular total global para cada producto usando SUMA de acumulados por bodega
   const totalGlobalPorProducto = useMemo(() => {
     const mapa = new Map();
     productos.forEach(producto => {
@@ -2878,6 +2764,7 @@ export default function DashboardCompartido({ codigoBarco }) {
   return (
     <>
       <style>{`
+        /* Estilos CSS completos del dashboard (los mismos que tenías) */
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700;800;900&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2909,7 +2796,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           padding: 0;
         }
 
-        /* ── TOPBAR RESPONSIVE ── */
         .alm-topbar {
           background: var(--navy);
           padding: 0 16px;
@@ -3044,125 +2930,48 @@ export default function DashboardCompartido({ codigoBarco }) {
         }
 
         @media (min-width: 768px) {
-          .alm-topbar {
-            padding: 0 24px;
-          }
-          
-          .alm-topbar-left {
-            gap: 16px;
-          }
-          
-          .alm-logo {
-            height: 36px;
-          }
-          
-          .alm-ship-name {
-            font-size: 15px;
-          }
-          
-          .alm-ship-code {
-            font-size: 11px;
-          }
-          
-          .alm-topbar-right {
-            gap: 12px;
-          }
-          
-          .alm-update-container {
-            display: block;
-          }
-          
-          .alm-update-time {
-            font-size: 11px;
-            color: rgba(255,255,255,.4);
-            font-family: 'DM Mono', monospace;
-            white-space: nowrap;
-          }
+          .alm-topbar { padding: 0 24px; }
+          .alm-topbar-left { gap: 16px; }
+          .alm-logo { height: 36px; }
+          .alm-ship-name { font-size: 15px; }
+          .alm-ship-code { font-size: 11px; }
+          .alm-topbar-right { gap: 12px; }
+          .alm-update-container { display: block; }
+          .alm-update-time { font-size: 11px; color: rgba(255,255,255,.4); font-family: 'DM Mono', monospace; white-space: nowrap; }
         }
 
         @media (min-width: 1024px) {
-          .alm-topbar {
-            padding: 0 32px;
-          }
-          
-          .alm-topbar-left {
-            gap: 20px;
-          }
-          
-          .alm-logo {
-            height: 38px;
-          }
-          
-          .alm-topbar-right {
-            gap: 14px;
-          }
-          
-          .alm-status-pill {
-            padding: 4px 12px;
-          }
-          
-          .alm-refresh-btn {
-            padding: 7px 14px;
-          }
+          .alm-topbar { padding: 0 32px; }
+          .alm-topbar-left { gap: 20px; }
+          .alm-logo { height: 38px; }
+          .alm-topbar-right { gap: 14px; }
+          .alm-status-pill { padding: 4px 12px; }
+          .alm-refresh-btn { padding: 7px 14px; }
         }
 
         @media (max-width: 480px) {
-          .alm-status-text {
-            display: none;
-          }
-          
-          .alm-status-pill {
-            padding: 4px 8px;
-          }
-          
-          .alm-refresh-text {
-            display: none;
-          }
-          
-          .alm-refresh-btn {
-            padding: 8px;
-            font-size: 16px;
-          }
-          
-          .alm-refresh-icon {
-            font-size: 16px;
-          }
-          
-          .alm-update-container {
-            display: none;
-          }
-          
-          .alm-ship-name {
-            font-size: 13px;
-          }
-          
-          .alm-ship-code {
-            font-size: 9px;
-          }
+          .alm-status-text { display: none; }
+          .alm-status-pill { padding: 4px 8px; }
+          .alm-refresh-text { display: none; }
+          .alm-refresh-btn { padding: 8px; font-size: 16px; }
+          .alm-refresh-icon { font-size: 16px; }
+          .alm-update-container { display: none; }
+          .alm-ship-name { font-size: 13px; }
+          .alm-ship-code { font-size: 9px; }
         }
 
         @media (max-width: 360px) {
-          .alm-divider {
-            display: none;
-          }
-          
-          .alm-logo {
-            height: 28px;
-          }
-          
-          .alm-ship-name {
-            max-width: 120px;
-          }
+          .alm-divider { display: none; }
+          .alm-logo { height: 28px; }
+          .alm-ship-name { max-width: 120px; }
         }
 
-        /* ── BODY ── */
         .alm-body {
           max-width: 1400px;
           margin: 0 auto;
           padding: 28px 24px 48px;
         }
 
-        /* ── NAV TABS ── */
         .alm-nav {
           display: flex;
           flex-wrap: wrap;
@@ -3174,6 +2983,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           box-shadow: var(--shadow);
           margin-bottom: 24px;
         }
+
         .alm-nav-btn {
           flex: 1;
           min-width: 120px;
@@ -3192,15 +3002,18 @@ export default function DashboardCompartido({ codigoBarco }) {
           justify-content: center;
           gap: 6px;
         }
+
         .alm-nav-btn:hover {
           background: var(--bg);
           color: var(--text);
         }
+
         .alm-nav-btn.active {
           background: var(--navy);
           color: #fff;
           box-shadow: 0 2px 8px rgba(15,23,42,.2);
         }
+
         .alm-nav-pct {
           font-size: 10px;
           padding: 2px 7px;
@@ -3208,13 +3021,13 @@ export default function DashboardCompartido({ codigoBarco }) {
           background: rgba(255,255,255,.2);
         }
 
-        /* ── TARJETAS DE PRODUCTO ── */
         .alm-cards-row {
           display: flex;
           flex-wrap: wrap;
           gap: 16px;
           margin-bottom: 24px;
         }
+
         .alm-card-producto {
           flex: 1;
           min-width: 210px;
@@ -3231,6 +3044,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           position: relative;
           overflow: hidden;
         }
+
         .alm-card-producto::before {
           content: '';
           position: absolute;
@@ -3240,22 +3054,27 @@ export default function DashboardCompartido({ codigoBarco }) {
           opacity: 0;
           transition: opacity .25s;
         }
+
         .alm-card-producto:hover {
           transform: translateY(-3px);
           box-shadow: var(--shadow-md);
           border-color: var(--color);
         }
+
         .alm-card-activo {
           border-color: var(--color) !important;
           box-shadow: 0 0 0 4px color-mix(in srgb, var(--color) 15%, transparent), var(--shadow-md) !important;
         }
+
         .alm-card-activo::before { opacity: 1; }
+
         .alm-card-top {
           display: flex;
           align-items: center;
           justify-content: space-between;
           margin-bottom: 12px;
         }
+
         .alm-card-icon-wrap {
           width: 52px; height: 52px;
           border-radius: 14px;
@@ -3264,7 +3083,9 @@ export default function DashboardCompartido({ codigoBarco }) {
           align-items: center;
           justify-content: center;
         }
+
         .alm-card-emoji { font-size: 26px; }
+
         .alm-card-code {
           font-size: 10px;
           font-weight: 800;
@@ -3275,6 +3096,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           display: block;
           margin-bottom: 3px;
         }
+
         .alm-card-name {
           font-size: 14px;
           font-weight: 700;
@@ -3282,16 +3104,19 @@ export default function DashboardCompartido({ codigoBarco }) {
           line-height: 1.3;
           margin-bottom: 2px;
         }
+
         .alm-card-meta {
           font-size: 11px;
           color: var(--text-3);
           margin-bottom: 4px;
         }
+
         .alm-card-faltante {
           font-size: 12px;
           font-weight: 700;
           margin-bottom: 8px;
         }
+
         .alm-card-track {
           height: 5px;
           background: #f1f5f9;
@@ -3299,17 +3124,20 @@ export default function DashboardCompartido({ codigoBarco }) {
           overflow: hidden;
           margin-bottom: 14px;
         }
+
         .alm-card-fill {
           height: 100%;
           background: var(--color);
           border-radius: 999px;
           transition: width 1s ease;
         }
+
         .alm-card-stats {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 6px;
         }
+
         .alm-stat {
           background: #f8fafc;
           border-radius: 10px;
@@ -3318,19 +3146,23 @@ export default function DashboardCompartido({ codigoBarco }) {
           align-items: flex-start;
           gap: 8px;
         }
+
         .alm-stat-total {
           grid-column: 1 / -1;
           background: color-mix(in srgb, var(--color) 8%, transparent);
           border: 1px solid color-mix(in srgb, var(--color) 20%, transparent);
         }
+
         .alm-stat-dot {
           width: 6px; height: 6px;
           border-radius: 50%;
           margin-top: 5px;
           flex-shrink: 0;
         }
+
         .alm-dot-banda { background: #3b82f6; }
         .alm-dot-cam { background: #10b981; }
+
         .alm-stat-label {
           font-size: 9px;
           text-transform: uppercase;
@@ -3339,21 +3171,23 @@ export default function DashboardCompartido({ codigoBarco }) {
           letter-spacing: .8px;
           margin-bottom: 2px;
         }
+
         .alm-stat-val {
           font-size: 12px;
           font-weight: 700;
           color: var(--text-2);
           font-family: 'DM Mono', monospace;
         }
+
         .alm-stat-bold { color: var(--text) !important; font-size: 13px !important; }
 
-        /* ── KPIs ── */
         .alm-kpis-row {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 14px;
           margin-bottom: 20px;
         }
+
         .alm-kpi {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3366,6 +3200,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           position: relative;
           overflow: hidden;
         }
+
         .alm-kpi::after {
           content: '';
           position: absolute;
@@ -3373,12 +3208,15 @@ export default function DashboardCompartido({ codigoBarco }) {
           height: 2px;
           background: var(--accent);
         }
+
         .alm-kpi-icon {
           font-size: 28px;
           line-height: 1;
           flex-shrink: 0;
         }
+
         .alm-kpi-body { flex: 1; }
+
         .alm-kpi-label {
           font-size: 10px;
           font-weight: 700;
@@ -3387,6 +3225,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           color: var(--text-3);
           margin-bottom: 4px;
         }
+
         .alm-kpi-value {
           font-size: 22px;
           font-weight: 900;
@@ -3394,11 +3233,13 @@ export default function DashboardCompartido({ codigoBarco }) {
           line-height: 1.1;
           font-family: 'DM Mono', monospace;
         }
+
         .alm-kpi-sub {
           font-size: 11px;
           color: var(--text-3);
           margin-top: 3px;
         }
+
         .alm-kpi-bar {
           position: absolute;
           top: 0; left: 0;
@@ -3407,13 +3248,14 @@ export default function DashboardCompartido({ codigoBarco }) {
           background: var(--accent);
           border-radius: 0 2px 2px 0;
         }
+
         @keyframes count-up {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+
         .alm-pulse-num { animation: count-up .6s ease; }
 
-        /* ── PROGRESS HERO ── */
         .alm-progress-hero {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3422,12 +3264,14 @@ export default function DashboardCompartido({ codigoBarco }) {
           box-shadow: var(--shadow);
           margin-bottom: 20px;
         }
+
         .alm-progress-hero-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 16px;
         }
+
         .alm-progress-pct {
           font-size: 42px;
           font-weight: 900;
@@ -3435,6 +3279,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           font-family: 'DM Mono', monospace;
           line-height: 1;
         }
+
         .alm-progress-track-hero {
           height: 14px;
           background: #f1f5f9;
@@ -3442,6 +3287,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           overflow: hidden;
           margin-bottom: 8px;
         }
+
         .alm-progress-fill-hero {
           height: 100%;
           background: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
@@ -3449,6 +3295,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           transition: width 1s ease;
           position: relative;
         }
+
         .alm-progress-fill-hero::after {
           content: '';
           position: absolute;
@@ -3457,6 +3304,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           background: rgba(255,255,255,.5);
           border-radius: 999px;
         }
+
         .alm-progress-labels {
           display: flex;
           justify-content: space-between;
@@ -3465,7 +3313,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           font-family: 'DM Mono', monospace;
         }
 
-        /* ── CHARTS ── */
         .alm-charts-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -3473,6 +3320,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           gap: 16px;
           margin-bottom: 20px;
         }
+
         .alm-chart-card {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3480,13 +3328,16 @@ export default function DashboardCompartido({ codigoBarco }) {
           padding: 20px;
           box-shadow: var(--shadow);
         }
+
         .alm-chart-wide { grid-column: 1 / -1; }
+
         .alm-chart-title {
           font-size: 13px;
           font-weight: 700;
           color: var(--text-2);
           margin-bottom: 14px;
         }
+
         .alm-no-data {
           height: 200px;
           display: flex;
@@ -3496,7 +3347,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           font-size: 13px;
         }
 
-        /* ── TOOLTIP ── */
         .alm-tooltip {
           background: var(--navy);
           border: 1px solid rgba(255,255,255,.1);
@@ -3504,6 +3354,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           padding: 10px 14px;
           box-shadow: 0 4px 16px rgba(0,0,0,.3);
         }
+
         .alm-tooltip-label {
           font-size: 11px;
           font-weight: 700;
@@ -3511,18 +3362,16 @@ export default function DashboardCompartido({ codigoBarco }) {
           margin-bottom: 4px;
           font-family: 'DM Mono', monospace;
         }
+
         .alm-tooltip-value {
           font-size: 12px;
           font-family: 'DM Mono', monospace;
         }
 
-        /* ── GAUGE ── */
         .alm-gauge { display: block; }
 
-        /* ── GENERAL GRID ── */
         .alm-general-grid { display: flex; flex-direction: column; gap: 0; }
 
-        /* ── TABLE ── */
         .alm-table-card {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3530,24 +3379,29 @@ export default function DashboardCompartido({ codigoBarco }) {
           box-shadow: var(--shadow);
           overflow: hidden;
         }
+
         .alm-table-header {
           padding: 16px 20px;
           border-bottom: 1px solid var(--border);
           background: #f8fafc;
         }
+
         .alm-table-scroll { overflow-x: auto; }
         .alm-table-max { max-height: 400px; overflow-y: auto; }
+
         .alm-table {
           width: 100%;
           border-collapse: collapse;
           font-size: 13px;
         }
+
         .alm-table thead {
           background: #f8fafc;
           position: sticky;
           top: 0;
           z-index: 2;
         }
+
         .alm-table th {
           padding: 11px 16px;
           font-size: 10px;
@@ -3558,19 +3412,24 @@ export default function DashboardCompartido({ codigoBarco }) {
           border-bottom: 1px solid var(--border);
           white-space: nowrap;
         }
+
         .alm-table td {
           padding: 11px 16px;
           color: var(--text-2);
           white-space: nowrap;
         }
+
         .alm-table tbody tr:hover { background: #f8fafc; }
+
         .alm-table tfoot {
           background: #f8fafc;
           border-top: 2px solid var(--border);
           position: sticky;
           bottom: 0;
         }
+
         .alm-table tfoot td { color: var(--text); }
+
         .alm-th-num, .alm-td-num { text-align: right; }
         .alm-col-banda { color: var(--blue); }
         .alm-col-cam { color: var(--amber); }
@@ -3583,7 +3442,6 @@ export default function DashboardCompartido({ codigoBarco }) {
         .alm-muted { color: var(--text-3); }
         .alm-mono { font-family: 'DM Mono', monospace; }
 
-        /* ── BADGES ── */
         .alm-badge {
           margin-left: 10px;
           font-size: 11px;
@@ -3593,6 +3451,7 @@ export default function DashboardCompartido({ codigoBarco }) {
           padding: 2px 9px;
           border-radius: 999px;
         }
+
         .alm-badge-blue {
           margin-left: 8px;
           font-size: 9px;
@@ -3605,7 +3464,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           letter-spacing: .5px;
         }
 
-        /* ── STATUS ── */
         .alm-status {
           font-size: 10px;
           font-weight: 700;
@@ -3614,17 +3472,18 @@ export default function DashboardCompartido({ codigoBarco }) {
           text-transform: capitalize;
           letter-spacing: .3px;
         }
+
         .alm-status-ok { background: #dcfce7; color: #166534; }
         .alm-status-pend { background: #fef9c3; color: #854d0e; }
         .alm-status-warn { background: #fee2e2; color: #991b1b; }
 
-        /* ── MINI PROGRESS ── */
         .alm-mini-progress {
           display: flex;
           align-items: center;
           gap: 8px;
           justify-content: flex-end;
         }
+
         .alm-mini-track {
           width: 60px;
           height: 5px;
@@ -3632,11 +3491,13 @@ export default function DashboardCompartido({ codigoBarco }) {
           border-radius: 999px;
           overflow: hidden;
         }
+
         .alm-mini-fill {
           height: 100%;
           border-radius: 999px;
           transition: width .8s ease;
         }
+
         .alm-mini-pct {
           font-size: 11px;
           font-weight: 700;
@@ -3646,13 +3507,11 @@ export default function DashboardCompartido({ codigoBarco }) {
           text-align: right;
         }
 
-        /* ── PRODUCT CELLS ── */
         .alm-prod-cell { display: flex; align-items: center; gap: 10px; }
         .alm-prod-emoji { font-size: 22px; }
         .alm-prod-name { font-weight: 700; font-size: 13px; color: var(--text); }
         .alm-prod-code { font-size: 10px; color: var(--text-3); font-family: 'DM Mono', monospace; }
 
-        /* ── DETAIL BTN ── */
         .alm-detail-btn {
           font-size: 11px;
           font-weight: 600;
@@ -3665,21 +3524,21 @@ export default function DashboardCompartido({ codigoBarco }) {
           transition: background .15s;
           font-family: 'Sora', sans-serif;
         }
+
         .alm-detail-btn:hover { background: #e2e8f0; color: var(--text); }
 
-        /* ── SECTION TITLES ── */
         .alm-section-title {
           font-size: 15px;
           font-weight: 800;
           color: var(--text);
         }
+
         .alm-section-sub {
           font-size: 12px;
           color: var(--text-3);
           margin-top: 2px;
         }
 
-        /* ── PRODUCTO HEADER ── */
         .alm-prod-header {
           border-radius: var(--radius);
           padding: 20px 24px;
@@ -3687,20 +3546,20 @@ export default function DashboardCompartido({ codigoBarco }) {
           box-shadow: var(--shadow-md);
           margin-bottom: 20px;
         }
+
         .alm-prod-header h2 {
           font-size: 22px;
           font-weight: 900;
           margin-bottom: 4px;
         }
+
         .alm-prod-header p {
           font-size: 12px;
           opacity: .75;
         }
 
-        /* ── SPACE Y ── */
         .alm-space-y { display: flex; flex-direction: column; gap: 20px; }
 
-        /* ── EMPTY ── */
         .alm-empty {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3710,9 +3569,9 @@ export default function DashboardCompartido({ codigoBarco }) {
           color: var(--text-3);
           font-size: 14px;
         }
+
         .alm-empty-icon { font-size: 36px; display: block; margin-bottom: 12px; }
 
-        /* ── FOOTER ── */
         .alm-footer {
           text-align: center;
           padding: 24px;
@@ -3721,7 +3580,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           font-family: 'DM Mono', monospace;
         }
 
-        /* ── SPLASH ── */
         .alm-splash {
           min-height: 100vh;
           display: flex;
@@ -3731,23 +3589,28 @@ export default function DashboardCompartido({ codigoBarco }) {
           background: var(--navy);
           gap: 20px;
         }
+
         .alm-splash-logo {
           height: 48px;
           filter: brightness(0) invert(1);
         }
+
         .alm-splash-ship {
           font-size: 64px;
           animation: float 3s ease-in-out infinite;
         }
+
         @keyframes float {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-12px); }
         }
+
         .alm-splash-text {
           color: rgba(255,255,255,.6);
           font-size: 16px;
           font-weight: 600;
         }
+
         .alm-loader {
           width: 40px; height: 40px;
           border: 3px solid rgba(255,255,255,.1);
@@ -3755,9 +3618,9 @@ export default function DashboardCompartido({ codigoBarco }) {
           border-radius: 50%;
           animation: spin .8s linear infinite;
         }
+
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ── ERROR BOX ── */
         .alm-error-box {
           background: #fff;
           border-radius: 20px;
@@ -3765,8 +3628,10 @@ export default function DashboardCompartido({ codigoBarco }) {
           text-align: center;
           max-width: 380px;
         }
+
         .alm-error-title { font-size: 18px; font-weight: 700; color: #dc2626; margin-bottom: 8px; }
         .alm-error-msg { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+
         .alm-retry-btn {
           background: #fee2e2;
           border: none;
@@ -3779,12 +3644,10 @@ export default function DashboardCompartido({ codigoBarco }) {
           font-family: 'Sora', sans-serif;
         }
 
-        /* ── SCROLLBAR ── */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-        /* ── RESPONSIVE ── */
         @media (max-width: 768px) {
           .alm-topbar { padding: 0 16px; }
           .alm-body { padding: 16px 12px 40px; }
@@ -3793,7 +3656,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           .alm-progress-pct { font-size: 28px; }
         }
 
-        /* ===== ESTILOS PARA PANELES DE PREDICCIONES ===== */
         .alm-predicciones-panel {
           background: var(--surface);
           border: 1px solid var(--border);
@@ -3882,47 +3744,6 @@ export default function DashboardCompartido({ codigoBarco }) {
           margin-top: 4px;
         }
         
-        .alm-pred-trend {
-          position: absolute;
-          top: 14px;
-          right: 14px;
-          font-size: 11px;
-          font-weight: 700;
-          padding: 2px 8px;
-          border-radius: 999px;
-        }
-        
-        .alm-pred-trend.up {
-          background: #dcfce7;
-          color: #166534;
-        }
-        
-        .alm-pred-trend.down {
-          background: #fee2e2;
-          color: #991b1b;
-        }
-        
-        .alm-pred-confianza {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .alm-confianza-indicador {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-        }
-        
-        .conf-alta { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
-        .conf-media { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
-        .conf-baja { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
-        
-        .alm-confianza-texto {
-          font-size: 12px;
-          font-weight: 600;
-        }
-        
         .alm-pred-grafico {
           background: #f8fafc;
           border-radius: 12px;
@@ -3961,280 +3782,250 @@ export default function DashboardCompartido({ codigoBarco }) {
           margin-bottom: 12px;
           color: var(--text);
         }
-        
-        .alm-recomendaciones-lista {
-          list-style: none;
-          padding: 0;
+
+        .alm-comparativa-section {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 24px;
+          margin-bottom: 24px;
+          box-shadow: var(--shadow);
         }
-        
-        .alm-recomendacion {
-          font-size: 12px;
-          padding: 8px 12px;
-          margin-bottom: 6px;
-          border-radius: 8px;
+
+        .alm-comparativa-header {
+          margin-bottom: 20px;
+        }
+
+        .alm-comparativa-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 20px;
+        }
+
+        .alm-comparativa-card {
           background: #f8fafc;
-          border-left: 3px solid transparent;
-        }
-        
-        .alm-recomendacion.warning {
-          border-left-color: #f59e0b;
-          background: #fffbeb;
-        }
-        
-        .alm-recomendacion.success {
-          border-left-color: #10b981;
-          background: #f0fdf4;
-        }
-        
-        .alm-recomendacion.info {
-          border-left-color: #3b82f6;
-          background: #eff6ff;
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 18px;
+          transition: all 0.2s ease;
         }
 
-        
-.alm-comparativa-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-}
+        .alm-comparativa-card:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+          border-color: var(--color);
+        }
 
-.alm-comparativa-header {
-  margin-bottom: 20px;
-}
+        .alm-comparativa-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 16px;
+        }
 
-.alm-comparativa-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
+        .alm-comparativa-titulo {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
 
-.alm-comparativa-card {
-  background: #f8fafc;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 18px;
-  transition: all 0.2s ease;
-}
+        .alm-comparativa-nombre {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text);
+          margin-bottom: 2px;
+        }
 
-.alm-comparativa-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--color);
-}
+        .alm-comparativa-codigo {
+          font-size: 11px;
+          color: var(--text-3);
+          font-family: 'DM Mono', monospace;
+        }
 
-.alm-comparativa-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
+        .alm-comparativa-meta {
+          text-align: right;
+        }
 
-.alm-comparativa-titulo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+        .alm-comparativa-meta-label {
+          font-size: 10px;
+          color: var(--text-3);
+          display: block;
+        }
 
-.alm-comparativa-nombre {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
-}
+        .alm-comparativa-meta-valor {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--text);
+          font-family: 'DM Mono', monospace;
+        }
 
-.alm-comparativa-codigo {
-  font-size: 11px;
-  color: var(--text-3);
-  font-family: 'DM Mono', monospace;
-}
+        .alm-comparativa-bars {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
 
-.alm-comparativa-meta {
-  text-align: right;
-}
+        .alm-comparativa-bar-container {
+          width: 100%;
+        }
 
-.alm-comparativa-meta-label {
-  font-size: 10px;
-  color: var(--text-3);
-  display: block;
-}
+        .alm-comparativa-bar-label {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 4px;
+          font-size: 11px;
+        }
 
-.alm-comparativa-meta-valor {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  font-family: 'DM Mono', monospace;
-}
+        .alm-comparativa-label-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
 
-.alm-comparativa-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+        .alm-comparativa-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
 
-.alm-comparativa-bar-container {
-  width: 100%;
-}
+        .banda-dot {
+          background: #3b82f6;
+        }
 
-.alm-comparativa-bar-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-  font-size: 11px;
-}
+        .viajes-dot {
+          background: #10b981;
+        }
 
-.alm-comparativa-label-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+        .alm-comparativa-valor {
+          font-weight: 600;
+          color: var(--text-2);
+          font-family: 'DM Mono', monospace;
+        }
 
-.alm-comparativa-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
+        .alm-comparativa-track {
+          height: 20px;
+          background: #e2e8f0;
+          border-radius: 10px;
+          position: relative;
+          overflow: hidden;
+        }
 
-.banda-dot {
-  background: #3b82f6;
-}
+        .alm-comparativa-fill {
+          height: 100%;
+          border-radius: 10px;
+          transition: width 0.5s ease;
+        }
 
-.viajes-dot {
-  background: #10b981;
-}
+        .banda-fill {
+          background: #3b82f6;
+        }
 
-.alm-comparativa-valor {
-  font-weight: 600;
-  color: var(--text-2);
-  font-family: 'DM Mono', monospace;
-}
+        .viajes-fill {
+          background: #10b981;
+        }
 
-.alm-comparativa-track {
-  height: 20px;
-  background: #e2e8f0;
-  border-radius: 10px;
-  position: relative;
-  overflow: hidden;
-}
+        .alm-comparativa-pct {
+          position: absolute;
+          right: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 10px;
+          font-weight: 700;
+          color: white;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+          z-index: 1;
+        }
 
-.alm-comparativa-fill {
-  height: 100%;
-  border-radius: 10px;
-  transition: width 0.5s ease;
-}
+        .alm-comparativa-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+        }
 
-.banda-fill {
-  background: #3b82f6;
-}
+        .alm-comparativa-total {
+          display: flex;
+          align-items: baseline;
+          gap: 4px;
+        }
 
-.viajes-fill {
-  background: #10b981;
-}
+        .alm-comparativa-total-label {
+          font-size: 11px;
+          color: var(--text-3);
+        }
 
-.alm-comparativa-pct {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 10px;
-  font-weight: 700;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  z-index: 1;
-}
+        .alm-comparativa-total-valor {
+          font-size: 14px;
+          font-weight: 800;
+          color: var(--text);
+          font-family: 'DM Mono', monospace;
+        }
 
-.alm-comparativa-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
+        .alm-comparativa-ratio {
+          font-size: 11px;
+          font-weight: 600;
+          padding: 4px 8px;
+          background: white;
+          border-radius: 20px;
+          border: 1px solid var(--border);
+        }
 
-.alm-comparativa-total {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
+        .alm-comparativa-progreso {
+          margin-top: 12px;
+        }
 
-.alm-comparativa-total-label {
-  font-size: 11px;
-  color: var(--text-3);
-}
+        .alm-comparativa-progreso-label {
+          display: flex;
+          justify-content: space-between;
+          font-size: 10px;
+          color: var(--text-3);
+          margin-bottom: 4px;
+        }
 
-.alm-comparativa-total-valor {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--text);
-  font-family: 'DM Mono', monospace;
-}
+        .alm-comparativa-progreso-track {
+          height: 4px;
+          background: #e2e8f0;
+          border-radius: 2px;
+          overflow: hidden;
+        }
 
-.alm-comparativa-ratio {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 8px;
-  background: white;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-}
+        .alm-comparativa-progreso-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.5s ease;
+        }
 
-.alm-comparativa-progreso {
-  margin-top: 12px;
-}
+        @media (max-width: 768px) {
+          .alm-comparativa-grid {
+            grid-template-columns: 1fr;
+          }
+          
+          .alm-comparativa-card-header {
+            flex-direction: column;
+            gap: 8px;
+          }
+          
+          .alm-comparativa-meta {
+            text-align: left;
+          }
+        }
 
-.alm-comparativa-progreso-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-3);
-  margin-bottom: 4px;
-}
+        .alm-table {
+          min-width: 1400px;
+        }
 
-.alm-comparativa-progreso-track {
-  height: 4px;
-  background: #e2e8f0;
-  border-radius: 2px;
-  overflow: hidden;
-}
+        .alm-table th {
+          white-space: nowrap;
+          padding: 11px 12px;
+        }
 
-.alm-comparativa-progreso-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-@media (max-width: 768px) {
-  .alm-comparativa-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .alm-comparativa-card-header {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .alm-comparativa-meta {
-    text-align: left;
-  }
-}
-
-.alm-table {
-  min-width: 1400px;
-}
-
-.alm-table th {
-  white-space: nowrap;
-  padding: 11px 12px;
-}
-
-.alm-table td {
-  white-space: nowrap;
-  padding: 11px 12px;
-}
+        .alm-table td {
+          white-space: nowrap;
+          padding: 11px 12px;
+        }
       `}</style>
 
       <div className="alm-root">
@@ -4326,7 +4117,6 @@ export default function DashboardCompartido({ codigoBarco }) {
 
           {productoSeleccionado === "general" ? (
             <>
-              {/* SOLO PARA EXPORTACIÓN: MOSTRAR RESUMEN DE PAROS */}
               {barco.tipo_operacion === 'exportacion' && (
                 <ResumenParosDashboard barcoId={barco.id} />
               )}
