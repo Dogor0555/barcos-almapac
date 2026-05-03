@@ -104,6 +104,46 @@ export default function BarcoPesadorPage() {
     comentarios: ''
   })
 
+
+
+
+  // 🔥 FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
+const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'viaje_numero') => {
+  let todosLosRegistros = []
+  let desde = 0
+  const limite = 1000
+  let hayMas = true
+
+  while (hayMas) {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select(`
+        *,
+        producto:producto_id(codigo, nombre, icono),
+        destino:destino_id(codigo, nombre)
+      `)
+      .eq(filtro, valor)
+      .order(ordenCampo, { ascending: true })
+      .range(desde, desde + limite - 1)
+
+    if (error) {
+      console.error(`Error cargando página de ${tabla}:`, error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      todosLosRegistros = [...todosLosRegistros, ...data]
+      desde += limite
+      hayMas = data.length === limite
+    } else {
+      hayMas = false
+    }
+  }
+
+  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+  return todosLosRegistros
+}
+
   // =====================================================
   // FUNCIONES PARA PRESERVAR POSICIÓN DE SCROLL
   // =====================================================
@@ -1814,93 +1854,131 @@ export default function BarcoPesadorPage() {
   }, [bitacora, productoActivo])
 
   const cargarDatos = async () => {
-    try {
-      setLoading(true)
+  try {
+    setLoading(true)
 
-      const { data: barcoData, error: barcoError } = await supabase
-        .from('barcos')
-        .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
-        .eq('token_compartido', token)
-        .single()
+    const { data: barcoData, error: barcoError } = await supabase
+      .from('barcos')
+      .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
+      .eq('token_compartido', token)
+      .single()
 
-      if (barcoError || !barcoData) {
-        toast.error('Link inválido')
-        return
-      }
+    if (barcoError || !barcoData) {
+      toast.error('Link inválido')
+      return
+    }
 
-      setBarco(barcoData)
+    setBarco(barcoData)
 
-      const productosBarco = barcoData.metas_json?.productos || []
+    const productosBarco = barcoData.metas_json?.productos || []
 
-      if (productosBarco.length === 0) {
-        toast.error('Este barco no tiene productos configurados')
-        setProductos([])
-      } else {
-        const { data: productosData } = await supabase
-          .from('productos')
-          .select('*')
-          .eq('activo', true)
-          .in('codigo', productosBarco)
-
-        setProductos(productosData || [])
-      }
-
-      const { data: destinosData } = await supabase
-        .from('destinos')
+    if (productosBarco.length === 0) {
+      toast.error('Este barco no tiene productos configurados')
+      setProductos([])
+    } else {
+      const { data: productosData } = await supabase
+        .from('productos')
         .select('*')
         .eq('activo', true)
+        .in('codigo', productosBarco)
 
-      setDestinos(destinosData || [])
-
-      const { data: viajesData } = await supabase
-        .from('viajes')
-        .select(`
-          *,
-          producto:producto_id(codigo, nombre, icono),
-          destino:destino_id(codigo, nombre)
-        `)
-        .eq('barco_id', barcoData.id)
-        .order('viaje_numero', { ascending: true })
-
-      setViajes(viajesData || [])
-
-      const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
-      setViajesIncompletos(incompletos)
-
-      const { data: bandaData } = await supabase
-        .from('lecturas_banda')
-        .select(`
-          *,
-          producto:producto_id(codigo, nombre, icono),
-          destino:destino_id(codigo, nombre)
-        `)
-        .eq('barco_id', barcoData.id)
-        .order('fecha_hora', { ascending: false })
-
-      setLecturasBanda(bandaData || [])
-
-      const { data: bitacoraData } = await supabase
-        .from('bitacora_flujos')
-        .select(`
-          *,
-          producto:producto_id(codigo, nombre, icono)
-        `)
-        .eq('barco_id', barcoData.id)
-        .order('fecha_hora', { ascending: false })
-
-      setBitacora(bitacoraData || [])
-
-    } catch (error) {
-      console.error('Error cargando datos:', error)
-      toast.error('Error al cargar datos')
-    } finally {
-      setLoading(false)
+      setProductos(productosData || [])
     }
+
+    const { data: destinosData } = await supabase
+      .from('destinos')
+      .select('*')
+      .eq('activo', true)
+
+    setDestinos(destinosData || [])
+
+    // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS VIAJES
+    const viajesData = await CARGAR_TODOS_LOS_REGISTROS('viajes', 'barco_id', barcoData.id)
+    
+    console.log('✅ Viajes cargados desde DB:', viajesData?.length)
+    console.log('📊 Viajes con estado incompleto:', viajesData?.filter(v => v.estado === 'incompleto').length)
+    console.log('🔍 Buscando viaje 666:', viajesData?.find(v => v.viaje_numero === 666))
+    console.log('🔍 Buscando viaje 668:', viajesData?.find(v => v.viaje_numero === 668))
+    
+    setViajes(viajesData || [])
+
+    const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
+    setViajesIncompletos(incompletos)
+
+    const { data: bandaData } = await supabase
+      .from('lecturas_banda')
+      .select(`
+        *,
+        producto:producto_id(codigo, nombre, icono),
+        destino:destino_id(codigo, nombre)
+      `)
+      .eq('barco_id', barcoData.id)
+      .order('fecha_hora', { ascending: false })
+
+    setLecturasBanda(bandaData || [])
+
+    const { data: bitacoraData } = await supabase
+      .from('bitacora_flujos')
+      .select(`
+        *,
+        producto:producto_id(codigo, nombre, icono)
+      `)
+      .eq('barco_id', barcoData.id)
+      .order('fecha_hora', { ascending: false })
+
+    setBitacora(bitacoraData || [])
+
+  } catch (error) {
+    console.error('Error cargando datos:', error)
+    toast.error('Error al cargar datos')
+  } finally {
+    setLoading(false)
   }
+}
 
   useEffect(() => {
     cargarDatos()
   }, [token])
+
+
+// 🔥 SUPABASE REALTIME - SINCRONIZACIÓN EN VIVO
+useEffect(() => {
+  if (!barco?.id) return
+
+  console.log('🔄 Activando Realtime para barco:', barco.id)
+
+  const channel = supabase
+    .channel(`realtime-viajes-${barco.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'viajes',
+        filter: `barco_id=eq.${barco.id}`
+      },
+      (payload) => {
+        console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.viaje_numero || payload.old?.viaje_numero)
+        cargarDatos()
+        
+        if (payload.eventType === 'INSERT') {
+          toast.success(`🚚 Nuevo viaje #${payload.new.viaje_numero} registrado`, { duration: 2000 })
+        } else if (payload.eventType === 'UPDATE') {
+          toast.info(`✏️ Viaje #${payload.new.viaje_numero} actualizado`, { duration: 2000 })
+        } else if (payload.eventType === 'DELETE') {
+          toast.warning(`🗑️ Viaje #${payload.old.viaje_numero} eliminado`, { duration: 2000 })
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log('📡 Realtime status:', status)
+    })
+
+  return () => {
+    console.log('🔌 Desconectando Realtime')
+    supabase.removeChannel(channel)
+  }
+}, [barco?.id])
 
   useEffect(() => {
     if (productos.length > 0 && !productoActivo) {
