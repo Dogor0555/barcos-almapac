@@ -3615,7 +3615,6 @@ useEffect(() => {
           <button
             onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
             className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
-            title={ordenViajes === 'asc' ? 'Orden ascendente (menor a mayor)' : 'Orden descendente (mayor a menor)'}
           >
             <ArrowUpDown className="w-4 h-4" />
             <span className="hidden sm:inline">
@@ -3645,7 +3644,6 @@ useEffect(() => {
       </div>
     </div>
 
-    {/* ALERTA DE SALTOS DE CORRELATIVO */}
     {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
       <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
         <div className="flex items-center gap-3">
@@ -3680,9 +3678,9 @@ useEffect(() => {
               <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Neto ALMAPAC (TM)</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">👤 Usuario</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">👤 Creado por</th>
               <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
             </tr>
           </thead>
@@ -3704,9 +3702,6 @@ useEffect(() => {
               const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
                 array[index + 1].viaje_numero - viaje.viaje_numero > 1
 
-              // 👇 ESTO ES LO QUE MUESTRA EL USUARIO (puedes cambiarlo)
-              const nombreUsuario = usuarioActual?.nombre || 'Usuario Actual'
-
               return (
                 <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
                   <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
@@ -3721,16 +3716,15 @@ useEffect(() => {
                   <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
                   <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
                   <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
-                  {/* 👇 CELDA DEL USUARIO - SOLO VISUAL, NO USA BD */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center">
                         <span className="text-[10px] font-bold text-indigo-400">
-                          {nombreUsuario.charAt(0).toUpperCase()}
+                          {usuarioActual?.charAt(0)?.toUpperCase() || '?'}
                         </span>
                       </div>
                       <span className="text-xs text-slate-300">
-                        {nombreUsuario}
+                        {usuarioActual || 'Sistema'}
                       </span>
                     </div>
                   </td>
