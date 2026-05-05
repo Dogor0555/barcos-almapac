@@ -3575,187 +3575,205 @@ useEffect(() => {
               </div>
             )}
 
-            {viajesCompletos.length > 0 && (
-              <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-                <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
-                      <span className="text-sm font-normal text-slate-500 ml-2">
-                        Barco: {barco.nombre}
-                      </span>
-                    </h3>
+           {viajesCompletos.length > 0 && (
+  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+    <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-white flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-green-400" />
+          Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
+          <span className="text-sm font-normal text-slate-500 ml-2">
+            Barco: {barco.nombre}
+          </span>
+        </h3>
 
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
-                        className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
-                        title={ordenViajes === 'asc' ? 'Orden ascendente (menor a mayor)' : 'Orden descendente (mayor a menor)'}
-                      >
-                        <ArrowUpDown className="w-4 h-4" />
-                        <span className="hidden sm:inline">
-                          {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
-                        </span>
-                      </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
+            className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
+            title={ordenViajes === 'asc' ? 'Orden ascendente (menor a mayor)' : 'Orden descendente (mayor a menor)'}
+          >
+            <ArrowUpDown className="w-4 h-4" />
+            <span className="hidden sm:inline">
+              {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
+            </span>
+          </button>
 
-                      <div className="relative w-64">
-                        <input
-                          type="text"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          placeholder="Buscar por placa..."
-                          className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
-                        />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                        {searchTerm && (
-                          <button
-                            onClick={() => setSearchTerm('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ALERTA DE SALTOS DE CORRELATIVO */}
-                {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
-                  <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="w-5 h-5 text-amber-400" />
-                      <div>
-                        <p className="font-bold text-amber-400">⚠️ Saltos de correlativo detectados</p>
-                        <p className="text-sm text-slate-400">
-                          {saltosCorrelativo.map((salto, idx) => (
-                            <span key={idx}>
-                              Faltan {salto.faltantes} viaje(s) entre #{salto.desde} y #{salto.hasta}
-                              {idx < saltosCorrelativo.length - 1 ? ' • ' : ''}
-                            </span>
-                          ))}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="overflow-x-auto">
-                  <div className="max-h-[500px] overflow-y-auto relative">
-                    <table className="w-full">
-                      <thead className="bg-slate-800 sticky top-0 z-10">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Neto ALMAPAC (TM)</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {viajesFiltrados.map((viaje, index, array) => {
-                          let acumuladoCorrido = 0
-                          if (ordenViajes === 'asc') {
-                            acumuladoCorrido = array
-                              .slice(0, index + 1)
-                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-                          } else {
-                            const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
-                            const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
-                            acumuladoCorrido = viajesAsc
-                              .slice(0, idxAsc + 1)
-                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-                          }
-
-                          const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
-                            array[index + 1].viaje_numero - viaje.viaje_numero > 1
-
-                          return (
-                            <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
-                              <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
-                              <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
-                              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
-                              <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
-                              <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
-                              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
-                              <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleEditarViaje(viaje)}
-                                    className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                                    title="Editar viaje completo"
-                                  >
-                                    <Edit2 className="w-4 h-4 text-blue-400" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleEliminarViaje(viaje.id)}
-                                    className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-red-400" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                      <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
-                        <tr>
-                          <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
-                          <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap"></td>
-                          <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">
-                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap"></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-
-                {searchTerm && (
-                  <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
-                    Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
-                    {viajesFiltrados.length === 0 && (
-                      <button
-                        onClick={() => setSearchTerm('')}
-                        className="ml-2 text-blue-400 hover:text-blue-300"
-                      >
-                        Limpiar búsqueda
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+          <div className="relative w-64">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por placa..."
+              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* ALERTA DE SALTOS DE CORRELATIVO */}
+    {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
+      <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400" />
+          <div>
+            <p className="font-bold text-amber-400">⚠️ Saltos de correlativo detectados</p>
+            <p className="text-sm text-slate-400">
+              {saltosCorrelativo.map((salto, idx) => (
+                <span key={idx}>
+                  Faltan {salto.faltantes} viaje(s) entre #{salto.desde} y #{salto.hasta}
+                  {idx < saltosCorrelativo.length - 1 ? ' • ' : ''}
+                </span>
+              ))}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <div className="overflow-x-auto">
+      <div className="max-h-[500px] overflow-y-auto relative">
+        <table className="w-full">
+          <thead className="bg-slate-800 sticky top-0 z-10">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Neto ALMAPAC (TM)</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">👤 Usuario</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {viajesFiltrados.map((viaje, index, array) => {
+              let acumuladoCorrido = 0
+              if (ordenViajes === 'asc') {
+                acumuladoCorrido = array
+                  .slice(0, index + 1)
+                  .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+              } else {
+                const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
+                const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
+                acumuladoCorrido = viajesAsc
+                  .slice(0, idxAsc + 1)
+                  .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+              }
+
+              const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
+                array[index + 1].viaje_numero - viaje.viaje_numero > 1
+
+              // 👇 ESTO ES LO QUE MUESTRA EL USUARIO (puedes cambiarlo)
+              const nombreUsuario = usuarioActual?.nombre || 'Usuario Actual'
+
+              return (
+                <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
+                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
+                  <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
+                  <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
+                  <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
+                  <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
+                  <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
+                  {/* 👇 CELDA DEL USUARIO - SOLO VISUAL, NO USA BD */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-indigo-400">
+                          {nombreUsuario.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-300">
+                        {nombreUsuario}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditarViaje(viaje)}
+                        className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                        title="Editar viaje completo"
+                      >
+                        <Edit2 className="w-4 h-4 text-blue-400" />
+                      </button>
+                      <button
+                        onClick={() => handleEliminarViaje(viaje.id)}
+                        className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
+            <tr>
+              <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
+              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
+                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
+              </td>
+              <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
+                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
+              </td>
+              <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
+                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap"></td>
+              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
+                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
+              </td>
+              <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">
+                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap"></td>
+              <td className="px-4 py-3 whitespace-nowrap"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    {searchTerm && (
+      <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
+        Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
+        {viajesFiltrados.length === 0 && (
+          <button
+            onClick={() => setSearchTerm('')}
+            className="ml-2 text-blue-400 hover:text-blue-300"
+          >
+            Limpiar búsqueda
+          </button>
+        )}
+      </div>
+    )}
+  </div>
+)}
           </>
         )}
 
