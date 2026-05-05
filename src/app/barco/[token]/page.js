@@ -56,6 +56,10 @@ export default function BarcoPesadorPage() {
   // Estado para el buscador de la tabla de viajes completos
   const [searchTerm, setSearchTerm] = useState('')
 
+
+  const [usuarioActual, setUsuarioActual] = useState('Cargando...')
+
+
   // Estado para el buscador de placas
   const [buscarPlaca, setBuscarPlaca] = useState('')
 
@@ -2025,6 +2029,26 @@ useEffect(() => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [modalEdicionAbierto])
+
+
+  // Obtener usuario actual para mostrar en la tabla
+useEffect(() => {
+  const obtenerUsuario = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const nombre = user.user_metadata?.nombre_completo || user.email?.split('@')[0] || 'Usuario'
+        setUsuarioActual(nombre)
+      } else {
+        setUsuarioActual('Anónimo')
+      }
+    } catch (error) {
+      console.error('Error obteniendo usuario:', error)
+      setUsuarioActual('Sistema')
+    }
+  }
+  obtenerUsuario()
+}, [])
 
   if (loading) {
     return (
