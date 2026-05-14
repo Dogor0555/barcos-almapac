@@ -15,7 +15,7 @@ import {
   ArrowRight, ArrowLeft, MapPin, Edit2, Trash2, Warehouse,
   TrendingUp, BarChart3, LineChart, Calendar, Eye,
   Pencil, Search, X, Lock, Unlock, Anchor, StopCircle, Inbox,
-  Download, ArrowUpDown, AlertTriangle, TrendingDown
+  Download, ArrowUpDown, AlertTriangle, TrendingDown, Timer
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -50,6 +50,11 @@ export default function BarcoPesadorPage() {
   const [modalEdicionAbierto, setModalEdicionAbierto] = useState(false)
   const [viajeEnEdicion, setViajeEnEdicion] = useState(null)
 
+  // Estado para el modal de tiempos entre viajes
+  const [modalTiemposAbierto, setModalTiemposAbierto] = useState(false)
+  const [tiemposResultados, setTiemposResultados] = useState([])
+  const [productoTiempoActual, setProductoTiempoActual] = useState('')
+
   const [conflicto, setConflicto] = useState(null)
   const [validando, setValidando] = useState(false)
 
@@ -73,6 +78,7 @@ export default function BarcoPesadorPage() {
   const inputRefs = useRef({})
   const viajesSectionRef = useRef(null)
   const modalRef = useRef(null)
+  const modalTiemposRef = useRef(null)
 
   const [nuevoViaje, setNuevoViaje] = useState({
     viaje_numero: 1,
@@ -108,51 +114,47 @@ export default function BarcoPesadorPage() {
     comentarios: ''
   })
 
-
-
-
   // 🔥 FUNCIÓN PARA CARGAR TODOS LOS REGISTROS SIN LÍMITE DE 1000
-const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'viaje_numero') => {
-  let todosLosRegistros = []
-  let desde = 0
-  const limite = 1000
-  let hayMas = true
+  const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'viaje_numero') => {
+    let todosLosRegistros = []
+    let desde = 0
+    const limite = 1000
+    let hayMas = true
 
-  while (hayMas) {
-    const { data, error } = await supabase
-      .from(tabla)
-      .select(`
-        *,
-        producto:producto_id(codigo, nombre, icono),
-        destino:destino_id(codigo, nombre)
-      `)
-      .eq(filtro, valor)
-      .order(ordenCampo, { ascending: true })
-      .range(desde, desde + limite - 1)
+    while (hayMas) {
+      const { data, error } = await supabase
+        .from(tabla)
+        .select(`
+          *,
+          producto:producto_id(codigo, nombre, icono),
+          destino:destino_id(codigo, nombre)
+        `)
+        .eq(filtro, valor)
+        .order(ordenCampo, { ascending: true })
+        .range(desde, desde + limite - 1)
 
-    if (error) {
-      console.error(`Error cargando página de ${tabla}:`, error)
-      break
+      if (error) {
+        console.error(`Error cargando página de ${tabla}:`, error)
+        break
+      }
+
+      if (data && data.length > 0) {
+        todosLosRegistros = [...todosLosRegistros, ...data]
+        desde += limite
+        hayMas = data.length === limite
+      } else {
+        hayMas = false
+      }
     }
 
-    if (data && data.length > 0) {
-      todosLosRegistros = [...todosLosRegistros, ...data]
-      desde += limite
-      hayMas = data.length === limite
-    } else {
-      hayMas = false
-    }
+    console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
+    return todosLosRegistros
   }
-
-  console.log(`📦 Cargados ${todosLosRegistros.length} registros de ${tabla}`)
-  return todosLosRegistros
-}
 
   // =====================================================
   // FUNCIONES PARA PRESERVAR POSICIÓN DE SCROLL
   // =====================================================
 
-  // Guarda la posición actual del scroll
   const guardarPosicionScroll = () => {
     return {
       x: window.scrollX,
@@ -160,7 +162,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // Restaura una posición de scroll guardada
   const restaurarPosicionScroll = (posicion) => {
     if (posicion) {
       window.scrollTo({
@@ -176,24 +177,20 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
   // =====================================================
   const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
 
-  // Para GUARDAR: Convertir hora de El Salvador del input a UTC
   const svToUTC = (svDateTime) => {
     if (!svDateTime) return null
     return dayjs.tz(svDateTime, TIMEZONE_EL_SALVADOR).utc().toISOString()
   }
 
-  // Para MOSTRAR: Convertir UTC de BD a hora de El Salvador
   const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm:ss') => {
     if (!utcDate) return '—'
     return dayjs.utc(utcDate).tz(TIMEZONE_EL_SALVADOR).format(format)
   }
 
-  // Obtener hora actual en El Salvador para inputs
   const getCurrentSVTimeForInput = () => {
     return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm:ss')
   }
 
-  // Función mejorada para obtener hora actual en formato 24h HH:MM:SS
   const getHoraActual24h = () => {
     const ahora = new Date()
     const horas = ahora.getHours().toString().padStart(2, '0')
@@ -202,24 +199,13 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return `${horas}:${minutos}:${segundos}`
   }
 
-  // ✅ FUNCIÓN PARA AUTO-FORMATEAR NÚMEROS - Solo formatea cuando tiene 5+ dígitos
   const autoFormatearNumero = (valor, campo = '') => {
     if (!valor) return valor
-
     const strValor = String(valor).trim()
-
-    // Si ya tiene punto decimal, devolver como está
     if (strValor.includes('.')) return strValor
-
-    // Limpiar caracteres no numéricos
     const soloNumeros = strValor.replace(/[^0-9]/g, '')
-
-    // Si no hay números, devolver vacío
     if (soloNumeros === '') return ''
-
     const numero = parseFloat(soloNumeros)
-
-    // Solo convertir si tiene 5 o más dígitos (mínimo 10,000 kg)
     if (!isNaN(numero) && soloNumeros.length >= 5) {
       const convertido = numero / 1000
       toast.success(`💰 ${campo || 'Peso'}: ${numero.toLocaleString()} kg → ${convertido.toFixed(3)} TM`, {
@@ -228,12 +214,9 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
       })
       return convertido.toString()
     }
-
-    // Si tiene menos de 5 dígitos, devolver el valor original
     return strValor
   }
 
-  // ✅ FUNCIÓN PARA MANEJAR ENTER COMO TAB
   const handleKeyDownEnter = (e, nextFieldId) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -243,7 +226,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // ✅ FUNCIÓN PARA CALCULAR ACUMULADO TOTAL (INCLUYE INCOMPLETOS Y COMPLETOS)
   const calcularAcumuladoTotalUPDP = (productoId) => {
     if (!productoId) return 0
     
@@ -258,7 +240,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return total
   }
 
-  // ✅ FUNCIÓN PARA ACTUALIZAR PREVIEW DEL ACUMULADO EN TIEMPO REAL
   const actualizarAcumuladoPreview = (pesoNetoIngresado) => {
     if (!productoActivo) return
     
@@ -275,7 +256,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return nuevoAcumulado
   }
 
-  // ✅ FUNCIÓN PARA ACTUALIZAR ACUMULADO EN BD
   const actualizarAcumuladoEnBD = async (productoId) => {
     try {
       const todosLosViajes = viajes
@@ -303,24 +283,18 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // Función para limpiar el buscador
   const limpiarBuscador = () => {
     setBuscarPlaca('')
   }
 
-  // Función para obtener el siguiente número de viaje para un producto específico
   const getSiguienteNumeroViaje = (productoId) => {
     if (!viajes.length || !productoId) return 1
-
     const viajesProducto = viajes.filter(v => v.producto_id === productoId)
-
     if (viajesProducto.length === 0) return 1
-
     const maxViaje = Math.max(...viajesProducto.map(v => v.viaje_numero))
     return maxViaje + 1
   }
 
-  // Función para formatear fecha local
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -328,7 +302,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return `${year}-${month}-${day}`
   }
 
-  // Función para formatear placa con C- automático
   const formatPlaca = (value) => {
     if (value.startsWith('C-')) {
       return 'C-' + value.slice(2).replace(/[^0-9]/g, '')
@@ -346,7 +319,151 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // ✅ FUNCIÓN PARA ABRIR MODAL DE EDICIÓN COMPLETA
+  // =====================================================
+  // FUNCIONES PARA EL MODAL DE TIEMPOS ENTRE VIAJES
+  // =====================================================
+  const calcularTiemposEntreViajes = () => {
+    if (!viajes.length || !productoActivo) {
+      toast.error('No hay viajes para analizar')
+      return
+    }
+
+    const viajesProducto = viajes.filter(v => 
+      v.producto_id === productoActivo.id && 
+      v.estado === 'completo' &&
+      v.hora_salida_updp &&
+      v.hora_entrada_almapac
+    )
+
+    if (viajesProducto.length < 2) {
+      toast.error('Se necesitan al menos 2 viajes completos para calcular diferencias')
+      return
+    }
+
+    // Ordenar por fecha y hora de salida
+    const viajesOrdenados = [...viajesProducto].sort((a, b) => {
+      const fechaA = new Date(`${a.fecha}T${a.hora_salida_updp}`)
+      const fechaB = new Date(`${b.fecha}T${b.hora_salida_updp}`)
+      return fechaA - fechaB
+    })
+
+    // Agrupar por placa y calcular tiempos entre viajes consecutivos
+    const viajesPorPlaca = {}
+    
+    viajesOrdenados.forEach(viaje => {
+      const placa = viaje.placa
+      if (!viajesPorPlaca[placa]) {
+        viajesPorPlaca[placa] = []
+      }
+      
+      const fechaSalida = new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
+      const fechaEntradaAlmapac = viaje.hora_entrada_almapac 
+        ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
+        : null
+      
+      viajesPorPlaca[placa].push({
+        viaje_numero: viaje.viaje_numero,
+        fechaSalida,
+        fechaEntradaAlmapac,
+        placa,
+        peso: viaje.peso_neto_updp_tm
+      })
+    })
+
+    // Calcular tiempos entre primer viaje y segundo viaje de cada placa
+    const resultados = []
+    
+    Object.keys(viajesPorPlaca).forEach(placa => {
+      const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
+      
+      for (let i = 0; i < viajesPlaca.length - 1; i++) {
+        const primerViaje = viajesPlaca[i]
+        const segundoViaje = viajesPlaca[i + 1]
+        
+        if (primerViaje.fechaSalida && segundoViaje.fechaEntradaAlmapac) {
+          const tiempoMs = segundoViaje.fechaEntradaAlmapac - primerViaje.fechaSalida
+          
+          if (tiempoMs > 0) {
+            const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
+            const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
+            const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
+            
+            resultados.push({
+              placa,
+              viajeNumeroSalida: primerViaje.viaje_numero,
+              viajeNumeroEntrada: segundoViaje.viaje_numero,
+              fechaSalida: primerViaje.fechaSalida,
+              fechaEntrada: segundoViaje.fechaEntradaAlmapac,
+              horas,
+              minutos,
+              segundos,
+              totalMinutos: tiempoMs / (1000 * 60),
+              pesoViaje1: primerViaje.peso,
+              pesoViaje2: segundoViaje.peso
+            })
+          } else if (tiempoMs < 0) {
+            // Tiempo negativo - podría ser porque el viaje es al día siguiente
+            // Intentar corregir sumando un día
+            const fechaEntradaCorregida = new Date(segundoViaje.fechaEntradaAlmapac)
+            fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
+            const tiempoMsCorregido = fechaEntradaCorregida - primerViaje.fechaSalida
+            
+            if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
+              const horas = Math.floor(tiempoMsCorregido / (1000 * 60 * 60))
+              const minutos = Math.floor((tiempoMsCorregido % (1000 * 60 * 60)) / (1000 * 60))
+              const segundos = Math.floor((tiempoMsCorregido % (1000 * 60)) / 1000)
+              
+              resultados.push({
+                placa,
+                viajeNumeroSalida: primerViaje.viaje_numero,
+                viajeNumeroEntrada: segundoViaje.viaje_numero,
+                fechaSalida: primerViaje.fechaSalida,
+                fechaEntrada: segundoViaje.fechaEntradaAlmapac,
+                horas,
+                minutos,
+                segundos,
+                totalMinutos: tiempoMsCorregido / (1000 * 60),
+                pesoViaje1: primerViaje.peso,
+                pesoViaje2: segundoViaje.peso,
+                nota: '⚠️ Entrada al día siguiente'
+              })
+            }
+          }
+        }
+      }
+    })
+
+    if (resultados.length === 0) {
+      toast.error('No se pudieron calcular tiempos entre viajes. Verifica que los viajes tengan hora de salida y entrada registradas')
+      return
+    }
+
+    // Ordenar por tiempo (mayor a menor)
+    resultados.sort((a, b) => b.totalMinutos - a.totalMinutos)
+    
+    setTiemposResultados(resultados)
+    setProductoTiempoActual(productoActivo.nombre)
+    setModalTiemposAbierto(true)
+  }
+
+  const cerrarModalTiempos = () => {
+    setModalTiemposAbierto(false)
+    setTiemposResultados([])
+  }
+
+  // Función para formatear fecha y hora
+  const formatFechaHoraCompleta = (fecha) => {
+    if (!fecha) return '—'
+    return new Date(fecha).toLocaleString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  }
+
   const abrirModalEdicionCompleta = (viaje) => {
     setViajeEnEdicion({
       ...viaje,
@@ -365,20 +482,16 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     setModalEdicionAbierto(true)
   }
 
-  // ✅ FUNCIÓN PARA CERRAR MODAL
   const cerrarModalEdicion = () => {
     setModalEdicionAbierto(false)
     setViajeEnEdicion(null)
   }
 
-  // ✅ FUNCIÓN PARA GUARDAR EDICIÓN COMPLETA DESDE MODAL
   const guardarEdicionCompleta = async () => {
     if (!viajeEnEdicion) return
-
     const posicionActual = guardarPosicionScroll()
 
     try {
-      // Validar campos obligatorios
       if (!viajeEnEdicion.placa || viajeEnEdicion.placa === 'C-') {
         toast.error('La placa es obligatoria')
         return
@@ -394,7 +507,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
         return
       }
 
-      // Procesar horas
       let horaSalidaUPDP = null
       let horaEntradaAlmapac = null
       let horaSalidaAlmapac = null
@@ -411,7 +523,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
         horaSalidaAlmapac = validateHora24h(viajeEnEdicion.hora_salida_almapac)
       }
 
-      // Calcular el nuevo acumulado
       const otrosViajes = viajes.filter(v => 
         v.producto_id === viajeEnEdicion.producto_id && 
         v.id !== viajeEnEdicion.id &&
@@ -467,12 +578,10 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // ✅ FUNCIÓN PARA EDITAR VIAJE DESDE PENDIENTES
   const handleEditarViajeDesdePaso2 = (viaje) => {
     abrirModalEdicionCompleta(viaje)
   }
 
-  // ✅ FUNCIÓN PARA SELECCIONAR VIAJE PARA COMPLETAR
   const seleccionarViajeParaCompletar = (viaje) => {
     setViajeSeleccionado(viaje)
     setModoRegistro('completar')
@@ -516,7 +625,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     toast.success(`✅ Se asignó el viaje #${conflicto.sugerido}`)
   }
 
-  // ✅ HANDLER MEJORADO
   const handleNuevoViajeChange = (e) => {
     const { name, value } = e.target
 
@@ -536,7 +644,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // ✅ HANDLER PARA COMPLETAR VIAJE
   const handleCompletarViajeChange = (e) => {
     const { name, value } = e.target
 
@@ -569,7 +676,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     setBitacoraActual(prev => ({ ...prev, [name]: value }))
   }
 
-  // ✅ EDITAR VIAJE DESDE TABLA DE COMPLETOS
   const handleEditarViaje = (viaje) => {
     abrirModalEdicionCompleta(viaje)
   }
@@ -629,17 +735,13 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
 
   const handleEliminarLectura = async (id) => {
     if (!confirm('¿Estás seguro de eliminar esta lectura?')) return
-
     const posicionActual = guardarPosicionScroll()
-
     try {
       const { error } = await supabase
         .from('lecturas_banda')
         .delete()
         .eq('id', id)
-
       if (error) throw error
-
       toast.success('Lectura eliminada correctamente')
       await cargarDatos()
       setEditandoLectura(null)
@@ -653,17 +755,13 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
 
   const handleEliminarBitacora = async (id) => {
     if (!confirm('¿Estás seguro de eliminar este registro?')) return
-
     const posicionActual = guardarPosicionScroll()
-
     try {
       const { error } = await supabase
         .from('bitacora_flujos')
         .delete()
         .eq('id', id)
-
       if (error) throw error
-
       toast.success('Registro eliminado correctamente')
       await cargarDatos()
       setEditandoBitacora(null)
@@ -675,7 +773,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }
 
-  // ✅ FUNCIÓN PARA VALIDAR PESOS OBLIGATORIOS
   const validarPesosObligatorios = () => {
     const pesoNeto = nuevoViaje.peso_neto_updp_tm
     const pesoBruto = nuevoViaje.peso_bruto_updp_tm
@@ -1195,24 +1292,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
 
       resumenData.push([])
 
-      if (productoActivo && resumenPorDestino.length > 0) {
-        resumenData.push([`RESUMEN POR DESTINO - ${productoActivo.nombre}`])
-        resumenData.push(['Destino', 'Límite (TM)', 'Total Viajes (TM)', 'Total Banda (TM)', 'Total (TM)', '% Límite'])
-
-        resumenPorDestino.forEach(dest => {
-          resumenData.push([
-            dest.nombre,
-            dest.limite_tm?.toFixed(3) || '0.000',
-            dest.viajes_tm?.toFixed(3) || '0.000',
-            dest.banda_tm?.toFixed(3) || '0.000',
-            dest.total_tm?.toFixed(3) || '0.000',
-            dest.porcentaje?.toFixed(1) + '%' || '0%'
-          ])
-        })
-
-        resumenData.push([])
-      }
-
       const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
       XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen General')
 
@@ -1440,7 +1519,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     })
   }
 
-  // Datos para gráfica de flujo acumulado por hora
   const datosGraficoFlujo = useMemo(() => {
     if (!productoActivo || !barco) return []
 
@@ -1515,7 +1593,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return acumuladoPorHora
   }, [viajes, lecturasBanda, productoActivo, barco])
 
-  // Flujo por hora de BANDA total
   const calcularFlujoBandaTotalPorHora = useMemo(() => {
     if (!productoActivo) return 0
 
@@ -1543,7 +1620,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return deltaAcumulado / diferenciaHoras
   }, [lecturasBanda, productoActivo])
 
-  // Calcular resumen por producto
   const resumenProductos = useMemo(() => {
     if (!productos.length) return {}
 
@@ -1592,7 +1668,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
         prod.tipo_registro === 'viajes' ? totalViajesTM :
           totalViajesTM + totalBandaTM
 
-      // Calcular faltante UPDP (solo la meta - acumulado UPDP, sin incluir pendientes)
       const faltanteUPDP = Math.max(0, metaTM - acumuladoUPDP)
 
       resumen[prod.id] = {
@@ -1630,7 +1705,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return resumen
   }, [productos, viajes, lecturasBanda, bitacora, barco])
 
-  // Calcular acumulado actual del producto activo
   const acumuladoActualProducto = useMemo(() => {
     if (!productoActivo) return 0
     
@@ -1642,7 +1716,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return todosLosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
   }, [viajes, productoActivo])
 
-  // Viajes completos filtrados por búsqueda
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
 
@@ -1669,7 +1742,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return ordenados
   }, [viajes, productoActivo, searchTerm, ordenViajes])
 
-  // Detectar saltos de correlativo
   const saltosCorrelativo = useMemo(() => {
     if (!viajesFiltrados.length || ordenViajes !== 'asc') return []
     
@@ -1688,18 +1760,11 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return saltos
   }, [viajesFiltrados, ordenViajes])
 
-  // =====================================================
-  // 🔥 NUEVA VERSIÓN: Resumen por destino con límites por producto
-  // =====================================================
   const resumenPorDestino = useMemo(() => {
     if (!productoActivo || !destinos.length) return []
 
-    // Obtener límites por producto-destino (nueva estructura)
     const limitesProductoDestino = barco?.metas_json?.limites_por_producto_destino || {}
-    // Obtener límites para el producto activo
     const limitesProductoActivo = limitesProductoDestino[productoActivo.codigo] || {}
-    
-    // FALLBACK: Si no hay límites en la nueva estructura, usar la antigua (compatibilidad)
     const limitesDestinoAntiguo = barco?.metas_json?.limites_destino || {}
 
     const mapa = {}
@@ -1712,7 +1777,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
           mapa[key] = {
             destino_id: key,
             nombre: v.destino?.nombre || `Destino ${key}`,
-            // Priorizar el límite específico del producto, fallback al antiguo
             limite_tm: limitesProductoActivo[key] || limitesDestinoAntiguo[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
@@ -1736,7 +1800,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
           mapa[key] = {
             destino_id: key,
             nombre: l.destino?.nombre || `Destino ${key}`,
-            // Priorizar el límite específico del producto, fallback al antiguo
             limite_tm: limitesProductoActivo[key] || limitesDestinoAntiguo[key] || 0,
             viajes_count: 0,
             viajes_tm: 0,
@@ -1768,7 +1831,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
   }, [productoActivo, viajes, lecturasBanda, destinos, barco])
 
-  // ALERTAS AUTOMÁTICAS
   useEffect(() => {
     if (resumenPorDestino.length > 0 && barco?.estado === 'activo') {
       resumenPorDestino.forEach(dest => {
@@ -1806,7 +1868,6 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
     }
   }, [resumenPorDestino, barco?.estado, productoActivo])
 
-  // Actualizar preview
   useEffect(() => {
     if (productoActivo) {
       actualizarAcumuladoPreview('')
@@ -1858,131 +1919,126 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'vi
   }, [bitacora, productoActivo])
 
   const cargarDatos = async () => {
-  try {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const { data: barcoData, error: barcoError } = await supabase
-      .from('barcos')
-      .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
-      .eq('token_compartido', token)
-      .single()
+      const { data: barcoData, error: barcoError } = await supabase
+        .from('barcos')
+        .select('*, tiempo_arribo, tiempo_ataque, tiempo_recibido, tiempo_arribo_editado, tiempo_ataque_editado, tiempo_recibido_editado, operacion_iniciada_at, operacion_finalizada_at, operacion_iniciada_por, operacion_finalizada_por, operacion_motivo_finalizacion, operacion_iniciada_editado, operacion_finalizada_editado')
+        .eq('token_compartido', token)
+        .single()
 
-    if (barcoError || !barcoData) {
-      toast.error('Link inválido')
-      return
-    }
+      if (barcoError || !barcoData) {
+        toast.error('Link inválido')
+        return
+      }
 
-    setBarco(barcoData)
+      setBarco(barcoData)
 
-    const productosBarco = barcoData.metas_json?.productos || []
+      const productosBarco = barcoData.metas_json?.productos || []
 
-    if (productosBarco.length === 0) {
-      toast.error('Este barco no tiene productos configurados')
-      setProductos([])
-    } else {
-      const { data: productosData } = await supabase
-        .from('productos')
+      if (productosBarco.length === 0) {
+        toast.error('Este barco no tiene productos configurados')
+        setProductos([])
+      } else {
+        const { data: productosData } = await supabase
+          .from('productos')
+          .select('*')
+          .eq('activo', true)
+          .in('codigo', productosBarco)
+
+        setProductos(productosData || [])
+      }
+
+      const { data: destinosData } = await supabase
+        .from('destinos')
         .select('*')
         .eq('activo', true)
-        .in('codigo', productosBarco)
 
-      setProductos(productosData || [])
+      setDestinos(destinosData || [])
+
+      const viajesData = await CARGAR_TODOS_LOS_REGISTROS('viajes', 'barco_id', barcoData.id)
+      
+      console.log('✅ Viajes cargados desde DB:', viajesData?.length)
+      console.log('📊 Viajes con estado incompleto:', viajesData?.filter(v => v.estado === 'incompleto').length)
+      
+      setViajes(viajesData || [])
+
+      const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
+      setViajesIncompletos(incompletos)
+
+      const { data: bandaData } = await supabase
+        .from('lecturas_banda')
+        .select(`
+          *,
+          producto:producto_id(codigo, nombre, icono),
+          destino:destino_id(codigo, nombre)
+        `)
+        .eq('barco_id', barcoData.id)
+        .order('fecha_hora', { ascending: false })
+
+      setLecturasBanda(bandaData || [])
+
+      const { data: bitacoraData } = await supabase
+        .from('bitacora_flujos')
+        .select(`
+          *,
+          producto:producto_id(codigo, nombre, icono)
+        `)
+        .eq('barco_id', barcoData.id)
+        .order('fecha_hora', { ascending: false })
+
+      setBitacora(bitacoraData || [])
+
+    } catch (error) {
+      console.error('Error cargando datos:', error)
+      toast.error('Error al cargar datos')
+    } finally {
+      setLoading(false)
     }
-
-    const { data: destinosData } = await supabase
-      .from('destinos')
-      .select('*')
-      .eq('activo', true)
-
-    setDestinos(destinosData || [])
-
-    // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS VIAJES
-    const viajesData = await CARGAR_TODOS_LOS_REGISTROS('viajes', 'barco_id', barcoData.id)
-    
-    console.log('✅ Viajes cargados desde DB:', viajesData?.length)
-    console.log('📊 Viajes con estado incompleto:', viajesData?.filter(v => v.estado === 'incompleto').length)
-    console.log('🔍 Buscando viaje 666:', viajesData?.find(v => v.viaje_numero === 666))
-    console.log('🔍 Buscando viaje 668:', viajesData?.find(v => v.viaje_numero === 668))
-    
-    setViajes(viajesData || [])
-
-    const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
-    setViajesIncompletos(incompletos)
-
-    const { data: bandaData } = await supabase
-      .from('lecturas_banda')
-      .select(`
-        *,
-        producto:producto_id(codigo, nombre, icono),
-        destino:destino_id(codigo, nombre)
-      `)
-      .eq('barco_id', barcoData.id)
-      .order('fecha_hora', { ascending: false })
-
-    setLecturasBanda(bandaData || [])
-
-    const { data: bitacoraData } = await supabase
-      .from('bitacora_flujos')
-      .select(`
-        *,
-        producto:producto_id(codigo, nombre, icono)
-      `)
-      .eq('barco_id', barcoData.id)
-      .order('fecha_hora', { ascending: false })
-
-    setBitacora(bitacoraData || [])
-
-  } catch (error) {
-    console.error('Error cargando datos:', error)
-    toast.error('Error al cargar datos')
-  } finally {
-    setLoading(false)
   }
-}
 
   useEffect(() => {
     cargarDatos()
   }, [token])
 
+  useEffect(() => {
+    if (!barco?.id) return
 
-// 🔥 SUPABASE REALTIME - SINCRONIZACIÓN EN VIVO
-useEffect(() => {
-  if (!barco?.id) return
+    console.log('🔄 Activando Realtime para barco:', barco.id)
 
-  console.log('🔄 Activando Realtime para barco:', barco.id)
-
-  const channel = supabase
-    .channel(`realtime-viajes-${barco.id}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'viajes',
-        filter: `barco_id=eq.${barco.id}`
-      },
-      (payload) => {
-        console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.viaje_numero || payload.old?.viaje_numero)
-        cargarDatos()
-        
-        if (payload.eventType === 'INSERT') {
-          toast.success(`🚚 Nuevo viaje #${payload.new.viaje_numero} registrado`, { duration: 2000 })
-        } else if (payload.eventType === 'UPDATE') {
-          toast.info(`✏️ Viaje #${payload.new.viaje_numero} actualizado`, { duration: 2000 })
-        } else if (payload.eventType === 'DELETE') {
-          toast.warning(`🗑️ Viaje #${payload.old.viaje_numero} eliminado`, { duration: 2000 })
+    const channel = supabase
+      .channel(`realtime-viajes-${barco.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'viajes',
+          filter: `barco_id=eq.${barco.id}`
+        },
+        (payload) => {
+          console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.viaje_numero || payload.old?.viaje_numero)
+          cargarDatos()
+          
+          if (payload.eventType === 'INSERT') {
+            toast.success(`🚚 Nuevo viaje #${payload.new.viaje_numero} registrado`, { duration: 2000 })
+          } else if (payload.eventType === 'UPDATE') {
+            toast.info(`✏️ Viaje #${payload.new.viaje_numero} actualizado`, { duration: 2000 })
+          } else if (payload.eventType === 'DELETE') {
+            toast.warning(`🗑️ Viaje #${payload.old.viaje_numero} eliminado`, { duration: 2000 })
+          }
         }
-      }
-    )
-    .subscribe((status) => {
-      console.log('📡 Realtime status:', status)
-    })
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime status:', status)
+      })
 
-  return () => {
-    console.log('🔌 Desconectando Realtime')
-    supabase.removeChannel(channel)
-  }
-}, [barco?.id])
+    return () => {
+      console.log('🔌 Desconectando Realtime')
+      supabase.removeChannel(channel)
+    }
+  }, [barco?.id])
 
   useEffect(() => {
     if (productos.length > 0 && !productoActivo) {
@@ -2015,40 +2071,40 @@ useEffect(() => {
     }
   }, [productoActivo, viajes, modoRegistro])
 
-  // Cerrar modal al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         cerrarModalEdicion()
       }
+      if (modalTiemposRef.current && !modalTiemposRef.current.contains(event.target)) {
+        cerrarModalTiempos()
+      }
     }
-    if (modalEdicionAbierto) {
+    if (modalEdicionAbierto || modalTiemposAbierto) {
       document.addEventListener('mousedown', handleClickOutside)
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [modalEdicionAbierto])
+  }, [modalEdicionAbierto, modalTiemposAbierto])
 
-
-  // Obtener usuario actual para mostrar en la tabla
-useEffect(() => {
-  const obtenerUsuario = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const nombre = user.user_metadata?.nombre_completo || user.email?.split('@')[0] || 'Usuario'
-        setUsuarioActual(nombre)
-      } else {
-        setUsuarioActual('Anónimo')
+  useEffect(() => {
+    const obtenerUsuario = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const nombre = user.user_metadata?.nombre_completo || user.email?.split('@')[0] || 'Usuario'
+          setUsuarioActual(nombre)
+        } else {
+          setUsuarioActual('Anónimo')
+        }
+      } catch (error) {
+        console.error('Error obteniendo usuario:', error)
+        setUsuarioActual('Sistema')
       }
-    } catch (error) {
-      console.error('Error obteniendo usuario:', error)
-      setUsuarioActual('Sistema')
     }
-  }
-  obtenerUsuario()
-}, [])
+    obtenerUsuario()
+  }, [])
 
   if (loading) {
     return (
@@ -2434,7 +2490,6 @@ useEffect(() => {
                   </p>
                 </div>
 
-                {/* Faltante UPDP - NUEVO */}
                 <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl p-4 col-span-1">
                   <div className="flex items-center gap-3">
                     <TrendingDown className="w-6 h-6 text-amber-200" />
@@ -2632,7 +2687,7 @@ useEffect(() => {
           </div>
         )}
 
-        {/* RESUMEN POR DESTINO CON LÍMITES (AHORA CON LÍMITES POR PRODUCTO) */}
+        {/* RESUMEN POR DESTINO CON LÍMITES */}
         {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
@@ -2913,7 +2968,6 @@ useEffect(() => {
                 Bitácora
               </button>
             </div>
-
           </div>
         )}
 
@@ -2986,7 +3040,6 @@ useEffect(() => {
                   </span>
                 </h2>
 
-                {/* PREVIEW DEL ACUMULADO EN TIEMPO REAL */}
                 <div className="mb-6 bg-gradient-to-r from-yellow-600/20 to-amber-600/20 border border-yellow-500/30 rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -3599,199 +3652,209 @@ useEffect(() => {
               </div>
             )}
 
-           {viajesCompletos.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
-    <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-white flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-400" />
-          Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
-          <span className="text-sm font-normal text-slate-500 ml-2">
-            Barco: {barco.nombre}
-          </span>
-        </h3>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
-            className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
-          >
-            <ArrowUpDown className="w-4 h-4" />
-            <span className="hidden sm:inline">
-              {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
-            </span>
-          </button>
-
-          <div className="relative w-64">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por placa..."
-              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
-      <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-400" />
-          <div>
-            <p className="font-bold text-amber-400">⚠️ Saltos de correlativo detectados</p>
-            <p className="text-sm text-slate-400">
-              {saltosCorrelativo.map((salto, idx) => (
-                <span key={idx}>
-                  Faltan {salto.faltantes} viaje(s) entre #{salto.desde} y #{salto.hasta}
-                  {idx < saltosCorrelativo.length - 1 ? ' • ' : ''}
-                </span>
-              ))}
-            </p>
-          </div>
-        </div>
-      </div>
-    )}
-
-    <div className="overflow-x-auto">
-      <div className="max-h-[500px] overflow-y-auto relative">
-        <table className="w-full">
-          <thead className="bg-slate-800 sticky top-0 z-10">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">👤 Creado por</th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {viajesFiltrados.map((viaje, index, array) => {
-              let acumuladoCorrido = 0
-              if (ordenViajes === 'asc') {
-                acumuladoCorrido = array
-                  .slice(0, index + 1)
-                  .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-              } else {
-                const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
-                const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
-                acumuladoCorrido = viajesAsc
-                  .slice(0, idxAsc + 1)
-                  .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-              }
-
-              const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
-                array[index + 1].viaje_numero - viaje.viaje_numero > 1
-
-              return (
-                <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
-                  <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
-                  <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
-                  <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
-                  <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
-                  <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
-                  <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                        <span className="text-[10px] font-bold text-indigo-400">
-                          {usuarioActual?.charAt(0)?.toUpperCase() || '?'}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-300">
-                        {usuarioActual || 'Sistema'}
+            {viajesCompletos.length > 0 && (
+              <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+                <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-white flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
+                      <span className="text-sm font-normal text-slate-500 ml-2">
+                        Barco: {barco.nombre}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditarViaje(viaje)}
-                        className="p-1 hover:bg-blue-500/20 rounded transition-colors"
-                        title="Editar viaje completo"
-                      >
-                        <Edit2 className="w-4 h-4 text-blue-400" />
-                      </button>
-                      <button
-                        onClick={() => handleEliminarViaje(viaje.id)}
-                        className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-          <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
-            <tr>
-              <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
-              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap"></td>
-              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">
-                {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap"></td>
-              <td className="px-4 py-3 whitespace-nowrap"></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
+                    </h3>
 
-    {searchTerm && (
-      <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
-        Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
-        {viajesFiltrados.length === 0 && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="ml-2 text-blue-400 hover:text-blue-300"
-          >
-            Limpiar búsqueda
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-)}
+                    <div className="flex items-center gap-3">
+                      {/* Botón para calcular tiempos entre viajes */}
+                      <button
+                        onClick={calcularTiemposEntreViajes}
+                        className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg"
+                        title="Ver tiempo entre primer viaje y siguiente por unidad"
+                      >
+                        <Timer className="w-4 h-4" />
+                        Tiempos entre viajes
+                      </button>
+
+                      <button
+                        onClick={() => setOrdenViajes(ordenViajes === 'asc' ? 'desc' : 'asc')}
+                        className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-sm text-slate-300 transition-all"
+                      >
+                        <ArrowUpDown className="w-4 h-4" />
+                        <span className="hidden sm:inline">
+                          {ordenViajes === 'asc' ? 'Menor a Mayor' : 'Mayor a Menor'}
+                        </span>
+                      </button>
+
+                      <div className="relative w-64">
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          placeholder="Buscar por placa..."
+                          className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        {searchTerm && (
+                          <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {saltosCorrelativo.length > 0 && ordenViajes === 'asc' && (
+                  <div className="bg-amber-500/10 border-l-4 border-amber-500 p-4 m-4 rounded-r-lg">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <p className="font-bold text-amber-400">⚠️ Saltos de correlativo detectados</p>
+                        <p className="text-sm text-slate-400">
+                          {saltosCorrelativo.map((salto, idx) => (
+                            <span key={idx}>
+                              Faltan {salto.faltantes} viaje(s) entre #{salto.desde} y #{salto.hasta}
+                              {idx < saltosCorrelativo.length - 1 ? ' • ' : ''}
+                            </span>
+                          ))}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <div className="max-h-[500px] overflow-y-auto relative">
+                    <table className="w-full">
+                      <thead className="bg-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Fecha</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida UPDP</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Entrada Almapac</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Salida Almapac</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Placa</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Neto UPDP (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto UPDP (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Bruto Almapac (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Destino</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Peso Destino (TM)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acumulado UPDP</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">👤 Creado por</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {viajesFiltrados.map((viaje, index, array) => {
+                          let acumuladoCorrido = 0
+                          if (ordenViajes === 'asc') {
+                            acumuladoCorrido = array
+                              .slice(0, index + 1)
+                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+                          } else {
+                            const viajesAsc = [...viajesFiltrados].sort((a, b) => a.viaje_numero - b.viaje_numero)
+                            const idxAsc = viajesAsc.findIndex(v => v.id === viaje.id)
+                            acumuladoCorrido = viajesAsc
+                              .slice(0, idxAsc + 1)
+                              .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+                          }
+
+                          const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
+                            array[index + 1].viaje_numero - viaje.viaje_numero > 1
+
+                          return (
+                            <tr key={viaje.id} className={`hover:bg-white/5 transition-colors ${haySaltoDespues ? 'border-b-2 border-amber-500/50' : ''}`}>
+                              <td className="px-4 py-3 font-bold text-white whitespace-nowrap">{viaje.viaje_numero}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatFecha(viaje.fecha)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_updp)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_entrada_almapac)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{formatHora(viaje.hora_salida_almapac) || '—'}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-200 whitespace-nowrap">{viaje.placa}</td>
+                              <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">{viaje.peso_neto_updp_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{viaje.peso_bruto_updp_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{viaje.peso_bruto_almapac_tm?.toFixed(3)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{viaje.destino?.nombre || '—'}</td>
+                              <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">{viaje.peso_destino_tm?.toFixed(3) || '—'}</td>
+                              <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">{acumuladoCorrido.toFixed(3)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-indigo-400">
+                                      {usuarioActual?.charAt(0)?.toUpperCase() || '?'}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-slate-300">
+                                    {usuarioActual || 'Sistema'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleEditarViaje(viaje)}
+                                    className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                                    title="Editar viaje completo"
+                                  >
+                                    <Edit2 className="w-4 h-4 text-blue-400" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEliminarViaje(viaje.id)}
+                                    className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-400" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot className="bg-slate-900 border-t border-white-10 sticky bottom-0">
+                        <tr>
+                          <td colSpan="6" className="px-4 py-3 font-bold text-white whitespace-nowrap">TOTALES</td>
+                          <td className="px-4 py-3 font-bold text-green-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-amber-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap"></td>
+                          <td className="px-4 py-3 font-bold text-purple-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-yellow-400 whitespace-nowrap">
+                            {viajesFiltrados.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap"></td>
+                          <td className="px-4 py-3 whitespace-nowrap"></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {searchTerm && (
+                  <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
+                    Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
+                    {viajesFiltrados.length === 0 && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="ml-2 text-blue-400 hover:text-blue-300"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -4181,8 +4244,8 @@ useEffect(() => {
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
                             </div>
-                           </td>
-                         </tr>
+                          </td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -4193,6 +4256,161 @@ useEffect(() => {
         )}
       </div>
 
+      {/* MODAL DE TIEMPOS ENTRE VIAJES */}
+      {modalTiemposAbierto && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div 
+            ref={modalTiemposRef}
+            className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-y-auto shadow-2xl"
+          >
+            {/* Header del Modal */}
+            <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Timer className="w-5 h-5 text-purple-400" />
+                  Tiempos entre viajes consecutivos
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {productoTiempoActual} · Barco: {barco?.nombre}
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Cálculo: Tiempo desde salida de un viaje hasta entrada del siguiente viaje (misma placa)
+                </p>
+              </div>
+              <button
+                onClick={cerrarModalTiempos}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="p-6">
+              {tiemposResultados.length === 0 ? (
+                <div className="text-center py-12">
+                  <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+                  <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
+                  <p className="text-sm text-slate-600 mt-2">
+                    Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de salida y entrada registrada
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Resumen estadístico */}
+                  <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-4">
+                      <p className="text-xs text-purple-200 uppercase font-bold">Total de unidades</p>
+                      <p className="text-2xl font-black text-white">
+                        {new Set(tiemposResultados.map(r => r.placa)).size}
+                      </p>
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-4">
+                      <p className="text-xs text-blue-200 uppercase font-bold">Total intervalos</p>
+                      <p className="text-2xl font-black text-white">{tiemposResultados.length}</p>
+                    </div>
+                    <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-xl p-4">
+                      <p className="text-xs text-green-200 uppercase font-bold">Tiempo promedio</p>
+                      <p className="text-2xl font-black text-white">
+                        {Math.floor(tiemposResultados.reduce((sum, r) => sum + r.totalMinutos, 0) / tiemposResultados.length)} min
+                      </p>
+                    </div>
+                    <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-xl p-4">
+                      <p className="text-xs text-amber-200 uppercase font-bold">Tiempo máximo</p>
+                      <p className="text-2xl font-black text-white">
+                        {Math.floor(Math.max(...tiemposResultados.map(r => r.totalMinutos)))} min
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tabla de resultados */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Placa</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Viaje #1 → #2</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Salida Viaje #1</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Entrada Viaje #2</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Tiempo transcurrido</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Nota</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {tiemposResultados.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-3 font-bold text-white whitespace-nowrap">
+                              {item.placa}
+                            </td>
+                            <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                              #{item.viajeNumeroSalida} → #{item.viajeNumeroEntrada}
+                            </td>
+                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                              {formatFechaHoraCompleta(item.fechaSalida)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                              {formatFechaHoraCompleta(item.fechaEntrada)}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-green-400 text-lg">
+                                  {item.horas}h {item.minutos}m {item.segundos}s
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  ({Math.floor(item.totalMinutos)} minutos totales)
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.nota ? (
+                                <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full">
+                                  {item.nota}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-600">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-900 border-t border-white/10">
+                        <tr>
+                          <td colSpan="4" className="px-4 py-3 font-bold text-white">PROMEDIO GENERAL</td>
+                          <td className="px-4 py-3">
+                            <span className="font-bold text-blue-400">
+                              {Math.floor(tiemposResultados.reduce((sum, r) => sum + r.totalMinutos, 0) / tiemposResultados.length)} minutos
+                            </span>
+                          </td>
+                          <td className="px-4 py-3"></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Ejemplo explicativo */}
+                  <div className="mt-6 bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                    <p className="text-xs text-slate-400 flex items-center gap-2">
+                      <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
+                      Ejemplo: Si un vehículo salió de Almapac a las 12:04pm y su siguiente entrada a Almapac fue a las 2:04pm, se tardó 2 horas.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer del Modal */}
+            <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end">
+              <button
+                onClick={cerrarModalTiempos}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE EDICIÓN COMPLETA DE VIAJE */}
       {modalEdicionAbierto && viajeEnEdicion && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -4200,7 +4418,6 @@ useEffect(() => {
             ref={modalRef}
             className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
           >
-            {/* Header del Modal */}
             <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -4225,9 +4442,7 @@ useEffect(() => {
               </button>
             </div>
 
-            {/* Contenido del Modal */}
             <div className="p-6 space-y-6">
-              {/* Sección: Información del Viaje */}
               <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
                 <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
                   <Truck className="w-4 h-4" />
@@ -4278,7 +4493,6 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Sección: Tiempos */}
               <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
                 <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
                   <Clock className="w-4 h-4" />
@@ -4345,7 +4559,6 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Sección: Pesos */}
               <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
                 <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
                   <Scale className="w-4 h-4" />
@@ -4413,7 +4626,6 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Sección: Observaciones */}
               <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
                 <h3 className="text-sm font-bold text-blue-400 mb-4 flex items-center gap-2">
                   <BookOpen className="w-4 h-4" />
@@ -4444,7 +4656,6 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* Footer del Modal */}
             <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={cerrarModalEdicion}
