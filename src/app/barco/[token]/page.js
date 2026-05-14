@@ -326,21 +326,22 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  const calcularTiemposEntreViajes = () => {
+const calcularTiemposEntreViajes = () => {
   if (!viajes.length || !productoActivo) {
     toast.error('No hay viajes para analizar')
     return
   }
 
-  // Filtrar viajes completos del producto activo que tengan hora de entrada
+  // Filtrar viajes completos del producto activo que tengan Salida Almapac y Entrada Almapac
   const viajesProducto = viajes.filter(v => 
     v.producto_id === productoActivo.id && 
     v.estado === 'completo' &&
-    v.hora_entrada_almapac
+    v.hora_salida_almapac &&  // Salida de Almapac
+    v.hora_entrada_almapac    // Entrada a Almapac
   )
 
   if (viajesProducto.length < 2) {
-    toast.error('Se necesitan al menos 2 viajes completos con hora de entrada registrada')
+    toast.error('Se necesitan al menos 2 viajes completos con hora de salida y entrada de Almapac registradas')
     return
   }
 
@@ -353,8 +354,13 @@ export default function BarcoPesadorPage() {
       viajesPorPlaca[placa] = []
     }
     
-    // Crear fecha de ENTRADA (la que usaremos para calcular)
-    const fechaEntrada = viaje.hora_entrada_almapac 
+    // Fecha de SALIDA de Almapac (desde donde empezamos a contar)
+    const fechaSalidaAlmapac = viaje.hora_salida_almapac 
+      ? new Date(`${viaje.fecha}T${viaje.hora_salida_almapac}`)
+      : null
+    
+    // Fecha de ENTRADA a Almapac (hasta donde llegamos)
+    const fechaEntradaAlmapac = viaje.hora_entrada_almapac 
       ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
       : null
     
@@ -362,9 +368,11 @@ export default function BarcoPesadorPage() {
       id: viaje.id,
       viaje_numero: viaje.viaje_numero,
       fecha: viaje.fecha,
-      hora_salida: viaje.hora_salida_updp || '—',
-      hora_entrada: viaje.hora_entrada_almapac,
-      fechaEntrada,
+      hora_salida_updp: viaje.hora_salida_updp || '—',
+      hora_entrada_almapac: viaje.hora_entrada_almapac,
+      hora_salida_almapac: viaje.hora_salida_almapac,
+      fechaSalidaAlmapac,
+      fechaEntradaAlmapac,
       destino: viaje.destino?.nombre || '—',
       peso_neto: viaje.peso_neto_updp_tm
     })
@@ -382,15 +390,16 @@ export default function BarcoPesadorPage() {
       const viajeActual = viajesPlaca[i]
       const viajeSiguiente = viajesPlaca[i + 1]
       
-      if (viajeActual.fechaEntrada && viajeSiguiente.fechaEntrada) {
-        let tiempoMs = viajeSiguiente.fechaEntrada - viajeActual.fechaEntrada
+      // 🔥 CALCULAR: Desde SALIDA ALMAPAC del viaje actual HASTA ENTRADA ALMAPAC del siguiente viaje
+      if (viajeActual.fechaSalidaAlmapac && viajeSiguiente.fechaEntradaAlmapac) {
+        let tiempoMs = viajeSiguiente.fechaEntradaAlmapac - viajeActual.fechaSalidaAlmapac
         let esDiaSiguiente = false
         
         // Si el tiempo es negativo, puede ser al día siguiente
         if (tiempoMs < 0) {
-          const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntrada)
+          const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntradaAlmapac)
           fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
-          const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaEntrada
+          const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaSalidaAlmapac
           if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
             tiempoMs = tiempoMsCorregido
             esDiaSiguiente = true
@@ -405,8 +414,10 @@ export default function BarcoPesadorPage() {
           tiemposEntreViajes.push({
             desdeViaje: viajeActual.viaje_numero,
             hastaViaje: viajeSiguiente.viaje_numero,
-            desdeHoraEntrada: viajeActual.hora_entrada,
-            hastaHoraEntrada: viajeSiguiente.hora_entrada,
+            desdeSalidaAlmapac: viajeActual.hora_salida_almapac,
+            hastaEntradaAlmapac: viajeSiguiente.hora_entrada_almapac,
+            desdeFecha: viajeActual.fecha,
+            hastaFecha: viajeSiguiente.fecha,
             horas,
             minutos,
             segundos,
@@ -4278,10 +4289,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
 {/* MODAL DE TIEMPOS ENTRE VIAJES */}
 {modalTiemposAbierto && (
   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div 
-      ref={modalTiemposRef}
-      className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl"
-    >
+    <div className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl">
       {/* Header */}
       <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center z-20">
         <div>
@@ -4293,7 +4301,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
             {productoTiempoActual} · Barco: {barco?.nombre}
           </p>
           <p className="text-xs text-slate-600 mt-0.5">
-            📍 Cálculo: Desde la Hora de ENTRADA de un viaje hasta la Hora de ENTRADA del siguiente viaje (misma placa)
+            📍 Cálculo: Desde <span className="text-green-400 font-bold">Salida de Almapac</span> de un viaje hasta <span className="text-yellow-400 font-bold">Entrada a Almapac</span> del siguiente viaje
           </p>
         </div>
         <button
@@ -4311,7 +4319,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
             <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
             <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
             <p className="text-sm text-slate-600 mt-2">
-              Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de entrada registrada
+              Se necesitan al menos 2 viajes completos con hora de salida y entrada de Almapac
             </p>
           </div>
         ) : (
@@ -4373,7 +4381,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
               </div>
             </div>
 
-            {/* Detalle por placa - SOLO LAS FILTRADAS */}
+            {/* Detalle por placa */}
             {resultadosFiltradosTiempos.length === 0 ? (
               <div className="text-center py-12 bg-slate-900/50 rounded-xl border border-white/10">
                 <Search className="w-12 h-12 text-slate-700 mx-auto mb-3" />
@@ -4432,8 +4440,9 @@ const resultadosFiltradosTiempos = useMemo(() => {
                         <tr>
                           <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase"># Viaje</th>
                           <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
-                          <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Salida</th>
-                          <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Entrada</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Salida UPDP</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Entrada Almapac</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Salida Almapac</th>
                           <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Destino</th>
                           <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Peso Neto</th>
                           <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Tiempo hasta próximo</th>
@@ -4448,8 +4457,9 @@ const resultadosFiltradosTiempos = useMemo(() => {
                             <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
                               <td className="px-4 py-2 font-bold text-white whitespace-nowrap">#{viaje.viaje_numero}</td>
                               <td className="px-4 py-2 whitespace-nowrap text-slate-300 text-xs">{formatFecha(viaje.fecha)}</td>
-                              <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">{viaje.hora_salida || '—'}</td>
-                              <td className="px-4 py-2 whitespace-nowrap font-mono text-green-400 text-xs font-bold">{viaje.hora_entrada || '—'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">{viaje.hora_salida_updp}</td>
+                              <td className="px-4 py-2 whitespace-nowrap font-mono text-yellow-400 text-xs">{viaje.hora_entrada_almapac}</td>
+                              <td className="px-4 py-2 whitespace-nowrap font-mono text-green-400 text-xs font-bold">{viaje.hora_salida_almapac}</td>
                               <td className="px-4 py-2 whitespace-nowrap text-slate-400 text-xs">{viaje.destino}</td>
                               <td className="px-4 py-2 whitespace-nowrap font-bold text-green-400 text-xs">{viaje.peso_neto?.toFixed(3) || '—'} TM</td>
                               <td className="px-4 py-2 whitespace-nowrap">
@@ -4459,7 +4469,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
                                       {tiempoAlSiguiente.horas}h {tiempoAlSiguiente.minutos}m {tiempoAlSiguiente.segundos}s
                                     </span>
                                     <span className="text-[9px] text-slate-500">
-                                      (Entrada #{tiempoAlSiguiente.desdeViaje} → Entrada #{tiempoAlSiguiente.hastaViaje})
+                                      (Salida #{tiempoAlSiguiente.desdeViaje} → Entrada #{tiempoAlSiguiente.hastaViaje})
                                     </span>
                                     {tiempoAlSiguiente.esDiaSiguiente && (
                                       <span className="text-[8px] text-yellow-500 mt-0.5">⚠️ día siguiente</span>
@@ -4477,7 +4487,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
                       </tbody>
                       <tfoot className="bg-slate-800/30 border-t border-white/10">
                         <tr>
-                          <td colSpan="5" className="px-4 py-2 text-right font-bold text-slate-400 text-xs">
+                          <td colSpan="6" className="px-4 py-2 text-right font-bold text-slate-400 text-xs">
                             ⏱️ PROMEDIO DE TIEMPOS:
                           </td>
                           <td colSpan="2" className="px-4 py-2">
@@ -4500,7 +4510,9 @@ const resultadosFiltradosTiempos = useMemo(() => {
             <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-white/5">
               <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
                 <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
-                <strong>Cálculo:</strong> Desde la <span className="text-green-400 font-bold">Hora de ENTRADA</span> de un viaje hasta la <span className="text-green-400 font-bold">Hora de ENTRADA</span> del siguiente viaje (misma placa).
+                <strong>Cálculo:</strong> Desde la <span className="text-green-400 font-bold">Hora de SALIDA de Almapac</span> de un viaje hasta la <span className="text-yellow-400 font-bold">Hora de ENTRADA a Almapac</span> del siguiente viaje (misma placa).
+                <br className="hidden sm:block" />
+                <span className="ml-6">Ejemplo: Viaje #1 salió de Almapac a las <strong className="text-green-400">12:04pm</strong> y Viaje #2 entró a Almapac a las <strong className="text-yellow-400">2:04pm</strong> → se tardó <strong className="text-blue-400">2 horas (120 minutos)</strong>.</span>
               </p>
             </div>
           </>
