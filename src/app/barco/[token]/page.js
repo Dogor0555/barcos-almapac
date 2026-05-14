@@ -228,29 +228,29 @@ export default function BarcoPesadorPage() {
 
   const calcularAcumuladoTotalUPDP = (productoId) => {
     if (!productoId) return 0
-    
-    const todosLosViajes = viajes.filter(v => 
-      v.producto_id === productoId && 
+
+    const todosLosViajes = viajes.filter(v =>
+      v.producto_id === productoId &&
       v.peso_neto_updp_tm !== null &&
       v.peso_neto_updp_tm !== '' &&
       Number(v.peso_neto_updp_tm) > 0
     )
-    
+
     const total = todosLosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
     return total
   }
 
   const actualizarAcumuladoPreview = (pesoNetoIngresado) => {
     if (!productoActivo) return
-    
+
     const acumuladoActual = calcularAcumuladoTotalUPDP(productoActivo.id)
-    
+
     let pesoNeto = 0
     if (pesoNetoIngresado && pesoNetoIngresado !== '') {
       pesoNeto = parseFloat(pesoNetoIngresado)
       if (isNaN(pesoNeto)) pesoNeto = 0
     }
-    
+
     const nuevoAcumulado = acumuladoActual + pesoNeto
     setAcumuladoPreview(nuevoAcumulado)
     return nuevoAcumulado
@@ -319,165 +319,146 @@ export default function BarcoPesadorPage() {
     }
   }
 
-  // =====================================================
-  // FUNCIONES PARA EL MODAL DE TIEMPOS ENTRE VIAJES
-  // =====================================================
   const calcularTiemposEntreViajes = () => {
-  if (!viajes.length || !productoActivo) {
-    toast.error('No hay viajes para analizar')
-    return
-  }
-
-  const viajesProducto = viajes.filter(v => 
-    v.producto_id === productoActivo.id && 
-    v.estado === 'completo' &&
-    v.hora_salida_updp &&
-    v.hora_entrada_almapac
-  )
-
-  if (viajesProducto.length < 2) {
-    toast.error('Se necesitan al menos 2 viajes completos para calcular diferencias')
-    return
-  }
-
-  // Ordenar por número de viaje
-  const viajesOrdenados = [...viajesProducto].sort((a, b) => a.viaje_numero - b.viaje_numero)
-
-  // Agrupar por placa
-  const viajesPorPlaca = {}
-  
-  viajesOrdenados.forEach(viaje => {
-    const placa = viaje.placa
-    if (!viajesPorPlaca[placa]) {
-      viajesPorPlaca[placa] = []
+    if (!viajes.length || !productoActivo) {
+      toast.error('No hay viajes para analizar')
+      return
     }
-    
-    const fechaSalida = new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
-    const fechaEntradaAlmapac = viaje.hora_entrada_almapac 
-      ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
-      : null
-    
-    viajesPorPlaca[placa].push({
-      id: viaje.id,
-      viaje_numero: viaje.viaje_numero,
-      fecha: viaje.fecha,
-      fechaSalida,
-      fechaEntradaAlmapac,
-      hora_salida: viaje.hora_salida_updp,
-      hora_entrada: viaje.hora_entrada_almapac,
-      placa,
-      peso_neto: viaje.peso_neto_updp_tm,
-      peso_bruto: viaje.peso_bruto_updp_tm,
-      destino: viaje.destino?.nombre || '—'
-    })
-  })
 
-  // Procesar cada placa y calcular tiempos entre viajes consecutivos
-  const resultadosPorPlaca = []
-  
-  Object.keys(viajesPorPlaca).forEach(placa => {
-    const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
-    
-    // Calcular tiempos entre cada par de viajes consecutivos
-    const tiemposEntreViajes = []
-    
-    for (let i = 0; i < viajesPlaca.length - 1; i++) {
-      const viajeActual = viajesPlaca[i]
-      const viajeSiguiente = viajesPlaca[i + 1]
-      
-      if (viajeActual.fechaSalida && viajeSiguiente.fechaEntradaAlmapac) {
-        let tiempoMs = viajeSiguiente.fechaEntradaAlmapac - viajeActual.fechaSalida
-        let esDiaSiguiente = false
-        
-        // Si el tiempo es negativo, puede ser porque el viaje es al día siguiente
-        if (tiempoMs < 0) {
-          const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntradaAlmapac)
-          fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
-          const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaSalida
-          
-          if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
-            tiempoMs = tiempoMsCorregido
-            esDiaSiguiente = true
+    const viajesProducto = viajes.filter(v =>
+      v.producto_id === productoActivo.id &&
+      v.estado === 'completo' &&
+      v.hora_entrada_almapac  // Debe tener hora de entrada
+    )
+
+    if (viajesProducto.length < 2) {
+      toast.error('Se necesitan al menos 2 viajes completos con hora de entrada registrada')
+      return
+    }
+
+    // Ordenar por número de viaje
+    const viajesOrdenados = [...viajesProducto].sort((a, b) => a.viaje_numero - b.viaje_numero)
+
+    // Agrupar por placa
+    const viajesPorPlaca = {}
+
+    viajesOrdenados.forEach(viaje => {
+      const placa = viaje.placa
+      if (!viajesPorPlaca[placa]) {
+        viajesPorPlaca[placa] = []
+      }
+
+      // Crear fecha de ENTRADA (la que usaremos para calcular)
+      const fechaEntrada = viaje.hora_entrada_almapac
+        ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
+        : null
+
+      // También guardamos la salida para mostrar en la tabla
+      const fechaSalida = viaje.hora_salida_updp
+        ? new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
+        : null
+
+      viajesPorPlaca[placa].push({
+        id: viaje.id,
+        viaje_numero: viaje.viaje_numero,
+        fecha: viaje.fecha,
+        fechaSalida,
+        fechaEntrada,
+        hora_salida: viaje.hora_salida_updp,
+        hora_entrada: viaje.hora_entrada_almapac,
+        placa,
+        peso_neto: viaje.peso_neto_updp_tm,
+        peso_bruto: viaje.peso_bruto_updp_tm,
+        destino: viaje.destino?.nombre || '—'
+      })
+    })
+
+    // Procesar cada placa
+    const resultadosPorPlaca = []
+
+    Object.keys(viajesPorPlaca).forEach(placa => {
+      const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
+      const tiemposEntreViajes = []
+
+      for (let i = 0; i < viajesPlaca.length - 1; i++) {
+        const viajeActual = viajesPlaca[i]
+        const viajeSiguiente = viajesPlaca[i + 1]
+
+        // 🔥 CALCULAR DESDE HORA DE ENTRADA del viaje actual HASTA HORA DE ENTRADA del siguiente viaje
+        if (viajeActual.fechaEntrada && viajeSiguiente.fechaEntrada) {
+          let tiempoMs = viajeSiguiente.fechaEntrada - viajeActual.fechaEntrada
+          let esDiaSiguiente = false
+
+          // Si el tiempo es negativo, puede ser porque el viaje es al día siguiente
+          if (tiempoMs < 0) {
+            const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntrada)
+            fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
+            const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaEntrada
+            if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
+              tiempoMs = tiempoMsCorregido
+              esDiaSiguiente = true
+            }
+          }
+
+          if (tiempoMs > 0) {
+            const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
+            const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
+            const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
+
+            tiemposEntreViajes.push({
+              desdeViaje: viajeActual.viaje_numero,
+              hastaViaje: viajeSiguiente.viaje_numero,
+              desdeFecha: viajeActual.fecha,
+              desdeHoraEntrada: viajeActual.hora_entrada,
+              hastaFecha: viajeSiguiente.fecha,
+              hastaHoraEntrada: viajeSiguiente.hora_entrada,
+              horas,
+              minutos,
+              segundos,
+              totalMinutos: tiempoMs / (1000 * 60),
+              esDiaSiguiente,
+              pesoViaje1: viajeActual.peso_neto,
+              pesoViaje2: viajeSiguiente.peso_neto,
+              destino1: viajeActual.destino,
+              destino2: viajeSiguiente.destino
+            })
           }
         }
-        
-        if (tiempoMs > 0) {
-          const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
-          const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
-          const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
-          
-          tiemposEntreViajes.push({
-            desdeViaje: viajeActual.viaje_numero,
-            hastaViaje: viajeSiguiente.viaje_numero,
-            desdeFecha: viajeActual.fecha,
-            desdeHoraSalida: viajeActual.hora_salida,
-            hastaFecha: viajeSiguiente.fecha,
-            hastaHoraEntrada: viajeSiguiente.hora_entrada,
-            horas,
-            minutos,
-            segundos,
-            totalMinutos: tiempoMs / (1000 * 60),
-            esDiaSiguiente,
-            pesoViaje1: viajeActual.peso_neto,
-            pesoViaje2: viajeSiguiente.peso_neto,
-            destino1: viajeActual.destino,
-            destino2: viajeSiguiente.destino
-          })
-        }
       }
+
+      if (tiemposEntreViajes.length > 0) {
+        const totalMinutos = tiemposEntreViajes.reduce((sum, t) => sum + t.totalMinutos, 0)
+        const promedioMinutos = totalMinutos / tiemposEntreViajes.length
+        const maxMinutos = Math.max(...tiemposEntreViajes.map(t => t.totalMinutos))
+        const minMinutos = Math.min(...tiemposEntreViajes.map(t => t.totalMinutos))
+
+        resultadosPorPlaca.push({
+          placa,
+          viajes: viajesPlaca,
+          tiempos: tiemposEntreViajes,
+          stats: {
+            totalViajes: viajesPlaca.length,
+            intervalos: tiemposEntreViajes.length,
+            promedioMinutos,
+            maxMinutos,
+            minMinutos,
+            totalMinutos
+          }
+        })
+      }
+    })
+
+    resultadosPorPlaca.sort((a, b) => b.stats.totalViajes - a.stats.totalViajes)
+
+    if (resultadosPorPlaca.length === 0) {
+      toast.error('No se pudieron calcular tiempos entre viajes')
+      return
     }
-    
-    // Calcular estadísticas para esta placa
-    if (tiemposEntreViajes.length > 0) {
-      const totalMinutos = tiemposEntreViajes.reduce((sum, t) => sum + t.totalMinutos, 0)
-      const promedioMinutos = totalMinutos / tiemposEntreViajes.length
-      const maxMinutos = Math.max(...tiemposEntreViajes.map(t => t.totalMinutos))
-      const minMinutos = Math.min(...tiemposEntreViajes.map(t => t.totalMinutos))
-      
-      resultadosPorPlaca.push({
-        placa,
-        viajes: viajesPlaca,
-        tiempos: tiemposEntreViajes,
-        stats: {
-          totalViajes: viajesPlaca.length,
-          intervalos: tiemposEntreViajes.length,
-          promedioMinutos,
-          maxMinutos,
-          minMinutos,
-          totalMinutos
-        }
-      })
-    } else if (viajesPlaca.length > 1) {
-      // Tiene múltiples viajes pero no se pudieron calcular tiempos (faltan horas)
-      resultadosPorPlaca.push({
-        placa,
-        viajes: viajesPlaca,
-        tiempos: [],
-        stats: {
-          totalViajes: viajesPlaca.length,
-          intervalos: 0,
-          promedioMinutos: 0,
-          maxMinutos: 0,
-          minMinutos: 0,
-          totalMinutos: 0,
-          error: 'Faltan horas de salida o entrada para calcular tiempos'
-        }
-      })
-    }
-  })
-  
-  // Ordenar por cantidad de viajes (mayor a menor)
-  resultadosPorPlaca.sort((a, b) => b.stats.totalViajes - a.stats.totalViajes)
-  
-  if (resultadosPorPlaca.length === 0) {
-    toast.error('No se pudieron calcular tiempos entre viajes. Verifica que los viajes tengan hora de salida y entrada registradas')
-    return
+
+    setTiemposResultados(resultadosPorPlaca)
+    setProductoTiempoActual(productoActivo.nombre)
+    setModalTiemposAbierto(true)
   }
-  
-  setTiemposResultados(resultadosPorPlaca)
-  setProductoTiempoActual(productoActivo.nombre)
-  setModalTiemposAbierto(true)
-}
 
   const cerrarModalTiempos = () => {
     setModalTiemposAbierto(false)
@@ -556,8 +537,8 @@ export default function BarcoPesadorPage() {
         horaSalidaAlmapac = validateHora24h(viajeEnEdicion.hora_salida_almapac)
       }
 
-      const otrosViajes = viajes.filter(v => 
-        v.producto_id === viajeEnEdicion.producto_id && 
+      const otrosViajes = viajes.filter(v =>
+        v.producto_id === viajeEnEdicion.producto_id &&
         v.id !== viajeEnEdicion.id &&
         v.peso_neto_updp_tm !== null
       )
@@ -668,7 +649,7 @@ export default function BarcoPesadorPage() {
       if (name === 'peso_bruto_updp_tm') nombreCampo = 'Peso Bruto UPDP'
       const valorFormateado = autoFormatearNumero(value, nombreCampo)
       setNuevoViaje(prev => ({ ...prev, [name]: valorFormateado }))
-      
+
       if (name === 'peso_neto_updp_tm') {
         actualizarAcumuladoPreview(valorFormateado)
       }
@@ -809,34 +790,34 @@ export default function BarcoPesadorPage() {
   const validarPesosObligatorios = () => {
     const pesoNeto = nuevoViaje.peso_neto_updp_tm
     const pesoBruto = nuevoViaje.peso_bruto_updp_tm
-    
+
     if (!pesoNeto || pesoNeto === '') {
       toast.error('❌ El Peso Neto UPDP es obligatorio en el Paso 1')
       return false
     }
-    
+
     if (!pesoBruto || pesoBruto === '') {
       toast.error('❌ El Peso Bruto UPDP es obligatorio en el Paso 1')
       return false
     }
-    
+
     const pesoNetoNum = Number(pesoNeto)
     const pesoBrutoNum = Number(pesoBruto)
-    
+
     if (isNaN(pesoNetoNum) || pesoNetoNum <= 0) {
       toast.error('❌ El Peso Neto UPDP debe ser un número mayor a 0')
       return false
     }
-    
+
     if (isNaN(pesoBrutoNum) || pesoBrutoNum <= 0) {
       toast.error('❌ El Peso Bruto UPDP debe ser un número mayor a 0')
       return false
     }
-    
+
     if (pesoNetoNum > pesoBrutoNum) {
       toast.error('⚠️ El Peso Neto no puede ser mayor al Peso Bruto')
     }
-    
+
     return true
   }
 
@@ -909,16 +890,16 @@ export default function BarcoPesadorPage() {
       let result
 
       if (editandoViaje) {
-        const otrosViajes = viajes.filter(v => 
-          v.producto_id === nuevoViaje.producto_id && 
+        const otrosViajes = viajes.filter(v =>
+          v.producto_id === nuevoViaje.producto_id &&
           v.id !== editandoViaje.id &&
           v.peso_neto_updp_tm !== null
         )
         const acumuladoOtros = otrosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
         const nuevoAcumuladoEditado = acumuladoOtros + nuevoPesoNeto
-        
+
         datosInsertar.total_acumulado_tm = nuevoAcumuladoEditado
-        
+
         result = await supabase
           .from('viajes')
           .update(datosInsertar)
@@ -975,7 +956,7 @@ export default function BarcoPesadorPage() {
 
         if (!result.error) {
           toast.success(`✅ Viaje #${nuevoViaje.viaje_numero} registrado - Nuevo acumulado: ${nuevoAcumulado.toFixed(3)} TM`)
-          
+
           toast.success(`📊 Acumulado UPDP actualizado: ${nuevoAcumulado.toFixed(3)} TM`, {
             duration: 4000,
             icon: '📊'
@@ -1013,7 +994,7 @@ export default function BarcoPesadorPage() {
       }
 
       setConflicto(null)
-      
+
       setTimeout(() => {
         if (viajesSectionRef.current) {
           viajesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1666,7 +1647,7 @@ export default function BarcoPesadorPage() {
 
       const todosLosViajesUPDP = viajes.filter(v => v.producto_id === prod.id && v.peso_neto_updp_tm !== null)
       const acumuladoUPDP = todosLosViajesUPDP.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
-      
+
       const acumuladoAlmapac = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_bruto_almapac_tm) || 0), 0)
       const acumuladoSistema = viajesCompletos.reduce((sum, v) => sum + (Number(v.peso_bruto_updp_tm) || 0), 0)
 
@@ -1740,12 +1721,12 @@ export default function BarcoPesadorPage() {
 
   const acumuladoActualProducto = useMemo(() => {
     if (!productoActivo) return 0
-    
-    const todosLosViajes = viajes.filter(v => 
-      v.producto_id === productoActivo.id && 
+
+    const todosLosViajes = viajes.filter(v =>
+      v.producto_id === productoActivo.id &&
       v.peso_neto_updp_tm !== null
     )
-    
+
     return todosLosViajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
   }, [viajes, productoActivo])
 
@@ -1771,13 +1752,13 @@ export default function BarcoPesadorPage() {
         return b.viaje_numero - a.viaje_numero
       }
     })
-    
+
     return ordenados
   }, [viajes, productoActivo, searchTerm, ordenViajes])
 
   const saltosCorrelativo = useMemo(() => {
     if (!viajesFiltrados.length || ordenViajes !== 'asc') return []
-    
+
     const saltos = []
     for (let i = 0; i < viajesFiltrados.length - 1; i++) {
       const actual = viajesFiltrados[i].viaje_numero
@@ -1991,10 +1972,10 @@ export default function BarcoPesadorPage() {
       setDestinos(destinosData || [])
 
       const viajesData = await CARGAR_TODOS_LOS_REGISTROS('viajes', 'barco_id', barcoData.id)
-      
+
       console.log('✅ Viajes cargados desde DB:', viajesData?.length)
       console.log('📊 Viajes con estado incompleto:', viajesData?.filter(v => v.estado === 'incompleto').length)
-      
+
       setViajes(viajesData || [])
 
       const incompletos = viajesData?.filter(v => v.estado === 'incompleto') || []
@@ -2053,7 +2034,7 @@ export default function BarcoPesadorPage() {
         (payload) => {
           console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.viaje_numero || payload.old?.viaje_numero)
           cargarDatos()
-          
+
           if (payload.eventType === 'INSERT') {
             toast.success(`🚚 Nuevo viaje #${payload.new.viaje_numero} registrado`, { duration: 2000 })
           } else if (payload.eventType === 'UPDATE') {
@@ -2178,10 +2159,10 @@ export default function BarcoPesadorPage() {
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${barco.estado === 'activo'
-                    ? 'bg-green-500/20 text-green-400'
-                    : barco.estado === 'finalizado'
-                      ? 'bg-red-500/20 text-red-400'
-                      : 'bg-yellow-500/20 text-yellow-400'
+                  ? 'bg-green-500/20 text-green-400'
+                  : barco.estado === 'finalizado'
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-yellow-500/20 text-yellow-400'
                   }`}>
                   {barco.estado === 'activo' && <Play className="w-3 h-3" />}
                   {barco.estado === 'finalizado' && <Lock className="w-3 h-3" />}
@@ -2223,17 +2204,17 @@ export default function BarcoPesadorPage() {
           {/* Indicadores de inicio/fin de descarga */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className={`rounded-xl p-4 ${barco.operacion_iniciada_at
-                ? 'bg-green-500/20 border border-green-500/30'
-                : 'bg-yellow-500/20 border border-yellow-500/30'
+              ? 'bg-green-500/20 border border-green-500/30'
+              : 'bg-yellow-500/20 border border-yellow-500/30'
               }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${barco.operacion_iniciada_at
-                    ? 'bg-green-500/30'
-                    : 'bg-yellow-500/30'
+                  ? 'bg-green-500/30'
+                  : 'bg-yellow-500/30'
                   }`}>
                   <Play className={`w-5 h-5 ${barco.operacion_iniciada_at
-                      ? 'text-green-400'
-                      : 'text-yellow-400'
+                    ? 'text-green-400'
+                    : 'text-yellow-400'
                     }`} />
                 </div>
                 <div className="flex-1">
@@ -2272,23 +2253,23 @@ export default function BarcoPesadorPage() {
             </div>
 
             <div className={`rounded-xl p-4 ${barco.operacion_finalizada_at
-                ? 'bg-red-500/20 border border-red-500/30'
-                : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                  ? 'bg-blue-500/20 border border-blue-500/30'
-                  : 'bg-slate-700/50 border border-white/10'
+              ? 'bg-red-500/20 border border-red-500/30'
+              : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                ? 'bg-blue-500/20 border border-blue-500/30'
+                : 'bg-slate-700/50 border border-white/10'
               }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${barco.operacion_finalizada_at
-                    ? 'bg-red-500/30'
-                    : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                      ? 'bg-blue-500/30'
-                      : 'bg-slate-600'
+                  ? 'bg-red-500/30'
+                  : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                    ? 'bg-blue-500/30'
+                    : 'bg-slate-600'
                   }`}>
                   <StopCircle className={`w-5 h-5 ${barco.operacion_finalizada_at
-                      ? 'text-red-400'
-                      : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
-                        ? 'text-blue-400'
-                        : 'text-slate-400'
+                    ? 'text-red-400'
+                    : barco.operacion_iniciada_at && !barco.operacion_finalizada_at
+                      ? 'text-blue-400'
+                      : 'text-slate-400'
                     }`} />
                 </div>
                 <div className="flex-1">
@@ -2433,8 +2414,8 @@ export default function BarcoPesadorPage() {
                   key={prod.id}
                   onClick={() => cambiarProducto(prod)}
                   className={`flex-1 min-w-[200px] px-6 py-4 border-b-2 transition-all ${activo
-                      ? `border-${colorClass}-500 bg-${colorClass}-500/10`
-                      : 'border-transparent hover:bg-white/5'
+                    ? `border-${colorClass}-500 bg-${colorClass}-500/10`
+                    : 'border-transparent hover:bg-white/5'
                     }`}
                 >
                   <div className="flex items-center gap-3">
@@ -2446,8 +2427,8 @@ export default function BarcoPesadorPage() {
                       <div className="flex items-center gap-2 text-xs">
                         <span className="text-slate-500">{prod.codigo}</span>
                         <span className={`px-1.5 py-0.5 rounded-full text-[8px] ${prod.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
-                            prod.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
-                              'bg-green-500/20 text-green-400'
+                          prod.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-green-500/20 text-green-400'
                           }`}>
                           {prod.tipo_registro}
                         </span>
@@ -2478,8 +2459,8 @@ export default function BarcoPesadorPage() {
                   <p className="text-slate-400 flex items-center gap-2">
                     {productoActivo.codigo}
                     <span className={`px-2 py-0.5 rounded-full text-xs ${productoActivo.tipo_registro === 'mixto' ? 'bg-purple-500/20 text-purple-400' :
-                        productoActivo.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-green-500/20 text-green-400'
+                      productoActivo.tipo_registro === 'banda' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-green-500/20 text-green-400'
                       }`}>
                       {productoActivo.tipo_registro}
                     </span>
@@ -2542,15 +2523,15 @@ export default function BarcoPesadorPage() {
                 </div>
 
                 <div className={`bg-slate-900 rounded-xl p-4 ${productoSeleccionado.faltanteTM > 0
-                    ? 'border-l-4 border-amber-500'
-                    : 'border-l-4 border-green-500'
+                  ? 'border-l-4 border-amber-500'
+                  : 'border-l-4 border-green-500'
                   }`}>
                   <p className="text-xs text-slate-500">
                     {productoSeleccionado.faltanteTM > 0 ? 'Faltante' : 'Excedente'}
                   </p>
                   <p className={`text-xl font-bold ${productoSeleccionado.faltanteTM > 0
-                      ? 'text-amber-400'
-                      : 'text-green-400'
+                    ? 'text-amber-400'
+                    : 'text-green-400'
                     }`}>
                     {productoSeleccionado.faltanteTM > 0
                       ? productoSeleccionado.faltanteTM.toFixed(3)
@@ -2613,8 +2594,8 @@ export default function BarcoPesadorPage() {
               <button
                 onClick={() => setVistaGraficos(!vistaGraficos)}
                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${vistaGraficos
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30'
                   }`}
               >
                 <LineChart className="w-4 h-4" />
@@ -2765,32 +2746,32 @@ export default function BarcoPesadorPage() {
                   <div
                     key={dest.destino_id}
                     className={`bg-slate-900 border rounded-xl overflow-hidden transition-all ${dest.limite_tm > 0 && dest.completado
-                        ? 'border-green-500/30 ring-1 ring-green-500/20'
-                        : dest.limite_tm > 0 && dest.cerca_limite
-                          ? 'border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
-                          : 'border-white/5'
+                      ? 'border-green-500/30 ring-1 ring-green-500/20'
+                      : dest.limite_tm > 0 && dest.cerca_limite
+                        ? 'border-amber-500/30 ring-1 ring-amber-500/20 animate-pulse'
+                        : 'border-white/5'
                       }`}
                   >
                     <div className={`flex items-center justify-between px-4 py-3 border-b ${dest.limite_tm > 0 && dest.completado
-                        ? 'border-green-500/20 bg-green-500/5'
-                        : dest.limite_tm > 0 && dest.cerca_limite
-                          ? 'border-amber-500/20 bg-amber-500/5'
-                          : 'border-white/5'
+                      ? 'border-green-500/20 bg-green-500/5'
+                      : dest.limite_tm > 0 && dest.cerca_limite
+                        ? 'border-amber-500/20 bg-amber-500/5'
+                        : 'border-white/5'
                       }`}>
                       <div className="flex items-center gap-2">
                         <MapPin className={`w-4 h-4 ${dest.limite_tm > 0 && dest.completado
-                            ? 'text-green-400'
-                            : dest.limite_tm > 0 && dest.cerca_limite
-                              ? 'text-amber-400'
-                              : 'text-teal-400'
+                          ? 'text-green-400'
+                          : dest.limite_tm > 0 && dest.cerca_limite
+                            ? 'text-amber-400'
+                            : 'text-teal-400'
                           }`} />
                         <span className="font-bold text-white">{dest.nombre}</span>
                         {dest.limite_tm > 0 && (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${dest.completado
-                              ? 'bg-green-500/20 text-green-400'
-                              : dest.cerca_limite
-                                ? 'bg-amber-500/20 text-amber-400'
-                                : 'bg-blue-500/20 text-blue-400'
+                            ? 'bg-green-500/20 text-green-400'
+                            : dest.cerca_limite
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : 'bg-blue-500/20 text-blue-400'
                             }`}>
                             {dest.completado ? 'COMPLETO' : `${dest.porcentaje.toFixed(0)}%`}
                           </span>
@@ -2805,10 +2786,10 @@ export default function BarcoPesadorPage() {
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${dest.limite_tm > 0 && dest.completado
-                              ? 'bg-green-500'
-                              : dest.limite_tm > 0 && dest.cerca_limite
-                                ? 'bg-amber-500'
-                                : 'bg-teal-500'
+                            ? 'bg-green-500'
+                            : dest.limite_tm > 0 && dest.cerca_limite
+                              ? 'bg-amber-500'
+                              : 'bg-teal-500'
                             }`}
                           style={{ width: `${Math.min(pct, 100)}%` }}
                         />
@@ -2819,10 +2800,10 @@ export default function BarcoPesadorPage() {
                       <div className="flex justify-between items-end">
                         <div>
                           <p className={`text-2xl font-black ${dest.limite_tm > 0 && dest.completado
-                              ? 'text-green-400'
-                              : dest.limite_tm > 0 && dest.cerca_limite
-                                ? 'text-amber-400'
-                                : 'text-teal-400'
+                            ? 'text-green-400'
+                            : dest.limite_tm > 0 && dest.cerca_limite
+                              ? 'text-amber-400'
+                              : 'text-teal-400'
                             }`}>
                             {dest.total_tm.toFixed(3)} TM
                           </p>
@@ -2835,10 +2816,10 @@ export default function BarcoPesadorPage() {
 
                         {limiteMensaje && (
                           <div className={`text-right ${dest.completado
-                              ? 'text-green-400'
-                              : dest.cerca_limite
-                                ? 'text-amber-400'
-                                : 'text-blue-400'
+                            ? 'text-green-400'
+                            : dest.cerca_limite
+                              ? 'text-amber-400'
+                              : 'text-blue-400'
                             }`}>
                             <p className="text-xs font-bold">{limiteMensaje}</p>
                           </div>
@@ -2857,10 +2838,10 @@ export default function BarcoPesadorPage() {
                         <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${dest.completado
-                                ? 'bg-green-500'
-                                : dest.cerca_limite
-                                  ? 'bg-amber-500'
-                                  : 'bg-blue-500'
+                              ? 'bg-green-500'
+                              : dest.cerca_limite
+                                ? 'bg-amber-500'
+                                : 'bg-blue-500'
                               }`}
                             style={{ width: `${Math.min(dest.porcentaje, 100)}%` }}
                           />
@@ -2970,8 +2951,8 @@ export default function BarcoPesadorPage() {
                 <button
                   onClick={() => setTipoRegistro('viajes')}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'viajes'
-                      ? 'bg-green-500 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                 >
                   <Truck className="w-4 h-4" />
@@ -2982,8 +2963,8 @@ export default function BarcoPesadorPage() {
                 <button
                   onClick={() => setTipoRegistro('banda')}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'banda'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                 >
                   <Scale className="w-4 h-4" />
@@ -2993,8 +2974,8 @@ export default function BarcoPesadorPage() {
               <button
                 onClick={() => setTipoRegistro('bitacora')}
                 className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${tipoRegistro === 'bitacora'
-                    ? 'bg-purple-500 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
               >
                 <BookOpen className="w-4 h-4" />
@@ -3025,8 +3006,8 @@ export default function BarcoPesadorPage() {
                     }
                   }}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${modoRegistro === 'nuevo' || modoRegistro === 'editar'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                 >
                   <ArrowRight className="w-4 h-4" />
@@ -3035,8 +3016,8 @@ export default function BarcoPesadorPage() {
                 <button
                   onClick={() => setModoRegistro('completar')}
                   className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${modoRegistro === 'completar'
-                      ? 'bg-green-500 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                   disabled={viajesIncompletosProducto.length === 0}
                 >
@@ -3795,7 +3776,7 @@ export default function BarcoPesadorPage() {
                               .reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
                           }
 
-                          const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 && 
+                          const haySaltoDespues = ordenViajes === 'asc' && index < array.length - 1 &&
                             array[index + 1].viaje_numero - viaje.viaje_numero > 1
 
                           return (
@@ -4087,7 +4068,7 @@ export default function BarcoPesadorPage() {
                               ) : (
                                 <span className="text-slate-600">—</span>
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3 text-slate-300">{lectura.destino?.nombre}</td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex gap-2">
@@ -4106,8 +4087,8 @@ export default function BarcoPesadorPage() {
                                   <Trash2 className="w-4 h-4 text-red-400" />
                                 </button>
                               </div>
-                             </td>
-                            </tr>
+                            </td>
+                          </tr>
                         )
                       })}
                     </tbody>
@@ -4288,233 +4269,287 @@ export default function BarcoPesadorPage() {
           </>
         )}
       </div>
-
-      {/* MODAL DE TIEMPOS ENTRE VIAJES - VERSIÓN COMPLETA CON DETALLE POR PLACA */}
-{modalTiemposAbierto && (
-  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div 
-      ref={modalTiemposRef}
-      className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl"
-    >
-      {/* Header del Modal */}
-      <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center z-20">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Timer className="w-5 h-5 text-purple-400" />
-            Tiempos entre viajes por Unidad (Placa)
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            {productoTiempoActual} · Barco: {barco?.nombre}
-          </p>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Cálculo: Tiempo desde la salida de un viaje hasta la entrada del siguiente viaje (misma placa)
-          </p>
-        </div>
-        <button
-          onClick={cerrarModalTiempos}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-        >
-          <X className="w-5 h-5 text-slate-400" />
-        </button>
-      </div>
-
-      {/* Contenido del Modal */}
-      <div className="p-6">
-        {tiemposResultados.length === 0 ? (
-          <div className="text-center py-12">
-            <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-            <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
-            <p className="text-sm text-slate-600 mt-2">
-              Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de salida y entrada registrada
+{/* MODAL DE TIEMPOS ENTRE VIAJES - CON BUSCADOR INTERNO */}
+{modalTiemposAbierto && (() => {
+  // Estados INTERNOS del modal
+  const [buscarPlacaLocal, setBuscarPlacaLocal] = useState('')
+  
+  // Filtrar resultados localmente
+  const resultadosFiltradosLocal = useMemo(() => {
+    if (!tiemposResultados.length) return []
+    if (!buscarPlacaLocal.trim()) return tiemposResultados
+    const termino = buscarPlacaLocal.trim().toUpperCase()
+    return tiemposResultados.filter(item => item.placa.toUpperCase().includes(termino))
+  }, [tiemposResultados, buscarPlacaLocal])
+  
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div 
+        ref={modalTiemposRef}
+        className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl"
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center z-20">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Timer className="w-5 h-5 text-purple-400" />
+              Tiempos entre viajes por Unidad (Placa)
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {productoTiempoActual} · Barco: {barco?.nombre}
+            </p>
+            <p className="text-xs text-slate-600 mt-0.5">
+              📍 Cálculo: Desde la Hora de ENTRADA de un viaje hasta la Hora de ENTRADA del siguiente viaje (misma placa)
             </p>
           </div>
-        ) : (
-          <>
-            {/* Resumen estadístico global */}
-            <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-3">
-                <p className="text-[10px] text-purple-200 uppercase font-bold">Total unidades</p>
-                <p className="text-xl font-black text-white">{tiemposResultados.length}</p>
-              </div>
-              <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-3">
-                <p className="text-[10px] text-blue-200 uppercase font-bold">Total viajes</p>
-                <p className="text-xl font-black text-white">
-                  {tiemposResultados.reduce((sum, p) => sum + p.stats.totalViajes, 0)}
-                </p>
-              </div>
-              <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-xl p-3">
-                <p className="text-[10px] text-green-200 uppercase font-bold">Total intervalos</p>
-                <p className="text-xl font-black text-white">
-                  {tiemposResultados.reduce((sum, p) => sum + p.stats.intervalos, 0)}
-                </p>
-              </div>
-              <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-xl p-3">
-                <p className="text-[10px] text-amber-200 uppercase font-bold">Promedio global</p>
-                <p className="text-xl font-black text-white">
-                  {Math.floor(tiemposResultados.reduce((sum, p) => sum + p.stats.promedioMinutos, 0) / tiemposResultados.length)} min
-                </p>
-              </div>
-              <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-xl p-3">
-                <p className="text-[10px] text-red-200 uppercase font-bold">Máximo global</p>
-                <p className="text-xl font-black text-white">
-                  {Math.floor(Math.max(...tiemposResultados.map(p => p.stats.maxMinutos)))} min
-                </p>
-              </div>
-            </div>
+          <button
+            onClick={cerrarModalTiempos}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
 
-            {/* Detalle por placa - Cada placa en su propia tarjeta */}
-            {tiemposResultados.map((placaData, idx) => (
-              <div key={idx} className="mb-6 bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
-                {/* Header de la placa */}
-                <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-5 py-3 border-b border-white/10">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                        <Truck className="w-5 h-5 text-purple-400" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-white">{placaData.placa}</h3>
-                        <p className="text-[10px] text-slate-400">
-                          {placaData.stats.totalViajes} viajes · {placaData.stats.intervalos} intervalos calculados
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 text-xs">
-                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                        <span className="text-slate-400">⏱️ Promedio:</span>
-                        <span className="ml-1 font-bold text-green-400">
-                          {Math.floor(placaData.stats.promedioMinutos)} min
-                        </span>
-                      </div>
-                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                        <span className="text-slate-400">📈 Máximo:</span>
-                        <span className="ml-1 font-bold text-amber-400">
-                          {Math.floor(placaData.stats.maxMinutos)} min
-                        </span>
-                      </div>
-                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                        <span className="text-slate-400">📉 Mínimo:</span>
-                        <span className="ml-1 font-bold text-blue-400">
-                          {Math.floor(placaData.stats.minMinutos)} min
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabla de viajes de esta placa */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-800/50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase"># Viaje</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Salida</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Entrada</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Destino</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Peso Neto</th>
-                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Tiempo hasta próximo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {placaData.viajes.map((viaje, vIdx) => {
-                        const tiempoAlSiguiente = placaData.tiempos.find(t => t.desdeViaje === viaje.viaje_numero)
-                        const esUltimo = vIdx === placaData.viajes.length - 1
-                        
-                        return (
-                          <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-4 py-2 font-bold text-white whitespace-nowrap">
-                              #{viaje.viaje_numero}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-slate-300 text-xs">
-                              {formatFecha(viaje.fecha)}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">
-                              {viaje.hora_salida || '—'}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">
-                              {viaje.hora_entrada || '—'}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-slate-400 text-xs">
-                              {viaje.destino}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap font-bold text-green-400 text-xs">
-                              {viaje.peso_neto?.toFixed(3) || '—'} TM
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap">
-                              {!esUltimo && tiempoAlSiguiente ? (
-                                <div className="flex flex-col">
-                                  <span className="font-bold text-blue-400 text-sm">
-                                    {tiempoAlSiguiente.horas}h {tiempoAlSiguiente.minutos}m {tiempoAlSiguiente.segundos}s
-                                  </span>
-                                  <span className="text-[9px] text-slate-500">
-                                    ({Math.floor(tiempoAlSiguiente.totalMinutos)} minutos)
-                                  </span>
-                                  {tiempoAlSiguiente.esDiaSiguiente && (
-                                    <span className="text-[8px] text-yellow-500 mt-0.5">⚠️ día siguiente</span>
-                                  )}
-                                </div>
-                              ) : esUltimo ? (
-                                <span className="text-[10px] text-slate-500">— Último viaje —</span>
-                              ) : (
-                                <span className="text-[10px] text-red-500">⚠️ No disponible</span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot className="bg-slate-800/30 border-t border-white/10">
-                      <tr>
-                        <td colSpan="5" className="px-4 py-2 text-right font-bold text-slate-400 text-xs">
-                          ⏱️ PROMEDIO DE TIEMPOS:
-                        </td>
-                        <td colSpan="2" className="px-4 py-2">
-                          <span className="font-bold text-green-400 text-sm">
-                            {Math.floor(placaData.stats.promedioMinutos)} minutos
-                          </span>
-                          <span className="text-[10px] text-slate-500 ml-2">
-                            (basado en {placaData.stats.intervalos} intervalo{placaData.stats.intervalos !== 1 ? 's' : ''})
-                          </span>
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            ))}
-
-            {/* Ejemplo explicativo */}
-            <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-white/5">
-              <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
-                <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
-                <strong>Cálculo:</strong> Tiempo desde la <span className="text-blue-400 font-bold">Hora de Salida</span> de un viaje hasta la <span className="text-green-400 font-bold">Hora de Entrada</span> del siguiente viaje (misma placa).
-                <br className="hidden sm:block" />
-                <span className="ml-6">Ejemplo: Si salió a las 12:04pm y su siguiente entrada fue a las 2:04pm → se tardó <strong className="text-yellow-400">2 horas (120 minutos)</strong>.</span>
+        {/* Contenido */}
+        <div className="p-6">
+          {tiemposResultados.length === 0 ? (
+            <div className="text-center py-12">
+              <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+              <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
+              <p className="text-sm text-slate-600 mt-2">
+                Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de entrada registrada
               </p>
             </div>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              {/* BUSCADOR INTERNO */}
+              <div className="mb-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={buscarPlacaLocal}
+                    onChange={(e) => setBuscarPlacaLocal(e.target.value.toUpperCase())}
+                    placeholder="🔍 Buscar por placa... (Ej: C-123456)"
+                    className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 pl-10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  {buscarPlacaLocal && (
+                    <button
+                      onClick={() => setBuscarPlacaLocal('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {resultadosFiltradosLocal.length} de {tiemposResultados.length} unidades encontradas
+                </p>
+              </div>
 
-      {/* Footer del Modal */}
-      <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end">
-        <button
-          onClick={cerrarModalTiempos}
-          className="px-5 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl transition-all flex items-center gap-2 font-bold shadow-lg"
-        >
-          <X className="w-4 h-4" />
-          Cerrar
-        </button>
+              {/* Resumen estadístico global */}
+              <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-3">
+                  <p className="text-[10px] text-purple-200 uppercase font-bold">Total unidades</p>
+                  <p className="text-xl font-black text-white">{tiemposResultados.length}</p>
+                </div>
+                <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-3">
+                  <p className="text-[10px] text-blue-200 uppercase font-bold">Total viajes</p>
+                  <p className="text-xl font-black text-white">
+                    {tiemposResultados.reduce((sum, p) => sum + p.stats.totalViajes, 0)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-xl p-3">
+                  <p className="text-[10px] text-green-200 uppercase font-bold">Total intervalos</p>
+                  <p className="text-xl font-black text-white">
+                    {tiemposResultados.reduce((sum, p) => sum + p.stats.intervalos, 0)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-xl p-3">
+                  <p className="text-[10px] text-amber-200 uppercase font-bold">Promedio global</p>
+                  <p className="text-xl font-black text-white">
+                    {Math.floor(tiemposResultados.reduce((sum, p) => sum + p.stats.promedioMinutos, 0) / tiemposResultados.length)} min
+                  </p>
+                </div>
+                <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-xl p-3">
+                  <p className="text-[10px] text-red-200 uppercase font-bold">Máximo global</p>
+                  <p className="text-xl font-black text-white">
+                    {Math.floor(Math.max(...tiemposResultados.map(p => p.stats.maxMinutos)))} min
+                  </p>
+                </div>
+              </div>
+
+              {/* Detalle por placa - SOLO LAS FILTRADAS */}
+              {resultadosFiltradosLocal.length === 0 ? (
+                <div className="text-center py-12 bg-slate-900/50 rounded-xl border border-white/10">
+                  <Search className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-400">No se encontraron placas con "{buscarPlacaLocal}"</p>
+                  <button
+                    onClick={() => setBuscarPlacaLocal('')}
+                    className="mt-3 text-sm text-purple-400 hover:text-purple-300"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </div>
+              ) : (
+                resultadosFiltradosLocal.map((placaData, idx) => (
+                  <div key={idx} className="mb-6 bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
+                    {/* Header de la placa */}
+                    <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-5 py-3 border-b border-white/10">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                            <Truck className="w-5 h-5 text-purple-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-white">{placaData.placa}</h3>
+                            <p className="text-[10px] text-slate-400">
+                              {placaData.stats.totalViajes} viajes · {placaData.stats.intervalos} intervalos
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 text-xs">
+                          <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                            <span className="text-slate-400">⏱️ Promedio:</span>
+                            <span className="ml-1 font-bold text-green-400">
+                              {Math.floor(placaData.stats.promedioMinutos)} min
+                            </span>
+                          </div>
+                          <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                            <span className="text-slate-400">📈 Máximo:</span>
+                            <span className="ml-1 font-bold text-amber-400">
+                              {Math.floor(placaData.stats.maxMinutos)} min
+                            </span>
+                          </div>
+                          <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                            <span className="text-slate-400">📉 Mínimo:</span>
+                            <span className="ml-1 font-bold text-blue-400">
+                              {Math.floor(placaData.stats.minMinutos)} min
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tabla de viajes */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-800/50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase"># Viaje</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Salida</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Entrada</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Destino</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Peso Neto</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Tiempo hasta próximo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {placaData.viajes.map((viaje, vIdx) => {
+                            const tiempoAlSiguiente = placaData.tiempos.find(t => t.desdeViaje === viaje.viaje_numero)
+                            const esUltimo = vIdx === placaData.viajes.length - 1
+                            
+                            return (
+                              <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
+                                <td className="px-4 py-2 font-bold text-white whitespace-nowrap">#{viaje.viaje_numero}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-slate-300 text-xs">{formatFecha(viaje.fecha)}</td>
+                                <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">{viaje.hora_salida || '—'}</td>
+                                <td className="px-4 py-2 whitespace-nowrap font-mono text-green-400 text-xs font-bold">{viaje.hora_entrada || '—'}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-slate-400 text-xs">{viaje.destino}</td>
+                                <td className="px-4 py-2 whitespace-nowrap font-bold text-green-400 text-xs">{viaje.peso_neto?.toFixed(3) || '—'} TM</td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                  {!esUltimo && tiempoAlSiguiente ? (
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-blue-400 text-sm">
+                                        {tiempoAlSiguiente.horas}h {tiempoAlSiguiente.minutos}m {tiempoAlSiguiente.segundos}s
+                                      </span>
+                                      <span className="text-[9px] text-slate-500">
+                                        (Entrada #{tiempoAlSiguiente.desdeViaje} → Entrada #{tiempoAlSiguiente.hastaViaje})
+                                      </span>
+                                      {tiempoAlSiguiente.esDiaSiguiente && (
+                                        <span className="text-[8px] text-yellow-500 mt-0.5">⚠️ día siguiente</span>
+                                      )}
+                                    </div>
+                                  ) : esUltimo ? (
+                                    <span className="text-[10px] text-slate-500">— Último viaje —</span>
+                                  ) : (
+                                    <span className="text-[10px] text-red-500">⚠️ No disponible</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                        <tfoot className="bg-slate-800/30 border-t border-white/10">
+                          <tr>
+                            <td colSpan="5" className="px-4 py-2 text-right font-bold text-slate-400 text-xs">
+                              ⏱️ PROMEDIO DE TIEMPOS:
+                            </td>
+                            <td colSpan="2" className="px-4 py-2">
+                              <span className="font-bold text-green-400 text-sm">
+                                {Math.floor(placaData.stats.promedioMinutos)} minutos
+                              </span>
+                              <span className="text-[10px] text-slate-500 ml-2">
+                                (basado en {placaData.stats.intervalos} intervalo{placaData.stats.intervalos !== 1 ? 's' : ''})
+                              </span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {/* Ejemplo explicativo */}
+              <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
+                  <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
+                  <strong>Cálculo:</strong> Desde la <span className="text-green-400 font-bold">Hora de ENTRADA</span> de un viaje hasta la <span className="text-green-400 font-bold">Hora de ENTRADA</span> del siguiente viaje (misma placa).
+                  <br className="hidden sm:block" />
+                  <span className="ml-6">Ejemplo: Viaje #1 entró a las <strong className="text-yellow-400">00:27:00</strong> y Viaje #2 entró a las <strong className="text-yellow-400">02:02:00</strong> → se tardó <strong className="text-green-400">1 hora 35 minutos</strong>.</span>
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-between items-center">
+          {buscarPlacaLocal && resultadosFiltradosLocal.length > 0 && (
+            <div className="text-xs text-purple-400">
+              Mostrando {resultadosFiltradosLocal.length} de {tiemposResultados.length} unidades
+            </div>
+          )}
+          <div className="flex gap-3 ml-auto">
+            {buscarPlacaLocal && (
+              <button
+                onClick={() => setBuscarPlacaLocal('')}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Limpiar filtro
+              </button>
+            )}
+            <button
+              onClick={cerrarModalTiempos}
+              className="px-5 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl transition-all flex items-center gap-2 font-bold shadow-lg"
+            >
+              <X className="w-4 h-4" />
+              Cerrar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-)}
+  )
+})()}
 
       {/* MODAL DE EDICIÓN COMPLETA DE VIAJE */}
       {modalEdicionAbierto && viajeEnEdicion && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div 
+          <div
             ref={modalRef}
             className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl"
           >
