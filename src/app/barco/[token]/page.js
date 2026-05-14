@@ -320,145 +320,129 @@ export default function BarcoPesadorPage() {
   }
 
   const calcularTiemposEntreViajes = () => {
-    if (!viajes.length || !productoActivo) {
-      toast.error('No hay viajes para analizar')
-      return
+  if (!viajes.length || !productoActivo) {
+    toast.error('No hay viajes para analizar')
+    return
+  }
+
+  // Filtrar viajes completos del producto activo que tengan hora de entrada
+  const viajesProducto = viajes.filter(v => 
+    v.producto_id === productoActivo.id && 
+    v.estado === 'completo' &&
+    v.hora_entrada_almapac
+  )
+
+  if (viajesProducto.length < 2) {
+    toast.error('Se necesitan al menos 2 viajes completos con hora de entrada registrada')
+    return
+  }
+
+  // Agrupar por placa
+  const viajesPorPlaca = {}
+  
+  viajesProducto.forEach(viaje => {
+    const placa = viaje.placa
+    if (!viajesPorPlaca[placa]) {
+      viajesPorPlaca[placa] = []
     }
-
-    const viajesProducto = viajes.filter(v =>
-      v.producto_id === productoActivo.id &&
-      v.estado === 'completo' &&
-      v.hora_entrada_almapac  // Debe tener hora de entrada
-    )
-
-    if (viajesProducto.length < 2) {
-      toast.error('Se necesitan al menos 2 viajes completos con hora de entrada registrada')
-      return
-    }
-
-    // Ordenar por número de viaje
-    const viajesOrdenados = [...viajesProducto].sort((a, b) => a.viaje_numero - b.viaje_numero)
-
-    // Agrupar por placa
-    const viajesPorPlaca = {}
-
-    viajesOrdenados.forEach(viaje => {
-      const placa = viaje.placa
-      if (!viajesPorPlaca[placa]) {
-        viajesPorPlaca[placa] = []
-      }
-
-      // Crear fecha de ENTRADA (la que usaremos para calcular)
-      const fechaEntrada = viaje.hora_entrada_almapac
-        ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
-        : null
-
-      // También guardamos la salida para mostrar en la tabla
-      const fechaSalida = viaje.hora_salida_updp
-        ? new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
-        : null
-
-      viajesPorPlaca[placa].push({
-        id: viaje.id,
-        viaje_numero: viaje.viaje_numero,
-        fecha: viaje.fecha,
-        fechaSalida,
-        fechaEntrada,
-        hora_salida: viaje.hora_salida_updp,
-        hora_entrada: viaje.hora_entrada_almapac,
-        placa,
-        peso_neto: viaje.peso_neto_updp_tm,
-        peso_bruto: viaje.peso_bruto_updp_tm,
-        destino: viaje.destino?.nombre || '—'
-      })
+    
+    // Crear fecha de ENTRADA (la que usaremos para calcular)
+    const fechaEntrada = viaje.hora_entrada_almapac 
+      ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
+      : null
+    
+    viajesPorPlaca[placa].push({
+      id: viaje.id,
+      viaje_numero: viaje.viaje_numero,
+      fecha: viaje.fecha,
+      hora_salida: viaje.hora_salida_updp || '—',
+      hora_entrada: viaje.hora_entrada_almapac,
+      fechaEntrada,
+      destino: viaje.destino?.nombre || '—',
+      peso_neto: viaje.peso_neto_updp_tm
     })
+  })
 
-    // Procesar cada placa
-    const resultadosPorPlaca = []
-
-    Object.keys(viajesPorPlaca).forEach(placa => {
-      const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
-      const tiemposEntreViajes = []
-
-      for (let i = 0; i < viajesPlaca.length - 1; i++) {
-        const viajeActual = viajesPlaca[i]
-        const viajeSiguiente = viajesPlaca[i + 1]
-
-        // 🔥 CALCULAR DESDE HORA DE ENTRADA del viaje actual HASTA HORA DE ENTRADA del siguiente viaje
-        if (viajeActual.fechaEntrada && viajeSiguiente.fechaEntrada) {
-          let tiempoMs = viajeSiguiente.fechaEntrada - viajeActual.fechaEntrada
-          let esDiaSiguiente = false
-
-          // Si el tiempo es negativo, puede ser porque el viaje es al día siguiente
-          if (tiempoMs < 0) {
-            const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntrada)
-            fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
-            const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaEntrada
-            if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
-              tiempoMs = tiempoMsCorregido
-              esDiaSiguiente = true
-            }
-          }
-
-          if (tiempoMs > 0) {
-            const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
-            const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
-            const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
-
-            tiemposEntreViajes.push({
-              desdeViaje: viajeActual.viaje_numero,
-              hastaViaje: viajeSiguiente.viaje_numero,
-              desdeFecha: viajeActual.fecha,
-              desdeHoraEntrada: viajeActual.hora_entrada,
-              hastaFecha: viajeSiguiente.fecha,
-              hastaHoraEntrada: viajeSiguiente.hora_entrada,
-              horas,
-              minutos,
-              segundos,
-              totalMinutos: tiempoMs / (1000 * 60),
-              esDiaSiguiente,
-              pesoViaje1: viajeActual.peso_neto,
-              pesoViaje2: viajeSiguiente.peso_neto,
-              destino1: viajeActual.destino,
-              destino2: viajeSiguiente.destino
-            })
+  // Procesar cada placa
+  const resultadosPorPlaca = []
+  
+  Object.keys(viajesPorPlaca).forEach(placa => {
+    // Ordenar por número de viaje
+    const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
+    const tiemposEntreViajes = []
+    
+    for (let i = 0; i < viajesPlaca.length - 1; i++) {
+      const viajeActual = viajesPlaca[i]
+      const viajeSiguiente = viajesPlaca[i + 1]
+      
+      if (viajeActual.fechaEntrada && viajeSiguiente.fechaEntrada) {
+        let tiempoMs = viajeSiguiente.fechaEntrada - viajeActual.fechaEntrada
+        let esDiaSiguiente = false
+        
+        // Si el tiempo es negativo, puede ser al día siguiente
+        if (tiempoMs < 0) {
+          const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntrada)
+          fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
+          const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaEntrada
+          if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
+            tiempoMs = tiempoMsCorregido
+            esDiaSiguiente = true
           }
         }
+        
+        if (tiempoMs > 0) {
+          const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
+          const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
+          const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
+          
+          tiemposEntreViajes.push({
+            desdeViaje: viajeActual.viaje_numero,
+            hastaViaje: viajeSiguiente.viaje_numero,
+            desdeHoraEntrada: viajeActual.hora_entrada,
+            hastaHoraEntrada: viajeSiguiente.hora_entrada,
+            horas,
+            minutos,
+            segundos,
+            totalMinutos: tiempoMs / (1000 * 60),
+            esDiaSiguiente
+          })
+        }
       }
-
-      if (tiemposEntreViajes.length > 0) {
-        const totalMinutos = tiemposEntreViajes.reduce((sum, t) => sum + t.totalMinutos, 0)
-        const promedioMinutos = totalMinutos / tiemposEntreViajes.length
-        const maxMinutos = Math.max(...tiemposEntreViajes.map(t => t.totalMinutos))
-        const minMinutos = Math.min(...tiemposEntreViajes.map(t => t.totalMinutos))
-
-        resultadosPorPlaca.push({
-          placa,
-          viajes: viajesPlaca,
-          tiempos: tiemposEntreViajes,
-          stats: {
-            totalViajes: viajesPlaca.length,
-            intervalos: tiemposEntreViajes.length,
-            promedioMinutos,
-            maxMinutos,
-            minMinutos,
-            totalMinutos
-          }
-        })
-      }
-    })
-
-    resultadosPorPlaca.sort((a, b) => b.stats.totalViajes - a.stats.totalViajes)
-
-    if (resultadosPorPlaca.length === 0) {
-      toast.error('No se pudieron calcular tiempos entre viajes')
-      return
     }
-
-    setTiemposResultados(resultadosPorPlaca)
-    setProductoTiempoActual(productoActivo.nombre)
-    setModalTiemposAbierto(true)
+    
+    if (tiemposEntreViajes.length > 0) {
+      const totalMinutos = tiemposEntreViajes.reduce((sum, t) => sum + t.totalMinutos, 0)
+      const promedioMinutos = totalMinutos / tiemposEntreViajes.length
+      const maxMinutos = Math.max(...tiemposEntreViajes.map(t => t.totalMinutos))
+      const minMinutos = Math.min(...tiemposEntreViajes.map(t => t.totalMinutos))
+      
+      resultadosPorPlaca.push({
+        placa,
+        viajes: viajesPlaca,
+        tiempos: tiemposEntreViajes,
+        stats: {
+          totalViajes: viajesPlaca.length,
+          intervalos: tiemposEntreViajes.length,
+          promedioMinutos,
+          maxMinutos,
+          minMinutos,
+          totalMinutos
+        }
+      })
+    }
+  })
+  
+  resultadosPorPlaca.sort((a, b) => b.stats.totalViajes - a.stats.totalViajes)
+  
+  if (resultadosPorPlaca.length === 0) {
+    toast.error('No se pudieron calcular tiempos entre viajes')
+    return
   }
+  
+  setTiemposResultados(resultadosPorPlaca)
+  setProductoTiempoActual(productoActivo.nombre)
+  setModalTiemposAbierto(true)
+}
 
   const cerrarModalTiempos = () => {
     setModalTiemposAbierto(false)
