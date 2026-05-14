@@ -166,6 +166,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
               <option value="chequero">Chequero (Atrasos)</option>
               <option value="chequerotraslado">Chequero Traslados</option>
               <option value="envasador">Envasador</option>
+              <option value="chequeronica">Chequero Clinker Nicaragua</option>
             </select>
           </div>
 

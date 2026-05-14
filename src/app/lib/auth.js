@@ -134,19 +134,23 @@ export const isChequero = () => {
   return user?.rol === 'chequero'
 }
 
-// NUEVA FUNCIÓN
-export const isChequeroTraslado = () => {
+export const isChequerotraslado = () => {
   const user = getCurrentUser()
   return user?.rol === 'chequerotraslado'
 }
 
+// NUEVO: Chequero de Clinker Nicaragua
+export const isChequeroNica = () => {
+  const user = getCurrentUser()
+  return user?.rol === 'chequeronica'
+}
 
 export const isEnvasador = () => {
   const user = getCurrentUser()
   return user?.rol === 'envasador'
 }
 
-// ACTUALIZADA
+// Actualizada para incluir chequeronica
 export const isPesadorOrAdmin = () => {
   const user = getCurrentUser()
   return user && (
@@ -154,6 +158,7 @@ export const isPesadorOrAdmin = () => {
     user.rol === 'pesador' || 
     user.rol === 'electricista' || 
     user.rol === 'chequero' ||
-    user.rol === 'chequerotraslado'
+    user.rol === 'chequerotraslado' ||
+    user.rol === 'chequeronica'
   )
 }
