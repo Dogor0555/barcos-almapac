@@ -1,4 +1,4 @@
-// app/barco/[token]/clinker-nica/page-client.js
+// app/barco/[token]/clinker-nica/page.js
 "use client";
 
 import { useEffect, useState, useMemo } from 'react'
@@ -21,26 +21,26 @@ import * as XLSX from 'xlsx'
 // Configuración de zona horaria
 dayjs.extend(utc)
 dayjs.extend(timezone)
-const TIMEZONE_EL_SALVADOR = 'America/El_Salvador'
+const TIMEZONE_NICARAGUA = 'America/Managua'
 
-const formatUTCToSV = (utcDate, format = 'DD/MM/YY HH:mm') => {
-  if (!utcDate) return '—'
-  return dayjs.utc(utcDate).tz(TIMEZONE_EL_SALVADOR).format(format)
-}
+// =====================================================
+// LISTAS PREDEFINIDAS
+// =====================================================
+const BARCASAS_PREDEFINIDAS = [
+  'Silvio Mayorga',
+  'Norman Guido',
+  'B26',
+  'B27',
+  'Luis Delgado',
+  'Marcio Seledon',
+  'Francisco Zalazar',
+  'Pilar Gutierrez'
+]
 
-const getCurrentSVTimeForInput = () => {
-  return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm')
-}
-
-// Lista predefinida de grúas
 const GRUAS_PREDEFINIDAS = [
-  'GRÚA 1',
-  'GRÚA 2',
-  'GRÚA 3',
-  'GRÚA MÓVIL',
-  'GRÚA PÓRTICO',
-  'GRÚA TORRE',
-  'OTRA'
+  'Sany 1',
+  'Sany 2',
+  'Sany 3'
 ]
 
 // =====================================================
@@ -82,12 +82,12 @@ const ModalConfirmacion = ({ isOpen, onClose, onConfirm, titulo, mensaje, loadin
 }
 
 // =====================================================
-// MODAL BARCASA
+// MODAL BARCASA (con select de barcazas predefinidas)
 // =====================================================
 const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    fecha: dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+    fecha: dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
     nombre_barcaza: '',
     placa: '',
     hora_inicio: '',
@@ -99,7 +99,7 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
   useEffect(() => {
     if (barcazaEditando) {
       setFormData({
-        fecha: barcazaEditando.fecha || dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+        fecha: barcazaEditando.fecha || dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
         nombre_barcaza: barcazaEditando.nombre_barcaza || '',
         placa: barcazaEditando.placa || '',
         hora_inicio: barcazaEditando.hora_inicio || '',
@@ -109,7 +109,7 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
       })
     } else {
       setFormData({
-        fecha: dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+        fecha: dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
         nombre_barcaza: '',
         placa: '',
         hora_inicio: '',
@@ -214,7 +214,17 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Nombre de la Barcaza *</label>
-              <input type="text" value={formData.nombre_barcaza} onChange={(e) => setFormData({ ...formData, nombre_barcaza: e.target.value })} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm" placeholder="Ej: Barcaza 1" required />
+              <select
+                value={formData.nombre_barcaza}
+                onChange={(e) => setFormData({ ...formData, nombre_barcaza: e.target.value })}
+                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                required
+              >
+                <option value="">Seleccionar barcaza...</option>
+                {BARCASAS_PREDEFINIDAS.map(barcaza => (
+                  <option key={barcaza} value={barcaza}>{barcaza}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Placa</label>
@@ -227,7 +237,7 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
               <div className="flex gap-2">
                 <input type="time" value={formData.hora_inicio} onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })} className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
-                <button type="button" onClick={() => setFormData(prev => ({ ...prev, hora_inicio: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') }))} className="px-2.5 py-2.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400">
+                <button type="button" onClick={() => setFormData(prev => ({ ...prev, hora_inicio: dayjs().tz(TIMEZONE_NICARAGUA).format('HH:mm') }))} className="px-2.5 py-2.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400">
                   <Play className="w-4 h-4" />
                 </button>
               </div>
@@ -236,7 +246,7 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Finalización</label>
               <div className="flex gap-2">
                 <input type="time" value={formData.hora_finalizacion} onChange={(e) => setFormData({ ...formData, hora_finalizacion: e.target.value })} className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
-                <button type="button" onClick={() => setFormData(prev => ({ ...prev, hora_finalizacion: dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm') }))} className="px-2.5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400">
+                <button type="button" onClick={() => setFormData(prev => ({ ...prev, hora_finalizacion: dayjs().tz(TIMEZONE_NICARAGUA).format('HH:mm') }))} className="px-2.5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400">
                   <StopCircle className="w-4 h-4" />
                 </button>
               </div>
@@ -277,13 +287,12 @@ const ModalBarcaza = ({ isOpen, onClose, onSave, barco, barcazaEditando }) => {
 }
 
 // =====================================================
-// MODAL ATRASO GRÚA
+// MODAL ATRASO GRÚA (SOLO SANY 1, SANY 2, SANY 3)
 // =====================================================
 const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => {
   const [loading, setLoading] = useState(false)
-  const [modoPersonalizado, setModoPersonalizado] = useState(false)
   const [formData, setFormData] = useState({
-    fecha: dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+    fecha: dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
     grua_nombre: '',
     hora_inicio: '',
     hora_fin: '',
@@ -294,26 +303,22 @@ const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => 
   useEffect(() => {
     if (atrasoEditando) {
       setFormData({
-        fecha: atrasoEditando.fecha || dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+        fecha: atrasoEditando.fecha || dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
         grua_nombre: atrasoEditando.grua_nombre || '',
         hora_inicio: atrasoEditando.hora_inicio || '',
         hora_fin: atrasoEditando.hora_fin || '',
         descripcion: atrasoEditando.descripcion || '',
         minutos_calculados: atrasoEditando.minutos
       })
-      if (atrasoEditando.grua_nombre && !GRUAS_PREDEFINIDAS.includes(atrasoEditando.grua_nombre)) {
-        setModoPersonalizado(true)
-      }
     } else {
       setFormData({
-        fecha: dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD'),
+        fecha: dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD'),
         grua_nombre: '',
         hora_inicio: '',
         hora_fin: '',
         descripcion: '',
         minutos_calculados: null
       })
-      setModoPersonalizado(false)
     }
   }, [atrasoEditando, isOpen])
 
@@ -345,7 +350,7 @@ const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => 
       if (!user) throw new Error('No autenticado')
 
       if (!formData.grua_nombre.trim()) {
-        toast.error('Debes seleccionar o ingresar el nombre de la grúa')
+        toast.error('Debes seleccionar una grúa')
         setLoading(false)
         return
       }
@@ -411,53 +416,17 @@ const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => 
 
           <div>
             <label className="block text-xs text-slate-400 mb-1.5 font-medium">Nombre de la Grúa *</label>
-            
-            {!modoPersonalizado ? (
-              <div className="space-y-2">
-                <select
-                  value={formData.grua_nombre}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (value === 'OTRA') {
-                      setModoPersonalizado(true)
-                      setFormData({ ...formData, grua_nombre: '' })
-                    } else {
-                      setFormData({ ...formData, grua_nombre: value })
-                    }
-                  }}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
-                >
-                  <option value="">Seleccionar grúa...</option>
-                  {GRUAS_PREDEFINIDAS.filter(g => g !== 'OTRA').map(grua => (
-                    <option key={grua} value={grua}>{grua}</option>
-                  ))}
-                  <option value="OTRA">✏️ Otra (ingresar manualmente)</option>
-                </select>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.grua_nombre}
-                    onChange={(e) => setFormData({ ...formData, grua_nombre: e.target.value })}
-                    className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
-                    placeholder="Ej: GRÚA PÓRTICO 2"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModoPersonalizado(false)
-                      setFormData({ ...formData, grua_nombre: '' })
-                    }}
-                    className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <select
+              value={formData.grua_nombre}
+              onChange={(e) => setFormData({ ...formData, grua_nombre: e.target.value })}
+              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+              required
+            >
+              <option value="">Seleccionar grúa...</option>
+              {GRUAS_PREDEFINIDAS.map(grua => (
+                <option key={grua} value={grua}>{grua}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -465,7 +434,7 @@ const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => 
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Inicio</label>
               <div className="flex gap-2">
                 <input type="time" value={formData.hora_inicio} onChange={(e) => handleHoraChange('hora_inicio', e.target.value)} className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" required />
-                <button type="button" onClick={() => handleHoraChange('hora_inicio', dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm'))} className="px-2.5 py-2.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400">
+                <button type="button" onClick={() => handleHoraChange('hora_inicio', dayjs().tz(TIMEZONE_NICARAGUA).format('HH:mm'))} className="px-2.5 py-2.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400">
                   <Play className="w-4 h-4" />
                 </button>
               </div>
@@ -474,7 +443,7 @@ const ModalAtrasoGrua = ({ isOpen, onClose, onSave, barco, atrasoEditando }) => 
               <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hora Fin</label>
               <div className="flex gap-2">
                 <input type="time" value={formData.hora_fin} onChange={(e) => handleHoraChange('hora_fin', e.target.value)} className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-3 text-white text-sm" />
-                <button type="button" onClick={() => handleHoraChange('hora_fin', dayjs().tz(TIMEZONE_EL_SALVADOR).format('HH:mm'))} className="px-2.5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400">
+                <button type="button" onClick={() => handleHoraChange('hora_fin', dayjs().tz(TIMEZONE_NICARAGUA).format('HH:mm'))} className="px-2.5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400">
                   <StopCircle className="w-4 h-4" />
                 </button>
               </div>
@@ -678,7 +647,7 @@ export default function ClinkerNicaPage() {
         ['REPORTE CLINKER NICARAGUA'],
         [`Barco: ${barco?.nombre || 'N/A'}`],
         [`Código: ${barco?.codigo_barco || 'N/A'}`],
-        [`Fecha de exportación: ${dayjs().tz(TIMEZONE_EL_SALVADOR).format('DD/MM/YYYY HH:mm:ss')}`],
+        [`Fecha de exportación: ${dayjs().tz(TIMEZONE_NICARAGUA).format('DD/MM/YYYY HH:mm:ss')}`],
         [],
         ['RESUMEN DE BARCASAS'],
         ['Total registros', estadisticasBarcazas.totalRegistros],
@@ -731,7 +700,7 @@ export default function ClinkerNicaPage() {
       
       XLSX.utils.book_append_sheet(wb, ws, 'Clinker_Nicaragua')
       
-      const fileName = `Clinker_Nicaragua_${barco?.nombre || 'reporte'}_${dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DD_HHmm')}.xlsx`
+      const fileName = `Clinker_Nicaragua_${barco?.nombre || 'reporte'}_${dayjs().tz(TIMEZONE_NICARAGUA).format('YYYY-MM-DD_HHmm')}.xlsx`
       XLSX.writeFile(wb, fileName)
       
       toast.success('Excel exportado correctamente')
@@ -929,7 +898,7 @@ export default function ClinkerNicaPage() {
                 </span>
               </div>
               <p className="text-orange-200 text-xs md:text-sm mt-1">
-                Registro de Barcazas y Atrasos de Grúa · {dayjs().tz(TIMEZONE_EL_SALVADOR).format('DD/MM/YYYY HH:mm')}
+                Registro de Barcazas y Atrasos de Grúa · {dayjs().tz(TIMEZONE_NICARAGUA).format('DD/MM/YYYY HH:mm')}
               </p>
             </div>
             <div className="flex gap-2">
@@ -1197,6 +1166,7 @@ export default function ClinkerNicaPage() {
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Inicio</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Fin</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Duración</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Descripción</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Registrado por</th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                       </tr>
@@ -1218,6 +1188,9 @@ export default function ClinkerNicaPage() {
                             </td>
                             <td className="px-4 py-3 font-bold text-sm">
                               {a.minutos ? `${Math.floor(a.minutos / 60)}h ${a.minutos % 60}m` : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-400 max-w-xs truncate">
+                              {a.descripcion || '—'}
                             </td>
                             <td className="px-4 py-3 text-xs text-slate-400">
                               {usuario?.nombre || usuario?.username || `ID: ${a.created_by}`}
