@@ -134,7 +134,8 @@ export const isChequero = () => {
   return user?.rol === 'chequero'
 }
 
-export const isChequerotraslado = () => {
+// Esta es la que usan tus otros archivos (con T mayúscula en Traslado)
+export const isChequeroTraslado = () => {
   const user = getCurrentUser()
   return user?.rol === 'chequerotraslado'
 }
