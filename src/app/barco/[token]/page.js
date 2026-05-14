@@ -330,29 +330,41 @@ export default function BarcoPesadorPage() {
   }
 
 
-  const exportarTiemposAPDF = () => {
+const exportarTiemposAPDF = () => {
   if (!tiemposResultados.length) {
     toast.error('No hay datos para exportar')
     return
   }
 
-  const doc = new jsPDF('landscape')
+  // Crear documento en horizontal (landscape)
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  })
+  
   const fechaActual = new Date().toLocaleString('es-ES')
+  let yOffset = 20
   
-  // Título
+  // Título principal
   doc.setFontSize(16)
-  doc.text(`Tiempos entre viajes - ${productoTiempoActual}`, 14, 15)
-  doc.setFontSize(10)
-  doc.text(`Barco: ${barco?.nombre}`, 14, 25)
-  doc.text(`Fecha: ${fechaActual}`, 14, 32)
-  doc.text(`Cálculo: Desde Salida Almapac hasta Entrada Almapac del siguiente viaje`, 14, 39)
+  doc.text(`Tiempos entre viajes - ${productoTiempoActual}`, 14, yOffset)
+  yOffset += 10
   
-  let yOffset = 50
+  doc.setFontSize(10)
+  doc.text(`Barco: ${barco?.nombre}`, 14, yOffset)
+  yOffset += 7
+  doc.text(`Fecha de exportación: ${fechaActual}`, 14, yOffset)
+  yOffset += 7
+  doc.text(`Cálculo: Desde Salida Almapac hasta Entrada Almapac del siguiente viaje`, 14, yOffset)
+  yOffset += 15
   
   // Recorrer cada placa
-  for (const placaData of resultadosFiltradosTiempos) {
-    // Verificar si necesitamos nueva página
-    if (yOffset > 200) {
+  for (let i = 0; i < resultadosFiltradosTiempos.length; i++) {
+    const placaData = resultadosFiltradosTiempos[i]
+    
+    // Verificar espacio en página
+    if (yOffset > 180) {
       doc.addPage()
       yOffset = 20
     }
@@ -361,12 +373,17 @@ export default function BarcoPesadorPage() {
     doc.setFontSize(12)
     doc.setTextColor(100, 100, 100)
     doc.text(`Placa: ${placaData.placa}`, 14, yOffset)
-    doc.setFontSize(10)
+    yOffset += 6
+    doc.setFontSize(9)
     doc.setTextColor(0, 0, 0)
-    doc.text(`Viajes: ${placaData.stats.totalViajes} | Intervalos: ${placaData.stats.intervalos} | Promedio: ${Math.floor(placaData.stats.promedioMinutos)} min`, 14, yOffset + 7)
+    doc.text(`Viajes: ${placaData.stats.totalViajes} | Intervalos: ${placaData.stats.intervalos} | Promedio: ${Math.floor(placaData.stats.promedioMinutos)} minutos`, 14, yOffset)
+    yOffset += 8
     
     // Preparar datos para la tabla
-    const tableData = placaData.viajes.map((viaje, vIdx) => {
+    const tableData = []
+    
+    for (let vIdx = 0; vIdx < placaData.viajes.length; vIdx++) {
+      const viaje = placaData.viajes[vIdx]
       const tiempoAlSiguiente = placaData.tiempos.find(t => t.desdeViaje === viaje.viaje_numero)
       const esUltimo = vIdx === placaData.viajes.length - 1
       
@@ -380,7 +397,7 @@ export default function BarcoPesadorPage() {
         tiempoTexto = 'No disponible'
       }
       
-      return [
+      tableData.push([
         viaje.viaje_numero.toString(),
         formatFecha(viaje.fecha),
         viaje.hora_salida_updp || '—',
@@ -389,28 +406,30 @@ export default function BarcoPesadorPage() {
         viaje.destino,
         viaje.peso_neto?.toFixed(3) || '—',
         tiempoTexto
-      ]
-    })
+      ])
+    }
     
-    // Configurar columnas
-    const columns = [
-      '# Viaje',
-      'Fecha',
-      'Salida UPDP',
-      'Entrada Almapac',
-      'Salida Almapac',
-      'Destino',
-      'Peso Neto (TM)',
-      'Tiempo hasta próximo'
-    ]
-    
-    // Generar tabla
-    doc.autoTable({
-      startY: yOffset + 12,
-      head: [columns],
+    // Generar tabla usando autoTable
+    autoTable(doc, {
+      startY: yOffset,
+      head: [[
+        '# Viaje',
+        'Fecha',
+        'Salida UPDP',
+        'Entrada Almapac',
+        'Salida Almapac',
+        'Destino',
+        'Peso Neto (TM)',
+        'Tiempo hasta próximo'
+      ]],
       body: tableData,
       theme: 'striped',
-      headStyles: { fillColor: [100, 100, 200], textColor: 255, fontSize: 8 },
+      headStyles: { 
+        fillColor: [100, 100, 200], 
+        textColor: 255, 
+        fontSize: 8,
+        fontStyle: 'bold'
+      },
       bodyStyles: { fontSize: 7 },
       columnStyles: {
         0: { cellWidth: 15 },
@@ -420,7 +439,7 @@ export default function BarcoPesadorPage() {
         4: { cellWidth: 25 },
         5: { cellWidth: 30 },
         6: { cellWidth: 25 },
-        7: { cellWidth: 35 }
+        7: { cellWidth: 40 }
       },
       margin: { left: 14, right: 14 }
     })
@@ -430,7 +449,8 @@ export default function BarcoPesadorPage() {
   }
   
   // Guardar PDF
-  doc.save(`tiempos_entre_viajes_${productoTiempoActual}_${new Date().toISOString().split('T')[0]}.pdf`)
+  const nombreArchivo = `tiempos_entre_viajes_${productoTiempoActual}_${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(nombreArchivo)
   toast.success('PDF exportado correctamente')
 }
 
