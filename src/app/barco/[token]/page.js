@@ -26,7 +26,7 @@ import timezone from 'dayjs/plugin/timezone'
 import * as XLSX from 'xlsx'
 
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 
 // Extender dayjs con plugins de zona horaria
 dayjs.extend(utc)
