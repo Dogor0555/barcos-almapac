@@ -343,41 +343,156 @@ const exportarTiemposAPDF = () => {
     format: 'a4'
   })
   
-  const fechaActual = new Date().toLocaleString('es-ES')
+  const fechaActual = new Date().toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+  
   let yOffset = 20
   
+  // ============================================
+  // HEADER CON LOGO Y TÍTULO MEJORADO
+  // ============================================
+  
+  // Línea superior decorativa
+  doc.setFillColor(100, 100, 200)
+  doc.rect(0, 0, 297, 8, 'F')
+  
   // Título principal
-  doc.setFontSize(16)
-  doc.text(`Tiempos entre viajes - ${productoTiempoActual}`, 14, yOffset)
+  doc.setFontSize(18)
+  doc.setTextColor(40, 40, 100)
+  doc.setFont('helvetica', 'bold')
+  doc.text('📊 REPORTE DE TIEMPOS ENTRE VIAJES', 14, yOffset)
+  yOffset += 8
+  
+  // Subtítulo
+  doc.setFontSize(10)
+  doc.setTextColor(100, 100, 100)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Producto: ${productoTiempoActual}`, 14, yOffset)
+  yOffset += 5
+  doc.text(`Barco: ${barco?.nombre} (${barco?.codigo_barco || 'N/A'})`, 14, yOffset)
+  yOffset += 5
+  doc.text(`Fecha de exportación: ${fechaActual}`, 14, yOffset)
+  yOffset += 5
+  doc.text(`Cálculo: Desde SALIDA de Almapac hasta ENTRADA a Almapac del siguiente viaje (misma placa)`, 14, yOffset)
   yOffset += 10
   
-  doc.setFontSize(10)
-  doc.text(`Barco: ${barco?.nombre}`, 14, yOffset)
-  yOffset += 7
-  doc.text(`Fecha de exportación: ${fechaActual}`, 14, yOffset)
-  yOffset += 7
-  doc.text(`Cálculo: Desde Salida Almapac hasta Entrada Almapac del siguiente viaje`, 14, yOffset)
-  yOffset += 15
+  // Línea separadora
+  doc.setDrawColor(200, 200, 200)
+  doc.line(14, yOffset - 2, 283, yOffset - 2)
   
-  // Recorrer cada placa
+  // ============================================
+  // RESUMEN GLOBAL CON TARJETAS
+  // ============================================
+  
+  doc.setFillColor(240, 240, 255)
+  doc.roundedRect(14, yOffset, 55, 20, 3, 3, 'F')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Total Unidades', 18, yOffset + 6)
+  doc.setFontSize(14)
+  doc.setTextColor(100, 100, 200)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${tiemposResultados.length}`, 18, yOffset + 15)
+  
+  doc.setFillColor(240, 255, 240)
+  doc.roundedRect(73, yOffset, 55, 20, 3, 3, 'F')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Total Viajes', 77, yOffset + 6)
+  doc.setFontSize(14)
+  doc.setTextColor(60, 160, 60)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${tiemposResultados.reduce((sum, p) => sum + p.stats.totalViajes, 0)}`, 77, yOffset + 15)
+  
+  doc.setFillColor(255, 240, 240)
+  doc.roundedRect(132, yOffset, 55, 20, 3, 3, 'F')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Total Intervalos', 136, yOffset + 6)
+  doc.setFontSize(14)
+  doc.setTextColor(200, 80, 80)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${tiemposResultados.reduce((sum, p) => sum + p.stats.intervalos, 0)}`, 136, yOffset + 15)
+  
+  doc.setFillColor(255, 255, 220)
+  doc.roundedRect(191, yOffset, 55, 20, 3, 3, 'F')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Promedio Global', 195, yOffset + 6)
+  doc.setFontSize(14)
+  doc.setTextColor(200, 140, 40)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${Math.floor(tiemposResultados.reduce((sum, p) => sum + p.stats.promedioMinutos, 0) / tiemposResultados.length)} min`, 195, yOffset + 15)
+  
+  doc.setFillColor(220, 240, 255)
+  doc.roundedRect(250, yOffset, 33, 20, 3, 3, 'F')
+  doc.setFontSize(8)
+  doc.setTextColor(80, 80, 80)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Máximo', 254, yOffset + 6)
+  doc.setFontSize(11)
+  doc.setTextColor(40, 100, 160)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${Math.floor(Math.max(...tiemposResultados.map(p => p.stats.maxMinutos)))} min`, 254, yOffset + 15)
+  
+  yOffset += 28
+  
+  // ============================================
+  // DETALLE POR PLACA
+  // ============================================
+  
   for (let i = 0; i < resultadosFiltradosTiempos.length; i++) {
     const placaData = resultadosFiltradosTiempos[i]
     
     // Verificar espacio en página
-    if (yOffset > 180) {
+    if (yOffset > 170) {
       doc.addPage()
       yOffset = 20
+      
+      // Re-encabezado en nueva página
+      doc.setFillColor(100, 100, 200)
+      doc.rect(0, 0, 297, 8, 'F')
+      doc.setFontSize(10)
+      doc.setTextColor(100, 100, 100)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Producto: ${productoTiempoActual} | Barco: ${barco?.nombre} | Página ${doc.internal.getNumberOfPages()}`, 14, 15)
+      doc.line(14, 18, 283, 18)
+      yOffset = 25
     }
     
-    // Título de la placa
+    // Card de placa con sombra
+    doc.setFillColor(248, 248, 252)
+    doc.roundedRect(14, yOffset - 3, 269, 8, 3, 3, 'F')
+    
+    // Icono de camión (texto)
+    doc.setFontSize(11)
+    doc.setTextColor(120, 80, 200)
+    doc.setFont('helvetica', 'bold')
+    doc.text('🚛', 18, yOffset + 3)
+    
+    // Nombre de placa
     doc.setFontSize(12)
+    doc.setTextColor(40, 40, 80)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${placaData.placa}`, 28, yOffset + 3)
+    
+    // Estadísticas de la placa
+    doc.setFontSize(8)
     doc.setTextColor(100, 100, 100)
-    doc.text(`Placa: ${placaData.placa}`, 14, yOffset)
-    yOffset += 6
-    doc.setFontSize(9)
-    doc.setTextColor(0, 0, 0)
-    doc.text(`Viajes: ${placaData.stats.totalViajes} | Intervalos: ${placaData.stats.intervalos} | Promedio: ${Math.floor(placaData.stats.promedioMinutos)} minutos`, 14, yOffset)
-    yOffset += 8
+    doc.setFont('helvetica', 'normal')
+    doc.text(`${placaData.stats.totalViajes} viajes | ${placaData.stats.intervalos} intervalos | Promedio: ${Math.floor(placaData.stats.promedioMinutos)} min | Máx: ${Math.floor(placaData.stats.maxMinutos)} min | Mín: ${Math.floor(placaData.stats.minMinutos)} min`, 100, yOffset + 3)
+    
+    yOffset += 10
     
     // Preparar datos para la tabla
     const tableData = []
@@ -388,8 +503,17 @@ const exportarTiemposAPDF = () => {
       const esUltimo = vIdx === placaData.viajes.length - 1
       
       let tiempoTexto = ''
+      let tiempoColor = [80, 80, 80]
+      
       if (!esUltimo && tiempoAlSiguiente) {
         tiempoTexto = `${tiempoAlSiguiente.horas}h ${tiempoAlSiguiente.minutos}m ${tiempoAlSiguiente.segundos}s`
+        if (tiempoAlSiguiente.totalMinutos > 120) {
+          tiempoColor = [200, 80, 80] // Rojo si es más de 2 horas
+        } else if (tiempoAlSiguiente.totalMinutos > 60) {
+          tiempoColor = [200, 140, 40] // Naranja si es más de 1 hora
+        } else {
+          tiempoColor = [60, 160, 60] // Verde si es menos de 1 hora
+        }
         if (tiempoAlSiguiente.esDiaSiguiente) tiempoTexto += ' (día sig)'
       } else if (esUltimo) {
         tiempoTexto = 'Último viaje'
@@ -404,23 +528,23 @@ const exportarTiemposAPDF = () => {
         viaje.hora_entrada_almapac || '—',
         viaje.hora_salida_almapac || '—',
         viaje.destino,
-        viaje.peso_neto?.toFixed(3) || '—',
-        tiempoTexto
+        `${viaje.peso_neto?.toFixed(3) || '—'} TM`,
+        { content: tiempoTexto, styles: { textColor: tiempoColor } }
       ])
     }
     
-    // Generar tabla usando autoTable
+    // Generar tabla mejorada
     autoTable(doc, {
       startY: yOffset,
       head: [[
-        '# Viaje',
-        'Fecha',
-        'Salida UPDP',
-        'Entrada Almapac',
-        'Salida Almapac',
-        'Destino',
-        'Peso Neto (TM)',
-        'Tiempo hasta próximo'
+        { content: '#', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Fecha', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Salida UPDP', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Entrada Almapac', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Salida Almapac', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Destino', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Peso Neto', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } },
+        { content: 'Tiempo hasta próximo', styles: { fillColor: [100, 100, 200], textColor: 255, fontStyle: 'bold' } }
       ]],
       body: tableData,
       theme: 'striped',
@@ -428,30 +552,61 @@ const exportarTiemposAPDF = () => {
         fillColor: [100, 100, 200], 
         textColor: 255, 
         fontSize: 8,
-        fontStyle: 'bold'
+        fontStyle: 'bold',
+        halign: 'center'
       },
-      bodyStyles: { fontSize: 7 },
+      bodyStyles: { fontSize: 7, cellPadding: 3 },
       columnStyles: {
-        0: { cellWidth: 15 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 25 },
+        0: { cellWidth: 12, halign: 'center' },
+        1: { cellWidth: 20, halign: 'center' },
+        2: { cellWidth: 18, halign: 'center' },
+        3: { cellWidth: 22, halign: 'center' },
+        4: { cellWidth: 22, halign: 'center' },
         5: { cellWidth: 30 },
-        6: { cellWidth: 25 },
-        7: { cellWidth: 40 }
+        6: { cellWidth: 22, halign: 'right' },
+        7: { cellWidth: 35 }
       },
-      margin: { left: 14, right: 14 }
+      margin: { left: 14, right: 14 },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+      rowPageBreak: 'avoid'
     })
     
     // Actualizar yOffset
-    yOffset = doc.lastAutoTable.finalY + 15
+    yOffset = doc.lastAutoTable.finalY + 8
+    
+    // Línea separadora entre placas
+    if (i < resultadosFiltradosTiempos.length - 1) {
+      doc.setDrawColor(220, 220, 220)
+      doc.line(14, yOffset - 2, 283, yOffset - 2)
+    }
+  }
+  
+  // ============================================
+  // PIE DE PÁGINA EN TODAS LAS PÁGINAS
+  // ============================================
+  
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(7)
+    doc.setTextColor(150, 150, 150)
+    doc.setFont('helvetica', 'italic')
+    doc.text(
+      `Generado por Sistema de Gestión de Flotas - ${new Date().toLocaleDateString('es-ES')}`,
+      14,
+      doc.internal.pageSize.height - 8
+    )
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      doc.internal.pageSize.width - 25,
+      doc.internal.pageSize.height - 8
+    )
   }
   
   // Guardar PDF
-  const nombreArchivo = `tiempos_entre_viajes_${productoTiempoActual}_${new Date().toISOString().split('T')[0]}.pdf`
+  const nombreArchivo = `tiempos_entre_viajes_${productoTiempoActual.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
   doc.save(nombreArchivo)
-  toast.success('PDF exportado correctamente')
+  toast.success('✅ PDF exportado correctamente')
 }
 
 const calcularTiemposEntreViajes = () => {
