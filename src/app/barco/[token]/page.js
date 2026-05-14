@@ -323,128 +323,161 @@ export default function BarcoPesadorPage() {
   // FUNCIONES PARA EL MODAL DE TIEMPOS ENTRE VIAJES
   // =====================================================
   const calcularTiemposEntreViajes = () => {
-    if (!viajes.length || !productoActivo) {
-      toast.error('No hay viajes para analizar')
-      return
+  if (!viajes.length || !productoActivo) {
+    toast.error('No hay viajes para analizar')
+    return
+  }
+
+  const viajesProducto = viajes.filter(v => 
+    v.producto_id === productoActivo.id && 
+    v.estado === 'completo' &&
+    v.hora_salida_updp &&
+    v.hora_entrada_almapac
+  )
+
+  if (viajesProducto.length < 2) {
+    toast.error('Se necesitan al menos 2 viajes completos para calcular diferencias')
+    return
+  }
+
+  // Ordenar por número de viaje
+  const viajesOrdenados = [...viajesProducto].sort((a, b) => a.viaje_numero - b.viaje_numero)
+
+  // Agrupar por placa
+  const viajesPorPlaca = {}
+  
+  viajesOrdenados.forEach(viaje => {
+    const placa = viaje.placa
+    if (!viajesPorPlaca[placa]) {
+      viajesPorPlaca[placa] = []
     }
-
-    const viajesProducto = viajes.filter(v => 
-      v.producto_id === productoActivo.id && 
-      v.estado === 'completo' &&
-      v.hora_salida_updp &&
-      v.hora_entrada_almapac
-    )
-
-    if (viajesProducto.length < 2) {
-      toast.error('Se necesitan al menos 2 viajes completos para calcular diferencias')
-      return
-    }
-
-    // Ordenar por fecha y hora de salida
-    const viajesOrdenados = [...viajesProducto].sort((a, b) => {
-      const fechaA = new Date(`${a.fecha}T${a.hora_salida_updp}`)
-      const fechaB = new Date(`${b.fecha}T${b.hora_salida_updp}`)
-      return fechaA - fechaB
-    })
-
-    // Agrupar por placa y calcular tiempos entre viajes consecutivos
-    const viajesPorPlaca = {}
     
-    viajesOrdenados.forEach(viaje => {
-      const placa = viaje.placa
-      if (!viajesPorPlaca[placa]) {
-        viajesPorPlaca[placa] = []
-      }
-      
-      const fechaSalida = new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
-      const fechaEntradaAlmapac = viaje.hora_entrada_almapac 
-        ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
-        : null
-      
-      viajesPorPlaca[placa].push({
-        viaje_numero: viaje.viaje_numero,
-        fechaSalida,
-        fechaEntradaAlmapac,
-        placa,
-        peso: viaje.peso_neto_updp_tm
-      })
-    })
-
-    // Calcular tiempos entre primer viaje y segundo viaje de cada placa
-    const resultados = []
+    const fechaSalida = new Date(`${viaje.fecha}T${viaje.hora_salida_updp}`)
+    const fechaEntradaAlmapac = viaje.hora_entrada_almapac 
+      ? new Date(`${viaje.fecha}T${viaje.hora_entrada_almapac}`)
+      : null
     
-    Object.keys(viajesPorPlaca).forEach(placa => {
-      const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
+    viajesPorPlaca[placa].push({
+      id: viaje.id,
+      viaje_numero: viaje.viaje_numero,
+      fecha: viaje.fecha,
+      fechaSalida,
+      fechaEntradaAlmapac,
+      hora_salida: viaje.hora_salida_updp,
+      hora_entrada: viaje.hora_entrada_almapac,
+      placa,
+      peso_neto: viaje.peso_neto_updp_tm,
+      peso_bruto: viaje.peso_bruto_updp_tm,
+      destino: viaje.destino?.nombre || '—'
+    })
+  })
+
+  // Procesar cada placa y calcular tiempos entre viajes consecutivos
+  const resultadosPorPlaca = []
+  
+  Object.keys(viajesPorPlaca).forEach(placa => {
+    const viajesPlaca = viajesPorPlaca[placa].sort((a, b) => a.viaje_numero - b.viaje_numero)
+    
+    // Calcular tiempos entre cada par de viajes consecutivos
+    const tiemposEntreViajes = []
+    
+    for (let i = 0; i < viajesPlaca.length - 1; i++) {
+      const viajeActual = viajesPlaca[i]
+      const viajeSiguiente = viajesPlaca[i + 1]
       
-      for (let i = 0; i < viajesPlaca.length - 1; i++) {
-        const primerViaje = viajesPlaca[i]
-        const segundoViaje = viajesPlaca[i + 1]
+      if (viajeActual.fechaSalida && viajeSiguiente.fechaEntradaAlmapac) {
+        let tiempoMs = viajeSiguiente.fechaEntradaAlmapac - viajeActual.fechaSalida
+        let esDiaSiguiente = false
         
-        if (primerViaje.fechaSalida && segundoViaje.fechaEntradaAlmapac) {
-          const tiempoMs = segundoViaje.fechaEntradaAlmapac - primerViaje.fechaSalida
+        // Si el tiempo es negativo, puede ser porque el viaje es al día siguiente
+        if (tiempoMs < 0) {
+          const fechaEntradaCorregida = new Date(viajeSiguiente.fechaEntradaAlmapac)
+          fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
+          const tiempoMsCorregido = fechaEntradaCorregida - viajeActual.fechaSalida
           
-          if (tiempoMs > 0) {
-            const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
-            const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
-            const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
-            
-            resultados.push({
-              placa,
-              viajeNumeroSalida: primerViaje.viaje_numero,
-              viajeNumeroEntrada: segundoViaje.viaje_numero,
-              fechaSalida: primerViaje.fechaSalida,
-              fechaEntrada: segundoViaje.fechaEntradaAlmapac,
-              horas,
-              minutos,
-              segundos,
-              totalMinutos: tiempoMs / (1000 * 60),
-              pesoViaje1: primerViaje.peso,
-              pesoViaje2: segundoViaje.peso
-            })
-          } else if (tiempoMs < 0) {
-            // Tiempo negativo - podría ser porque el viaje es al día siguiente
-            // Intentar corregir sumando un día
-            const fechaEntradaCorregida = new Date(segundoViaje.fechaEntradaAlmapac)
-            fechaEntradaCorregida.setDate(fechaEntradaCorregida.getDate() + 1)
-            const tiempoMsCorregido = fechaEntradaCorregida - primerViaje.fechaSalida
-            
-            if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
-              const horas = Math.floor(tiempoMsCorregido / (1000 * 60 * 60))
-              const minutos = Math.floor((tiempoMsCorregido % (1000 * 60 * 60)) / (1000 * 60))
-              const segundos = Math.floor((tiempoMsCorregido % (1000 * 60)) / 1000)
-              
-              resultados.push({
-                placa,
-                viajeNumeroSalida: primerViaje.viaje_numero,
-                viajeNumeroEntrada: segundoViaje.viaje_numero,
-                fechaSalida: primerViaje.fechaSalida,
-                fechaEntrada: segundoViaje.fechaEntradaAlmapac,
-                horas,
-                minutos,
-                segundos,
-                totalMinutos: tiempoMsCorregido / (1000 * 60),
-                pesoViaje1: primerViaje.peso,
-                pesoViaje2: segundoViaje.peso,
-                nota: '⚠️ Entrada al día siguiente'
-              })
-            }
+          if (tiempoMsCorregido > 0 && tiempoMsCorregido < 48 * 60 * 60 * 1000) {
+            tiempoMs = tiempoMsCorregido
+            esDiaSiguiente = true
           }
         }
+        
+        if (tiempoMs > 0) {
+          const horas = Math.floor(tiempoMs / (1000 * 60 * 60))
+          const minutos = Math.floor((tiempoMs % (1000 * 60 * 60)) / (1000 * 60))
+          const segundos = Math.floor((tiempoMs % (1000 * 60)) / 1000)
+          
+          tiemposEntreViajes.push({
+            desdeViaje: viajeActual.viaje_numero,
+            hastaViaje: viajeSiguiente.viaje_numero,
+            desdeFecha: viajeActual.fecha,
+            desdeHoraSalida: viajeActual.hora_salida,
+            hastaFecha: viajeSiguiente.fecha,
+            hastaHoraEntrada: viajeSiguiente.hora_entrada,
+            horas,
+            minutos,
+            segundos,
+            totalMinutos: tiempoMs / (1000 * 60),
+            esDiaSiguiente,
+            pesoViaje1: viajeActual.peso_neto,
+            pesoViaje2: viajeSiguiente.peso_neto,
+            destino1: viajeActual.destino,
+            destino2: viajeSiguiente.destino
+          })
+        }
       }
-    })
-
-    if (resultados.length === 0) {
-      toast.error('No se pudieron calcular tiempos entre viajes. Verifica que los viajes tengan hora de salida y entrada registradas')
-      return
     }
-
-    // Ordenar por tiempo (mayor a menor)
-    resultados.sort((a, b) => b.totalMinutos - a.totalMinutos)
     
-    setTiemposResultados(resultados)
-    setProductoTiempoActual(productoActivo.nombre)
-    setModalTiemposAbierto(true)
+    // Calcular estadísticas para esta placa
+    if (tiemposEntreViajes.length > 0) {
+      const totalMinutos = tiemposEntreViajes.reduce((sum, t) => sum + t.totalMinutos, 0)
+      const promedioMinutos = totalMinutos / tiemposEntreViajes.length
+      const maxMinutos = Math.max(...tiemposEntreViajes.map(t => t.totalMinutos))
+      const minMinutos = Math.min(...tiemposEntreViajes.map(t => t.totalMinutos))
+      
+      resultadosPorPlaca.push({
+        placa,
+        viajes: viajesPlaca,
+        tiempos: tiemposEntreViajes,
+        stats: {
+          totalViajes: viajesPlaca.length,
+          intervalos: tiemposEntreViajes.length,
+          promedioMinutos,
+          maxMinutos,
+          minMinutos,
+          totalMinutos
+        }
+      })
+    } else if (viajesPlaca.length > 1) {
+      // Tiene múltiples viajes pero no se pudieron calcular tiempos (faltan horas)
+      resultadosPorPlaca.push({
+        placa,
+        viajes: viajesPlaca,
+        tiempos: [],
+        stats: {
+          totalViajes: viajesPlaca.length,
+          intervalos: 0,
+          promedioMinutos: 0,
+          maxMinutos: 0,
+          minMinutos: 0,
+          totalMinutos: 0,
+          error: 'Faltan horas de salida o entrada para calcular tiempos'
+        }
+      })
+    }
+  })
+  
+  // Ordenar por cantidad de viajes (mayor a menor)
+  resultadosPorPlaca.sort((a, b) => b.stats.totalViajes - a.stats.totalViajes)
+  
+  if (resultadosPorPlaca.length === 0) {
+    toast.error('No se pudieron calcular tiempos entre viajes. Verifica que los viajes tengan hora de salida y entrada registradas')
+    return
   }
+  
+  setTiemposResultados(resultadosPorPlaca)
+  setProductoTiempoActual(productoActivo.nombre)
+  setModalTiemposAbierto(true)
+}
 
   const cerrarModalTiempos = () => {
     setModalTiemposAbierto(false)
@@ -4256,160 +4289,227 @@ export default function BarcoPesadorPage() {
         )}
       </div>
 
-      {/* MODAL DE TIEMPOS ENTRE VIAJES */}
-      {modalTiemposAbierto && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div 
-            ref={modalTiemposRef}
-            className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-y-auto shadow-2xl"
-          >
-            {/* Header del Modal */}
-            <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Timer className="w-5 h-5 text-purple-400" />
-                  Tiempos entre viajes consecutivos
-                </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  {productoTiempoActual} · Barco: {barco?.nombre}
-                </p>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Cálculo: Tiempo desde salida de un viaje hasta entrada del siguiente viaje (misma placa)
+      {/* MODAL DE TIEMPOS ENTRE VIAJES - VERSIÓN COMPLETA CON DETALLE POR PLACA */}
+{modalTiemposAbierto && (
+  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div 
+      ref={modalTiemposRef}
+      className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl"
+    >
+      {/* Header del Modal */}
+      <div className="sticky top-0 bg-[#0f172a] border-b border-white/10 px-6 py-4 flex justify-between items-center z-20">
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Timer className="w-5 h-5 text-purple-400" />
+            Tiempos entre viajes por Unidad (Placa)
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            {productoTiempoActual} · Barco: {barco?.nombre}
+          </p>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Cálculo: Tiempo desde la salida de un viaje hasta la entrada del siguiente viaje (misma placa)
+          </p>
+        </div>
+        <button
+          onClick={cerrarModalTiempos}
+          className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+        >
+          <X className="w-5 h-5 text-slate-400" />
+        </button>
+      </div>
+
+      {/* Contenido del Modal */}
+      <div className="p-6">
+        {tiemposResultados.length === 0 ? (
+          <div className="text-center py-12">
+            <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+            <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
+            <p className="text-sm text-slate-600 mt-2">
+              Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de salida y entrada registrada
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Resumen estadístico global */}
+            <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-3">
+                <p className="text-[10px] text-purple-200 uppercase font-bold">Total unidades</p>
+                <p className="text-xl font-black text-white">{tiemposResultados.length}</p>
+              </div>
+              <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-3">
+                <p className="text-[10px] text-blue-200 uppercase font-bold">Total viajes</p>
+                <p className="text-xl font-black text-white">
+                  {tiemposResultados.reduce((sum, p) => sum + p.stats.totalViajes, 0)}
                 </p>
               </div>
-              <button
-                onClick={cerrarModalTiempos}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
+              <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-xl p-3">
+                <p className="text-[10px] text-green-200 uppercase font-bold">Total intervalos</p>
+                <p className="text-xl font-black text-white">
+                  {tiemposResultados.reduce((sum, p) => sum + p.stats.intervalos, 0)}
+                </p>
+              </div>
+              <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-xl p-3">
+                <p className="text-[10px] text-amber-200 uppercase font-bold">Promedio global</p>
+                <p className="text-xl font-black text-white">
+                  {Math.floor(tiemposResultados.reduce((sum, p) => sum + p.stats.promedioMinutos, 0) / tiemposResultados.length)} min
+                </p>
+              </div>
+              <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-xl p-3">
+                <p className="text-[10px] text-red-200 uppercase font-bold">Máximo global</p>
+                <p className="text-xl font-black text-white">
+                  {Math.floor(Math.max(...tiemposResultados.map(p => p.stats.maxMinutos)))} min
+                </p>
+              </div>
             </div>
 
-            {/* Contenido del Modal */}
-            <div className="p-6">
-              {tiemposResultados.length === 0 ? (
-                <div className="text-center py-12">
-                  <Timer className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-                  <p className="text-slate-400">No hay datos suficientes para calcular tiempos</p>
-                  <p className="text-sm text-slate-600 mt-2">
-                    Se necesitan al menos 2 viajes completos con la misma placa que tengan hora de salida y entrada registrada
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Resumen estadístico */}
-                  <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-4">
-                      <p className="text-xs text-purple-200 uppercase font-bold">Total de unidades</p>
-                      <p className="text-2xl font-black text-white">
-                        {new Set(tiemposResultados.map(r => r.placa)).size}
-                      </p>
+            {/* Detalle por placa - Cada placa en su propia tarjeta */}
+            {tiemposResultados.map((placaData, idx) => (
+              <div key={idx} className="mb-6 bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
+                {/* Header de la placa */}
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-5 py-3 border-b border-white/10">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <Truck className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{placaData.placa}</h3>
+                        <p className="text-[10px] text-slate-400">
+                          {placaData.stats.totalViajes} viajes · {placaData.stats.intervalos} intervalos calculados
+                        </p>
+                      </div>
                     </div>
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-4">
-                      <p className="text-xs text-blue-200 uppercase font-bold">Total intervalos</p>
-                      <p className="text-2xl font-black text-white">{tiemposResultados.length}</p>
-                    </div>
-                    <div className="bg-gradient-to-r from-green-600 to-green-800 rounded-xl p-4">
-                      <p className="text-xs text-green-200 uppercase font-bold">Tiempo promedio</p>
-                      <p className="text-2xl font-black text-white">
-                        {Math.floor(tiemposResultados.reduce((sum, r) => sum + r.totalMinutos, 0) / tiemposResultados.length)} min
-                      </p>
-                    </div>
-                    <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-xl p-4">
-                      <p className="text-xs text-amber-200 uppercase font-bold">Tiempo máximo</p>
-                      <p className="text-2xl font-black text-white">
-                        {Math.floor(Math.max(...tiemposResultados.map(r => r.totalMinutos)))} min
-                      </p>
+                    <div className="flex gap-3 text-xs">
+                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                        <span className="text-slate-400">⏱️ Promedio:</span>
+                        <span className="ml-1 font-bold text-green-400">
+                          {Math.floor(placaData.stats.promedioMinutos)} min
+                        </span>
+                      </div>
+                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                        <span className="text-slate-400">📈 Máximo:</span>
+                        <span className="ml-1 font-bold text-amber-400">
+                          {Math.floor(placaData.stats.maxMinutos)} min
+                        </span>
+                      </div>
+                      <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
+                        <span className="text-slate-400">📉 Mínimo:</span>
+                        <span className="ml-1 font-bold text-blue-400">
+                          {Math.floor(placaData.stats.minMinutos)} min
+                        </span>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Tabla de resultados */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-800 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Placa</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Viaje #1 → #2</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Salida Viaje #1</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Entrada Viaje #2</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Tiempo transcurrido</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Nota</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {tiemposResultados.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-white/5 transition-colors">
-                            <td className="px-4 py-3 font-bold text-white whitespace-nowrap">
-                              {item.placa}
+                {/* Tabla de viajes de esta placa */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-800/50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase"># Viaje</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Salida</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Hora Entrada</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Destino</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Peso Neto</th>
+                        <th className="px-4 py-2 text-left text-[10px] font-bold text-slate-400 uppercase">Tiempo hasta próximo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {placaData.viajes.map((viaje, vIdx) => {
+                        const tiempoAlSiguiente = placaData.tiempos.find(t => t.desdeViaje === viaje.viaje_numero)
+                        const esUltimo = vIdx === placaData.viajes.length - 1
+                        
+                        return (
+                          <tr key={viaje.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-2 font-bold text-white whitespace-nowrap">
+                              #{viaje.viaje_numero}
                             </td>
-                            <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                              #{item.viajeNumeroSalida} → #{item.viajeNumeroEntrada}
+                            <td className="px-4 py-2 whitespace-nowrap text-slate-300 text-xs">
+                              {formatFecha(viaje.fecha)}
                             </td>
-                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                              {formatFechaHoraCompleta(item.fechaSalida)}
+                            <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">
+                              {viaje.hora_salida || '—'}
                             </td>
-                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                              {formatFechaHoraCompleta(item.fechaEntrada)}
+                            <td className="px-4 py-2 whitespace-nowrap font-mono text-slate-300 text-xs">
+                              {viaje.hora_entrada || '—'}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-green-400 text-lg">
-                                  {item.horas}h {item.minutos}m {item.segundos}s
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  ({Math.floor(item.totalMinutos)} minutos totales)
-                                </span>
-                              </div>
+                            <td className="px-4 py-2 whitespace-nowrap text-slate-400 text-xs">
+                              {viaje.destino}
                             </td>
-                            <td className="px-4 py-3">
-                              {item.nota ? (
-                                <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full">
-                                  {item.nota}
-                                </span>
+                            <td className="px-4 py-2 whitespace-nowrap font-bold text-green-400 text-xs">
+                              {viaje.peso_neto?.toFixed(3) || '—'} TM
+                            </td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              {!esUltimo && tiempoAlSiguiente ? (
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-blue-400 text-sm">
+                                    {tiempoAlSiguiente.horas}h {tiempoAlSiguiente.minutos}m {tiempoAlSiguiente.segundos}s
+                                  </span>
+                                  <span className="text-[9px] text-slate-500">
+                                    ({Math.floor(tiempoAlSiguiente.totalMinutos)} minutos)
+                                  </span>
+                                  {tiempoAlSiguiente.esDiaSiguiente && (
+                                    <span className="text-[8px] text-yellow-500 mt-0.5">⚠️ día siguiente</span>
+                                  )}
+                                </div>
+                              ) : esUltimo ? (
+                                <span className="text-[10px] text-slate-500">— Último viaje —</span>
                               ) : (
-                                <span className="text-xs text-slate-600">—</span>
+                                <span className="text-[10px] text-red-500">⚠️ No disponible</span>
                               )}
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-900 border-t border-white/10">
-                        <tr>
-                          <td colSpan="4" className="px-4 py-3 font-bold text-white">PROMEDIO GENERAL</td>
-                          <td className="px-4 py-3">
-                            <span className="font-bold text-blue-400">
-                              {Math.floor(tiemposResultados.reduce((sum, r) => sum + r.totalMinutos, 0) / tiemposResultados.length)} minutos
-                            </span>
-                          </td>
-                          <td className="px-4 py-3"></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot className="bg-slate-800/30 border-t border-white/10">
+                      <tr>
+                        <td colSpan="5" className="px-4 py-2 text-right font-bold text-slate-400 text-xs">
+                          ⏱️ PROMEDIO DE TIEMPOS:
+                        </td>
+                        <td colSpan="2" className="px-4 py-2">
+                          <span className="font-bold text-green-400 text-sm">
+                            {Math.floor(placaData.stats.promedioMinutos)} minutos
+                          </span>
+                          <span className="text-[10px] text-slate-500 ml-2">
+                            (basado en {placaData.stats.intervalos} intervalo{placaData.stats.intervalos !== 1 ? 's' : ''})
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            ))}
 
-                  {/* Ejemplo explicativo */}
-                  <div className="mt-6 bg-slate-800/50 rounded-xl p-4 border border-white/5">
-                    <p className="text-xs text-slate-400 flex items-center gap-2">
-                      <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
-                      Ejemplo: Si un vehículo salió de Almapac a las 12:04pm y su siguiente entrada a Almapac fue a las 2:04pm, se tardó 2 horas.
-                    </p>
-                  </div>
-                </>
-              )}
+            {/* Ejemplo explicativo */}
+            <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-white/5">
+              <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
+                <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
+                <strong>Cálculo:</strong> Tiempo desde la <span className="text-blue-400 font-bold">Hora de Salida</span> de un viaje hasta la <span className="text-green-400 font-bold">Hora de Entrada</span> del siguiente viaje (misma placa).
+                <br className="hidden sm:block" />
+                <span className="ml-6">Ejemplo: Si salió a las 12:04pm y su siguiente entrada fue a las 2:04pm → se tardó <strong className="text-yellow-400">2 horas (120 minutos)</strong>.</span>
+              </p>
             </div>
+          </>
+        )}
+      </div>
 
-            {/* Footer del Modal */}
-            <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end">
-              <button
-                onClick={cerrarModalTiempos}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Footer del Modal */}
+      <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-end">
+        <button
+          onClick={cerrarModalTiempos}
+          className="px-5 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl transition-all flex items-center gap-2 font-bold shadow-lg"
+        >
+          <X className="w-4 h-4" />
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* MODAL DE EDICIÓN COMPLETA DE VIAJE */}
       {modalEdicionAbierto && viajeEnEdicion && (
