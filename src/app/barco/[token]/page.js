@@ -25,6 +25,9 @@ import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import * as XLSX from 'xlsx'
 
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+
 // Extender dayjs con plugins de zona horaria
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -325,6 +328,111 @@ export default function BarcoPesadorPage() {
       setNuevoViaje(prev => ({ ...prev, placa: formatted }))
     }
   }
+
+
+  const exportarTiemposAPDF = () => {
+  if (!tiemposResultados.length) {
+    toast.error('No hay datos para exportar')
+    return
+  }
+
+  const doc = new jsPDF('landscape')
+  const fechaActual = new Date().toLocaleString('es-ES')
+  
+  // Título
+  doc.setFontSize(16)
+  doc.text(`Tiempos entre viajes - ${productoTiempoActual}`, 14, 15)
+  doc.setFontSize(10)
+  doc.text(`Barco: ${barco?.nombre}`, 14, 25)
+  doc.text(`Fecha: ${fechaActual}`, 14, 32)
+  doc.text(`Cálculo: Desde Salida Almapac hasta Entrada Almapac del siguiente viaje`, 14, 39)
+  
+  let yOffset = 50
+  
+  // Recorrer cada placa
+  for (const placaData of resultadosFiltradosTiempos) {
+    // Verificar si necesitamos nueva página
+    if (yOffset > 200) {
+      doc.addPage()
+      yOffset = 20
+    }
+    
+    // Título de la placa
+    doc.setFontSize(12)
+    doc.setTextColor(100, 100, 100)
+    doc.text(`Placa: ${placaData.placa}`, 14, yOffset)
+    doc.setFontSize(10)
+    doc.setTextColor(0, 0, 0)
+    doc.text(`Viajes: ${placaData.stats.totalViajes} | Intervalos: ${placaData.stats.intervalos} | Promedio: ${Math.floor(placaData.stats.promedioMinutos)} min`, 14, yOffset + 7)
+    
+    // Preparar datos para la tabla
+    const tableData = placaData.viajes.map((viaje, vIdx) => {
+      const tiempoAlSiguiente = placaData.tiempos.find(t => t.desdeViaje === viaje.viaje_numero)
+      const esUltimo = vIdx === placaData.viajes.length - 1
+      
+      let tiempoTexto = ''
+      if (!esUltimo && tiempoAlSiguiente) {
+        tiempoTexto = `${tiempoAlSiguiente.horas}h ${tiempoAlSiguiente.minutos}m ${tiempoAlSiguiente.segundos}s`
+        if (tiempoAlSiguiente.esDiaSiguiente) tiempoTexto += ' (día sig)'
+      } else if (esUltimo) {
+        tiempoTexto = 'Último viaje'
+      } else {
+        tiempoTexto = 'No disponible'
+      }
+      
+      return [
+        viaje.viaje_numero.toString(),
+        formatFecha(viaje.fecha),
+        viaje.hora_salida_updp || '—',
+        viaje.hora_entrada_almapac || '—',
+        viaje.hora_salida_almapac || '—',
+        viaje.destino,
+        viaje.peso_neto?.toFixed(3) || '—',
+        tiempoTexto
+      ]
+    })
+    
+    // Configurar columnas
+    const columns = [
+      '# Viaje',
+      'Fecha',
+      'Salida UPDP',
+      'Entrada Almapac',
+      'Salida Almapac',
+      'Destino',
+      'Peso Neto (TM)',
+      'Tiempo hasta próximo'
+    ]
+    
+    // Generar tabla
+    doc.autoTable({
+      startY: yOffset + 12,
+      head: [columns],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [100, 100, 200], textColor: 255, fontSize: 8 },
+      bodyStyles: { fontSize: 7 },
+      columnStyles: {
+        0: { cellWidth: 15 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 30 },
+        6: { cellWidth: 25 },
+        7: { cellWidth: 35 }
+      },
+      margin: { left: 14, right: 14 }
+    })
+    
+    // Actualizar yOffset
+    yOffset = doc.lastAutoTable.finalY + 15
+  }
+  
+  // Guardar PDF
+  doc.save(`tiempos_entre_viajes_${productoTiempoActual}_${new Date().toISOString().split('T')[0]}.pdf`)
+  toast.success('PDF exportado correctamente')
+}
 
 const calcularTiemposEntreViajes = () => {
   if (!viajes.length || !productoActivo) {
@@ -4286,7 +4394,6 @@ const resultadosFiltradosTiempos = useMemo(() => {
       </div>
 
 
-{/* MODAL DE TIEMPOS ENTRE VIAJES */}
 {modalTiemposAbierto && (
   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div className="bg-[#0f172a] border border-white/20 rounded-2xl w-full max-w-7xl max-h-[85vh] overflow-y-auto shadow-2xl">
@@ -4406,28 +4513,8 @@ const resultadosFiltradosTiempos = useMemo(() => {
                         <div>
                           <h3 className="text-lg font-bold text-white">{placaData.placa}</h3>
                           <p className="text-[10px] text-slate-400">
-                            {placaData.stats.totalViajes} viajes · {placaData.stats.intervalos} intervalos
+                            {placaData.stats.totalViajes} viajes · {placaData.stats.intervalos} intervalos · Promedio: {Math.floor(placaData.stats.promedioMinutos)} min
                           </p>
-                        </div>
-                      </div>
-                      <div className="flex gap-3 text-xs">
-                        <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                          <span className="text-slate-400">⏱️ Promedio:</span>
-                          <span className="ml-1 font-bold text-green-400">
-                            {Math.floor(placaData.stats.promedioMinutos)} min
-                          </span>
-                        </div>
-                        <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                          <span className="text-slate-400">📈 Máximo:</span>
-                          <span className="ml-1 font-bold text-amber-400">
-                            {Math.floor(placaData.stats.maxMinutos)} min
-                          </span>
-                        </div>
-                        <div className="bg-slate-800 px-3 py-1.5 rounded-lg">
-                          <span className="text-slate-400">📉 Mínimo:</span>
-                          <span className="ml-1 font-bold text-blue-400">
-                            {Math.floor(placaData.stats.minMinutos)} min
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -4480,8 +4567,8 @@ const resultadosFiltradosTiempos = useMemo(() => {
                                 ) : (
                                   <span className="text-[10px] text-red-500">⚠️ No disponible</span>
                                 )}
-                              </td>
-                            </tr>
+                               </td>
+                             </tr>
                           )
                         })}
                       </tbody>
@@ -4511,8 +4598,6 @@ const resultadosFiltradosTiempos = useMemo(() => {
               <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
                 <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">i</span>
                 <strong>Cálculo:</strong> Desde la <span className="text-green-400 font-bold">Hora de SALIDA de Almapac</span> de un viaje hasta la <span className="text-yellow-400 font-bold">Hora de ENTRADA a Almapac</span> del siguiente viaje (misma placa).
-                <br className="hidden sm:block" />
-                <span className="ml-6">Ejemplo: Viaje #1 salió de Almapac a las <strong className="text-green-400">12:04pm</strong> y Viaje #2 entró a Almapac a las <strong className="text-yellow-400">2:04pm</strong> → se tardó <strong className="text-blue-400">2 horas (120 minutos)</strong>.</span>
               </p>
             </div>
           </>
@@ -4521,12 +4606,23 @@ const resultadosFiltradosTiempos = useMemo(() => {
 
       {/* Footer */}
       <div className="sticky bottom-0 bg-[#0f172a] border-t border-white/10 px-6 py-4 flex justify-between items-center">
-        {buscarPlacaTiempos && resultadosFiltradosTiempos.length > 0 && (
-          <div className="text-xs text-purple-400">
-            Mostrando {resultadosFiltradosTiempos.length} de {tiemposResultados.length} unidades
-          </div>
-        )}
-        <div className="flex gap-3 ml-auto">
+        <div className="flex gap-3">
+          {buscarPlacaTiempos && resultadosFiltradosTiempos.length > 0 && (
+            <div className="text-xs text-purple-400">
+              Mostrando {resultadosFiltradosTiempos.length} de {tiemposResultados.length} unidades
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3">
+          {/* Botón Exportar PDF */}
+          <button
+            onClick={exportarTiemposAPDF}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors flex items-center gap-2 font-bold shadow-lg"
+          >
+            <Download className="w-4 h-4" />
+            Exportar PDF
+          </button>
+          
           {buscarPlacaTiempos && (
             <button
               onClick={() => setBuscarPlacaTiempos('')}
