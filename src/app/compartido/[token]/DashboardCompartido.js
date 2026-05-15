@@ -1459,25 +1459,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         </div>
       </div>
 
-      {/* ⚠️ ADVERTENCIA: Viajes incompletos excluidos */}
-      {viajesIncompletos.length > 0 && (
-        <div style={{
-          background: '#fef3c7',
-          borderLeft: '4px solid #f59e0b',
-          borderRadius: '8px',
-          padding: '10px 16px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '12px'
-        }}>
-          <span style={{ fontSize: '16px' }}>⚠️</span>
-          <span style={{ color: '#92400e' }}>
-            <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no se están considerando
-          </span>
-        </div>
-      )}
+      
 
       {/* 🔥 INFO: Acumulado al inicio del período */}
       {acumuladoInicioPeriodo > 0 && (
