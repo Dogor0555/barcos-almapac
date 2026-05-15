@@ -1161,7 +1161,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (CORREGIDO)
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -1169,9 +1169,24 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
   const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
+  // 🔥 FILTRAR VIAJES POR PERÍODO DE TIEMPO SELECCIONADO
+  const viajesFiltradosPorPeriodo = useMemo(() => {
+    if (!viajes || viajes.length === 0) return [];
+    
+    const ahora = dayjs();
+    const horasAtras = ahora.subtract(periodoPrediccion, 'hour');
+    
+    return viajes.filter(v => {
+      const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
+                        (v.created_at ? dayjs.utc(v.created_at) : null);
+      if (!fechaViaje) return false;
+      return fechaViaje.isAfter(horasAtras);
+    });
+  }, [viajes, periodoPrediccion]);
+
   const viajesCompletos = useMemo(() => {
-    return viajes.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
-  }, [viajes]);
+    return viajesFiltradosPorPeriodo.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
+  }, [viajesFiltradosPorPeriodo]);
 
   const viajesOrdenados = useMemo(() => {
     return [...viajesCompletos].sort((a, b) => {
@@ -1247,10 +1262,10 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   }, [viajesOrdenados]);
 
   const datosViajes = useMemo(() => {
-    const viajesParaGrafico = viajes.slice(-15);
+    const viajesParaGrafico = viajesFiltradosPorPeriodo.slice(-15);
     return viajesParaGrafico.map((v, i, arr) => {
-      const viajesCompletosHastaAhora = viajes
-        .slice(0, viajes.indexOf(v) + 1)
+      const viajesCompletosHastaAhora = viajesFiltradosPorPeriodo
+        .slice(0, viajesFiltradosPorPeriodo.indexOf(v) + 1)
         .filter(v2 => v2.estado === 'completo');
       const acumulado = viajesCompletosHastaAhora.reduce((sum, v2) => sum + (v2.peso_destino_tm || 0), 0);
       return {
@@ -1262,7 +1277,18 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         estado: v.estado
       };
     });
-  }, [viajes]);
+  }, [viajesFiltradosPorPeriodo]);
+
+  // Mostrar información del período seleccionado
+  const getPeriodoTexto = () => {
+    switch(periodoPrediccion) {
+      case 3: return 'Últimas 3 horas';
+      case 6: return 'Últimas 6 horas';
+      case 12: return 'Últimas 12 horas';
+      case 24: return 'Últimas 24 horas';
+      default: return `Últimas ${periodoPrediccion} horas`;
+    }
+  };
 
   if (!meta || meta === 0) {
     return (
@@ -1283,15 +1309,18 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
       <div className="alm-predicciones-header">
         <h4 className="alm-chart-title">🚛 Tendencias Viajes - {producto.nombre}</h4>
         <div className="alm-predicciones-controls">
+          <span className="alm-periodo-info" style={{ fontSize: '11px', color: '#64748b', marginRight: '8px' }}>
+            {getPeriodoTexto()}
+          </span>
           <select
             value={periodoPrediccion}
             onChange={(e) => setPeriodoPrediccion(Number(e.target.value))}
             className="alm-predicciones-select"
           >
-            <option value={3}>3 horas</option>
-            <option value={6}>6 horas</option>
-            <option value={12}>12 horas</option>
-            <option value={24}>24 horas</option>
+            <option value={3}>📊 3 horas</option>
+            <option value={6}>📊 6 horas</option>
+            <option value={12}>📊 12 horas</option>
+            <option value={24}>📊 24 horas</option>
           </select>
         </div>
       </div>
@@ -1355,11 +1384,12 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div className="alm-pred-leyenda">
               <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Peso Destino por Viaje</span>
               <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Acumulado Destino</span>
+              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#94a3b8' }} />Período: {getPeriodoTexto()}</span>
             </div>
           </div>
         ) : (
           <div className="alm-pred-grafico alm-empty" style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <p>No hay suficientes datos para mostrar el gráfico</p>
+            <p>No hay viajes en el período seleccionado ({getPeriodoTexto().toLowerCase()})</p>
           </div>
         )}
       </div>
