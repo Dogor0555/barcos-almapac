@@ -1161,7 +1161,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (SOLO VIAJES COMPLETOS)
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (ACUMULADO REAL TOTAL)
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -1174,15 +1174,38 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     return viajes.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
   }, [viajes]);
 
-  // 🔥 FILTRAR VIAJES COMPLETOS POR PERÍODO DE TIEMPO SELECCIONADO
+  // 🔥 ORDENAR TODOS LOS VIAJES COMPLETOS cronológicamente (para acumulado REAL)
+  const viajesCompletosOrdenados = useMemo(() => {
+    return [...viajesCompletosBase].sort((a, b) => {
+      const fechaA = a.fecha_hora ? dayjs.utc(a.fecha_hora).unix() :
+        (a.created_at ? dayjs.utc(a.created_at).unix() : 0);
+      const fechaB = b.fecha_hora ? dayjs.utc(b.fecha_hora).unix() :
+        (b.created_at ? dayjs.utc(b.created_at).unix() : 0);
+      return fechaA - fechaB;
+    });
+  }, [viajesCompletosBase]);
+
+  // 🔥 Calcular acumulado REAL TOTAL (desde el primer viaje hasta hoy)
+  const acumuladoRealTotal = useMemo(() => {
+    let acumulado = 0;
+    return viajesCompletosOrdenados.map(viaje => {
+      acumulado += (viaje.peso_destino_tm || 0);
+      return {
+        ...viaje,
+        acumulado_real: acumulado
+      };
+    });
+  }, [viajesCompletosOrdenados]);
+
+  // 🔥 FILTRAR VIAJES POR PERÍODO DE TIEMPO (solo para MOSTRAR, no para reiniciar acumulado)
   const viajesFiltradosPorPeriodo = useMemo(() => {
-    if (!viajesCompletosBase || viajesCompletosBase.length === 0) return [];
+    if (!acumuladoRealTotal || acumuladoRealTotal.length === 0) return [];
     
     const ahora = dayjs();
     let horasAtras;
     
     switch(periodoPrediccion) {
-      case 1: // ÚLTIMA HORA
+      case 1:
         horasAtras = ahora.subtract(1, 'hour');
         break;
       case 3:
@@ -1201,45 +1224,70 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         horasAtras = ahora.subtract(6, 'hour');
     }
     
-    return viajesCompletosBase.filter(v => {
+    // Filtrar viajes por fecha, pero mantener su acumulado_real TOTAL
+    return acumuladoRealTotal.filter(v => {
       const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
                         (v.created_at ? dayjs.utc(v.created_at) : null);
       if (!fechaViaje) return false;
       return fechaViaje.isAfter(horasAtras);
     });
-  }, [viajesCompletosBase, periodoPrediccion]);
+  }, [acumuladoRealTotal, periodoPrediccion]);
 
-  // 🔥 FILTRO ESPECIAL: VIAJES COMPLETOS DE LA ÚLTIMA HORA
+  // 🔥 Obtener el acumulado EXACTO al inicio del período seleccionado
+  const acumuladoInicioPeriodo = useMemo(() => {
+    if (acumuladoRealTotal.length === 0) return 0;
+    
+    const ahora = dayjs();
+    let horasAtras;
+    
+    switch(periodoPrediccion) {
+      case 1: horasAtras = ahora.subtract(1, 'hour'); break;
+      case 3: horasAtras = ahora.subtract(3, 'hour'); break;
+      case 6: horasAtras = ahora.subtract(6, 'hour'); break;
+      case 12: horasAtras = ahora.subtract(12, 'hour'); break;
+      case 24: horasAtras = ahora.subtract(24, 'hour'); break;
+      default: horasAtras = ahora.subtract(6, 'hour');
+    }
+    
+    // Encontrar el último viaje ANTES del período seleccionado
+    let ultimoAcumuladoAntes = 0;
+    for (let i = 0; i < acumuladoRealTotal.length; i++) {
+      const viaje = acumuladoRealTotal[i];
+      const fechaViaje = viaje.fecha_hora ? dayjs.utc(viaje.fecha_hora) : 
+                        (viaje.created_at ? dayjs.utc(viaje.created_at) : null);
+      if (fechaViaje && fechaViaje.isBefore(horasAtras)) {
+        ultimoAcumuladoAntes = viaje.acumulado_real;
+      } else {
+        break;
+      }
+    }
+    
+    return ultimoAcumuladoAntes;
+  }, [acumuladoRealTotal, periodoPrediccion]);
+
+  // 🔥 VIAJES DE LA ÚLTIMA HORA (con su acumulado REAL)
   const viajesUltimaHora = useMemo(() => {
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
     
-    return viajesCompletosBase.filter(v => {
+    return acumuladoRealTotal.filter(v => {
       const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
                         (v.created_at ? dayjs.utc(v.created_at) : null);
       if (!fechaViaje) return false;
       return fechaViaje.isAfter(hace1Hora);
     });
-  }, [viajesCompletosBase]);
+  }, [acumuladoRealTotal]);
 
-  // Ya no necesitamos filtrar por estado porque viajesFiltradosPorPeriodo ya son SOLO completos
   const viajesCompletos = viajesFiltradosPorPeriodo;
 
-  const viajesOrdenados = useMemo(() => {
-    return [...viajesCompletos].sort((a, b) => {
-      const fechaA = a.fecha_hora ? dayjs.utc(a.fecha_hora).unix() :
-        (a.created_at ? dayjs.utc(a.created_at).unix() : 0);
-      const fechaB = b.fecha_hora ? dayjs.utc(b.fecha_hora).unix() :
-        (b.created_at ? dayjs.utc(b.created_at).unix() : 0);
-      return fechaA - fechaB;
-    });
-  }, [viajesCompletos]);
-
-  // 🔥 FLUJO DE LA ÚLTIMA HORA (solo viajes completos)
+  // 🔥 FLUJO DE LA ÚLTIMA HORA (diferencia real de acumulado)
   const flujoUltimaHora = useMemo(() => {
     if (viajesUltimaHora.length === 0) return 0;
-    const totalToneladas = viajesUltimaHora.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
-    return totalToneladas; // En 1 hora, T/h = toneladas
+    const primerViajeUltimaHora = viajesUltimaHora[0];
+    const ultimoViajeUltimaHora = viajesUltimaHora[viajesUltimaHora.length - 1];
+    const acumuladoInicio = primerViajeUltimaHora.acumulado_real - (primerViajeUltimaHora.peso_destino_tm || 0);
+    const acumuladoFin = ultimoViajeUltimaHora.acumulado_real;
+    return acumuladoFin - acumuladoInicio;
   }, [viajesUltimaHora]);
 
   const rendimientoPromedio = useMemo(() => {
@@ -1249,9 +1297,9 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   }, [viajesCompletos]);
 
   const frecuenciaViajes = useMemo(() => {
-    if (viajesOrdenados.length < 2) return 0;
-    const primerViaje = viajesOrdenados[0];
-    const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
+    if (viajesCompletos.length < 2) return 0;
+    const primerViaje = viajesCompletos[0];
+    const ultimoViaje = viajesCompletos[viajesCompletos.length - 1];
     const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
     const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
     if (!fechaPrimera || !fechaUltima) return 0;
@@ -1259,23 +1307,32 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     const horaFinal = dayjs.utc(fechaUltima);
     const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
     if (horasTranscurridas <= 0) return 0;
-    return viajesOrdenados.length / horasTranscurridas;
-  }, [viajesOrdenados]);
+    return viajesCompletos.length / horasTranscurridas;
+  }, [viajesCompletos]);
 
+  // 🔥 FLUJO POR HORA basado en acumulado REAL (no reiniciado)
   const flujoPorHoraViajes = useMemo(() => {
-    if (viajesOrdenados.length < 2) return 0;
-    const primerViaje = viajesOrdenados[0];
-    const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
-    const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
-    const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-    if (!fechaPrimera || !fechaUltima) return 0;
-    const horaInicial = dayjs.utc(fechaPrimera);
-    const horaFinal = dayjs.utc(fechaUltima);
-    const horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
-    if (horasTranscurridas <= 0) return 0;
-    const totalToneladas = viajesOrdenados.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
-    return totalToneladas / horasTranscurridas;
-  }, [viajesOrdenados]);
+    if (viajesCompletos.length < 1) return 0;
+    
+    const acumuladoInicio = acumuladoInicioPeriodo;
+    const acumuladoFin = viajesCompletos.length > 0 ? viajesCompletos[viajesCompletos.length - 1].acumulado_real : acumuladoInicio;
+    const diferenciaTotal = acumuladoFin - acumuladoInicio;
+    
+    let horasTranscurridas = periodoPrediccion;
+    if (viajesCompletos.length > 0) {
+      const primerViaje = viajesCompletos[0];
+      const ultimoViaje = viajesCompletos[viajesCompletos.length - 1];
+      const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
+      const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
+      if (fechaPrimera && fechaUltima) {
+        const horaInicial = dayjs.utc(fechaPrimera);
+        const horaFinal = dayjs.utc(fechaUltima);
+        horasTranscurridas = horaFinal.diff(horaInicial, 'hour', true);
+      }
+    }
+    
+    return horasTranscurridas > 0 ? diferenciaTotal / horasTranscurridas : 0;
+  }, [viajesCompletos, acumuladoInicioPeriodo, periodoPrediccion]);
 
   const rendimientoReciente = useMemo(() => {
     const ultimosViajes = viajesCompletos.slice(-5);
@@ -1285,65 +1342,75 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   }, [viajesCompletos, rendimientoPromedio]);
 
   const totalViajes = viajesCompletos.length;
-  const totalToneladasViajes = viajesCompletos.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
+  const totalToneladasEnPeriodo = viajesCompletos.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
+  const totalToneladasGlobal = acumuladoRealTotal.length > 0 ? acumuladoRealTotal[acumuladoRealTotal.length - 1]?.acumulado_real || 0 : 0;
 
   const viajesFaltantes = useMemo(() => {
     if (!meta || meta === 0) return 0;
-    const toneladasFaltantes = Math.max(0, meta - totalToneladasViajes);
+    const toneladasFaltantes = Math.max(0, meta - totalToneladasGlobal);
     return rendimientoReciente > 0 ? Math.ceil(toneladasFaltantes / rendimientoReciente) : 0;
-  }, [meta, totalToneladasViajes, rendimientoReciente]);
+  }, [meta, totalToneladasGlobal, rendimientoReciente]);
 
-  const horasTranscurridas = useMemo(() => {
-    if (viajesOrdenados.length < 2) return 0;
-    const primerViaje = viajesOrdenados[0];
-    const ultimoViaje = viajesOrdenados[viajesOrdenados.length - 1];
-    const fechaPrimera = primerViaje.fecha_hora || primerViaje.created_at;
-    const fechaUltima = ultimoViaje.fecha_hora || ultimoViaje.created_at;
-    if (!fechaPrimera || !fechaUltima) return 0;
-    const horaInicial = dayjs.utc(fechaPrimera);
-    const horaFinal = dayjs.utc(fechaUltima);
-    return horaFinal.diff(horaInicial, 'hour', true);
-  }, [viajesOrdenados]);
-
+  // 🔥 DATOS PARA EL GRÁFICO - MOSTRANDO ACUMULADO REAL (NO REINICIADO)
   const datosViajes = useMemo(() => {
-    const viajesParaGrafico = viajesFiltradosPorPeriodo.slice(-15);
-    return viajesParaGrafico.map((v, i, arr) => {
-      const viajesCompletosHastaAhora = viajesFiltradosPorPeriodo
-        .slice(0, viajesFiltradosPorPeriodo.indexOf(v) + 1);
-      const acumulado = viajesCompletosHastaAhora.reduce((sum, v2) => sum + (v2.peso_destino_tm || 0), 0);
+    return viajesCompletos.map((v, i) => {
       return {
         numero: `V${v.viaje_numero || (i + 1)}`,
         peso: v.peso_destino_tm || 0,
-        acumulado: acumulado,
-        hora: v.fecha_hora ? dayjs.utc(v.fecha_hora).format("HH:mm") :
-          (v.created_at ? dayjs.utc(v.created_at).format("HH:mm") : '--:--'),
-        estado: v.estado,
-        fechaCompleta: v.fecha_hora || v.created_at
+        acumulado: v.acumulado_real, // ← ACUMULADO REAL TOTAL
+        acumuladoInicioPeriodo: acumuladoInicioPeriodo,
+        hora: v.fecha_hora ? dayjs.utc(v.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm") :
+          (v.created_at ? dayjs.utc(v.created_at).tz(ZONA_HORARIA_SV).format("HH:mm") : '--:--'),
+        fechaCompleta: v.fecha_hora || v.created_at,
+        pesoTon: (v.peso_destino_tm || 0).toFixed(2)
       };
     });
-  }, [viajesFiltradosPorPeriodo]);
+  }, [viajesCompletos, acumuladoInicioPeriodo]);
 
   // Mostrar información del período seleccionado
   const getPeriodoTexto = () => {
     switch(periodoPrediccion) {
-      case 1: return '🕐 ÚLTIMA HORA (SOLO COMPLETOS)';
-      case 3: return '📊 Últimas 3 horas (solo completos)';
-      case 6: return '📊 Últimas 6 horas (solo completos)';
-      case 12: return '📊 Últimas 12 horas (solo completos)';
-      case 24: return '📊 Últimas 24 horas (solo completos)';
-      default: return `📊 Últimas ${periodoPrediccion} horas (solo completos)`;
+      case 1: return '🕐 ÚLTIMA HORA';
+      case 3: return '📊 Últimas 3 horas';
+      case 6: return '📊 Últimas 6 horas';
+      case 12: return '📊 Últimas 12 horas';
+      case 24: return '📊 Últimas 24 horas';
+      default: return `📊 Últimas ${periodoPrediccion} horas`;
     }
   };
 
-  // Obtener color del período para destacar
   const getPeriodoColor = () => {
     return periodoPrediccion === 1 ? '#ef4444' : producto.color_accent;
   };
 
-  // Contar viajes incompletos (para mostrar advertencia)
   const viajesIncompletos = useMemo(() => {
     return viajes.filter(v => v.estado !== 'completo');
   }, [viajes]);
+
+  // Tooltip personalizado que muestra el acumulado REAL
+  const CustomViajesTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0]?.payload;
+    
+    return (
+      <div className="alm-tooltip" style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '12px 16px' }}>
+        <p className="alm-tooltip-label" style={{ color: '#94a3b8', marginBottom: '8px' }}>
+          Viaje {label} · {data?.hora || '--:--'}
+        </p>
+        <p className="alm-tooltip-value" style={{ color: producto.color_accent }}>
+          📦 Peso: <strong>{fmtTM(data?.peso, 2)} T</strong>
+        </p>
+        <p className="alm-tooltip-value" style={{ color: '#f97316', marginTop: '4px' }}>
+          📊 Acumulado TOTAL: <strong>{fmtTM(data?.acumulado, 2)} T</strong>
+        </p>
+        {acumuladoInicioPeriodo > 0 && (
+          <p className="alm-tooltip-value" style={{ color: '#10b981', marginTop: '4px', fontSize: '10px' }}>
+            📈 Acumulado al inicio del período: {fmtTM(acumuladoInicioPeriodo, 2)} T
+          </p>
+        )}
+      </div>
+    );
+  };
 
   if (!meta || meta === 0) {
     return (
@@ -1407,7 +1474,29 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         }}>
           <span style={{ fontSize: '16px' }}>⚠️</span>
           <span style={{ color: '#92400e' }}>
-            <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no se están considerando en los cálculos
+            <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no se están considerando
+          </span>
+        </div>
+      )}
+
+      {/* 🔥 INFO: Acumulado al inicio del período */}
+      {acumuladoInicioPeriodo > 0 && (
+        <div style={{
+          background: '#1e293b',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+            📍 Acumulado TOTAL hasta el inicio del período:
+          </span>
+          <span style={{ fontSize: '18px', fontWeight: '800', color: '#f97316', fontFamily: 'monospace' }}>
+            {fmtTM(acumuladoInicioPeriodo, 2)} T
           </span>
         </div>
       )}
@@ -1419,127 +1508,108 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div className="alm-pred-metrica" style={{ borderColor: '#ef4444', background: '#fff5f5' }}>
               <span className="alm-pred-label" style={{ color: '#ef4444' }}>🕐 FLUJO ÚLTIMA HORA</span>
               <span className="alm-pred-valor-grande" style={{ color: '#ef4444' }}>{fmtTM(flujoUltimaHora, 2)} T/h</span>
-              <span className="alm-pred-sub">{viajesUltimaHora.length} viaje{viajesUltimaHora.length !== 1 ? 's' : ''} completos en la última hora</span>
+              <span className="alm-pred-sub">{viajesUltimaHora.length} viaje{viajesUltimaHora.length !== 1 ? 's' : ''} completos</span>
             </div>
           )}
 
           <div className="alm-pred-metrica" style={{ borderColor: getPeriodoColor() }}>
-            <span className="alm-pred-label">📊 TOTAL VIAJES COMPLETOS</span>
+            <span className="alm-pred-label">📊 VIAJES EN EL PERÍODO</span>
             <span className="alm-pred-valor-grande">{totalViajes}</span>
-            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 2)} {textoUnidad}</span>
-            {periodoPrediccion === 1 && (
-              <span className="alm-pred-sub" style={{ color: '#ef4444', marginTop: '4px' }}>
-                ✅ Solo viajes completos de la última hora
-              </span>
-            )}
+            <span className="alm-pred-sub">{fmtTM(totalToneladasEnPeriodo, 2)} {textoUnidad} en este período</span>
+          </div>
+
+          <div className="alm-pred-metrica" style={{ borderColor: '#3b82f6' }}>
+            <span className="alm-pred-label">📈 ACUMULADO TOTAL GLOBAL</span>
+            <span className="alm-pred-valor-grande" style={{ color: '#3b82f6' }}>{fmtTM(totalToneladasGlobal, 2)} T</span>
+            <span className="alm-pred-sub">Desde el primer viaje completo</span>
           </div>
 
           <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${getPeriodoColor()}20`, borderColor: getPeriodoColor() }}>
-            <span className="alm-pred-label">⏱️ FLUJO PROMEDIO POR HORA</span>
+            <span className="alm-pred-label">⏱️ FLUJO PROMEDIO EN EL PERÍODO</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPorHoraViajes, 2)} T/h</span>
-            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas (solo completos)</span>
+            <span className="alm-pred-sub">{fmtTM(totalToneladasEnPeriodo, 0)} T en {periodoPrediccion} horas</span>
           </div>
 
           <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
             <span className="alm-pred-label">⚖️ RENDIMIENTO PROMEDIO</span>
             <span className="alm-pred-valor">{fmtTM(rendimientoPromedio, 2)} T/viaje</span>
-            <span className="alm-pred-sub">Basado en {totalViajes} viaje{totalViajes !== 1 ? 's' : ''} completos</span>
+            <span className="alm-pred-sub">Basado en {totalViajes} viaje{totalViajes !== 1 ? 's' : ''}</span>
           </div>
-
-          {frecuenciaViajes > 0 && (
-            <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
-              <span className="alm-pred-label">⏱️ FRECUENCIA DE VIAJES</span>
-              <span className="alm-pred-valor">{Math.round(frecuenciaViajes)} viajes/h</span>
-              <span className="alm-pred-sub">Viajes completos por hora</span>
-            </div>
-          )}
 
           {viajesFaltantes > 0 && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">📦 {textoFaltante}</span>
               <span className="alm-pred-valor">{viajesFaltantes} viajes</span>
-              <span className="alm-pred-sub">{fmtTM(meta - totalToneladasViajes, 2)} T por transportar</span>
+              <span className="alm-pred-sub">{fmtTM(meta - totalToneladasGlobal, 2)} T por transportar</span>
             </div>
           )}
         </div>
 
         {datosViajes.length > 0 ? (
           <div className="alm-pred-grafico">
-            <ResponsiveContainer width="100%" height={320}>
+            <ResponsiveContainer width="100%" height={340}>
               <ComposedChart data={datosViajes} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="numero" tick={{ fontSize: 9, fill: "#64748b" }} angle={-45} textAnchor="end" height={50} />
                 <YAxis yAxisId="left" tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'Peso (TM)', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#64748b' } }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'Acumulado (TM)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#64748b' } }} />
-                <Tooltip
-                  formatter={(value, name) => {
-                    if (name === "Peso Viaje") return [fmtTM(value, 2) + ' T', name];
-                    if (name === "Acumulado") return [fmtTM(value, 2) + ' T', name];
-                    return [value, name];
-                  }}
-                  labelFormatter={(label) => `Viaje ${label}`}
-                />
-                <Bar yAxisId="left" dataKey="peso" fill={periodoPrediccion === 1 ? '#ef4444' : producto.color_accent} name="Peso Viaje (Destino)" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: "#ef4444" }} name="Acumulado (Destino)" />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'Acumulado TOTAL (TM)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#64748b' } }} domain={[0, 'auto']} />
+                <Tooltip content={<CustomViajesTooltip />} />
+                <Bar yAxisId="left" dataKey="peso" fill={periodoPrediccion === 1 ? '#ef4444' : producto.color_accent} name="Peso Viaje" radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }} name="Acumulado TOTAL" />
+                {/* Línea horizontal del acumulado al inicio del período */}
+                <Line yAxisId="right" type="monotone" dataKey="acumuladoInicioPeriodo" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="Inicio del período" />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
               <span className="alm-leyenda-item">
                 <span className="alm-leyenda-color" style={{ background: periodoPrediccion === 1 ? '#ef4444' : producto.color_accent }} />
-                Peso Destino por Viaje (solo completos)
+                Peso por Viaje
               </span>
-              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Acumulado Destino</span>
               <span className="alm-leyenda-item">
-                <span className="alm-leyenda-color" style={{ background: getPeriodoColor() }} />
-                Período: {getPeriodoTexto()}
+                <span className="alm-leyenda-color" style={{ background: '#f97316' }} />
+                Acumulado TOTAL (NO reinicia)
+              </span>
+              <span className="alm-leyenda-item">
+                <span className="alm-leyenda-color" style={{ background: '#ef4444' }} />
+                Nivel al inicio del período
               </span>
             </div>
           </div>
         ) : (
           <div className="alm-pred-grafico alm-empty" style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
-            <span style={{ fontSize: '48px' }}>✅</span>
+            <span style={{ fontSize: '48px' }}>📊</span>
             <p style={{ fontWeight: '600', color: '#f59e0b' }}>No hay viajes COMPLETOS en el período seleccionado</p>
             <p style={{ fontSize: '12px', color: '#64748b' }}>{getPeriodoTexto().toLowerCase()}</p>
-            {viajesIncompletos.length > 0 && (
-              <p style={{ fontSize: '11px', color: '#f59e0b', marginTop: '8px' }}>
-                ⚠️ Hay {viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''} que no se están mostrando
-              </p>
-            )}
+            <p style={{ fontSize: '11px', color: '#f97316' }}>
+              Acumulado TOTAL global: {fmtTM(totalToneladasGlobal, 2)} T
+            </p>
           </div>
         )}
       </div>
 
-      {/* 🔥 RESUMEN ADICIONAL PARA ÚLTIMA HORA */}
-      {periodoPrediccion === 1 && viajesUltimaHora.length > 0 && (
-        <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#fff5f5', borderRadius: '12px', padding: '16px' }}>
-          <h5 className="alm-recomendaciones-titulo" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>✅</span> Resumen Última Hora (Solo viajes completos)
+      {/* 🔥 RESUMEN DEL PERÍODO CON ACUMULADO EXACTO */}
+      {viajesCompletos.length > 0 && (
+        <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+          <h5 className="alm-recomendaciones-titulo" style={{ color: '#f97316', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>📈</span> Resumen de Acumulado en el Período
           </h5>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '12px' }}>
             <div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>Viajes completados</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{viajesUltimaHora.length}</div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Al inicio del período</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#94a3b8' }}>{fmtTM(acumuladoInicioPeriodo, 2)} T</div>
             </div>
             <div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>Tonelajes transportados</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{fmtTM(flujoUltimaHora, 2)} T</div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Al final del período</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#f97316' }}>{fmtTM(viajesCompletos[viajesCompletos.length - 1]?.acumulado_real || 0, 2)} T</div>
             </div>
             <div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>Rendimiento promedio</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{fmtTM(flujoUltimaHora / viajesUltimaHora.length, 2)} T/viaje</div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Diferencia en el período</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: '#10b981' }}>{fmtTM(totalToneladasEnPeriodo, 2)} T</div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🔥 INFORME DE VIAJES EXCLUIDOS */}
-      {viajesIncompletos.length > 0 && periodoPrediccion !== 1 && (
-        <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#fef3c7', borderRadius: '12px', padding: '12px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#92400e' }}>
-            <span>⚠️</span>
-            <span>
-              <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no incluidos en los cálculos
-            </span>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Progreso en el período</div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: getPeriodoColor() }}>{((totalToneladasEnPeriodo / meta) * 100).toFixed(1)}%</div>
+            </div>
           </div>
         </div>
       )}
