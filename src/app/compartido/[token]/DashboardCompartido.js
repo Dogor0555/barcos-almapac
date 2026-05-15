@@ -1161,7 +1161,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (CORREGIDO)
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (CON FILTROS POR HORA)
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -1174,7 +1174,27 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     if (!viajes || viajes.length === 0) return [];
     
     const ahora = dayjs();
-    const horasAtras = ahora.subtract(periodoPrediccion, 'hour');
+    let horasAtras;
+    
+    switch(periodoPrediccion) {
+      case 1: // ÚLTIMA HORA
+        horasAtras = ahora.subtract(1, 'hour');
+        break;
+      case 3:
+        horasAtras = ahora.subtract(3, 'hour');
+        break;
+      case 6:
+        horasAtras = ahora.subtract(6, 'hour');
+        break;
+      case 12:
+        horasAtras = ahora.subtract(12, 'hour');
+        break;
+      case 24:
+        horasAtras = ahora.subtract(24, 'hour');
+        break;
+      default:
+        horasAtras = ahora.subtract(6, 'hour');
+    }
     
     return viajes.filter(v => {
       const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
@@ -1183,6 +1203,19 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
       return fechaViaje.isAfter(horasAtras);
     });
   }, [viajes, periodoPrediccion]);
+
+  // 🔥 FILTRO ESPECIAL: VIAJES DE LA ÚLTIMA HORA (para mostrar en métrica destacada)
+  const viajesUltimaHora = useMemo(() => {
+    const ahora = dayjs();
+    const hace1Hora = ahora.subtract(1, 'hour');
+    
+    return viajes.filter(v => {
+      const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
+                        (v.created_at ? dayjs.utc(v.created_at) : null);
+      if (!fechaViaje) return false;
+      return fechaViaje.isAfter(hace1Hora) && v.estado === 'completo' && v.peso_destino_tm > 0;
+    });
+  }, [viajes]);
 
   const viajesCompletos = useMemo(() => {
     return viajesFiltradosPorPeriodo.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
@@ -1197,6 +1230,13 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
       return fechaA - fechaB;
     });
   }, [viajesCompletos]);
+
+  // 🔥 FLUJO DE LA ÚLTIMA HORA (cálculo específico)
+  const flujoUltimaHora = useMemo(() => {
+    if (viajesUltimaHora.length === 0) return 0;
+    const totalToneladas = viajesUltimaHora.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
+    return totalToneladas; // En 1 hora, T/h = toneladas
+  }, [viajesUltimaHora]);
 
   const rendimientoPromedio = useMemo(() => {
     if (viajesCompletos.length === 0) return 0;
@@ -1274,7 +1314,8 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         acumulado: acumulado,
         hora: v.fecha_hora ? dayjs.utc(v.fecha_hora).format("HH:mm") :
           (v.created_at ? dayjs.utc(v.created_at).format("HH:mm") : '--:--'),
-        estado: v.estado
+        estado: v.estado,
+        fechaCompleta: v.fecha_hora || v.created_at
       };
     });
   }, [viajesFiltradosPorPeriodo]);
@@ -1282,12 +1323,18 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   // Mostrar información del período seleccionado
   const getPeriodoTexto = () => {
     switch(periodoPrediccion) {
-      case 3: return 'Últimas 3 horas';
-      case 6: return 'Últimas 6 horas';
-      case 12: return 'Últimas 12 horas';
-      case 24: return 'Últimas 24 horas';
-      default: return `Últimas ${periodoPrediccion} horas`;
+      case 1: return '🕐 ÚLTIMA HORA';
+      case 3: return '📊 Últimas 3 horas';
+      case 6: return '📊 Últimas 6 horas';
+      case 12: return '📊 Últimas 12 horas';
+      case 24: return '📊 Últimas 24 horas';
+      default: return `📊 Últimas ${periodoPrediccion} horas`;
     }
+  };
+
+  // Obtener color del período para destacar
+  const getPeriodoColor = () => {
+    return periodoPrediccion === 1 ? '#ef4444' : producto.color_accent;
   };
 
   if (!meta || meta === 0) {
@@ -1308,15 +1355,27 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     <div className="alm-predicciones-panel">
       <div className="alm-predicciones-header">
         <h4 className="alm-chart-title">🚛 Tendencias Viajes - {producto.nombre}</h4>
-        <div className="alm-predicciones-controls">
-          <span className="alm-periodo-info" style={{ fontSize: '11px', color: '#64748b', marginRight: '8px' }}>
+        <div className="alm-predicciones-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="alm-periodo-info" style={{ 
+            fontSize: '11px', 
+            fontWeight: periodoPrediccion === 1 ? '800' : '500',
+            color: getPeriodoColor(),
+            background: periodoPrediccion === 1 ? '#ef444410' : 'transparent',
+            padding: '4px 8px',
+            borderRadius: '20px'
+          }}>
             {getPeriodoTexto()}
           </span>
           <select
             value={periodoPrediccion}
             onChange={(e) => setPeriodoPrediccion(Number(e.target.value))}
             className="alm-predicciones-select"
+            style={{
+              borderColor: periodoPrediccion === 1 ? '#ef4444' : undefined,
+              background: periodoPrediccion === 1 ? '#fff5f5' : undefined
+            }}
           >
+            <option value={1}>🕐 ÚLTIMA HORA</option>
             <option value={3}>📊 3 horas</option>
             <option value={6}>📊 6 horas</option>
             <option value={12}>📊 12 horas</option>
@@ -1327,13 +1386,27 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
 
       <div className="alm-predicciones-grid">
         <div className="alm-pred-metricas">
-          <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
+          {/* 🔥 MÉTRICA DESTACADA DE ÚLTIMA HORA */}
+          {flujoUltimaHora > 0 && periodoPrediccion !== 1 && (
+            <div className="alm-pred-metrica" style={{ borderColor: '#ef4444', background: '#fff5f5' }}>
+              <span className="alm-pred-label" style={{ color: '#ef4444' }}>🕐 FLUJO ÚLTIMA HORA</span>
+              <span className="alm-pred-valor-grande" style={{ color: '#ef4444' }}>{fmtTM(flujoUltimaHora, 2)} T/h</span>
+              <span className="alm-pred-sub">{viajesUltimaHora.length} viaje{viajesUltimaHora.length !== 1 ? 's' : ''} en la última hora</span>
+            </div>
+          )}
+
+          <div className="alm-pred-metrica" style={{ borderColor: getPeriodoColor() }}>
             <span className="alm-pred-label">📊 TOTAL VIAJES COMPLETOS</span>
             <span className="alm-pred-valor-grande">{totalViajes}</span>
             <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 2)} {textoUnidad}</span>
+            {periodoPrediccion === 1 && (
+              <span className="alm-pred-sub" style={{ color: '#ef4444', marginTop: '4px' }}>
+                ⚡ Datos SOLO de la última hora
+              </span>
+            )}
           </div>
 
-          <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${producto.color_accent}20`, borderColor: producto.color_accent }}>
+          <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${getPeriodoColor()}20`, borderColor: getPeriodoColor() }}>
             <span className="alm-pred-label">⏱️ FLUJO PROMEDIO POR HORA</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPorHoraViajes, 2)} T/h</span>
             <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas</span>
@@ -1377,22 +1450,53 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
                   }}
                   labelFormatter={(label) => `Viaje ${label}`}
                 />
-                <Bar yAxisId="left" dataKey="peso" fill={producto.color_accent} name="Peso Viaje (Destino)" radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="peso" fill={periodoPrediccion === 1 ? '#ef4444' : producto.color_accent} name="Peso Viaje (Destino)" radius={[3, 3, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: "#ef4444" }} name="Acumulado (Destino)" />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="alm-pred-leyenda">
-              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: producto.color_accent }} />Peso Destino por Viaje</span>
+              <span className="alm-leyenda-item">
+                <span className="alm-leyenda-color" style={{ background: periodoPrediccion === 1 ? '#ef4444' : producto.color_accent }} />
+                Peso Destino por Viaje
+              </span>
               <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Acumulado Destino</span>
-              <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#94a3b8' }} />Período: {getPeriodoTexto()}</span>
+              <span className="alm-leyenda-item">
+                <span className="alm-leyenda-color" style={{ background: getPeriodoColor() }} />
+                Período: {getPeriodoTexto()}
+              </span>
             </div>
           </div>
         ) : (
-          <div className="alm-pred-grafico alm-empty" style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <p>No hay viajes en el período seleccionado ({getPeriodoTexto().toLowerCase()})</p>
+          <div className="alm-pred-grafico alm-empty" style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
+            <span style={{ fontSize: '48px' }}>🕐</span>
+            <p style={{ fontWeight: '600', color: '#ef4444' }}>No hay viajes en el período seleccionado</p>
+            <p style={{ fontSize: '12px', color: '#64748b' }}>{getPeriodoTexto().toLowerCase()}</p>
           </div>
         )}
       </div>
+
+      {/* 🔥 RESUMEN ADICIONAL PARA ÚLTIMA HORA */}
+      {periodoPrediccion === 1 && viajesUltimaHora.length > 0 && (
+        <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#fff5f5', borderRadius: '12px', padding: '16px' }}>
+          <h5 className="alm-recomendaciones-titulo" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🕐</span> Detalle de la Última Hora
+          </h5>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '12px' }}>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Viajes completados</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{viajesUltimaHora.length}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Tonelajes transportados</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{fmtTM(flujoUltimaHora, 2)} T</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Rendimiento promedio</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{fmtTM(flujoUltimaHora / viajesUltimaHora.length, 2)} T/viaje</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
