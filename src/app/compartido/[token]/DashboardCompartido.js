@@ -1161,7 +1161,7 @@ function PanelPrediccionesBanda({ producto, lecturas, viajes, meta, tipoOperacio
 }
 
 // ============================================================================
-// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (CON FILTROS POR HORA)
+// COMPONENTE: Panel de Tendencias y Predicciones para Viajes (SOLO VIAJES COMPLETOS)
 // ============================================================================
 function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const [periodoPrediccion, setPeriodoPrediccion] = useState(6);
@@ -1169,9 +1169,14 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const textoFaltante = tipoOperacion === 'exportacion' ? 'FALTANTE POR CARGAR' : 'FALTANTE POR DESCARGAR';
   const textoUnidad = tipoOperacion === 'exportacion' ? 'T cargadas' : 'T descargadas';
 
-  // 🔥 FILTRAR VIAJES POR PERÍODO DE TIEMPO SELECCIONADO
+  // 🔥 FILTRAR SOLO VIAJES COMPLETOS primero
+  const viajesCompletosBase = useMemo(() => {
+    return viajes.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
+  }, [viajes]);
+
+  // 🔥 FILTRAR VIAJES COMPLETOS POR PERÍODO DE TIEMPO SELECCIONADO
   const viajesFiltradosPorPeriodo = useMemo(() => {
-    if (!viajes || viajes.length === 0) return [];
+    if (!viajesCompletosBase || viajesCompletosBase.length === 0) return [];
     
     const ahora = dayjs();
     let horasAtras;
@@ -1196,30 +1201,29 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         horasAtras = ahora.subtract(6, 'hour');
     }
     
-    return viajes.filter(v => {
+    return viajesCompletosBase.filter(v => {
       const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
                         (v.created_at ? dayjs.utc(v.created_at) : null);
       if (!fechaViaje) return false;
       return fechaViaje.isAfter(horasAtras);
     });
-  }, [viajes, periodoPrediccion]);
+  }, [viajesCompletosBase, periodoPrediccion]);
 
-  // 🔥 FILTRO ESPECIAL: VIAJES DE LA ÚLTIMA HORA (para mostrar en métrica destacada)
+  // 🔥 FILTRO ESPECIAL: VIAJES COMPLETOS DE LA ÚLTIMA HORA
   const viajesUltimaHora = useMemo(() => {
     const ahora = dayjs();
     const hace1Hora = ahora.subtract(1, 'hour');
     
-    return viajes.filter(v => {
+    return viajesCompletosBase.filter(v => {
       const fechaViaje = v.fecha_hora ? dayjs.utc(v.fecha_hora) : 
                         (v.created_at ? dayjs.utc(v.created_at) : null);
       if (!fechaViaje) return false;
-      return fechaViaje.isAfter(hace1Hora) && v.estado === 'completo' && v.peso_destino_tm > 0;
+      return fechaViaje.isAfter(hace1Hora);
     });
-  }, [viajes]);
+  }, [viajesCompletosBase]);
 
-  const viajesCompletos = useMemo(() => {
-    return viajesFiltradosPorPeriodo.filter(v => v.estado === 'completo' && v.peso_destino_tm > 0);
-  }, [viajesFiltradosPorPeriodo]);
+  // Ya no necesitamos filtrar por estado porque viajesFiltradosPorPeriodo ya son SOLO completos
+  const viajesCompletos = viajesFiltradosPorPeriodo;
 
   const viajesOrdenados = useMemo(() => {
     return [...viajesCompletos].sort((a, b) => {
@@ -1231,7 +1235,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     });
   }, [viajesCompletos]);
 
-  // 🔥 FLUJO DE LA ÚLTIMA HORA (cálculo específico)
+  // 🔥 FLUJO DE LA ÚLTIMA HORA (solo viajes completos)
   const flujoUltimaHora = useMemo(() => {
     if (viajesUltimaHora.length === 0) return 0;
     const totalToneladas = viajesUltimaHora.reduce((sum, v) => sum + (v.peso_destino_tm || 0), 0);
@@ -1305,8 +1309,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     const viajesParaGrafico = viajesFiltradosPorPeriodo.slice(-15);
     return viajesParaGrafico.map((v, i, arr) => {
       const viajesCompletosHastaAhora = viajesFiltradosPorPeriodo
-        .slice(0, viajesFiltradosPorPeriodo.indexOf(v) + 1)
-        .filter(v2 => v2.estado === 'completo');
+        .slice(0, viajesFiltradosPorPeriodo.indexOf(v) + 1);
       const acumulado = viajesCompletosHastaAhora.reduce((sum, v2) => sum + (v2.peso_destino_tm || 0), 0);
       return {
         numero: `V${v.viaje_numero || (i + 1)}`,
@@ -1323,12 +1326,12 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   // Mostrar información del período seleccionado
   const getPeriodoTexto = () => {
     switch(periodoPrediccion) {
-      case 1: return '🕐 ÚLTIMA HORA';
-      case 3: return '📊 Últimas 3 horas';
-      case 6: return '📊 Últimas 6 horas';
-      case 12: return '📊 Últimas 12 horas';
-      case 24: return '📊 Últimas 24 horas';
-      default: return `📊 Últimas ${periodoPrediccion} horas`;
+      case 1: return '🕐 ÚLTIMA HORA (SOLO COMPLETOS)';
+      case 3: return '📊 Últimas 3 horas (solo completos)';
+      case 6: return '📊 Últimas 6 horas (solo completos)';
+      case 12: return '📊 Últimas 12 horas (solo completos)';
+      case 24: return '📊 Últimas 24 horas (solo completos)';
+      default: return `📊 Últimas ${periodoPrediccion} horas (solo completos)`;
     }
   };
 
@@ -1336,6 +1339,11 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
   const getPeriodoColor = () => {
     return periodoPrediccion === 1 ? '#ef4444' : producto.color_accent;
   };
+
+  // Contar viajes incompletos (para mostrar advertencia)
+  const viajesIncompletos = useMemo(() => {
+    return viajes.filter(v => v.estado !== 'completo');
+  }, [viajes]);
 
   if (!meta || meta === 0) {
     return (
@@ -1355,7 +1363,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
     <div className="alm-predicciones-panel">
       <div className="alm-predicciones-header">
         <h4 className="alm-chart-title">🚛 Tendencias Viajes - {producto.nombre}</h4>
-        <div className="alm-predicciones-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="alm-predicciones-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <span className="alm-periodo-info" style={{ 
             fontSize: '11px', 
             fontWeight: periodoPrediccion === 1 ? '800' : '500',
@@ -1384,6 +1392,26 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
         </div>
       </div>
 
+      {/* ⚠️ ADVERTENCIA: Viajes incompletos excluidos */}
+      {viajesIncompletos.length > 0 && (
+        <div style={{
+          background: '#fef3c7',
+          borderLeft: '4px solid #f59e0b',
+          borderRadius: '8px',
+          padding: '10px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '12px'
+        }}>
+          <span style={{ fontSize: '16px' }}>⚠️</span>
+          <span style={{ color: '#92400e' }}>
+            <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no se están considerando en los cálculos
+          </span>
+        </div>
+      )}
+
       <div className="alm-predicciones-grid">
         <div className="alm-pred-metricas">
           {/* 🔥 MÉTRICA DESTACADA DE ÚLTIMA HORA */}
@@ -1391,7 +1419,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div className="alm-pred-metrica" style={{ borderColor: '#ef4444', background: '#fff5f5' }}>
               <span className="alm-pred-label" style={{ color: '#ef4444' }}>🕐 FLUJO ÚLTIMA HORA</span>
               <span className="alm-pred-valor-grande" style={{ color: '#ef4444' }}>{fmtTM(flujoUltimaHora, 2)} T/h</span>
-              <span className="alm-pred-sub">{viajesUltimaHora.length} viaje{viajesUltimaHora.length !== 1 ? 's' : ''} en la última hora</span>
+              <span className="alm-pred-sub">{viajesUltimaHora.length} viaje{viajesUltimaHora.length !== 1 ? 's' : ''} completos en la última hora</span>
             </div>
           )}
 
@@ -1401,7 +1429,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 2)} {textoUnidad}</span>
             {periodoPrediccion === 1 && (
               <span className="alm-pred-sub" style={{ color: '#ef4444', marginTop: '4px' }}>
-                ⚡ Datos SOLO de la última hora
+                ✅ Solo viajes completos de la última hora
               </span>
             )}
           </div>
@@ -1409,19 +1437,20 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
           <div className="alm-pred-metrica alm-pred-destacada" style={{ background: `${getPeriodoColor()}20`, borderColor: getPeriodoColor() }}>
             <span className="alm-pred-label">⏱️ FLUJO PROMEDIO POR HORA</span>
             <span className="alm-pred-valor-grande">{fmtTM(flujoPorHoraViajes, 2)} T/h</span>
-            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas</span>
+            <span className="alm-pred-sub">{fmtTM(totalToneladasViajes, 0)} T en {horasTranscurridas.toFixed(1)} horas (solo completos)</span>
           </div>
 
           <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
             <span className="alm-pred-label">⚖️ RENDIMIENTO PROMEDIO</span>
             <span className="alm-pred-valor">{fmtTM(rendimientoPromedio, 2)} T/viaje</span>
-            <span className="alm-pred-sub">{rendimientoReciente > rendimientoPromedio ? '↑ Superior' : '↓ Inferior'} al reciente</span>
+            <span className="alm-pred-sub">Basado en {totalViajes} viaje{totalViajes !== 1 ? 's' : ''} completos</span>
           </div>
 
           {frecuenciaViajes > 0 && (
             <div className="alm-pred-metrica" style={{ borderColor: producto.color_accent }}>
               <span className="alm-pred-label">⏱️ FRECUENCIA DE VIAJES</span>
               <span className="alm-pred-valor">{Math.round(frecuenciaViajes)} viajes/h</span>
+              <span className="alm-pred-sub">Viajes completos por hora</span>
             </div>
           )}
 
@@ -1457,7 +1486,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
             <div className="alm-pred-leyenda">
               <span className="alm-leyenda-item">
                 <span className="alm-leyenda-color" style={{ background: periodoPrediccion === 1 ? '#ef4444' : producto.color_accent }} />
-                Peso Destino por Viaje
+                Peso Destino por Viaje (solo completos)
               </span>
               <span className="alm-leyenda-item"><span className="alm-leyenda-color" style={{ background: '#ef4444' }} />Acumulado Destino</span>
               <span className="alm-leyenda-item">
@@ -1468,9 +1497,14 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
           </div>
         ) : (
           <div className="alm-pred-grafico alm-empty" style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
-            <span style={{ fontSize: '48px' }}>🕐</span>
-            <p style={{ fontWeight: '600', color: '#ef4444' }}>No hay viajes en el período seleccionado</p>
+            <span style={{ fontSize: '48px' }}>✅</span>
+            <p style={{ fontWeight: '600', color: '#f59e0b' }}>No hay viajes COMPLETOS en el período seleccionado</p>
             <p style={{ fontSize: '12px', color: '#64748b' }}>{getPeriodoTexto().toLowerCase()}</p>
+            {viajesIncompletos.length > 0 && (
+              <p style={{ fontSize: '11px', color: '#f59e0b', marginTop: '8px' }}>
+                ⚠️ Hay {viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''} que no se están mostrando
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -1479,7 +1513,7 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
       {periodoPrediccion === 1 && viajesUltimaHora.length > 0 && (
         <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#fff5f5', borderRadius: '12px', padding: '16px' }}>
           <h5 className="alm-recomendaciones-titulo" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>🕐</span> Detalle de la Última Hora
+            <span>✅</span> Resumen Última Hora (Solo viajes completos)
           </h5>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '12px' }}>
             <div>
@@ -1494,6 +1528,18 @@ function PanelPrediccionesViajes({ producto, viajes, meta, tipoOperacion }) {
               <div style={{ fontSize: '11px', color: '#64748b' }}>Rendimiento promedio</div>
               <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{fmtTM(flujoUltimaHora / viajesUltimaHora.length, 2)} T/viaje</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 INFORME DE VIAJES EXCLUIDOS */}
+      {viajesIncompletos.length > 0 && periodoPrediccion !== 1 && (
+        <div className="alm-recomendaciones" style={{ marginTop: '16px', background: '#fef3c7', borderRadius: '12px', padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#92400e' }}>
+            <span>⚠️</span>
+            <span>
+              <strong>{viajesIncompletos.length} viaje{viajesIncompletos.length !== 1 ? 's' : ''} incompleto{viajesIncompletos.length !== 1 ? 's' : ''}</strong> no incluidos en los cálculos
+            </span>
           </div>
         </div>
       )}
