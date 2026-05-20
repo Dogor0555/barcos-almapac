@@ -34,7 +34,9 @@ const BARCASAS_PREDEFINIDAS = [
   'Luis Delgado',
   'Marcio Seledon',
   'Francisco Zalazar',
-  'Pilar Gutierrez'
+  'Pilar Gutierrez',
+  'Melicario Garcia',
+  'General Augusto C. Sandino'
 ]
 
 const GRUAS_PREDEFINIDAS = [
