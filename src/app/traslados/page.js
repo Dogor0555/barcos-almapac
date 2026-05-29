@@ -720,50 +720,126 @@ export default function TrasladosPage() {
     cargarDatos()
   }, [])
 
-  const cargarDatos = async () => {
-    try {
-      setLoading(true)
+ const cargarDatos = async () => {
+  try {
+    setLoading(true)
+    
+    // 🔥 OBTENER TODOS LOS TRASLADOS (sin límite de 1000)
+    let allTraslados = []
+    let page = 0
+    const pageSize = 1000
+    let hasMore = true
+
+    while (hasMore) {
+      const from = page * pageSize
+      const to = from + pageSize - 1
       
-      const { data: trasladosData, error } = await supabase
+      const { data, error } = await supabase
         .from('traslados')
         .select('*')
         .order('fecha', { ascending: false })
         .order('hora_inicio_carga', { ascending: false })
+        .range(from, to)
 
       if (error) throw error
-      setTraslados(trasladosData || [])
+      
+      if (data && data.length > 0) {
+        allTraslados = [...allTraslados, ...data]
+        page++
+        
+        // Si recibimos menos de pageSize, no hay más datos
+        if (data.length < pageSize) {
+          hasMore = false
+        }
+      } else {
+        hasMore = false
+      }
+    }
+    
+    setTraslados(allTraslados)
 
-      const { data: operativosData } = await supabase
-        .from('operativos_traslados')
-        .select('*')
-        .order('created_at', { ascending: false })
+    // Obtener operativos (probablemente menos de 1000)
+    const { data: operativosData } = await supabase
+      .from('operativos_traslados')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      setOperativos(operativosData || [])
+    setOperativos(operativosData || [])
 
-      const { data: atrasosData } = await supabase
+    // Obtener atrasos (con paginación también por si acaso)
+    let allAtrasos = []
+    page = 0
+    hasMore = true
+    
+    while (hasMore) {
+      const from = page * pageSize
+      const to = from + pageSize - 1
+      
+      const { data, error } = await supabase
         .from('traslados_atrasos')
         .select('*')
         .eq('es_general', true)
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false })
+        .range(from, to)
 
-      setAtrasosGenerales(atrasosData || [])
+      if (error) throw error
+      
+      if (data && data.length > 0) {
+        allAtrasos = [...allAtrasos, ...data]
+        page++
+        
+        if (data.length < pageSize) {
+          hasMore = false
+        }
+      } else {
+        hasMore = false
+      }
+    }
+    
+    setAtrasosGenerales(allAtrasos)
 
-      const { data: turnosData } = await supabase
+    // Obtener turnos (con paginación)
+    let allTurnos = []
+    page = 0
+    hasMore = true
+    
+    while (hasMore) {
+      const from = page * pageSize
+      const to = from + pageSize - 1
+      
+      const { data, error } = await supabase
         .from('turnos_operativos')
         .select('*')
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false })
+        .range(from, to)
 
-      setTurnos(turnosData || [])
+      if (error) throw error
       
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error al cargar datos')
-    } finally {
-      setLoading(false)
+      if (data && data.length > 0) {
+        allTurnos = [...allTurnos, ...data]
+        page++
+        
+        if (data.length < pageSize) {
+          hasMore = false
+        }
+      } else {
+        hasMore = false
+      }
     }
+    
+    setTurnos(allTurnos)
+    
+    toast.success(`✅ Cargados ${allTraslados.length} traslados, ${allAtrasos.length} atrasos y ${allTurnos.length} turnos`)
+    
+  } catch (error) {
+    console.error('Error:', error)
+    toast.error('Error al cargar datos')
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleEliminarTraslado = async (id, correlativo) => {
     if (!isAdmin()) {
