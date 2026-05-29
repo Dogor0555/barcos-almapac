@@ -11,7 +11,7 @@ import {
   Download, ChevronDown, ChevronUp, Loader, MoreVertical,
   ArrowLeft, BarChart3, TrendingUp, FolderOpen, RotateCw,
   Wrench, Moon, Sun, Smartphone, Activity, Users,
-  Play, Pause, StopCircle, Menu
+  Play, Pause, StopCircle, Menu, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -39,8 +39,6 @@ const TurnoForm = ({ operativos, onClose, onSuccess, turno = null }) => {
     const minutos = ahora.getMinutes().toString().padStart(2, '0')
     setFormData({ ...formData, [campo]: `${hora}:${minutos}` })
   }
-
-  
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -493,7 +491,6 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
         throw new Error('Debes ingresar hora de inicio y fin')
       }
 
-      // Calcular duración en minutos
       const inicio = dayjs(`2000-01-01 ${formData.hora_inicio}`)
       const fin = dayjs(`2000-01-01 ${formData.hora_fin}`)
       let duracion_minutos = fin.diff(inicio, 'minute')
@@ -684,6 +681,103 @@ const AtrasoGeneralForm = ({ operativos, onClose, onSuccess, atraso = null }) =>
   )
 }
 
+// Componente de paginación
+const Paginacion = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalRegistros }) => {
+  const getPageNumbers = () => {
+    const pages = []
+    const maxVisible = 5
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
+    let end = Math.min(totalPages, start + maxVisible - 1)
+    
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1)
+    }
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i)
+    }
+    return pages
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-slate-800/50 rounded-xl border border-white/10">
+      <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 order-2 sm:order-1">
+        <span>Mostrar</span>
+        <select
+          value={itemsPerPage}
+          onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+          className="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-white"
+        >
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
+        <span>registros</span>
+        <span className="hidden sm:inline ml-2">
+          | Total: <span className="text-amber-400 font-bold">{totalRegistros}</span> registros
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1 sm:gap-2 order-1 sm:order-2">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className="p-1.5 sm:p-2 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-4 h-4 -ml-3" />
+        </button>
+        
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 sm:p-2 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        <div className="flex gap-1">
+          {getPageNumbers().map(page => (
+            <button
+              key={page}
+              onClick={() => onPageChange(page)}
+              className={`min-w-[32px] sm:min-w-[40px] h-8 sm:h-10 px-2 sm:px-3 rounded-lg font-bold text-sm transition-all ${
+                currentPage === page
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                  : 'bg-slate-900 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 sm:p-2 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 sm:p-2 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-4 h-4 -ml-3" />
+        </button>
+      </div>
+
+      <div className="text-xs text-slate-400 order-3">
+        Página {currentPage} de {totalPages}
+      </div>
+    </div>
+  )
+}
+
 // Componente principal
 export default function TrasladosPage() {
   const router = useRouter()
@@ -709,6 +803,12 @@ export default function TrasladosPage() {
   const [exportando, setExportando] = useState(null)
   const [vista, setVista] = useState('traslados')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalRegistros, setTotalRegistros] = useState(0)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -717,129 +817,88 @@ export default function TrasladosPage() {
       return
     }
     setUser(currentUser)
-    cargarDatos()
+    cargarPagina(1)
   }, [])
 
- const cargarDatos = async () => {
-  try {
-    setLoading(true)
-    
-    // 🔥 OBTENER TODOS LOS TRASLADOS (sin límite de 1000)
-    let allTraslados = []
-    let page = 0
-    const pageSize = 1000
-    let hasMore = true
-
-    while (hasMore) {
-      const from = page * pageSize
-      const to = from + pageSize - 1
+  // Función para cargar SOLO los registros de la página actual
+  const cargarPagina = async (pagina = currentPage, items = itemsPerPage) => {
+    try {
+      setLoading(true)
       
-      const { data, error } = await supabase
+      const from = (pagina - 1) * items
+      const to = from + items - 1
+      
+      // Obtener TOTAL de registros (para calcular páginas)
+      const { count, error: countError } = await supabase
+        .from('traslados')
+        .select('*', { count: 'exact', head: true })
+      
+      if (countError) throw countError
+      setTotalRegistros(count || 0)
+      setTotalPages(Math.ceil((count || 0) / items))
+      
+      // Obtener SOLO los registros de la página actual
+      const { data: trasladosData, error } = await supabase
         .from('traslados')
         .select('*')
         .order('fecha', { ascending: false })
         .order('hora_inicio_carga', { ascending: false })
         .range(from, to)
-
+      
       if (error) throw error
+      setTraslados(trasladosData || [])
       
-      if (data && data.length > 0) {
-        allTraslados = [...allTraslados, ...data]
-        page++
-        
-        // Si recibimos menos de pageSize, no hay más datos
-        if (data.length < pageSize) {
-          hasMore = false
-        }
-      } else {
-        hasMore = false
-      }
-    }
-    
-    setTraslados(allTraslados)
-
-    // Obtener operativos (probablemente menos de 1000)
-    const { data: operativosData } = await supabase
-      .from('operativos_traslados')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    setOperativos(operativosData || [])
-
-    // Obtener atrasos (con paginación también por si acaso)
-    let allAtrasos = []
-    page = 0
-    hasMore = true
-    
-    while (hasMore) {
-      const from = page * pageSize
-      const to = from + pageSize - 1
+      // Cargar operativos, atrasos y turnos (son menos datos)
+      const { data: operativosData } = await supabase
+        .from('operativos_traslados')
+        .select('*')
+        .order('created_at', { ascending: false })
       
-      const { data, error } = await supabase
+      setOperativos(operativosData || [])
+      
+      const { data: atrasosData } = await supabase
         .from('traslados_atrasos')
         .select('*')
         .eq('es_general', true)
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false })
-        .range(from, to)
-
-      if (error) throw error
       
-      if (data && data.length > 0) {
-        allAtrasos = [...allAtrasos, ...data]
-        page++
-        
-        if (data.length < pageSize) {
-          hasMore = false
-        }
-      } else {
-        hasMore = false
-      }
-    }
-    
-    setAtrasosGenerales(allAtrasos)
-
-    // Obtener turnos (con paginación)
-    let allTurnos = []
-    page = 0
-    hasMore = true
-    
-    while (hasMore) {
-      const from = page * pageSize
-      const to = from + pageSize - 1
+      setAtrasosGenerales(atrasosData || [])
       
-      const { data, error } = await supabase
+      const { data: turnosData } = await supabase
         .from('turnos_operativos')
         .select('*')
         .order('fecha', { ascending: false })
         .order('hora_inicio', { ascending: false })
-        .range(from, to)
-
-      if (error) throw error
       
-      if (data && data.length > 0) {
-        allTurnos = [...allTurnos, ...data]
-        page++
-        
-        if (data.length < pageSize) {
-          hasMore = false
-        }
-      } else {
-        hasMore = false
-      }
+      setTurnos(turnosData || [])
+      
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al cargar datos')
+    } finally {
+      setLoading(false)
     }
-    
-    setTurnos(allTurnos)
-    
-    toast.success(`✅ Cargados ${allTraslados.length} traslados, ${allAtrasos.length} atrasos y ${allTurnos.length} turnos`)
-    
-  } catch (error) {
-    console.error('Error:', error)
-    toast.error('Error al cargar datos')
-  } finally {
-    setLoading(false)
   }
-}
+
+  // Función para cambiar de página
+  const cambiarPagina = (nuevaPagina) => {
+    if (nuevaPagina < 1 || nuevaPagina > totalPages) return
+    setCurrentPage(nuevaPagina)
+    cargarPagina(nuevaPagina, itemsPerPage)
+  }
+
+  // Función para cambiar items por página
+  const cambiarItemsPorPagina = (nuevosItems) => {
+    setItemsPerPage(nuevosItems)
+    setCurrentPage(1)
+    cargarPagina(1, nuevosItems)
+  }
+
+  // Recargar datos manteniendo la página actual
+  const recargarDatos = () => {
+    cargarPagina(currentPage, itemsPerPage)
+  }
 
   const handleEliminarTraslado = async (id, correlativo) => {
     if (!isAdmin()) {
@@ -856,7 +915,7 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success('Traslado eliminado')
-      cargarDatos()
+      recargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al eliminar')
@@ -878,7 +937,7 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success('Atraso eliminado')
-      cargarDatos()
+      recargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al eliminar')
@@ -900,7 +959,7 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success('Turno eliminado')
-      cargarDatos()
+      recargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al eliminar')
@@ -919,45 +978,10 @@ export default function TrasladosPage() {
 
       if (error) throw error
       toast.success(`Traslado ${nuevoEstado === 'activo' ? 'reabierto' : 'completado'}`)
-      cargarDatos()
+      recargarDatos()
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al cambiar estado')
-    }
-  }
-
-  const handleExportar = async (traslado) => {
-    try {
-      setExportando(traslado.id)
-      
-      const operativo = operativos.find(o => o.id === traslado.operativo_id)
-
-      const exportData = {
-        metadata: {
-          fecha_exportacion: new Date().toISOString(),
-          exportado_por: user?.nombre,
-          tipo: 'traslado'
-        },
-        traslado: {
-          ...traslado,
-          operativo_nombre: operativo?.nombre
-        }
-      }
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `TRASLADO_${traslado.correlativo_viaje}_${dayjs().format('YYYYMMDD_HHmm')}.json`
-      link.click()
-      URL.revokeObjectURL(url)
-
-      toast.success('✅ Datos exportados')
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error al exportar')
-    } finally {
-      setExportando(null)
     }
   }
 
@@ -1079,7 +1103,7 @@ export default function TrasladosPage() {
                 <option value="atrasos">🔧 Atrasos</option>
                 <option value="turnos">👥 Turnos</option>
               </select>
-              <button onClick={cargarDatos} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
+              <button onClick={recargarDatos} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg">
                 <RefreshCw className="w-4 h-4" />
               </button>
               <button onClick={logout} className="bg-red-500/20 hover:bg-red-500/30 p-2 rounded-lg">
@@ -1106,7 +1130,7 @@ export default function TrasladosPage() {
                   <option value="turnos">👥 Ver Turnos</option>
                 </select>
                 <div className="flex gap-2">
-                  <button onClick={cargarDatos} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg flex-1 flex items-center justify-center">
+                  <button onClick={recargarDatos} className="bg-white/10 hover:bg-white/20 p-2 rounded-lg flex-1 flex items-center justify-center">
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button onClick={logout} className="bg-red-500/20 hover:bg-red-500/30 p-2 rounded-lg flex-1 flex items-center justify-center">
@@ -1132,7 +1156,7 @@ export default function TrasladosPage() {
             </div>
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">Unidades</div>
-              <div className="text-sm sm:text-lg font-bold">{stats.totalUnidades}</div>
+              <div className="text-sm sm:text-lg font-bold">{totalRegistros}</div>
             </div>
           </div>
         </div>
@@ -1178,137 +1202,149 @@ export default function TrasladosPage() {
           </div>
         </div>
 
-        {/* Vista de Traslados */}
+        {/* Vista de Traslados con Paginación */}
         {vista === 'traslados' && (
-          <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
-            <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
-              <h2 className="font-bold text-white text-sm sm:text-base">Traslados ({trasladosFiltrados.length})</h2>
+          <>
+            <div className="bg-[#1e293b] border border-white/10 rounded-xl overflow-hidden">
+              <div className="bg-slate-800 px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10">
+                <h2 className="font-bold text-white text-sm sm:text-base">Traslados ({totalRegistros} total)</h2>
+              </div>
+              
+              <div className="sm:hidden divide-y divide-white/5">
+                {trasladosFiltrados.map((t) => (
+                  <div key={t.id} className="p-3 hover:bg-white/5">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="text-xs text-slate-500">Correlativo</span>
+                        <p className="font-mono text-amber-400 font-bold text-sm">{t.correlativo_viaje}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                        t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
+                      }`}>{t.estado}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                      <div>
+                        <span className="text-slate-500">Conductor</span>
+                        <p className="font-bold text-white truncate">{t.nombre_conductor}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Operativo</span>
+                        <p className="text-amber-400 truncate">{getOperativoNombre(t.operativo_id)}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Placa/Remolque</span>
+                        <p className="font-mono text-blue-400">{t.placa || '—'} / {t.remolque}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Transporte</span>
+                        <p className="text-white truncate">{t.transporte}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500">Horas</span>
+                        <p>
+                          <span className="text-green-400">{formatHora(t.hora_inicio_carga)}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                      <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
+                        <Eye className="w-4 h-4 text-blue-400" />
+                      </button>
+                      {t.estado === 'activo' && (
+                        <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1.5 hover:bg-green-500/20 rounded">
+                          <CheckCircle className="w-4 h-4 text-green-400" />
+                        </button>
+                      )}
+                      <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
+                        <Edit2 className="w-4 h-4 text-blue-400" />
+                      </button>
+                      {isAdmin() && (
+                        <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1.5 hover:bg-red-500/20 rounded">
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-800/50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Correlativo</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Conductor</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Placa</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Remolque</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Transporte</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Horas</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Estado</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {trasladosFiltrados.map((t) => (
+                      <tr key={t.id} className="hover:bg-white/5">
+                        <td className="px-4 py-2 font-mono text-amber-400">{t.correlativo_viaje}</td>
+                        <td className="px-4 py-2 text-amber-400">{getOperativoNombre(t.operativo_id)}</td>
+                        <td className="px-4 py-2 text-white">{t.nombre_conductor}</td>
+                        <td className="px-4 py-2 font-mono text-blue-400">{t.placa || '—'}</td>
+                        <td className="px-4 py-2 font-mono text-blue-400">{t.remolque}</td>
+                        <td className="px-4 py-2 text-white">{t.transporte}</td>
+                        <td className="px-4 py-2 text-slate-300">{formatFecha(t.fecha)}</td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <span className="text-green-400">{formatHora(t.hora_inicio_carga)}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
+                          }`}>{t.estado}</span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1 hover:bg-blue-500/20 rounded">
+                              <Eye className="w-4 h-4 text-blue-400" />
+                            </button>
+                            {t.estado === 'activo' && (
+                              <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1 hover:bg-green-500/20 rounded">
+                                <CheckCircle className="w-4 h-4 text-green-400" />
+                              </button>
+                            )}
+                            <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded">
+                              <Edit2 className="w-4 h-4 text-blue-400" />
+                            </button>
+                            {isAdmin() && (
+                              <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
             
-            <div className="sm:hidden divide-y divide-white/5">
-              {trasladosFiltrados.map((t) => (
-                <div key={t.id} className="p-3 hover:bg-white/5">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <span className="text-xs text-slate-500">Correlativo</span>
-                      <p className="font-mono text-amber-400 font-bold text-sm">{t.correlativo_viaje}</p>
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
-                      t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
-                    }`}>{t.estado}</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                    <div>
-                      <span className="text-slate-500">Conductor</span>
-                      <p className="font-bold text-white truncate">{t.nombre_conductor}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Operativo</span>
-                      <p className="text-amber-400 truncate">{getOperativoNombre(t.operativo_id)}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Placa/Remolque</span>
-                      <p className="font-mono text-blue-400">{t.placa || '—'} / {t.remolque}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Transporte</span>
-                      <p className="text-white truncate">{t.transporte}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-slate-500">Horas</span>
-                      <p>
-                        <span className="text-green-400">{formatHora(t.hora_inicio_carga)}</span>
-                        <span className="text-slate-600 mx-1">→</span>
-                        <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
-                      <Eye className="w-4 h-4 text-blue-400" />
-                    </button>
-                    {t.estado === 'activo' && (
-                      <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1.5 hover:bg-green-500/20 rounded">
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                      </button>
-                    )}
-                    <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1.5 hover:bg-blue-500/20 rounded">
-                      <Edit2 className="w-4 h-4 text-blue-400" />
-                    </button>
-                    {isAdmin() && (
-                      <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1.5 hover:bg-red-500/20 rounded">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Correlativo</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Operativo</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Conductor</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Placa</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Remolque</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Transporte</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Fecha</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Horas</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Estado</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-400">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {trasladosFiltrados.map((t) => (
-                    <tr key={t.id} className="hover:bg-white/5">
-                      <td className="px-4 py-2 font-mono text-amber-400">{t.correlativo_viaje}</td>
-                      <td className="px-4 py-2 text-amber-400">{getOperativoNombre(t.operativo_id)}</td>
-                      <td className="px-4 py-2 text-white">{t.nombre_conductor}</td>
-                      <td className="px-4 py-2 font-mono text-blue-400">{t.placa || '—'}</td>
-                      <td className="px-4 py-2 font-mono text-blue-400">{t.remolque}</td>
-                      <td className="px-4 py-2 text-white">{t.transporte}</td>
-                      <td className="px-4 py-2 text-slate-300">{formatFecha(t.fecha)}</td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className="text-green-400">{formatHora(t.hora_inicio_carga)}</span>
-                        <span className="text-slate-600 mx-1">→</span>
-                        <span className="text-red-400">{formatHora(t.hora_fin_carga)}</span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                          t.estado === 'activo' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
-                        }`}>{t.estado}</span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => { setTrasladoSeleccionado(t); setShowDetalleModal(true); }} className="p-1 hover:bg-blue-500/20 rounded">
-                            <Eye className="w-4 h-4 text-blue-400" />
-                          </button>
-                          {t.estado === 'activo' && (
-                            <button onClick={() => handleCambiarEstado(t.id, t.estado)} className="p-1 hover:bg-green-500/20 rounded">
-                              <CheckCircle className="w-4 h-4 text-green-400" />
-                            </button>
-                          )}
-                          <button onClick={() => { setTrasladoSeleccionado(t); setShowEditForm(true); }} className="p-1 hover:bg-blue-500/20 rounded">
-                            <Edit2 className="w-4 h-4 text-blue-400" />
-                          </button>
-                          {isAdmin() && (
-                            <button onClick={() => handleEliminarTraslado(t.id, t.correlativo_viaje)} className="p-1 hover:bg-red-500/20 rounded">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            {/* Componente de Paginación */}
+            <Paginacion 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={cambiarPagina}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={cambiarItemsPorPagina}
+              totalRegistros={totalRegistros}
+            />
+          </>
         )}
 
         {/* Vista de Atrasos */}
@@ -1595,12 +1631,12 @@ export default function TrasladosPage() {
       </div>
 
       {/* Modales */}
-      {showForm && <TrasladoForm onClose={() => setShowForm(false)} onSuccess={() => { setShowForm(false); cargarDatos(); }} />}
+      {showForm && <TrasladoForm onClose={() => setShowForm(false)} onSuccess={() => { setShowForm(false); recargarDatos(); }} />}
       {showEditForm && trasladoSeleccionado && (
         <TrasladoForm
           traslado={trasladoSeleccionado}
           onClose={() => { setShowEditForm(false); setTrasladoSeleccionado(null); }}
-          onSuccess={() => { setShowEditForm(false); setTrasladoSeleccionado(null); cargarDatos(); }}
+          onSuccess={() => { setShowEditForm(false); setTrasladoSeleccionado(null); recargarDatos(); }}
         />
       )}
       {showTurnoForm && (
@@ -1608,7 +1644,7 @@ export default function TrasladosPage() {
           operativos={operativos}
           turno={turnoEditando}
           onClose={() => { setShowTurnoForm(false); setTurnoEditando(null); }}
-          onSuccess={() => { setShowTurnoForm(false); setTurnoEditando(null); cargarDatos(); }}
+          onSuccess={() => { setShowTurnoForm(false); setTurnoEditando(null); recargarDatos(); }}
         />
       )}
       {showAtrasoGeneralForm && (
@@ -1616,7 +1652,7 @@ export default function TrasladosPage() {
           operativos={operativos}
           atraso={atrasoEditando}
           onClose={() => { setShowAtrasoGeneralForm(false); setAtrasoEditando(null); }}
-          onSuccess={() => { setShowAtrasoGeneralForm(false); setAtrasoEditando(null); cargarDatos(); }}
+          onSuccess={() => { setShowAtrasoGeneralForm(false); setAtrasoEditando(null); recargarDatos(); }}
         />
       )}
       {showDetalleModal && trasladoSeleccionado && (
