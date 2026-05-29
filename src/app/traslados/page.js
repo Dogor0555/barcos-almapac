@@ -729,8 +729,7 @@ const Paginacion = ({ currentPage, totalPages, onPageChange, itemsPerPage, onIte
           <ChevronLeft className="w-4 h-4 -ml-3" />
         </button>
         
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
+        <button          onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 sm:p-2 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
@@ -778,6 +777,155 @@ const Paginacion = ({ currentPage, totalPages, onPageChange, itemsPerPage, onIte
   )
 }
 
+// Componente de estadísticas por operativo
+const EstadisticasPorOperativo = ({ operativos, turnos, atrasosGenerales, traslados }) => {
+  const [operativoSeleccionado, setOperativoSeleccionado] = useState('todos')
+  
+  const calcularStats = () => {
+    const statsMap = new Map()
+    
+    operativos.forEach(op => {
+      statsMap.set(op.id, {
+        operativo_id: op.id,
+        nombre: op.nombre,
+        tiempoTotalTurnos: 0,
+        tiempoInactividad: 0,
+        totalUnidades: 0,
+        unidadesCompletadas: 0,
+        unidadesActivas: 0
+      })
+    })
+    
+    turnos.forEach(t => {
+      if (t.hora_inicio && t.hora_fin && statsMap.has(t.operativo_id)) {
+        const inicio = dayjs(`2000-01-01 ${t.hora_inicio}`)
+        const fin = dayjs(`2000-01-01 ${t.hora_fin}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        const stats = statsMap.get(t.operativo_id)
+        stats.tiempoTotalTurnos += diff
+      }
+    })
+    
+    atrasosGenerales.forEach(a => {
+      let duracion = a.duracion_minutos || 0
+      if (!duracion && a.hora_inicio && a.hora_fin && statsMap.has(a.operativo_id)) {
+        const inicio = dayjs(`2000-01-01 ${a.hora_inicio}`)
+        const fin = dayjs(`2000-01-01 ${a.hora_fin}`)
+        let diff = fin.diff(inicio, 'minute')
+        if (diff < 0) diff += 24 * 60
+        duracion = diff
+      }
+      if (statsMap.has(a.operativo_id)) {
+        const stats = statsMap.get(a.operativo_id)
+        stats.tiempoInactividad += duracion
+      }
+    })
+    
+    traslados.forEach(t => {
+      if (statsMap.has(t.operativo_id)) {
+        const stats = statsMap.get(t.operativo_id)
+        stats.totalUnidades++
+        if (t.estado === 'completado') stats.unidadesCompletadas++
+        else if (t.estado === 'activo') stats.unidadesActivas++
+      }
+    })
+    
+    return Array.from(statsMap.values()).sort((a, b) => b.totalUnidades - a.totalUnidades)
+  }
+  
+  const estadisticas = calcularStats()
+  const statsFiltradas = operativoSeleccionado === 'todos' 
+    ? estadisticas 
+    : estadisticas.filter(op => op.operativo_id === parseInt(operativoSeleccionado))
+  
+  if (estadisticas.length === 0) return null
+  
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold text-white/80 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-amber-400" />
+          Estadísticas por Operativo
+        </h3>
+        <select
+          value={operativoSeleccionado}
+          onChange={(e) => setOperativoSeleccionado(e.target.value)}
+          className="text-xs bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-white"
+        >
+          <option value="todos">Todos los operativos</option>
+          {operativos.map(op => (
+            <option key={op.id} value={op.id}>{op.nombre}</option>
+          ))}
+        </select>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {statsFiltradas.map((op) => {
+          const tiempoEfectivo = op.tiempoTotalTurnos - op.tiempoInactividad
+          const eficiencia = op.tiempoTotalTurnos > 0 
+            ? ((tiempoEfectivo / op.tiempoTotalTurnos) * 100).toFixed(1)
+            : 0
+          
+          return (
+            <div key={op.operativo_id} className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-3 border border-white/10 hover:border-amber-500/50 transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-amber-400 text-sm truncate">{op.nombre}</h4>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  eficiencia >= 80 ? 'bg-green-500/20 text-green-400' :
+                  eficiencia >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {eficiencia}% eficiencia
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-black/20 rounded-lg p-2">
+                  <div className="text-slate-400 text-[10px]">Turnos</div>
+                  <div className="font-bold text-white">{Math.floor(op.tiempoTotalTurnos / 60)}h</div>
+                  <div className="text-[9px] text-slate-500">{op.tiempoTotalTurnos % 60}m</div>
+                </div>
+                
+                <div className="bg-black/20 rounded-lg p-2">
+                  <div className="text-slate-400 text-[10px]">Inactividad</div>
+                  <div className="font-bold text-red-400">{Math.floor(op.tiempoInactividad / 60)}h</div>
+                  <div className="text-[9px] text-slate-500">{op.tiempoInactividad % 60}m</div>
+                </div>
+                
+                <div className="bg-black/20 rounded-lg p-2">
+                  <div className="text-slate-400 text-[10px]">Efectivo</div>
+                  <div className="font-bold text-green-400">{Math.floor(tiempoEfectivo / 60)}h</div>
+                  <div className="text-[9px] text-slate-500">{tiempoEfectivo % 60}m</div>
+                </div>
+                
+                <div className="bg-black/20 rounded-lg p-2">
+                  <div className="text-slate-400 text-[10px]">Unidades</div>
+                  <div className="font-bold text-blue-400">{op.totalUnidades}</div>
+                  <div className="text-[9px] text-slate-500">
+                    ✓{op.unidadesCompletadas} | 🔄{op.unidadesActivas}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all ${
+                    eficiencia >= 80 ? 'bg-green-500' :
+                    eficiencia >= 60 ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${eficiencia}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Componente principal
 export default function TrasladosPage() {
   const router = useRouter()
@@ -800,7 +948,6 @@ export default function TrasladosPage() {
   const [filtroAtrasoOperativo, setFiltroAtrasoOperativo] = useState('todos')
   const [filtroTurnoOperativo, setFiltroTurnoOperativo] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
-  const [exportando, setExportando] = useState(null)
   const [vista, setVista] = useState('traslados')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
@@ -991,7 +1138,6 @@ export default function TrasladosPage() {
   const calcularEstadisticas = () => {
     let tiempoTotalTurnos = 0
     let tiempoInactividad = 0
-    let totalUnidades = traslados.length
 
     turnos.forEach(t => {
       if (t.hora_inicio && t.hora_fin) {
@@ -1018,12 +1164,11 @@ export default function TrasladosPage() {
     return {
       tiempoTotal: tiempoTotalTurnos,
       tiempoInactividad,
-      tiempoEfectivo: tiempoTotalTurnos - tiempoInactividad,
-      totalUnidades
+      tiempoEfectivo: tiempoTotalTurnos - tiempoInactividad
     }
   }
 
-  const stats = calcularEstadisticas()
+  const statsGenerales = calcularEstadisticas()
 
   const trasladosFiltrados = traslados.filter(t => {
     if (filtroEstado !== 'todos' && t.estado !== filtroEstado) return false
@@ -1141,18 +1286,19 @@ export default function TrasladosPage() {
             </div>
           )}
 
+          {/* Tarjetas generales */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 mt-3 sm:mt-4">
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">T. Turnos</div>
-              <div className="text-sm sm:text-lg font-bold">{Math.floor(stats.tiempoTotal / 60)}h</div>
+              <div className="text-sm sm:text-lg font-bold">{Math.floor(statsGenerales.tiempoTotal / 60)}h</div>
             </div>
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">Inactividad</div>
-              <div className="text-sm sm:text-lg font-bold text-red-300">{Math.floor(stats.tiempoInactividad / 60)}h</div>
+              <div className="text-sm sm:text-lg font-bold text-red-300">{Math.floor(statsGenerales.tiempoInactividad / 60)}h</div>
             </div>
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">Efectivo</div>
-              <div className="text-sm sm:text-lg font-bold text-green-300">{Math.floor(stats.tiempoEfectivo / 60)}h</div>
+              <div className="text-sm sm:text-lg font-bold text-green-300">{Math.floor(statsGenerales.tiempoEfectivo / 60)}h</div>
             </div>
             <div className="bg-white/10 rounded-lg p-1.5 sm:p-2">
               <div className="text-[10px] sm:text-xs text-amber-200">Unidades</div>
@@ -1160,6 +1306,14 @@ export default function TrasladosPage() {
             </div>
           </div>
         </div>
+
+        {/* Estadísticas por Operativo */}
+        <EstadisticasPorOperativo 
+          operativos={operativos}
+          turnos={turnos}
+          atrasosGenerales={atrasosGenerales}
+          traslados={traslados}
+        />
 
         {/* Filtros */}
         <div className="bg-[#1e293b] rounded-xl p-3 sm:p-4 border border-white/10">
@@ -1335,7 +1489,6 @@ export default function TrasladosPage() {
               </div>
             </div>
             
-            {/* Componente de Paginación */}
             <Paginacion 
               currentPage={currentPage}
               totalPages={totalPages}
