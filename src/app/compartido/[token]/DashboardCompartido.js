@@ -2100,36 +2100,19 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     <div className="alm-general-grid">
 
       <div className="alm-kpis-row">
-  <KpiCard 
-    label={`Total ${textoAccion}`} 
-    value={`${fmtTM(totalGlobal, 2)} TM`}
-    sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} 
-    icon="⚓" 
-    accent="#3b82f6" 
-    animate 
-  />
-  <KpiCard 
-    label="Cantidad Manifestada Total" 
-    value={`${fmtTM(metaGlobal, 2)} TM`}
-    sub={`${productos.length} ${productos.length === 1 ? 'producto' : 'productos'}`} 
-    icon="🎯" 
-    accent="#10b981" 
-  />
-  <KpiCard 
-    label={textoFaltante} 
-    value={`${fmtTM(faltanteGlobal, 2)} TM`}
-    sub="por procesar" 
-    icon="⏳" 
-    accent="#ef4444" 
-  />
-  <KpiCard 
-    label="Lecturas" 
-    value={tipoOperacion === 'exportacion' ? lecturasExportacion.length : lecturasBanda.length}
-    sub="registros totales" 
-    icon="📊" 
-    accent="#8b5cf6" 
-  />
-</div>
+        <KpiCard label={`Total ${textoAccion}`} value={`${fmtTM(totalGlobal, 2)} TM`}
+          sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} icon="⚓" accent="#3b82f6" animate />
+        <KpiCard label="Cantidad Manifestada Total" value={`${fmtTM(metaGlobal, 2)} TM`}
+          sub={`${productos.length} productos`} icon="🎯" accent="#10b981" />
+        <KpiCard label={textoFaltante} value={`${fmtTM(faltanteGlobal, 2)} TM`}
+          sub="por procesar" icon="⏳" accent="#ef4444" />
+        {tipoOperacion !== 'exportacion' && (
+          <KpiCard label="Viajes Completos" value={viajes.filter(v => v.estado === 'completo').length}
+            sub="camiones pesados" icon="🚛" accent="#f59e0b" />
+        )}
+        <KpiCard label="Lecturas" value={tipoOperacion === 'exportacion' ? lecturasExportacion.length : lecturasBanda.length}
+          sub="registros totales" icon="📊" accent="#8b5cf6" />
+      </div>
 
       <div className="alm-progress-hero">
         <div className="alm-progress-hero-header">
