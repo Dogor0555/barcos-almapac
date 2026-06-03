@@ -2001,15 +2001,24 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
       
       let totalExportacion = 0;
-      if (tipoOperacion === 'exportacion') {
-        const esMelaza = producto.codigo === 'MZ-001';
-        totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
-      } else {
-        const exportacionesProducto = lecturasExportacion
-          .filter((e) => e.producto_id === producto.id)
-          .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
-        totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
-      }
+if (tipoOperacion === 'exportacion') {
+  const esMelaza = producto.codigo === 'MZ-001';
+  if (esMelaza) {
+    // MELAZA: usar el último valor cronológico de CADA bodega? NO!
+    // Para el desglose por producto, Melaza también muestra el último valor cronológico
+    const exportacionesProducto = lecturasExportacion
+      .filter(e => e.producto_id === producto.id)
+      .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+    totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
+  } else {
+    totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, false);
+  }
+} else {
+  const exportacionesProducto = lecturasExportacion
+    .filter((e) => e.producto_id === producto.id)
+    .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+  totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
+}
       
       const meta = getMetaProducto(barco.metas_json, producto);
       
