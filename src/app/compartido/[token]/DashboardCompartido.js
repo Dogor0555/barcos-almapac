@@ -2100,19 +2100,36 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     <div className="alm-general-grid">
 
       <div className="alm-kpis-row">
-        <KpiCard label={`Total ${textoAccion}`} value={`${fmtTM(totalGlobal, 2)} TM`}
-          sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} icon="⚓" accent="#3b82f6" animate />
-        <KpiCard label="Cantidad Manifestada Total" value={`${fmtTM(metaGlobal, 2)} TM`}
-          sub={`${productos.length} productos`} icon="🎯" accent="#10b981" />
-        <KpiCard label={textoFaltante} value={`${fmtTM(faltanteGlobal, 2)} TM`}
-          sub="por procesar" icon="⏳" accent="#ef4444" />
-        {tipoOperacion !== 'exportacion' && (
-          <KpiCard label="Viajes Completos" value={viajes.filter(v => v.estado === 'completo').length}
-            sub="camiones pesados" icon="🚛" accent="#f59e0b" />
-        )}
-        <KpiCard label="Lecturas" value={tipoOperacion === 'exportacion' ? lecturasExportacion.length : lecturasBanda.length}
-          sub="registros totales" icon="📊" accent="#8b5cf6" />
-      </div>
+  <KpiCard 
+    label={`Total ${textoAccion}`} 
+    value={`${fmtTM(totalGlobal, 2)} TM`}
+    sub={`${progresoGlobal.toFixed(1)}% de la cantidad manifestada`} 
+    icon="⚓" 
+    accent="#3b82f6" 
+    animate 
+  />
+  <KpiCard 
+    label="Cantidad Manifestada Total" 
+    value={`${fmtTM(metaGlobal, 2)} TM`}
+    sub={`${productos.length} ${productos.length === 1 ? 'producto' : 'productos'}`} 
+    icon="🎯" 
+    accent="#10b981" 
+  />
+  <KpiCard 
+    label={textoFaltante} 
+    value={`${fmtTM(faltanteGlobal, 2)} TM`}
+    sub="por procesar" 
+    icon="⏳" 
+    accent="#ef4444" 
+  />
+  <KpiCard 
+    label="Lecturas" 
+    value={tipoOperacion === 'exportacion' ? lecturasExportacion.length : lecturasBanda.length}
+    sub="registros totales" 
+    icon="📊" 
+    accent="#8b5cf6" 
+  />
+</div>
 
       <div className="alm-progress-hero">
         <div className="alm-progress-hero-header">
@@ -3031,15 +3048,33 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
   }, [lecturasExportacion, productoSeleccionado]);
 
-  const totalGlobalPorProducto = useMemo(() => {
-  const mapa = new Map();
+  const totalGlobal = useMemo(() => {
+  let total = 0;
   productos.forEach(producto => {
     const esMelaza = producto.codigo === 'MZ-001';
-    const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
-    mapa.set(producto.id, total);
+    if (tipoOperacion === 'exportacion') {
+      if (esMelaza) {
+        // Para MELAZA: usar el último valor registrado
+        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+        if (exportacionesProducto.length > 0) {
+          const ordenadas = [...exportacionesProducto].sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
+          const ultimo = ordenadas[ordenadas.length - 1];
+          total += Number(ultimo.acumulado_tm) || 0;
+        }
+      } else {
+        total += calcularTotalGlobalExportacion(lecturasExportacion, producto.id, false);
+      }
+    } else {
+      // Importación: sumar banda + camiones
+      const viajesProducto = viajes.filter(v => v.producto_id === producto.id && v.estado === 'completo');
+      const totalCamiones = viajesProducto.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
+      const lecturasProducto = lecturasBanda.filter(l => l.producto_id === producto.id).sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+      const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
+      total += totalCamiones + totalBanda;
+    }
   });
-  return mapa;
-}, [productos, lecturasExportacion]);
+  return total;
+}, [productos, tipoOperacion, lecturasExportacion, lecturasBanda, viajes]);
 
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();
