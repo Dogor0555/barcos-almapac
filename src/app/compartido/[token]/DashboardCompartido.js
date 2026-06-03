@@ -2003,7 +2003,15 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       let totalExportacion = 0;
       if (tipoOperacion === 'exportacion') {
         const esMelaza = producto.codigo === 'MZ-001';
-        totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
+        if (esMelaza) {
+          // MELAZA: mostrar el último valor cronológico
+          const exportacionesProducto = lecturasExportacion
+            .filter(e => e.producto_id === producto.id)
+            .sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+          totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0].acumulado_tm || 0 : 0;
+        } else {
+          totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, false);
+        }
       } else {
         const exportacionesProducto = lecturasExportacion
           .filter((e) => e.producto_id === producto.id)
@@ -2036,7 +2044,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
   }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json, tipoOperacion]);
 
   // =====================================================
-  // TOTAL GLOBAL - CORREGIDO PARA MELAZA
+  // TOTAL GLOBAL - CORREGIDO PARA MELAZA (USAR ÚLTIMO REGISTRO CRONOLÓGICO)
   // =====================================================
   const totalGlobal = useMemo(() => {
     if (tipoOperacion !== 'exportacion') {
@@ -2044,39 +2052,48 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       return totales.reduce((s, t) => s + t.total, 0);
     }
     
-    // Para EXPORTACIÓN: calcular correctamente por producto
-    let sumaGlobal = 0;
+    // Verificar si SOLO hay Melaza o hay otros productos
+    const soloMelaza = productos.length === 1 && productos[0]?.codigo === 'MZ-001';
+    const hayMelaza = productos.some(p => p.codigo === 'MZ-001');
+    const hayOtros = productos.some(p => p.codigo !== 'MZ-001');
     
-    productos.forEach(producto => {
-      const esMelaza = producto.codigo === 'MZ-001';
-      
-      if (esMelaza) {
-        // MELAZA: sumar los últimos valores de CADA bodega (NO el último registro cronológico)
-        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
-        if (exportacionesProducto.length > 0) {
-          // Obtener el último valor de cada bodega
-          const ultimoPorBodega = new Map();
-          exportacionesProducto.forEach(exp => {
-            const bodegaId = exp.bodega_id;
-            const valorActual = Number(exp.acumulado_tm) || 0;
-            const valorExistente = ultimoPorBodega.get(bodegaId) || 0;
-            if (valorActual > valorExistente) {
-              ultimoPorBodega.set(bodegaId, valorActual);
-            }
-          });
-          // Sumar los valores de todas las bodegas
-          let totalMelaza = 0;
-          ultimoPorBodega.forEach(val => { totalMelaza += val; });
-          sumaGlobal += totalMelaza;
-        }
-      } else {
-        // Otros productos: usar el total del producto
-        const totalProducto = totales.find(t => t.producto.id === producto.id)?.total || 0;
-        sumaGlobal += totalProducto;
+    if (soloMelaza) {
+      // SOLO MELAZA: el total es el ÚLTIMO valor cronológico (el registro más reciente de cualquier bodega)
+      const todasExportaciones = [...lecturasExportacion].sort(
+        (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+      );
+      if (todasExportaciones.length > 0) {
+        return Number(todasExportaciones[0].acumulado_tm) || 0;
       }
-    });
+      return 0;
+    }
     
-    return sumaGlobal;
+    if (hayMelaza && hayOtros) {
+      // Hay Melaza y otros productos: Melaza usa último valor cronológico, otros usan suma
+      let sumaGlobal = 0;
+      
+      productos.forEach(producto => {
+        if (producto.codigo === 'MZ-001') {
+          // MELAZA: último valor cronológico (el registro más reciente de cualquier bodega de Melaza)
+          const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+          if (exportacionesProducto.length > 0) {
+            const ordenadas = [...exportacionesProducto].sort(
+              (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+            );
+            sumaGlobal += Number(ordenadas[0].acumulado_tm) || 0;
+          }
+        } else {
+          // Otros productos: usar el total del producto
+          const totalProducto = totales.find(t => t.producto.id === producto.id)?.total || 0;
+          sumaGlobal += totalProducto;
+        }
+      });
+      
+      return sumaGlobal;
+    }
+    
+    // Solo otros productos (no Melaza): suma simple
+    return totales.reduce((s, t) => s + t.total, 0);
   }, [productos, tipoOperacion, lecturasExportacion, totales]);
 
   const metaGlobal = totales.reduce((s, t) => s + t.meta, 0);
