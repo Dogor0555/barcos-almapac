@@ -2044,49 +2044,68 @@ if (tipoOperacion === 'exportacion') {
     });
   }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json, tipoOperacion]);
 
-  // =====================================================
-  // TOTAL GLOBAL - CORREGIDO PARA MELAZA
+    // =====================================================
+  // TOTAL GLOBAL PARA MELAZA - CORREGIDO
   // =====================================================
   const totalGlobal = useMemo(() => {
+    const tipoOperacion = barco?.tipo_operacion || 'importacion';
+    
     if (tipoOperacion !== 'exportacion') {
-      // Para importación: suma simple
-      return totales.reduce((s, t) => s + t.total, 0);
+      // Para importación: sumar todos los productos
+      let suma = 0;
+      productos.forEach(producto => {
+        const vp = viajes.filter(v => v.producto_id === producto.id && v.estado === 'completo');
+        const lp = lecturasBanda.filter(l => l.producto_id === producto.id).sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+        const totalCamiones = vp.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
+        const totalBanda = lp.length > 0 ? lp[0]?.acumulado_tm || 0 : 0;
+        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id).sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+        const totalExportacion = exportacionesProducto.length > 0 ? exportacionesProducto[0]?.acumulado_tm || 0 : 0;
+        suma += totalCamiones + totalBanda + totalExportacion;
+      });
+      return suma;
     }
     
-    // Para EXPORTACIÓN: calcular correctamente por producto
-    let sumaGlobal = 0;
+    // Para EXPORTACIÓN
+    const soloMelaza = productos.length === 1 && productos[0].codigo === 'MZ-001';
     
+    if (soloMelaza) {
+      // SOLO MELAZA: el total es el ÚLTIMO valor cronológico
+      const todasExportaciones = [...lecturasExportacion].sort(
+        (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+      );
+      if (todasExportaciones.length > 0) {
+        return Number(todasExportaciones[0].acumulado_tm) || 0;
+      }
+      return 0;
+    }
+    
+    // Múltiples productos o no Melaza: calcular por producto
+    let sumaGlobal = 0;
     productos.forEach(producto => {
       const esMelaza = producto.codigo === 'MZ-001';
+      const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
       
-      if (esMelaza) {
-        // MELAZA: sumar los últimos valores de CADA bodega (NO el último registro cronológico)
-        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
-        if (exportacionesProducto.length > 0) {
-          // Obtener el último valor de cada bodega
-          const ultimoPorBodega = new Map();
-          exportacionesProducto.forEach(exp => {
-            const bodegaId = exp.bodega_id;
-            const valorActual = Number(exp.acumulado_tm) || 0;
-            const valorExistente = ultimoPorBodega.get(bodegaId) || 0;
-            if (valorActual > valorExistente) {
-              ultimoPorBodega.set(bodegaId, valorActual);
-            }
-          });
-          // Sumar los valores de todas las bodegas
-          let totalMelaza = 0;
-          ultimoPorBodega.forEach(val => { totalMelaza += val; });
-          sumaGlobal += totalMelaza;
-        }
-      } else {
-        // Otros productos: usar el total del producto
-        const totalProducto = totales.find(t => t.producto.id === producto.id)?.total || 0;
-        sumaGlobal += totalProducto;
+      if (esMelaza && exportacionesProducto.length > 0) {
+        // MELAZA: último valor cronológico
+        const ordenadas = [...exportacionesProducto].sort(
+          (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+        );
+        sumaGlobal += Number(ordenadas[0].acumulado_tm) || 0;
+      } else if (!esMelaza && exportacionesProducto.length > 0) {
+        // Otros productos: suma de aportes por bodega
+        sumaGlobal += calcularTotalGlobalExportacion(lecturasExportacion, producto.id, false);
+      } else if (!esMelaza) {
+        // Si no hay exportaciones pero hay otros datos
+        const vp = viajes.filter(v => v.producto_id === producto.id && v.estado === 'completo');
+        const lp = lecturasBanda.filter(l => l.producto_id === producto.id).sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
+        const totalCamiones = vp.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
+        const totalBanda = lp.length > 0 ? lp[0]?.acumulado_tm || 0 : 0;
+        sumaGlobal += totalCamiones + totalBanda;
       }
     });
     
     return sumaGlobal;
-  }, [productos, tipoOperacion, lecturasExportacion, totales]);
+  }, [barco, productos, viajes, lecturasBanda, lecturasExportacion]);
 
   const metaGlobal = totales.reduce((s, t) => s + t.meta, 0);
   const faltanteGlobal = Math.max(0, metaGlobal - totalGlobal);
