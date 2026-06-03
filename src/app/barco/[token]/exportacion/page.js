@@ -2562,6 +2562,8 @@ const estadisticasProducto = useMemo(() => {
       (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
     )
     
+    const esMelaza = productoActivo?.codigo === 'MZ-001'
+    
     // CALCULAR FLUJO - Usando el registro cronológico anterior
     const flujoPorRegistro = new Map()
     
@@ -2603,19 +2605,21 @@ const estadisticasProducto = useMemo(() => {
       }
     }
     
-    // Detectar retornos (cuando se vuelve a una bodega ya usada)
+    // Detectar retornos - SOLO para productos que NO son melaza
     const esRetornoBodega = new Map()
-    for (let i = 0; i < ascendente.length; i++) {
-      const actual = ascendente[i]
-      let bodegaVistaAntes = false
-      for (let j = 0; j < i; j++) {
-        if (ascendente[j].bodega_id === actual.bodega_id) {
-          bodegaVistaAntes = true
-          break
+    if (!esMelaza) {
+      for (let i = 0; i < ascendente.length; i++) {
+        const actual = ascendente[i]
+        let bodegaVistaAntes = false
+        for (let j = 0; j < i; j++) {
+          if (ascendente[j].bodega_id === actual.bodega_id) {
+            bodegaVistaAntes = true
+            break
+          }
         }
-      }
-      if (bodegaVistaAntes) {
-        esRetornoBodega.set(actual.id, true)
+        if (bodegaVistaAntes) {
+          esRetornoBodega.set(actual.id, true)
+        }
       }
     }
     
@@ -2649,7 +2653,8 @@ const estadisticasProducto = useMemo(() => {
         })
       }
       
-      if (esRetorno) {
+      // Solo mostrar RETORNO si NO es melaza
+      if (esRetorno && !esMelaza) {
         rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
         badges.push({
           text: "RETORNO A BODEGA",
@@ -2679,7 +2684,6 @@ const estadisticasProducto = useMemo(() => {
           flujoIcono = <span className="mr-1">📊</span>
           flujoDisplay = `${flujoCalculado.toFixed(3)} TM`
           
-          // Mostrar el cálculo en tooltip
           const idxAscendente = ascendente.findIndex(a => a.id === exp.id)
           if (idxAscendente > 0) {
             const valorAnterior = Number(ascendente[idxAscendente - 1].acumulado_tm) || 0
