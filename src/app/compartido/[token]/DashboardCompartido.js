@@ -1974,7 +1974,7 @@ function FinalizacionGeneral({ metaGlobal, totalGlobal, viajes, lecturasBanda, l
 }
 
 // ============================================================================
-// COMPONENTE: Vista General PREMIUM con Gráficos
+// COMPONENTE: Vista General PREMIUM con Gráficos (CORREGIDO PARA MELAZA)
 // ============================================================================
 function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExportacion, onSelectProducto }) {
   const tipoOperacion = barco.tipo_operacion || 'importacion';
@@ -1987,6 +1987,9 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
   console.log("Lecturas Banda:", lecturasBanda.length);
   console.log("Exportaciones:", lecturasExportacion.length);
 
+  // =====================================================
+  // CALCULAR TOTALES POR PRODUCTO - CORREGIDO PARA MELAZA
+  // =====================================================
   const totales = useMemo(() => {
     return productos.map((producto) => {
       const viajesProducto = viajes.filter((v) => v.producto_id === producto.id && v.estado === 'completo');
@@ -1999,7 +2002,8 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
       
       let totalExportacion = 0;
       if (tipoOperacion === 'exportacion') {
-        totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id);
+        const esMelaza = producto.codigo === 'MZ-001';
+        totalExportacion = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
       } else {
         const exportacionesProducto = lecturasExportacion
           .filter((e) => e.producto_id === producto.id)
@@ -2031,7 +2035,50 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
     });
   }, [productos, viajes, lecturasBanda, lecturasExportacion, barco.metas_json, tipoOperacion]);
 
-  const totalGlobal = totales.reduce((s, t) => s + t.total, 0);
+  // =====================================================
+  // TOTAL GLOBAL - CORREGIDO PARA MELAZA
+  // =====================================================
+  const totalGlobal = useMemo(() => {
+    if (tipoOperacion !== 'exportacion') {
+      // Para importación: suma simple
+      return totales.reduce((s, t) => s + t.total, 0);
+    }
+    
+    // Para EXPORTACIÓN: calcular correctamente por producto
+    let sumaGlobal = 0;
+    
+    productos.forEach(producto => {
+      const esMelaza = producto.codigo === 'MZ-001';
+      
+      if (esMelaza) {
+        // MELAZA: sumar los últimos valores de CADA bodega (NO el último registro cronológico)
+        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+        if (exportacionesProducto.length > 0) {
+          // Obtener el último valor de cada bodega
+          const ultimoPorBodega = new Map();
+          exportacionesProducto.forEach(exp => {
+            const bodegaId = exp.bodega_id;
+            const valorActual = Number(exp.acumulado_tm) || 0;
+            const valorExistente = ultimoPorBodega.get(bodegaId) || 0;
+            if (valorActual > valorExistente) {
+              ultimoPorBodega.set(bodegaId, valorActual);
+            }
+          });
+          // Sumar los valores de todas las bodegas
+          let totalMelaza = 0;
+          ultimoPorBodega.forEach(val => { totalMelaza += val; });
+          sumaGlobal += totalMelaza;
+        }
+      } else {
+        // Otros productos: usar el total del producto
+        const totalProducto = totales.find(t => t.producto.id === producto.id)?.total || 0;
+        sumaGlobal += totalProducto;
+      }
+    });
+    
+    return sumaGlobal;
+  }, [productos, tipoOperacion, lecturasExportacion, totales]);
+
   const metaGlobal = totales.reduce((s, t) => s + t.meta, 0);
   const faltanteGlobal = Math.max(0, metaGlobal - totalGlobal);
   const progresoGlobal = pct(totalGlobal, metaGlobal);
@@ -2054,6 +2101,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
       );
       
+      // Para el gráfico de evolución, necesitamos mostrar la SUMA POR BODEGA en cada punto
       const puntosPorTiempo = new Map();
       
       todasExportaciones.forEach(exp => {
@@ -2069,6 +2117,7 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
         }
         
         const punto = puntosPorTiempo.get(timestamp);
+        // Guardar el valor más reciente para cada bodega en este timestamp
         punto.acumuladoPorBodega.set(exp.bodega_id, exp.acumulado_tm || 0);
       });
       
@@ -2294,6 +2343,9 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                     <div>
                       <h4 className="alm-comparativa-nombre">{producto.nombre}</h4>
                       <span className="alm-comparativa-codigo">{producto.codigo}</span>
+                      {producto.codigo === 'MZ-001' && (
+                        <span style={{ fontSize: '9px', color: '#f59e0b', marginLeft: '4px' }}>(Melaza)</span>
+                      )}
                     </div>
                   </div>
                   <div className="alm-comparativa-meta">
@@ -2441,6 +2493,9 @@ function VistaGeneral({ barco, productos, viajes, lecturasBanda, lecturasExporta
                         <div>
                           <p className="alm-prod-name">{producto.nombre}</p>
                           <p className="alm-prod-code">{producto.codigo}</p>
+                          {producto.codigo === 'MZ-001' && (
+                            <span style={{ fontSize: '9px', color: '#f59e0b' }}>Melaza</span>
+                          )}
                         </div>
                       </div>
                     </td>
