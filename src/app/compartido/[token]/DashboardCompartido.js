@@ -3048,33 +3048,15 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
   }, [lecturasExportacion, productoSeleccionado]);
 
-  const totalGlobal = useMemo(() => {
-  let total = 0;
+  const totalGlobalPorProducto = useMemo(() => {
+  const mapa = new Map();
   productos.forEach(producto => {
     const esMelaza = producto.codigo === 'MZ-001';
-    if (tipoOperacion === 'exportacion') {
-      if (esMelaza) {
-        // Para MELAZA: usar el último valor registrado
-        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
-        if (exportacionesProducto.length > 0) {
-          const ordenadas = [...exportacionesProducto].sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix());
-          const ultimo = ordenadas[ordenadas.length - 1];
-          total += Number(ultimo.acumulado_tm) || 0;
-        }
-      } else {
-        total += calcularTotalGlobalExportacion(lecturasExportacion, producto.id, false);
-      }
-    } else {
-      // Importación: sumar banda + camiones
-      const viajesProducto = viajes.filter(v => v.producto_id === producto.id && v.estado === 'completo');
-      const totalCamiones = viajesProducto.reduce((s, v) => s + (v.peso_destino_tm || 0), 0);
-      const lecturasProducto = lecturasBanda.filter(l => l.producto_id === producto.id).sort((a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix());
-      const totalBanda = lecturasProducto.length > 0 ? lecturasProducto[0].acumulado_tm || 0 : 0;
-      total += totalCamiones + totalBanda;
-    }
+    const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
+    mapa.set(producto.id, total);
   });
-  return total;
-}, [productos, tipoOperacion, lecturasExportacion, lecturasBanda, viajes]);
+  return mapa;
+}, [productos, lecturasExportacion]);
 
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();
