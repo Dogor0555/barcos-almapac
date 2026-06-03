@@ -2685,54 +2685,239 @@ const estadisticasProducto = useMemo(() => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {bitacoraFiltrada.map(reg => {
-                    const fechaSV = formatUTCToSV(reg.fecha_hora, 'DD/MM/YY')
-                    const horaSV = formatUTCToSV(reg.fecha_hora, 'HH:mm')
-                    const horaNum = parseInt(horaSV.split(':')[0])
-                    
-                    let turno = '—'
-                    if (horaNum >= 6 && horaNum < 18) {
-                      turno = '6:00 - 18:00'
-                    } else {
-                      turno = '18:00 - 6:00'
-                    }
-                    
-                    return (
-                      <tr key={reg.id} className="hover:bg-white/5">
-                        <td className="px-4 py-2">
-                          <div>{fechaSV}</div>
-                          <div className="text-xs text-slate-500">{horaSV}</div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            turno === '6:00 - 18:00' 
-                              ? 'bg-yellow-500/20 text-yellow-400' 
-                              : 'bg-blue-500/20 text-blue-400'
-                          }`}>
-                            {turno}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-slate-400">{reg.comentarios || '—'}</td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditarBitacora(reg)}
-                              className="p-1 hover:bg-blue-500/20 rounded"
-                            >
-                              <Edit2 className="w-4 h-4 text-blue-400" />
-                            </button>
-                            <button
-                              onClick={() => handleEliminarBitacora(reg.id)}
-                              className="p-1 hover:bg-red-500/20 rounded"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
+  {(() => {
+    const ascendente = [...exportacionesFiltradas].sort(
+      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+    )
+    
+    const esMelaza = productoActivo?.codigo === 'MZ-001'
+    
+    // CALCULAR FLUJO CORRECTAMENTE PARA MELAZA
+    // Para Melaza: flujo = valor actual - valor anterior (el registro inmediatamente anterior, sin importar bodega)
+    const flujoPorRegistro = new Map()
+    
+    ascendente.forEach((reg, idx) => {
+      const valorActual = Number(reg.acumulado_tm) || 0
+      let flujo = 0
+      let tipo = ''
+      
+      if (idx === 0) {
+        // Primer registro del día: flujo = valor actual
+        flujo = valorActual
+        tipo = 'primer_registro'
+      } else {
+        const anterior = ascendente[idx - 1]
+        const valorAnterior = Number(anterior.acumulado_tm) || 0
+        
+        if (esMelaza) {
+          // MELAZA: flujo = ACTUAL - ANTERIOR (el registro inmediatamente anterior, sea de la bodega que sea)
+          flujo = Math.max(0, valorActual - valorAnterior)
+          tipo = 'delta_con_anterior'
+        } else {
+          // Otros productos: lógica normal
+          if (reg.bodega_id !== anterior.bodega_id) {
+            // Cambio de bodega - se reinicia
+            flujo = valorActual
+            tipo = 'cambio_bodega'
+          } else {
+            // Misma bodega - diferencia normal
+            const diferencia = valorActual - valorAnterior
+            flujo = Math.max(0, diferencia)
+            tipo = 'delta_normal'
+          }
+        }
+      }
+      
+      flujoPorRegistro.set(reg.id, { valor: flujo, tipo: tipo, valorActual: valorActual })
+    })
+    
+    // Detectar primera vez de cada bodega (para badges)
+    const esPrimeraVezBodega = new Map()
+    const bodegasVistas = new Set()
+    
+    ascendente.forEach(exp => {
+      if (!bodegasVistas.has(exp.bodega_id)) {
+        esPrimeraVezBodega.set(exp.id, true)
+        bodegasVistas.add(exp.bodega_id)
+      } else {
+        esPrimeraVezBodega.set(exp.id, false)
+      }
+    })
+    
+    // Detectar cambios de bodega (para badges)
+    const hayCambioBodega = new Map()
+    for (let i = 1; i < ascendente.length; i++) {
+      const actual = ascendente[i]
+      const anterior = ascendente[i - 1]
+      if (actual.bodega_id !== anterior.bodega_id) {
+        hayCambioBodega.set(actual.id, true)
+      }
+    }
+    
+    // Detectar retornos (cuando se vuelve a una bodega ya usada)
+    const esRetornoBodega = new Map()
+    for (let i = 0; i < ascendente.length; i++) {
+      const actual = ascendente[i]
+      let bodegaVistaAntes = false
+      for (let j = 0; j < i; j++) {
+        if (ascendente[j].bodega_id === actual.bodega_id) {
+          bodegaVistaAntes = true
+          break
+        }
+      }
+      if (bodegaVistaAntes) {
+        esRetornoBodega.set(actual.id, true)
+      }
+    }
+    
+    // Orden descendente para mostrar
+    const descendente = [...exportacionesFiltradas].sort(
+      (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
+    )
+    
+    return descendente.map((exp, idx) => {
+      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+      const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+      const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+      const horaNum = parseInt(horaSV.split(':')[0])
+      
+      const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
+      
+      const esPrimera = esPrimeraVezBodega.get(exp.id)
+      const esCambio = hayCambioBodega.get(exp.id)
+      const esRetorno = esRetornoBodega.get(exp.id)
+      const infoFlujo = flujoPorRegistro.get(exp.id)
+      
+      // Encontrar el valor anterior para mostrar en tooltip
+      let valorAnteriorMostrar = null
+      const idxAscendente = ascendente.findIndex(a => a.id === exp.id)
+      if (idxAscendente > 0) {
+        valorAnteriorMostrar = Number(ascendente[idxAscendente - 1].acumulado_tm) || 0
+      }
+      
+      let rowClasses = "hover:bg-white/5 transition-colors"
+      let badges = []
+      
+      if (esPrimera && !esRetorno) {
+        rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
+        badges.push({
+          text: "INICIO DE BODEGA",
+          icono: <Layers className="w-3 h-3" />,
+          color: "bg-blue-500/30 text-blue-300"
+        })
+      }
+      
+      if (esRetorno) {
+        rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
+        badges.push({
+          text: "RETORNO A BODEGA",
+          icono: <ArrowRightLeft className="w-3 h-3" />,
+          color: "bg-purple-500/30 text-purple-300"
+        })
+      }
+      
+      if (esCambio) {
+        rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
+        badges.push({
+          text: "CAMBIO DE BODEGA",
+          icono: <ArrowRightLeft className="w-3 h-3" />,
+          color: "bg-orange-500/30 text-orange-300"
+        })
+      }
+      
+      // Mostrar flujo
+      let flujoColor = "text-slate-500"
+      let flujoIcono = null
+      let flujoDisplay = "—"
+      let flujoTooltip = ""
+      
+      if (infoFlujo && infoFlujo.valor > 0) {
+        flujoColor = "text-green-400"
+        flujoIcono = <span className="mr-1">+</span>
+        flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+        
+        if (esMelaza && valorAnteriorMostrar !== null) {
+          flujoTooltip = `📊 ${infoFlujo.valorActual.toFixed(3)} - ${valorAnteriorMostrar.toFixed(3)} = ${infoFlujo.valor.toFixed(3)} TM`
+        }
+      } else if (infoFlujo && infoFlujo.valor === 0) {
+        flujoColor = "text-yellow-400"
+        flujoIcono = <span className="mr-1">⚠️</span>
+        flujoDisplay = `0 TM`
+        flujoTooltip = `No hubo avance (${infoFlujo.valorActual.toFixed(3)} - ${valorAnteriorMostrar?.toFixed(3) || '0'} = 0)`
+      }
+      
+      // Para Melaza, mostrar siempre el cálculo
+      if (esMelaza && infoFlujo && valorAnteriorMostrar !== null && idxAscendente > 0) {
+        flujoIcono = <span className="mr-1">📊</span>
+      }
+      
+      return (
+        <tr key={exp.id} className={rowClasses}>
+          <td className="px-4 py-3">
+            <div>{fechaSV}</div>
+            <div className="text-xs text-slate-500">{horaSV}</div>
+            {badges.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {badges.map((badge, i) => (
+                  <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
+                    {badge.icono}
+                    {badge.text}
+                  </span>
+                ))}
+              </div>
+            )}
+          </td>
+          <td className="px-4 py-3">
+            <span className={`text-xs px-2 py-1 rounded-full ${
+              turno === '6:00 - 18:00' 
+                ? 'bg-yellow-500/20 text-yellow-400' 
+                : 'bg-blue-500/20 text-blue-400'
+            }`}>
+              {turno}
+            </span>
+          </td>
+          <td className="px-4 py-3 font-bold text-blue-400">
+            {(exp.acumulado_tm || 0).toFixed(3)} TM
+          </td>
+          <td className="px-4 py-3 font-bold">
+            {infoFlujo ? (
+              <span className={flujoColor} title={flujoTooltip}>
+                {flujoIcono}
+                {flujoDisplay}
+              </span>
+            ) : (
+              <span className="text-slate-500">—</span>
+            )}
+          </td>
+          <td className="px-4 py-3">
+            {bodega ? (
+              <div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodega.color }} />
+                  <p className="text-white font-medium">{bodega.nombre}</p>
+                </div>
+                <p className="text-xs text-green-400">{bodega.codigo}</p>
+              </div>
+            ) : '—'}
+          </td>
+          <td className="px-4 py-3 text-slate-400 max-w-xs truncate" title={exp.observaciones || ''}>
+            {exp.observaciones || '—'}
+          </td>
+          <td className="px-4 py-3">
+            <div className="flex gap-2">
+              <button onClick={() => handleEditarExportacion(exp)} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
+                <Edit2 className="w-4 h-4 text-blue-400" />
+              </button>
+              <button onClick={() => handleEliminarExportacion(exp.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </button>
+            </div>
+          </td>
+        </tr>
+      )
+    })
+  })()}
+</tbody>
               </table>
             </div>
           )}
