@@ -3086,15 +3086,59 @@ export default function DashboardCompartido({ codigoBarco }) {
     return lecturasExportacion.filter((e) => e.producto_id === productoSeleccionado);
   }, [lecturasExportacion, productoSeleccionado]);
 
-  const totalGlobalPorProducto = useMemo(() => {
-  const mapa = new Map();
-  productos.forEach(producto => {
-    const esMelaza = producto.codigo === 'MZ-001';
-    const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
-    mapa.set(producto.id, total);
-  });
-  return mapa;
-}, [productos, lecturasExportacion]);
+  // =====================================================
+// TOTAL GLOBAL - CORREGIDO PARA MELAZA (ÚLTIMO VALOR CRONOLÓGICO)
+// =====================================================
+const totalGlobal = useMemo(() => {
+  if (tipoOperacion !== 'exportacion') {
+    // Para importación: suma simple
+    return totales.reduce((s, t) => s + t.total, 0);
+  }
+  
+  // Para EXPORTACIÓN: verificar si es solo Melaza o hay otros productos
+  const soloMelaza = productos.length === 1 && productos[0].codigo === 'MZ-001';
+  const hayMelaza = productos.some(p => p.codigo === 'MZ-001');
+  const hayOtros = productos.some(p => p.codigo !== 'MZ-001');
+  
+  if (soloMelaza) {
+    // SOLO MELAZA: el total es el ÚLTIMO valor cronológico (el registro más reciente)
+    const todasExportaciones = [...lecturasExportacion].sort(
+      (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+    );
+    if (todasExportaciones.length > 0) {
+      const ultimoRegistro = todasExportaciones[0];
+      return Number(ultimoRegistro.acumulado_tm) || 0;
+    }
+    return 0;
+  }
+  
+  if (hayMelaza && hayOtros) {
+    // Hay Melaza y otros productos: Melaza usa último valor, otros usan suma
+    let sumaGlobal = 0;
+    
+    productos.forEach(producto => {
+      if (producto.codigo === 'MZ-001') {
+        // MELAZA: último valor cronológico
+        const exportacionesProducto = lecturasExportacion.filter(e => e.producto_id === producto.id);
+        if (exportacionesProducto.length > 0) {
+          const ordenadas = [...exportacionesProducto].sort(
+            (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
+          );
+          sumaGlobal += Number(ordenadas[0].acumulado_tm) || 0;
+        }
+      } else {
+        // Otros productos: usar el total del producto
+        const totalProducto = totales.find(t => t.producto.id === producto.id)?.total || 0;
+        sumaGlobal += totalProducto;
+      }
+    });
+    
+    return sumaGlobal;
+  }
+  
+  // Solo otros productos (no Melaza): suma simple
+  return totales.reduce((s, t) => s + t.total, 0);
+}, [productos, tipoOperacion, lecturasExportacion, totales]);
 
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();
