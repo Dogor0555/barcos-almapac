@@ -1512,14 +1512,29 @@ const estadisticasProducto = useMemo(() => {
   }, [exportaciones, productoActivo])
   
   // TOTAL GENERAL = suma de los aportes REALES de todas las bodegas
-  const totalGeneral = useMemo(() => {
+  // TOTAL GENERAL - Diferente para Melaza
+const totalGeneral = useMemo(() => {
+  if (!productoActivo) return 0
+  
+  const esMelaza = productoActivo?.codigo === 'MZ-001'
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  
+  if (exportacionesProd.length === 0) return 0
+  
+  if (esMelaza) {
+    // Para MELAZA: el total es el ÚLTIMO valor registrado (cronológico)
+    const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    const ultimoRegistro = ordenadas[ordenadas.length - 1]
+    return Number(ultimoRegistro.acumulado_tm) || 0
+  } else {
+    // Para otros productos: suma de aportes reales por bodega
     let suma = 0
     aporteRealPorBodega.forEach((aporte) => {
       suma += aporte
     })
     return suma
-  }, [aporteRealPorBodega])
-  
+  }
+}, [exportaciones, productoActivo, aporteRealPorBodega])
   // ACUMULADOS POR BODEGA (para el resumen - se mantiene igual)
   const acumuladosPorBodega = useMemo(() => {
     if (!productoActivo) return new Map()
