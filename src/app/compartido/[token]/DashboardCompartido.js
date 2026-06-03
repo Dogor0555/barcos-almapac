@@ -90,39 +90,37 @@ const CARGAR_TODOS_LOS_REGISTROS = async (tabla, filtro, valor, ordenCampo = 'fe
 // ============================================================================
 // FUNCIÓN PARA CALCULAR TOTAL GLOBAL EN EXPORTACIÓN (SUMA DE ACUMULADOS POR BODEGA)
 // ============================================================================
-function calcularTotalGlobalExportacion(exportaciones, productoId) {
+function calcularTotalGlobalExportacion(exportaciones, productoId, esMelaza = false) {
   const exportacionesProducto = exportaciones.filter(e => e.producto_id === productoId);
   if (exportacionesProducto.length === 0) return 0;
   
-  // Ordenar por fecha (ascendente) para procesar en orden cronológico
+  // Ordenar por fecha (ascendente)
   const ordenadas = [...exportacionesProducto].sort(
     (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
   );
   
-  // Mapa para almacenar el ÚLTIMO valor conocido de cada bodega
-  const ultimoValorPorBodega = new Map();
+  if (esMelaza) {
+    // Para MELAZA: el total es el ÚLTIMO valor registrado (cronológico)
+    const ultimoRegistro = ordenadas[ordenadas.length - 1];
+    return Number(ultimoRegistro.acumulado_tm) || 0;
+  }
   
-  // Acumulador real que suma TODOS los aportes
+  // Para otros productos: suma de aportes por bodega
+  const ultimoValorPorBodega = new Map();
   let totalReal = 0;
   
-  ordenadas.forEach((lectura, index) => {
+  ordenadas.forEach((lectura) => {
     const bodegaId = lectura.bodega_id;
     const valorActual = Number(lectura.acumulado_tm) || 0;
     const ultimoValor = ultimoValorPorBodega.get(bodegaId);
     
     if (ultimoValor === undefined) {
-      // PRIMERA VEZ que vemos esta bodega: sumamos el valor inicial
       totalReal += valorActual;
       ultimoValorPorBodega.set(bodegaId, valorActual);
     } else if (valorActual >= ultimoValor) {
-      // CONTINUACIÓN normal: sumamos la diferencia
-      const diferencia = valorActual - ultimoValor;
-      totalReal += diferencia;
+      totalReal += valorActual - ultimoValor;
       ultimoValorPorBodega.set(bodegaId, valorActual);
     } else {
-      // ¡ES UN RETORNO! El valor bajó porque volvimos a esta bodega
-      // En un retorno, el valor en BD es el NUEVO acumulado de esa bodega
-      // pero el aporte real es el valor ACTUAL (no la diferencia)
       totalReal += valorActual;
       ultimoValorPorBodega.set(bodegaId, valorActual);
     }
@@ -2611,19 +2609,52 @@ function TablaBanda({ lecturas, producto }) {
   }
 
   const calcularFlujoGeneral = () => {
-    if (lecturas.length < 2) return 0;
-    const lecturasOrdenadas = [...lecturas].sort(
-      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
-    );
-    const primeraLectura = lecturasOrdenadas[0];
-    const ultimaLectura = lecturasOrdenadas[lecturasOrdenadas.length - 1];
-    const horaPrimera = dayjs.utc(primeraLectura.fecha_hora);
-    const horaUltima = dayjs.utc(ultimaLectura.fecha_hora);
-    const horasTranscurridas = horaUltima.diff(horaPrimera, 'hour', true);
-    if (horasTranscurridas <= 0) return 0;
-    const acumuladoActual = ultimaLectura.acumulado_tm;
-    return acumuladoActual / horasTranscurridas;
-  };
+  if (lecturas.length < 2) return 0;
+  const lecturasOrdenadas = [...lecturas].sort(
+    (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+  );
+  
+  const esMelaza = producto?.codigo === 'MZ-001';
+  
+  if (esMelaza) {
+    // Para MELAZA: flujo = (último - primero) / horas totales
+    const primera = lecturasOrdenadas[0];
+    const ultima = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+    const diferencia = ultima.acumulado_tm - primera.acumulado_tm;
+    if (diferencia <= 0) return 0;
+    const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+    return horas > 0 ? diferencia / horas : 0;
+  }
+  
+  // Para otros productos: cálculo por bodega
+  const lecturasPorBodega = new Map();
+  lecturasOrdenadas.forEach(l => {
+    if (!lecturasPorBodega.has(l.bodega_id)) {
+      lecturasPorBodega.set(l.bodega_id, []);
+    }
+    lecturasPorBodega.get(l.bodega_id).push(l);
+  });
+  
+  let totalToneladas = 0;
+  let totalHoras = 0;
+  
+  lecturasPorBodega.forEach(lecturasBodega => {
+    if (lecturasBodega.length >= 2) {
+      const primera = lecturasBodega[0];
+      const ultima = lecturasBodega[lecturasBodega.length - 1];
+      const diferencia = ultima.acumulado_tm - primera.acumulado_tm;
+      if (diferencia > 0) {
+        const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+        if (horas > 0) {
+          totalToneladas += diferencia;
+          totalHoras += horas;
+        }
+      }
+    }
+  });
+  
+  return totalHoras > 0 ? totalToneladas / totalHoras : 0;
+};
 
   const areaData = [...lecturas]
     .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
@@ -2714,7 +2745,7 @@ function TablaBanda({ lecturas, producto }) {
 }
 
 // ============================================================================
-// COMPONENTE: Tabla de Exportaciones
+// COMPONENTE: Tabla de Exportaciones (CORREGIDO PARA MELAZA)
 // ============================================================================
 function TablaExportacion({ lecturas, producto }) {
   if (!lecturas.length) {
@@ -2737,12 +2768,27 @@ function TablaExportacion({ lecturas, producto }) {
     { id: 8, nombre: 'Bodega 8', codigo: 'BDG-08' },
   ];
 
+  const esMelaza = producto?.codigo === 'MZ-001';
+
+  // Calcular flujo general - CORREGIDO para Melaza
   const calcularFlujoGeneral = () => {
     if (lecturas.length < 2) return 0;
+    
     const lecturasOrdenadas = [...lecturas].sort(
       (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
     );
     
+    if (esMelaza) {
+      // Para MELAZA: flujo = (último - primero) / horas totales
+      const primera = lecturasOrdenadas[0];
+      const ultima = lecturasOrdenadas[lecturasOrdenadas.length - 1];
+      const diferencia = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
+      if (diferencia <= 0) return 0;
+      const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
+      return horas > 0 ? diferencia / horas : 0;
+    }
+    
+    // Para otros productos: cálculo por bodega
     const lecturasPorBodega = new Map();
     lecturasOrdenadas.forEach(l => {
       if (!lecturasPorBodega.has(l.bodega_id)) {
@@ -2758,7 +2804,7 @@ function TablaExportacion({ lecturas, producto }) {
       if (lecturasBodega.length >= 2) {
         const primera = lecturasBodega[0];
         const ultima = lecturasBodega[lecturasBodega.length - 1];
-        const diferencia = ultima.acumulado_tm - primera.acumulado_tm;
+        const diferencia = (ultima.acumulado_tm || 0) - (primera.acumulado_tm || 0);
         if (diferencia > 0) {
           const horas = dayjs.utc(ultima.fecha_hora).diff(dayjs.utc(primera.fecha_hora), 'hour', true);
           if (horas > 0) {
@@ -2772,6 +2818,36 @@ function TablaExportacion({ lecturas, producto }) {
     return totalHoras > 0 ? totalToneladas / totalHoras : 0;
   };
 
+  // Calcular flujo para CADA registro - CORREGIDO para Melaza
+  const calcularFlujoPorRegistro = useMemo(() => {
+    const lecturasOrdenadas = [...lecturas].sort(
+      (a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix()
+    );
+    
+    const flujoMap = new Map();
+    
+    lecturasOrdenadas.forEach((reg, idx) => {
+      let flujo = 0;
+      
+      if (idx === 0) {
+        // Primer registro: flujo = 0 o basado en nada
+        flujo = 0;
+      } else {
+        const anterior = lecturasOrdenadas[idx - 1];
+        const diferencia = (reg.acumulado_tm || 0) - (anterior.acumulado_tm || 0);
+        const horas = dayjs.utc(reg.fecha_hora).diff(dayjs.utc(anterior.fecha_hora), 'hour', true);
+        
+        if (diferencia > 0 && horas > 0) {
+          flujo = diferencia / horas;
+        }
+      }
+      
+      flujoMap.set(reg.id, flujo);
+    });
+    
+    return flujoMap;
+  }, [lecturas]);
+
   const lineData = useMemo(() => {
     const lecturasOrdenadas = [...lecturas]
       .sort((a, b) => dayjs.utc(a.fecha_hora).unix() - dayjs.utc(b.fecha_hora).unix())
@@ -2779,9 +2855,9 @@ function TablaExportacion({ lecturas, producto }) {
     
     return lecturasOrdenadas.map((l) => ({
       hora: dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV).format("HH:mm"),
-      flujo: l.flujo_calculado || 0
+      flujo: calcularFlujoPorRegistro.get(l.id) || 0
     }));
-  }, [lecturas]);
+  }, [lecturas, calcularFlujoPorRegistro]);
 
   const CustomFlujoTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -2802,7 +2878,10 @@ function TablaExportacion({ lecturas, producto }) {
       {lineData.length > 1 && (
         <div className="alm-table-card">
           <div className="alm-table-header">
-            <h4 className="alm-chart-title">📈 Tendencia de Flujo de Carga (TM/h)</h4>
+            <h4 className="alm-chart-title">
+              📈 Tendencia de Flujo de Carga (TM/h)
+              {esMelaza && <span style={{ fontSize: '10px', marginLeft: '8px', color: '#f59e0b' }}>(Flujo calculado como diferencia cronológica)</span>}
+            </h4>
           </div>
           <div style={{ padding: "0 20px 16px" }}>
             <ResponsiveContainer width="100%" height={200}>
@@ -2849,6 +2928,11 @@ function TablaExportacion({ lecturas, producto }) {
           {lecturas.length >= 2 && (
             <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
               Flujo promedio: <strong style={{ color: producto.color_accent }}>{fmtTM(calcularFlujoGeneral(), 2)} TM/h</strong>
+              {esMelaza && (
+                <span style={{ marginLeft: '12px', fontSize: '11px', color: '#f59e0b' }}>
+                  (Cálculo: diferencia entre primer y último registro)
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -2865,39 +2949,49 @@ function TablaExportacion({ lecturas, producto }) {
               </tr>
             </thead>
             <tbody>
-              {lecturas.map((l, i) => {
-                const bodega = BODEGAS.find(b => b.id === l.bodega_id);
-                const fechaHoraSV = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV);
-                
-                return (
-                  <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
-                    <td className="alm-muted">{i + 1}</td>
-                    <td>
-                      {fechaHoraSV.format("DD/MM/YY HH:mm")}
-                      {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
-                    </td>
-                    <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
-                      {fmtTM(l.acumulado_tm)}
-                    </td>
-                    <td className="alm-td-num" style={{ color: l.flujo_calculado > 0 ? '#10b981' : '#94a3b8' }}>
-                      {l.flujo_calculado > 0 ? (
-                        <span style={{ fontWeight: 600 }}>
-                          {fmtTM(l.flujo_calculado, 2)} TM/h
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td>
-                      {bodega ? (
-                        <div>
-                          <span className="font-medium text-white">{bodega.nombre}</span>
-                          <span className="text-xs text-green-400 ml-2">{bodega.codigo}</span>
-                        </div>
-                      ) : '—'}
-                    </td>
-                    <td className="text-slate-400">{l.observaciones || '—'}</td>
-                  </tr>
+              {(() => {
+                // Ordenar descendente para mostrar el más reciente primero
+                const lecturasDescendente = [...lecturas].sort(
+                  (a, b) => dayjs.utc(b.fecha_hora).unix() - dayjs.utc(a.fecha_hora).unix()
                 );
-              })}
+                
+                return lecturasDescendente.map((l, i) => {
+                  const bodega = BODEGAS.find(b => b.id === l.bodega_id);
+                  const fechaHoraSV = dayjs.utc(l.fecha_hora).tz(ZONA_HORARIA_SV);
+                  const flujoCalculado = calcularFlujoPorRegistro.get(l.id) || 0;
+                  
+                  return (
+                    <tr key={l.id} className={i === 0 ? "alm-tr-latest" : i % 2 === 0 ? "" : "alm-tr-alt"}>
+                      <td className="alm-muted">{i + 1}</td>
+                      <td>
+                        {fechaHoraSV.format("DD/MM/YY HH:mm")}
+                        {i === 0 && <span className="alm-badge-blue">ÚLTIMO</span>}
+                      </td>
+                      <td className="alm-td-num alm-bold" style={{ color: producto.color_accent }}>
+                        {fmtTM(l.acumulado_tm)}
+                      </td>
+                      <td className="alm-td-num" style={{ color: flujoCalculado > 0 ? '#10b981' : '#94a3b8' }}>
+                        {flujoCalculado > 0 ? (
+                          <span style={{ fontWeight: 600 }}>
+                            {fmtTM(flujoCalculado, 2)} TM/h
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {bodega ? (
+                          <div>
+                            <span className="font-medium text-white">{bodega.nombre}</span>
+                            <span className="text-xs text-green-400 ml-2">{bodega.codigo}</span>
+                          </div>
+                        ) : '—'}
+                      </td>
+                      <td className="text-slate-400">{l.observaciones || '—'}</td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -2938,13 +3032,14 @@ export default function DashboardCompartido({ codigoBarco }) {
   }, [lecturasExportacion, productoSeleccionado]);
 
   const totalGlobalPorProducto = useMemo(() => {
-    const mapa = new Map();
-    productos.forEach(producto => {
-      const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id);
-      mapa.set(producto.id, total);
-    });
-    return mapa;
-  }, [productos, lecturasExportacion]);
+  const mapa = new Map();
+  productos.forEach(producto => {
+    const esMelaza = producto.codigo === 'MZ-001';
+    const total = calcularTotalGlobalExportacion(lecturasExportacion, producto.id, esMelaza);
+    mapa.set(producto.id, total);
+  });
+  return mapa;
+}, [productos, lecturasExportacion]);
 
   const totalesPorProducto = useMemo(() => {
     const mapa = new Map();

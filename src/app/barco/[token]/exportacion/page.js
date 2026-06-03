@@ -1476,40 +1476,41 @@ const estadisticasProducto = useMemo(() => {
   // =====================================================
   
   // Calcular el aporte REAL de cada bodega (sumando retornos correctamente)
-  const aporteRealPorBodega = useMemo(() => {
-    if (!productoActivo) return new Map()
+  // Calcular el aporte REAL de cada bodega - SOLO para productos NO melaza
+const aporteRealPorBodega = useMemo(() => {
+  if (!productoActivo) return new Map()
+  
+  const esMelaza = productoActivo?.codigo === 'MZ-001'
+  
+  // Para Melaza no necesitamos este cálculo
+  if (esMelaza) return new Map()
+  
+  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+  const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+  
+  const aporteTotal = new Map()
+  const ultimoValorPorBodega = new Map()
+  
+  ordenadas.forEach(lectura => {
+    const bodegaId = lectura.bodega_id
+    const valorActual = Number(lectura.acumulado_tm) || 0
+    const ultimoValor = ultimoValorPorBodega.get(bodegaId)
     
-    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-    const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    let aporte = 0
+    if (ultimoValor === undefined) {
+      aporte = valorActual
+    } else if (valorActual >= ultimoValor) {
+      aporte = valorActual - ultimoValor
+    } else {
+      aporte = valorActual
+    }
     
-    const aporteTotal = new Map()
-    const ultimoValorPorBodega = new Map()
-    
-    ordenadas.forEach(lectura => {
-      const bodegaId = lectura.bodega_id
-      const valorActual = Number(lectura.acumulado_tm) || 0
-      const ultimoValor = ultimoValorPorBodega.get(bodegaId)
-      
-      let aporte = 0
-      if (ultimoValor === undefined) {
-        // PRIMERA VEZ que se carga esta bodega
-        aporte = valorActual
-      } else if (valorActual >= ultimoValor) {
-        // CONTINUACIÓN normal de la misma bodega
-        aporte = valorActual - ultimoValor
-      } else {
-        // RETORNO a una bodega que ya se había usado
-        // El valor en BD es el nuevo acumulado de esa bodega
-        aporte = valorActual
-      }
-      
-      const aporteExistente = aporteTotal.get(bodegaId) || 0
-      aporteTotal.set(bodegaId, aporteExistente + aporte)
-      ultimoValorPorBodega.set(bodegaId, valorActual)
-    })
-    
-    return aporteTotal
-  }, [exportaciones, productoActivo])
+    aporteTotal.set(bodegaId, (aporteTotal.get(bodegaId) || 0) + aporte)
+    ultimoValorPorBodega.set(bodegaId, valorActual)
+  })
+  
+  return aporteTotal
+}, [exportaciones, productoActivo])
   
   // TOTAL GENERAL = suma de los aportes REALES de todas las bodegas
   // TOTAL GENERAL - Diferente para Melaza
