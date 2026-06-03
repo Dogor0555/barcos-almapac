@@ -49,12 +49,6 @@ const getCurrentSVTimeForInput = () => {
   return dayjs().tz(TIMEZONE_EL_SALVADOR).format('YYYY-MM-DDTHH:mm')
 }
 
-
-const esProductoMelaza = (producto) => {
-  return producto?.codigo === 'MZ-001'
-}
-
-
 // =====================================================
 // CONFIGURACIÓN DE BODEGAS DEL BARCO
 // =====================================================
@@ -1483,44 +1477,39 @@ const estadisticasProducto = useMemo(() => {
   
   // Calcular el aporte REAL de cada bodega (sumando retornos correctamente)
   const aporteRealPorBodega = useMemo(() => {
-  if (!productoActivo) return new Map()
-  
-  const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
-  const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
-  
-  const aporteTotal = new Map()
-  const ultimoValorPorBodega = new Map()
-  const isMelaza = productoActivo?.codigo === 'MZ-001'
-  
-  ordenadas.forEach(lectura => {
-    const bodegaId = lectura.bodega_id
-    const valorActual = Number(lectura.acumulado_tm) || 0
-    const ultimoValor = ultimoValorPorBodega.get(bodegaId)
+    if (!productoActivo) return new Map()
     
-    let aporte = 0
-    if (ultimoValor === undefined) {
-      // Primera vez que se carga esta bodega
-      aporte = valorActual
-    } else {
-      if (isMelaza) {
-        // MELAZA: flujo = ACTUAL - ÚLTIMO DE LA MISMA BODEGA
-        aporte = Math.max(0, valorActual - ultimoValor)
+    const exportacionesProd = exportaciones.filter(e => e.producto_id === productoActivo.id)
+    const ordenadas = [...exportacionesProd].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora))
+    
+    const aporteTotal = new Map()
+    const ultimoValorPorBodega = new Map()
+    
+    ordenadas.forEach(lectura => {
+      const bodegaId = lectura.bodega_id
+      const valorActual = Number(lectura.acumulado_tm) || 0
+      const ultimoValor = ultimoValorPorBodega.get(bodegaId)
+      
+      let aporte = 0
+      if (ultimoValor === undefined) {
+        // PRIMERA VEZ que se carga esta bodega
+        aporte = valorActual
+      } else if (valorActual >= ultimoValor) {
+        // CONTINUACIÓN normal de la misma bodega
+        aporte = valorActual - ultimoValor
       } else {
-        // Otros productos: lógica normal con detección de retornos
-        if (valorActual >= ultimoValor) {
-          aporte = valorActual - ultimoValor
-        } else {
-          aporte = valorActual
-        }
+        // RETORNO a una bodega que ya se había usado
+        // El valor en BD es el nuevo acumulado de esa bodega
+        aporte = valorActual
       }
-    }
+      
+      const aporteExistente = aporteTotal.get(bodegaId) || 0
+      aporteTotal.set(bodegaId, aporteExistente + aporte)
+      ultimoValorPorBodega.set(bodegaId, valorActual)
+    })
     
-    aporteTotal.set(bodegaId, (aporteTotal.get(bodegaId) || 0) + aporte)
-    ultimoValorPorBodega.set(bodegaId, valorActual)
-  })
-  
-  return aporteTotal
-}, [exportaciones, productoActivo])
+    return aporteTotal
+  }, [exportaciones, productoActivo])
   
   // TOTAL GENERAL = suma de los aportes REALES de todas las bodegas
   const totalGeneral = useMemo(() => {
@@ -2567,24 +2556,223 @@ const estadisticasProducto = useMemo(() => {
                     <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">Acciones</th>
                   </tr>
                 </thead>
-                <tfoot className="bg-slate-900 sticky bottom-0">
-  <tr className="bg-orange-500/5">
-    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
-    <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-      {totalGeneral.toFixed(3)} TM
-    </td>
-    <td colSpan="3"></td>
-  </tr>
-  {barco.metas_json?.limites?.[productoActivo.codigo] > 0 && (
-    <tr className="bg-orange-500/5">
-      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>FALTA POR CARGAR</td>
-      <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>
-        {faltaPorCargar.toFixed(3)} TM
-      </td>
-      <td colSpan="3"></td>
-    </tr>
-  )}
-</tfoot>
+                <tbody className="divide-y divide-white/5">
+                  {(() => {
+                    const ascendente = [...exportacionesFiltradas].sort(
+                      (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
+                    )
+                    
+                    const esRetornoExacto = new Map()
+                    for (let i = 1; i < ascendente.length; i++) {
+                      const actual = ascendente[i]
+                      const anterior = ascendente[i - 1]
+                      if (actual.bodega_id !== anterior.bodega_id) {
+                        let bodegaVistaAntes = false
+                        for (let j = 0; j < i; j++) {
+                          if (ascendente[j].bodega_id === actual.bodega_id) {
+                            bodegaVistaAntes = true
+                            break
+                          }
+                        }
+                        if (bodegaVistaAntes) {
+                          esRetornoExacto.set(actual.id, true)
+                        }
+                      }
+                    }
+                    
+                    const flujoPorRegistro = new Map()
+                    const bodegasUnicas = [...new Set(ascendente.map(e => e.bodega_id))]
+                    
+                    bodegasUnicas.forEach(bodegaId => {
+                      const registrosBodega = ascendente.filter(e => e.bodega_id === bodegaId)
+                      
+                      registrosBodega.forEach((reg, idx) => {
+                        const esRetorno = esRetornoExacto.get(reg.id)
+                        
+                        if (idx === 0 || esRetorno) {
+                          flujoPorRegistro.set(reg.id, {
+                            valor: Number(reg.acumulado_tm) || 0,
+                            tipo: 'inicio_o_retorno',
+                            minutos: null
+                          })
+                        } else {
+                          const anterior = registrosBodega[idx - 1]
+                          const deltaTM = Number(reg.acumulado_tm) - Number(anterior.acumulado_tm)
+                          const minutosDiff = (new Date(reg.fecha_hora) - new Date(anterior.fecha_hora)) / (1000 * 60)
+                          
+                          flujoPorRegistro.set(reg.id, {
+                            valor: deltaTM,
+                            tipo: 'delta_entre_lecturas',
+                            minutos: minutosDiff
+                          })
+                        }
+                      })
+                    })
+                    
+                    const esPrimeraVezBodega = new Map()
+                    const bodegasVistas = new Set()
+                    
+                    ascendente.forEach(exp => {
+                      if (!bodegasVistas.has(exp.bodega_id)) {
+                        esPrimeraVezBodega.set(exp.id, true)
+                        bodegasVistas.add(exp.bodega_id)
+                      } else {
+                        esPrimeraVezBodega.set(exp.id, false)
+                      }
+                    })
+                    
+                    const hayCambioBodega = new Map()
+                    for (let i = 1; i < ascendente.length; i++) {
+                      const actual = ascendente[i]
+                      const anterior = ascendente[i - 1]
+                      if (actual.bodega_id !== anterior.bodega_id) {
+                        hayCambioBodega.set(anterior.id, true)
+                      }
+                    }
+                    
+                    const descendente = [...exportacionesFiltradas].sort(
+                      (a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)
+                    )
+                    
+                    return descendente.map((exp) => {
+                      const bodega = BODEGAS_BARCO.find(b => b.id === exp.bodega_id)
+                      const fechaSV = formatUTCToSV(exp.fecha_hora, 'DD/MM/YY')
+                      const horaSV = formatUTCToSV(exp.fecha_hora, 'HH:mm')
+                      const horaNum = parseInt(horaSV.split(':')[0])
+                      
+                      const turno = (horaNum >= 6 && horaNum < 18) ? '6:00 - 18:00' : '18:00 - 6:00'
+                      
+                      const esPrimera = esPrimeraVezBodega.get(exp.id)
+                      const esCambio = hayCambioBodega.get(exp.id)
+                      const esRetorno = esRetornoExacto.get(exp.id)
+                      const infoFlujo = flujoPorRegistro.get(exp.id)
+                      
+                      let rowClasses = "hover:bg-white/5 transition-colors"
+                      let badges = []
+                      
+                      if (esPrimera && !esRetorno) {
+                        rowClasses = "bg-blue-500/10 hover:bg-blue-500/20 border-l-4 border-blue-500"
+                        badges.push({
+                          text: "INICIO DE BODEGA",
+                          icono: <Layers className="w-3 h-3" />,
+                          color: "bg-blue-500/30 text-blue-300"
+                        })
+                      }
+                      
+                      if (esRetorno) {
+                        rowClasses = "bg-purple-500/10 hover:bg-purple-500/20 border-l-4 border-purple-500"
+                        badges.push({
+                          text: "RETORNO A BODEGA",
+                          icono: <ArrowRightLeft className="w-3 h-3" />,
+                          color: "bg-purple-500/30 text-purple-300"
+                        })
+                      }
+                      
+                      if (esCambio) {
+                        rowClasses = "bg-orange-500/10 hover:bg-orange-500/20 border-l-4 border-orange-500"
+                        badges.push({
+                          text: "CAMBIO DE BODEGA",
+                          icono: <ArrowRightLeft className="w-3 h-3" />,
+                          color: "bg-orange-500/30 text-orange-300"
+                        })
+                      }
+                      
+                      let flujoColor = "text-slate-500"
+                      let flujoIcono = null
+                      let flujoDisplay = "—"
+                      
+                      if (infoFlujo) {
+                        if (infoFlujo.tipo === 'inicio_o_retorno') {
+                          flujoColor = "text-cyan-400"
+                          flujoIcono = <span className="mr-1"></span>
+                          flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                        } else {
+                          if (infoFlujo.valor >= 0) {
+                            flujoColor = "text-green-400"
+                            if (infoFlujo.minutos && infoFlujo.minutos < 15) {
+                              flujoIcono = <span className="mr-1">⚡</span>
+                            } else {
+                              flujoIcono = <span className="mr-1"></span>
+                            }
+                            flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
+                            if (infoFlujo.minutos) {
+                              flujoDisplay += ` (${infoFlujo.minutos.toFixed(0)} min)`
+                            }
+                          } else {
+                            flujoColor = "text-red-400"
+                            flujoIcono = <span className="mr-1">⚠️</span>
+                            flujoDisplay = `ERROR: ${infoFlujo.valor.toFixed(3)} TM`
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <tr key={exp.id} className={rowClasses}>
+                          <td className="px-4 py-3">
+                            <div>{fechaSV}</div>
+                            <div className="text-xs text-slate-500">{horaSV}</div>
+                            {badges.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {badges.map((badge, i) => (
+                                  <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>
+                                    {badge.icono}
+                                    {badge.text}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              turno === '6:00 - 18:00' 
+                                ? 'bg-yellow-500/20 text-yellow-400' 
+                                : 'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {turno}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-bold text-blue-400">
+                            {(exp.acumulado_tm || 0).toFixed(3)} TM
+                          </td>
+                          <td className="px-4 py-3 font-bold">
+                            {infoFlujo ? (
+                              <span className={flujoColor}>
+                                {flujoIcono}
+                                {flujoDisplay}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {bodega ? (
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bodega.color }} />
+                                  <p className="text-white font-medium">{bodega.nombre}</p>
+                                </div>
+                                <p className="text-xs text-green-400">{bodega.codigo}</p>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 max-w-xs truncate" title={exp.observaciones || ''}>
+                            {exp.observaciones || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button onClick={() => handleEditarExportacion(exp)} className="p-1 hover:bg-blue-500/20 rounded" title="Editar">
+                                <Edit2 className="w-4 h-4 text-blue-400" />
+                              </button>
+                              <button onClick={() => handleEliminarExportacion(exp.id)} className="p-1 hover:bg-red-500/20 rounded" title="Eliminar">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
                 <tfoot className="bg-slate-900 sticky bottom-0">
                   <tr className="bg-orange-500/5">
                     <td className="px-4 py-3 font-bold text-orange-400" colSpan={2}>TOTAL ACUMULADO GLOBAL</td>
