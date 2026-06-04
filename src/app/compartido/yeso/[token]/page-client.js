@@ -832,53 +832,6 @@ export default function ClientPage({ token }) {
             </div>
           )}
 
-          {/* DESTINOS - FILTROS RÁPIDOS */}
-          {destinos.length > 0 && (
-            <>
-              <div className="section-title">
-                <FaWarehouse size={14} />
-                Destinos (Bodegas / Silos / Bins / Módulos)
-              </div>
-              <div className="alm-tarjetas-grid-destinos">
-                {destinos.map(destino => {
-                  const totalDestino = registros
-                    .filter(r => r.destino_id === destino.id)
-                    .reduce((sum, r) => sum + (r.peso_neto_updp_tm || 0), 0)
-                  const isSelected = destinoSeleccionado === destino.id
-                  return (
-                    <div
-                      key={destino.id}
-                      className={`tarjeta-destino ${isSelected ? 'tarjeta-destino-selected' : ''}`}
-                      onClick={() => handleSeleccionarDestino(destino.id)}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ 
-                          width: '8px', 
-                          height: '8px', 
-                          borderRadius: '50%', 
-                          background: COLORES_DESTINO[destino.tipo] || '#10b981' 
-                        }} />
-                        <span style={{ fontWeight: 'bold', fontSize: '12px', color: 'white' }}>{destino.codigo}</span>
-                        <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
-                          {destino.tipo}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>{destino.nombre}</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: isSelected ? 'white' : '#10b981' }}>
-                        {fmtTM(totalDestino, 1)} TM
-                      </div>
-                      {isSelected && (
-                        <div style={{ fontSize: '9px', marginTop: '6px', color: 'rgba(255,255,255,0.7)' }}>
-                          ✓ Filtro activo
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
           {/* EMPRESAS TRANSPORTISTAS */}
           {promediosPorTransporte.length > 0 && (
             <>
