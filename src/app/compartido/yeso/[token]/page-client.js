@@ -20,14 +20,14 @@ import {
   FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
-  FiChevronDown, FiChevronUp
+  FiChevronDown, FiChevronUp, FiActivity, FiDatabase
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
   FaTrailer, FaMountain, FaChartPie, FaChartLine, FaDatabase,
-  FaClipboardList, FaFileExcel, FaWarehouse
+  FaClipboardList, FaFileExcel, FaWarehouse, FaShip, FaCubes
 } from 'react-icons/fa'
-import { GiCoalWagon, GiWeightScale, GiMinerals } from 'react-icons/gi'
+import { GiCoalWagon, GiWeightScale, GiMinerals, GiCargoShip, GiCrane } from 'react-icons/gi'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -44,7 +44,7 @@ const RANGOS = {
   TRAILETA: { min: 22, max: 26 }
 }
 
-const COLORES = ["#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5"]
+const COLORES = ["#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5", "#059669", "#047857"]
 const COLORES_DESTINO = {
   "bodega": "#3b82f6",
   "silo": "#22c55e", 
@@ -107,9 +107,9 @@ const getEstadoPeso = (pesoNeto, tipoUnidad) => {
 
 // Función para obtener el color según estado
 const getColorPorEstado = (estado) => {
-  if (estado === 'bajo') return '#fbbf24'
+  if (estado === 'bajo') return '#f59e0b'
   if (estado === 'sobre') return '#ef4444'
-  return '#4ade80'
+  return '#10b981'
 }
 
 // Función para verificar si está fuera de rango
@@ -123,7 +123,6 @@ const estaFueraDeRango = (pesoNeto, tipoUnidad) => {
 
 // NORMALIZADOR: Transforma los datos del registro al formato que espera el dashboard
 const normalizarRegistro = (reg, index, registrosAnteriores, destinosMap) => {
-  // Calcular acumulado progresivo basado en correlativo
   let acumulado = 0
   if (registrosAnteriores) {
     const anteriores = registrosAnteriores.filter(r => r.correlativo < reg.correlativo)
@@ -185,7 +184,6 @@ function useYesoData(token, transporteFiltro = null, diaFiltro = null, destinoFi
 
       if (productoError || !productoData) throw new Error('Producto YESO no encontrado')
 
-      // Cargar destinos
       const { data: destinosData, error: destinosError } = await supabase
         .from('destinos')
         .select('*')
@@ -196,16 +194,12 @@ function useYesoData(token, transporteFiltro = null, diaFiltro = null, destinoFi
       const destinosMap = new Map()
       destinosData?.forEach(d => destinosMap.set(d.id, d))
 
-      // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS REGISTROS
       const registrosRaw = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', 'barco_id', barcoData.id)
 
-      // Filtrar solo registros COMPLETADOS
       const completados = (registrosRaw || []).filter(r => r.estado === 'COMPLETADO')
       
-      // Normalizar los registros
       let registrosNormalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados, destinosMap))
 
-      // Aplicar filtros
       if (transporteFiltro) {
         registrosNormalizados = registrosNormalizados.filter(r => r.transporte === transporteFiltro)
       }
@@ -312,16 +306,14 @@ export default function ClientPage({ token }) {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [destinoSeleccionado, setDestinoSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
-  const [ordenTabla, setOrdenTabla] = useState('reciente') // 'reciente' o 'antiguo'
+  const [ordenTabla, setOrdenTabla] = useState('reciente')
 
   const { barco, producto, registros, destinos, loading, error, lastUpdate, refetch } = useYesoData(
     token, transporteSeleccionado, diaSeleccionado, destinoSeleccionado
   )
 
-  // Calcular estadísticas usando la función agregada
   const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
 
-  // Calcular faltante de descarga y excedente
   const meta = barco?.metas_json?.limites?.['YE-001'] || 0
   const faltante = Math.max(0, meta - estadisticas.totalNeto)
   const excedente = Math.max(0, estadisticas.totalNeto - meta)
@@ -329,7 +321,6 @@ export default function ClientPage({ token }) {
   const metaCompletada = porcentajeMeta >= 100
   const tieneExcedente = excedente > 0
 
-  // Ordenar registros para la tabla
   const registrosOrdenados = useMemo(() => {
     if (!registros.length) return []
     
@@ -355,7 +346,6 @@ export default function ClientPage({ token }) {
     }
   }, [registros, ordenTabla])
 
-  // 🔥 Cargar todos los registros sin límite para estadísticas globales
   useEffect(() => {
     const cargarTodosRegistros = async () => {
       try {
@@ -380,7 +370,6 @@ export default function ClientPage({ token }) {
             const completados = registrosGlobales.filter(r => r.estado === 'COMPLETADO')
             const normalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados, destinosMap))
             setTodosLosRegistros(normalizados)
-            console.log(`📊 Dashboard Yeso: ${normalizados.length} registros globales cargados`)
           }
         }
       } catch (error) {
@@ -396,10 +385,8 @@ export default function ClientPage({ token }) {
       return
     }
 
-    // Helper para estilo (simplificado - puedes expandir igual que en Pet Coke)
     const wb = XLSX.utils.book_new()
 
-    // Hoja 1: Resumen General
     const resumenData = [
       ['BARCO', barco?.nombre || 'N/A'],
       ['CÓDIGO BARCO', barco?.codigo_barco || 'N/A'],
@@ -419,7 +406,6 @@ export default function ClientPage({ token }) {
     const wsResumen = XLSX.utils.aoa_to_sheet([['RESUMEN GENERAL'], ...resumenData.map(r => r)])
     XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
 
-    // Hoja 2: Todos los registros
     const registrosData = registros.map(r => ({
       'CORRELATIVO': r.correlativo,
       'PLACA': r.placa,
@@ -556,11 +542,11 @@ export default function ClientPage({ token }) {
 
   if (loading && !barco) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🪨</div>
-          <p style={{ color: '#94a3b8' }}>Cargando datos de Yeso...</p>
-          <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#10b981', borderRadius: '50%', margin: '20px auto', animation: 'spin 1s linear infinite' }} />
+          <div style={{ fontSize: '64px', marginBottom: '20px', animation: 'bounce 1s infinite' }}>🪨</div>
+          <p style={{ color: '#a5b4fc', fontWeight: '500' }}>Cargando datos de Yeso...</p>
+          <div style={{ width: '50px', height: '50px', border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981', borderRadius: '50%', margin: '20px auto', animation: 'spin 1s linear infinite' }} />
         </div>
       </div>
     )
@@ -568,10 +554,10 @@ export default function ClientPage({ token }) {
 
   if (error || !barco) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', padding: '20px' }}>
-        <div style={{ background: '#1e293b', padding: '40px', borderRadius: '16px', maxWidth: '400px', textAlign: 'center' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', padding: '20px' }}>
+        <div style={{ background: 'rgba(30,41,59,0.9)', backdropFilter: 'blur(10px)', padding: '40px', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', border: '1px solid rgba(239,68,68,0.3)' }}>
           <div style={{ fontSize: '64px', marginBottom: '20px' }}>⚠️</div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', color: '#ef4444' }}>Error</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', color: '#f87171' }}>Error</h1>
           <p style={{ color: '#94a3b8' }}>{error || 'No se pudieron cargar los datos'}</p>
         </div>
       </div>
@@ -588,80 +574,88 @@ export default function ClientPage({ token }) {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700;800;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #f1f5f9; --text-2: #94a3b8; --green: #10b981; --green-dark: #059669; }
-        body { background: var(--bg); font-family: 'Sora', sans-serif; }
-        .alm-yeso-root { min-height: 100vh; background: var(--bg); }
-        .alm-topbar { background: #0f172a; border-bottom: 1px solid var(--border); padding: 0 24px; height: 68px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-        .alm-logo { height: 32px; filter: brightness(0) invert(1); }
-        .alm-ship-name { font-weight: 800; color: white; font-size: 14px; }
+        :root { --bg-dark: #0f172a; --bg-gradient-start: #0f172a; --bg-gradient-end: #1e1b4b; --surface: rgba(30,41,59,0.8); --surface-solid: #1e293b; --border: rgba(51,65,85,0.6); --text: #f1f5f9; --text-2: #94a3b8; --green: #10b981; --green-dark: #059669; --cyan: #06b6d4; --purple: #8b5cf6; }
+        body { background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%); font-family: 'Sora', sans-serif; min-height: 100vh; }
+        .alm-yeso-root { min-height: 100vh; background: radial-gradient(circle at 20% 30%, rgba(16,185,129,0.03) 0%, transparent 50%); }
+        .alm-topbar { background: rgba(15,23,42,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(16,185,129,0.2); padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .alm-logo { height: 36px; filter: brightness(0) invert(1); }
+        .alm-ship-name { font-weight: 800; color: white; font-size: 16px; background: linear-gradient(135deg, #fff, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .alm-ship-code { font-size: 10px; color: #64748b; font-family: 'DM Mono', monospace; }
-        .alm-refresh-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .alm-refresh-btn:hover { background: rgba(255,255,255,0.15); }
-        .alm-excel-btn { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 6px 12px; color: #34d399; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-        .alm-excel-btn:hover { background: rgba(16, 185, 129, 0.25); transform: translateY(-1px); }
+        .alm-refresh-btn { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 8px 16px; color: #34d399; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; font-weight: 500; }
+        .alm-refresh-btn:hover { background: rgba(16,185,129,0.2); border-color: #10b981; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
+        .alm-excel-btn { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.4); border-radius: 10px; padding: 8px 16px; color: #34d399; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; font-weight: 500; }
+        .alm-excel-btn:hover { background: rgba(16,185,129,0.25); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.15); }
         .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-        .orden-boton { background: rgba(255,255,255,0.05); border: 1px solid #334155; border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-        .orden-boton:hover { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
+        .orden-boton { background: rgba(255,255,255,0.03); border: 1px solid #334155; border-radius: 24px; padding: 6px 16px; font-size: 12px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; font-weight: 500; }
+        .orden-boton:hover { background: rgba(16,185,129,0.12); border-color: #10b981; color: #10b981; }
         .orden-boton-activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
-        .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .alm-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 14px; position: relative; overflow: hidden; }
-        .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--green); }
-        .alm-kpi-icon { font-size: 28px; color: #10b981; }
-        .alm-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
-        .alm-kpi-value { font-size: 28px; font-weight: 900; color: white; font-family: 'DM Mono', monospace; }
-        .alm-kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
-        .alm-alert-card { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 16px; padding: 16px 20px; margin-bottom: 24px; }
-        .alm-alert-title { font-size: 13px; font-weight: bold; color: #f87171; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-        .alm-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-        .alm-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+        .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 28px; }
+        .alm-kpi { background: rgba(30,41,59,0.7); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.15); border-radius: 20px; padding: 20px; display: flex; align-items: flex-start; gap: 16px; position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .alm-kpi:hover { transform: translateY(-2px); border-color: rgba(16,185,129,0.4); box-shadow: 0 8px 25px rgba(0,0,0,0.2), 0 0 0 1px rgba(16,185,129,0.1); }
+        .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); border-radius: 0 0 20px 20px; }
+        .alm-kpi-icon { font-size: 32px; background: linear-gradient(135deg, #10b981, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .alm-kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 6px; }
+        .alm-kpi-value { font-size: 28px; font-weight: 900; color: white; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
+        .alm-kpi-sub { font-size: 11px; color: #64748b; margin-top: 6px; }
+        .alm-alert-card { background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.08)); border: 1px solid rgba(239,68,68,0.4); border-radius: 20px; padding: 18px 24px; margin-bottom: 28px; backdrop-filter: blur(4px); }
+        .alm-alert-title { font-size: 13px; font-weight: bold; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .alm-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+        .alm-chart-card { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.1); border-radius: 20px; padding: 20px; transition: all 0.3s ease; }
+        .alm-chart-card:hover { border-color: rgba(16,185,129,0.25); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
         .alm-chart-wide { grid-column: 1 / -1; }
-        .alm-chart-title { font-size: 14px; font-weight: 700; color: white; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-        .alm-table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 24px; }
-        .alm-table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: #0f172a; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .alm-chart-title { font-size: 14px; font-weight: 700; color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.3px; }
+        .alm-table-card { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.1); border-radius: 20px; overflow: hidden; margin-bottom: 28px; transition: all 0.3s ease; }
+        .alm-table-header { padding: 16px 24px; border-bottom: 1px solid rgba(51,65,85,0.5); background: rgba(15,23,42,0.5); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
         .alm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .alm-table th { padding: 12px 16px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid var(--border); }
-        .alm-table td { padding: 12px 16px; color: #cbd5e1; border-bottom: 1px solid var(--border); }
-        .alm-table tbody tr:hover { background: rgba(16, 185, 129, 0.05); }
-        .alm-table .alm-td-num { text-align: right; }
-        .alm-table-row-bajo { background: rgba(251, 191, 36, 0.15); }
-        .alm-table-row-bajo:hover { background: rgba(251, 191, 36, 0.25); }
-        .alm-table-row-sobre { background: rgba(239, 68, 68, 0.15); }
-        .alm-table-row-sobre:hover { background: rgba(239, 68, 68, 0.25); }
-        .alm-footer { text-align: center; padding: 24px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; }
-        .alm-badge { background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-left: 8px; }
-        .alm-badge-warning { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-        .alm-badge-filter { background: rgba(16, 185, 129, 0.3); color: #10b981; }
-        .alm-badge-bajo { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-        .alm-progress-hero { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-        .alm-progress-track { height: 12px; background: #334155; border-radius: 999px; overflow: hidden; margin: 12px 0; }
-        .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 999px; transition: width 1s ease; }
-        .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316); }
-        .alm-progress-fill-complete { background: linear-gradient(90deg, #10b981, #34d399); }
-        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
-        .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; }
-        .section-title { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; margin-bottom: 14px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
-        .section-title::after { content: ''; flex: 1; height: 1px; background: #334155; }
-        .destino-badge { background: rgba(59,130,246,0.15); color: #60a5fa; padding: 2px 8px; border-radius: 999px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s; }
-        .destino-badge:hover { background: rgba(59,130,246,0.3); transform: scale(1.02); }
+        .alm-table th { padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid rgba(51,65,85,0.5); letter-spacing: 0.5px; }
+        .alm-table td { padding: 14px 16px; color: #cbd5e1; border-bottom: 1px solid rgba(51,65,85,0.3); }
+        .alm-table tbody tr:hover { background: rgba(16,185,129,0.05); cursor: pointer; }
+        .alm-table .alm-td-num { text-align: right; font-family: 'DM Mono', monospace; }
+        .alm-table-row-bajo { background: rgba(245,158,11,0.08); border-left: 3px solid #f59e0b; }
+        .alm-table-row-bajo:hover { background: rgba(245,158,11,0.15); }
+        .alm-table-row-sobre { background: rgba(239,68,68,0.08); border-left: 3px solid #ef4444; }
+        .alm-table-row-sobre:hover { background: rgba(239,68,68,0.15); }
+        .alm-footer { text-align: center; padding: 28px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; border-top: 1px solid rgba(51,65,85,0.3); margin-top: 20px; }
+        .alm-badge { background: rgba(16,185,129,0.15); color: #10b981; padding: 4px 12px; border-radius: 999px; font-size: 11px; margin-left: 10px; font-weight: 500; }
+        .alm-badge-warning { background: rgba(239,68,68,0.15); color: #f87171; }
+        .alm-badge-filter { background: rgba(16,185,129,0.25); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+        .alm-badge-bajo { background: rgba(245,158,11,0.15); color: #fbbf24; }
+        .alm-progress-hero { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.2); border-radius: 20px; padding: 24px; margin-bottom: 28px; }
+        .alm-progress-track { height: 12px; background: #1e293b; border-radius: 999px; overflow: hidden; margin: 14px 0; }
+        .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); border-radius: 999px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; }
+        .alm-progress-fill::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 2s infinite; }
+        .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316, #fb923c); }
+        .alm-progress-fill-complete { background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); }
+        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid #334155; border-radius: 24px; padding: 6px 14px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; border-color: #10b981; }
+        .section-title { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; margin-bottom: 16px; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+        .section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, #334155, transparent); }
+        .destino-badge { background: rgba(59,130,246,0.12); color: #60a5fa; padding: 4px 12px; border-radius: 999px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+        .destino-badge:hover { background: rgba(59,130,246,0.25); transform: scale(1.02); }
         .destino-badge-active { background: #10b981; color: white; }
         .alm-tarjetas-grid-destinos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .tarjeta-destino { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s; }
-        .tarjeta-destino:hover { border-color: #10b981; transform: translateY(-2px); }
-        .tarjeta-destino-selected { background: linear-gradient(135deg, #10b981, #059669); border-color: #10b981; }
+        .tarjeta-destino { background: rgba(30,41,59,0.5); border: 1px solid #334155; border-radius: 14px; padding: 12px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(4px); }
+        .tarjeta-destino:hover { border-color: #10b981; transform: translateY(-2px); background: rgba(30,41,59,0.8); }
+        .tarjeta-destino-selected { background: linear-gradient(135deg, #10b98120, #05966920); border-color: #10b981; }
         .barra-dia { cursor: pointer; transition: opacity 0.2s; }
         .barra-dia:hover { opacity: 0.8; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         @media (max-width: 768px) {
           .alm-charts-row { grid-template-columns: 1fr; }
           .alm-body { padding: 16px; }
+          .alm-kpis-row { gap: 12px; }
+          .alm-kpi-value { font-size: 22px; }
         }
       `}</style>
 
       <div className="alm-yeso-root">
         <header className="alm-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <img src="/logo.png" alt="ALMAPAC" className="alm-logo" />
-            <div style={{ width: '1px', height: '30px', background: '#334155' }} />
+            <div style={{ width: '1px', height: '36px', background: 'linear-gradient(180deg, transparent, #10b981, transparent)' }} />
             <div>
               <div className="alm-ship-name">{barco.nombre}</div>
               <div className="alm-ship-code">#{barco.codigo_barco} · Yeso (YE-001)</div>
@@ -670,25 +664,28 @@ export default function ClientPage({ token }) {
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button onClick={descargarExcel} className="alm-excel-btn">
               <FaFileExcel size={14} />
-              Descargar Excel
+              <span>Exportar Excel</span>
             </button>
             {(transporteSeleccionado || diaSeleccionado || destinoSeleccionado) && (
               <button onClick={limpiarTodosLosFiltros} className="alm-clear-filter">
                 <FiX size={12} />
-                Limpiar todos los filtros
+                Limpiar filtros
               </button>
             )}
             <button onClick={refetch} className="alm-refresh-btn">
               <FiRefreshCw size={14} />
-              Actualizar
+              <span>Actualizar</span>
             </button>
           </div>
         </header>
 
         <div className="alm-body">
-          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <span className="alm-badge alm-badge-filter">{filtroActivoTexto}</span>
-            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <span className="alm-badge alm-badge-filter" style={{ fontSize: '12px' }}>
+              <FiActivity size={12} style={{ display: 'inline', marginRight: '6px' }} />
+              {filtroActivoTexto}
+            </span>
+            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '4px 12px', borderRadius: '20px' }}>
               <FiClock size={12} />
               Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
             </div>
@@ -697,27 +694,30 @@ export default function ClientPage({ token }) {
           {/* SECCIÓN DE EXCEDENTE */}
           {tieneExcedente && (
             <div style={{ 
-              marginBottom: '24px', 
-              background: 'linear-gradient(135deg, #ef4444, #dc2626)', 
-              borderRadius: '16px', 
-              padding: '16px 20px',
+              marginBottom: '28px', 
+              background: 'linear-gradient(135deg, #ef4444, #dc2626, #b91c1c)', 
+              borderRadius: '20px', 
+              padding: '20px 28px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
-              gap: '12px',
-              animation: 'pulse 2s infinite'
+              gap: '16px',
+              animation: 'pulse 2s infinite',
+              boxShadow: '0 8px 25px rgba(239,68,68,0.3)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <FiAlertCircle size={28} style={{ color: 'white' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '12px' }}>
+                  <FiAlertCircle size={32} style={{ color: 'white' }} />
+                </div>
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'rgba(255,255,255,0.9)' }}>EXCEDENTE DE DESCARGA</div>
-                  <div style={{ fontSize: '28px', fontWeight: '900', color: 'white', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'rgba(255,255,255,0.9)', letterSpacing: '1px' }}>EXCEDENTE DE DESCARGA</div>
+                  <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', fontFamily: 'monospace' }}>
                     +{fmtTM(excedente, 2)} TM
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', textAlign: 'right' }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', textAlign: 'right', maxWidth: '250px' }}>
                 La cantidad descargada supera la meta manifestada
               </div>
             </div>
@@ -726,31 +726,31 @@ export default function ClientPage({ token }) {
           {/* KPIs */}
           <div className="alm-kpis-row">
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><GiWeightScale size={28} /></div>
+              <div className="alm-kpi-icon"><GiWeightScale size={32} /></div>
               <div>
                 <div className="alm-kpi-label">Total Descargado</div>
-                <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto, 2)} TM</div>
+                <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
                 <div className="alm-kpi-sub">Peso Neto UPDP</div>
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiTruck size={28} /></div>
+              <div className="alm-kpi-icon"><FiTruck size={32} /></div>
               <div>
                 <div className="alm-kpi-label">Total Viajes</div>
-                <div className="alm-kpi-value">{estadisticas.totalViajes}</div>
+                <div className="alm-kpi-value">{estadisticas.totalViajes.toLocaleString()}</div>
                 <div className="alm-kpi-sub">Unidades procesadas</div>
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiBarChart2 size={28} /></div>
+              <div className="alm-kpi-icon"><FiBarChart2 size={32} /></div>
               <div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
-                <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} TM</div>
+                <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
                 <div className="alm-kpi-sub">VOLQ: 14-18 | TRAIL: 22-25 TM</div>
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiUsers size={28} /></div>
+              <div className="alm-kpi-icon"><FaBuilding size={32} /></div>
               <div>
                 <div className="alm-kpi-label">Transportistas</div>
                 <div className="alm-kpi-value">{promediosPorTransporte.length}</div>
@@ -761,7 +761,7 @@ export default function ClientPage({ token }) {
 
           <div className="alm-kpis-row">
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiCheckCircle size={28} style={{ color: '#4ade80' }} /></div>
+              <div className="alm-kpi-icon"><FiCheckCircle size={32} style={{ color: '#4ade80' }} /></div>
               <div>
                 <div className="alm-kpi-label">En Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
@@ -769,7 +769,7 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiAlertCircle size={28} style={{ color: '#f87171' }} /></div>
+              <div className="alm-kpi-icon"><FiAlertCircle size={32} style={{ color: '#f87171' }} /></div>
               <div>
                 <div className="alm-kpi-label">Fuera de Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
@@ -777,18 +777,18 @@ export default function ClientPage({ token }) {
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiTrendingUp size={28} style={{ color: '#10b981' }} /></div>
+              <div className="alm-kpi-icon"><FiTrendingUp size={32} style={{ color: '#10b981' }} /></div>
               <div>
                 <div className="alm-kpi-label">META MANIFESTADA</div>
-                <div className="alm-kpi-value" style={{ color: '#10b981' }}>{fmtTM(meta, 2)} TM</div>
+                <div className="alm-kpi-value" style={{ color: '#10b981' }}>{fmtTM(meta, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
                 <div className="alm-kpi-sub">Cantidad contratada</div>
               </div>
             </div>
             <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FaWarehouse size={28} style={{ color: '#60a5fa' }} /></div>
+              <div className="alm-kpi-icon"><FaWarehouse size={32} style={{ color: '#60a5fa' }} /></div>
               <div>
                 <div className="alm-kpi-label">DESTINOS</div>
-                <div className="alm-kpi-value" style={{ fontSize: '20px' }}>{Object.keys(estadisticas.porDestino).length}</div>
+                <div className="alm-kpi-value" style={{ fontSize: '22px' }}>{Object.keys(estadisticas.porDestino).length}</div>
                 <div className="alm-kpi-sub">Bodegas/Silos/Bins</div>
               </div>
             </div>
@@ -797,13 +797,19 @@ export default function ClientPage({ token }) {
           {/* META PROGRESS */}
           {meta > 0 && (
             <div className="alm-progress-hero">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <FiTrendingUp size={16} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <FiTrendingUp size={18} style={{ color: '#10b981' }} />
                   Progreso de Descarga vs Meta
                 </span>
-                <span style={{ color: tieneExcedente ? '#ef4444' : (metaCompletada ? '#4ade80' : '#10b981'), fontWeight: 'bold' }}>
-                  {porcentajeMeta.toFixed(1)}%
+                <span style={{ 
+                  background: tieneExcedente ? 'rgba(239,68,68,0.2)' : (metaCompletada ? 'rgba(74,222,128,0.2)' : 'rgba(16,185,129,0.2)'), 
+                  padding: '4px 12px', 
+                  borderRadius: '20px',
+                  fontWeight: 'bold',
+                  color: tieneExcedente ? '#f87171' : (metaCompletada ? '#4ade80' : '#10b981')
+                }}>
+                  {porcentajeMeta.toFixed(1)}% completado
                 </span>
               </div>
               <div className="alm-progress-track">
@@ -816,17 +822,17 @@ export default function ClientPage({ token }) {
                     position: 'relative',
                     width: `${Math.min(porcentajeMeta - 100, 100)}%`,
                     height: '12px',
-                    background: '#ef4444',
+                    background: 'linear-gradient(90deg, #ef4444, #f97316)',
                     borderRadius: '0 999px 999px 0',
                     marginTop: '-12px',
                     marginLeft: '100%',
-                    transition: 'width 1s ease'
+                    transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
                   }} />
                 )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginTop: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>
                 <span>0 TM</span>
-                <span>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
             </div>
@@ -838,8 +844,9 @@ export default function ClientPage({ token }) {
               <div className="section-title">
                 <FaBuilding size={14} />
                 Empresas Transportistas
+                <span className="alm-badge">{promediosPorTransporte.length} empresas</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: '28px' }}>
                 {promediosPorTransporte.map(empresa => {
                   const isSelected = transporteSeleccionado === empresa.nombre
                   return (
@@ -847,29 +854,31 @@ export default function ClientPage({ token }) {
                       key={empresa.nombre}
                       onClick={() => handleSeleccionarTransporte(empresa.nombre)}
                       style={{
-                        background: isSelected ? 'linear-gradient(135deg, #10b981, #059669)' : '#1e293b',
+                        background: isSelected ? 'linear-gradient(135deg, #10b98120, #05966920)' : 'rgba(30,41,59,0.5)',
+                        backdropFilter: 'blur(8px)',
                         border: `1px solid ${isSelected ? '#10b981' : '#334155'}`,
-                        borderRadius: '12px',
-                        padding: '12px',
+                        borderRadius: '16px',
+                        padding: '16px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        transform: isSelected ? 'scale(1.01)' : 'none'
+                        transition: 'all 0.3s ease',
+                        transform: isSelected ? 'scale(1.02)' : 'none',
+                        boxShadow: isSelected ? '0 4px 15px rgba(16,185,129,0.2)' : 'none'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 'bold', color: 'white' }}>{empresa.nombre}</span>
-                        <span style={{ fontSize: '18px', fontWeight: 'bold', color: isSelected ? 'white' : '#10b981' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ fontWeight: 'bold', color: 'white', fontSize: '15px' }}>{empresa.nombre}</span>
+                        <span style={{ fontSize: '20px', fontWeight: 'bold', color: isSelected ? '#10b981' : '#34d399', fontFamily: 'monospace' }}>
                           {fmtTM(empresa.totalNeto, 1)} TM
                         </span>
                       </div>
-                      <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: '#94a3b8' }}>
-                        <span>{empresa.totalViajes} viajes</span>
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: '#94a3b8', flexWrap: 'wrap' }}>
+                        <span>📊 {empresa.totalViajes} viajes</span>
                         {empresa.viajesTraileta > 0 && <span>🚛 Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
                         {empresa.viajesVolqueta > 0 && <span>⛰️ Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
                       </div>
                       {empresa.fueraRango > 0 && (
-                        <div style={{ fontSize: '10px', color: '#f87171', marginTop: '6px' }}>
-                          ⚠️ {empresa.fueraRango} viajes fuera de rango
+                        <div style={{ fontSize: '10px', color: '#f87171', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <FiAlertCircle size={10} /> {empresa.fueraRango} viajes fuera de rango
                         </div>
                       )}
                     </div>
@@ -883,58 +892,58 @@ export default function ClientPage({ token }) {
           <div className="alm-charts-row">
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <FaChartPie size={16} />
+                <FaChartPie size={16} style={{ color: '#10b981' }} />
                 Descarga por Transporte
               </div>
               {datosGraficoTransporte.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
-                    <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                       {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
                   </PieChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
             </div>
 
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <FaWarehouse size={16} />
+                <FaWarehouse size={16} style={{ color: '#60a5fa' }} />
                 Descarga por Destino
               </div>
               {datosGraficoDestino.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
-                    <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => {
-                      const shortName = name.length > 20 ? name.substring(0, 18) + '...' : name
+                    <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => {
+                      const shortName = name.length > 20 ? name.substring(0, 16) + '..' : name.split(' ')[0]
                       return `${shortName} ${(percent * 100).toFixed(0)}%`
                     }} labelLine={false}>
                       {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
                   </PieChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
             </div>
 
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <FiCalendar size={16} />
+                <FiCalendar size={16} style={{ color: '#f59e0b' }} />
                 Descarga por Día
                 {diaSeleccionado && <span className="alm-badge alm-badge-filter">Filtrado: {diaSeleccionado}</span>}
               </div>
               {datosGraficoDia.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={datosGraficoDia}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="dia" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
                     <Bar 
                       dataKey="total" 
                       fill="#10b981" 
-                      radius={[4, 4, 0, 0]}
+                      radius={[6, 6, 0, 0]}
                       onClick={(data) => handleSeleccionarDia(data.dia)}
                       cursor="pointer"
                       className="barra-dia"
@@ -949,10 +958,10 @@ export default function ClientPage({ token }) {
                             height={height}
                             fill={isSelected ? '#059669' : '#10b981'}
                             stroke={isSelected ? '#fbbf24' : 'none'}
-                            strokeWidth={isSelected ? 2 : 0}
-                            rx={4}
-                            ry={4}
-                            style={{ cursor: 'pointer' }}
+                            strokeWidth={2}
+                            rx={6}
+                            ry={6}
+                            style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                             onClick={() => handleSeleccionarDia(payload.dia)}
                           />
                         )
@@ -960,48 +969,48 @@ export default function ClientPage({ token }) {
                     />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
-              <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', marginTop: '8px' }}>
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
+              <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', marginTop: '12px' }}>
                 💡 Haz clic en cualquier barra para filtrar por ese día
               </div>
             </div>
 
             <div className="alm-chart-card">
               <div className="alm-chart-title">
-                <FaChartLine size={16} />
+                <FaChartLine size={16} style={{ color: '#8b5cf6' }} />
                 Distribución de Pesos Netos
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '10px', justifyContent: 'center' }}>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#4ade80', borderRadius: '2px' }}></span> En Rango</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fbbf24', borderRadius: '2px' }}></span> Bajo Peso</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></span> Sobrepeso</span>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#10b981', borderRadius: '3px' }}></span> En Rango (14-18 / 22-26 TM)</span>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#f59e0b', borderRadius: '3px' }}></span> Bajo Peso</span>
+                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '3px' }}></span> Sobrepeso</span>
               </div>
               {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 10 }} interval={Math.floor(estadisticas.acumuladoPorCorrelativo.length / 10)} />
                     <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
                     <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
                       {estadisticas.acumuladoPorCorrelativo.map((entry, idx) => (
                         <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
                       ))}
                     </Bar>
-                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq min ${RANGOS.VOLQUETA.min}`, fill: '#fbbf24', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#fbbf24" strokeDasharray="3 3" label={{ value: `Volq max ${RANGOS.VOLQUETA.max}`, fill: '#fbbf24', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#10b981" strokeDasharray="3 3" label={{ value: `Trail min ${RANGOS.TRAILETA.min}`, fill: '#10b981', fontSize: 9 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#10b981" strokeDasharray="3 3" label={{ value: `Trail max ${RANGOS.TRAILETA.max}`, fill: '#10b981', fontSize: 9 }} />
+                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `Volq ${RANGOS.VOLQUETA.min}`, fill: '#f59e0b', fontSize: 8 }} />
+                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `Volq ${RANGOS.VOLQUETA.max}`, fill: '#f59e0b', fontSize: 8 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#10b981" strokeDasharray="4 4" label={{ value: `Trail ${RANGOS.TRAILETA.min}`, fill: '#10b981', fontSize: 8 }} />
+                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#10b981" strokeDasharray="4 4" label={{ value: `Trail ${RANGOS.TRAILETA.max}`, fill: '#10b981', fontSize: 8 }} />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>Sin datos</div>}
+              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
             </div>
           </div>
 
           {/* FLUJO POR HORA */}
           <div className="alm-chart-card alm-chart-wide">
             <div className="alm-chart-title">
-              <FiClock size={16} />
+              <FiClock size={16} style={{ color: '#06b6d4' }} />
               Flujo de Descarga por Hora
             </div>
             {flujoPorHora.length > 0 ? (
@@ -1009,27 +1018,32 @@ export default function ClientPage({ token }) {
                 <LineChart data={flujoPorHora}>
                   <defs>
                     <linearGradient id="flujoGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="acumuladoGradient" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="hora" tick={{ fill: '#94a3b8', fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
-                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
+                  <XAxis dataKey="hora" tick={{ fill: '#94a3b8', fontSize: 11 }} angle={-45} textAnchor="end" height={65} />
+                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'TM por Hora', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'TM Acumulado', angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 10 }} />
                   <Tooltip formatter={(value, name) => {
                     if (name === 'totalTM') return [`${fmtTM(value, 2)} TM`, 'Descarga por Hora']
                     if (name === 'acumulado') return [`${fmtTM(value, 2)} TM`, 'Acumulado Total']
                     return [value, name]
-                  }} />
-                  <Bar yAxisId="left" dataKey="totalTM" fill="#10b981" opacity={0.8} radius={[4, 4, 0, 0]} name="Descarga por Hora" />
-                  <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#fbbf24" strokeWidth={3} dot={{ r: 3, fill: '#fbbf24' }} name="Acumulado Total" />
+                  }} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                  <Bar yAxisId="left" dataKey="totalTM" fill="url(#flujoGradient)" opacity={0.9} radius={[6, 6, 0, 0]} name="Descarga por Hora" />
+                  <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#1e293b' }} name="Acumulado Total" />
+                  <Area yAxisId="right" type="monotone" dataKey="acumulado" fill="url(#acumuladoGradient)" stroke="none" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
               <div style={{ textAlign: 'center', color: '#64748b', padding: '80px 40px' }}>
-                <FiClock size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                <p>No hay datos de hora disponibles</p>
+                <FiClock size={48} style={{ margin: '0 auto 20px', opacity: 0.4 }} />
+                <p>No hay datos de hora disponibles para mostrar el flujo</p>
               </div>
             )}
           </div>
@@ -1037,17 +1051,17 @@ export default function ClientPage({ token }) {
           {/* TABLA DE REGISTROS */}
           <div className="alm-table-card">
             <div className="alm-table-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <FaClipboardList size={14} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <FaClipboardList size={14} style={{ color: '#10b981' }} />
                 <span style={{ fontWeight: 'bold', color: 'white' }}>Registros de Descarga - Yeso</span>
-                <span className="alm-badge">{registros.length} viajes</span>
+                <span className="alm-badge">{registros.length.toLocaleString()} viajes</span>
                 {destinoSeleccionado && (
                   <span className="alm-badge alm-badge-filter">
-                    Destino: {destinos.find(d => d.id === destinoSeleccionado)?.nombre}
+                    🎯 Destino: {destinos.find(d => d.id === destinoSeleccionado)?.nombre}
                   </span>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button className={`orden-boton ${ordenTabla === 'reciente' ? 'orden-boton-activo' : ''}`} onClick={() => setOrdenTabla('reciente')}>
                   <FiArrowDown size={12} /> Más Reciente
                 </button>
@@ -1056,11 +1070,11 @@ export default function ClientPage({ token }) {
                 </button>
               </div>
             </div>
-            <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '550px', overflowY: 'auto' }}>
               <table className="alm-table">
                 <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 10 }}>
                   <tr>
-                    <th>#</th>
+                    <th style={{ width: '60px' }}>#</th>
                     <th>Placa</th>
                     <th>Transporte</th>
                     <th>Tipo</th>
@@ -1081,28 +1095,28 @@ export default function ClientPage({ token }) {
                     if (estado === 'sobre') rowClass = 'alm-table-row-sobre'
                     return (
                       <tr key={reg.id} className={rowClass}>
-                        <td style={{ fontWeight: 'bold' }}>{reg.correlativo}</td>
-                        <td style={{ fontFamily: 'monospace' }}>{reg.placa}</td>
+                        <td style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{reg.correlativo}</td>
+                        <td style={{ fontFamily: 'monospace', fontWeight: '500' }}>{reg.placa}</td>
                         <td>{reg.transporte || '—'}</td>
-                        <td>{reg.tipo_unidad || '—'}</td>
+                        <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
                         <td>
                           {reg.destino_info && (
-                            <span className="destino-badge">
+                            <span className="destino-badge" onClick={() => handleSeleccionarDestino(reg.destino_id)}>
+                              <FiMapPin size={10} />
                               {reg.destino_info.codigo} - {reg.destino_info.nombre}
                             </span>
                           )}
                         </td>
                         <td>{reg.fecha}</td>
-                        <td>{reg.hora_entrada || '—'}</td>
-                        <td>{reg.hora_salida || '—'}</td>
-                        <td style={{ color: '#4ade80' }}>{reg.tiempo_atencion || '—'}</td>
+                                                <td>{reg.hora_salida || '—'}</td>
+                        <td style={{ color: '#4ade80', fontFamily: 'monospace' }}>{reg.tiempo_atencion || '—'}</td>
                         <td className="alm-td-num" style={{ 
-                          color: estado === 'bajo' ? '#fbbf24' : (estado === 'sobre' ? '#f87171' : '#4ade80'),
+                          color: estado === 'bajo' ? '#f59e0b' : (estado === 'sobre' ? '#f87171' : '#4ade80'),
                           fontWeight: 'bold'
                         }}>
-                          {reg.peso_neto_updp_tm?.toFixed(3)}
+                          {reg.peso_neto_updp_tm?.toFixed(3)} TM
                         </td>
-                        <td className="alm-td-num" style={{ color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(3)}</td>
+                        <td className="alm-td-num" style={{ color: '#fbbf24', fontFamily: 'monospace' }}>{reg.acumulado_updp_tm?.toFixed(3)} TM</td>
                       </tr>
                     )
                   })}
@@ -1112,13 +1126,22 @@ export default function ClientPage({ token }) {
           </div>
 
           <div className="alm-footer">
-            <FiRefreshCw size={10} style={{ display: 'inline', marginRight: '4px' }} />
-            auto-refresh 30s · {barco.nombre} · YESO (YE-001) · {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM descargadas
-            <br />
-            <span style={{ color: '#fbbf24' }}>🟡 VOLQUETA: 14-18 TM</span> · 
-            <span style={{ color: '#10b981' }}>🟢 TRAILETA: 22-25 TM</span> · 
-            <span style={{ color: '#f87171' }}>🔴 Rojo = Sobrepeso</span> · 
-            <span style={{ color: '#fbbf24' }}>🟡 Amarillo = Bajo peso</span>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <span><FiRefreshCw size={10} style={{ display: 'inline', marginRight: '6px' }} /> auto-refresh cada 30s</span>
+              <span><GiCargoShip size={10} style={{ display: 'inline', marginRight: '6px' }} /> {barco.nombre}</span>
+              <span><GiMinerals size={10} style={{ display: 'inline', marginRight: '6px' }} /> YESO (YE-001)</span>
+              <span><FaDatabase size={10} style={{ display: 'inline', marginRight: '6px' }} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '10px' }}>
+              <span style={{ color: '#f59e0b' }}>🟡 VOLQUETA: 14-18 TM</span>
+              <span style={{ color: '#10b981' }}>🟢 TRAILETA: 22-26 TM</span>
+              <span style={{ color: '#f87171' }}>🔴 Rojo = Sobrepeso</span>
+              <span style={{ color: '#f59e0b' }}>🟡 Amarillo = Bajo peso</span>
+              <span style={{ color: '#4ade80' }}>🟢 Verde = En rango</span>
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '9px', color: '#475569' }}>
+              ALMAPAC - Sistema de Gestión de Descarga de Yeso
+            </div>
           </div>
         </div>
       </div>
