@@ -5,7 +5,7 @@ import {
   MoreVertical, Eye, Package, Edit2, ExternalLink, FileText,
   Truck, Clock, BarChart3, BookOpen, Power, Play,
   Download, Trash2, Copy, Upload as Export, ChevronRight, Flame,
-  Anchor
+  Anchor, Layers
 } from 'lucide-react'
 
 export default function AccionesBarcoMenu({
@@ -41,6 +41,8 @@ export default function AccionesBarcoMenu({
 
   // Verificar si el barco tiene Pet Coke configurado
   const tienePetCoke = barco.metas_json?.productos?.includes('PC-001')
+  // Verificar si el barco tiene Yeso configurado
+  const tieneYeso = barco.metas_json?.productos?.includes('YE-001')
   
   // Verificar si el barco tiene Clinker Nicaragua configurado
   const tieneClinkerNica = barco.metas_json?.productos?.includes('CLINKER_NICA') || 
@@ -82,6 +84,15 @@ export default function AccionesBarcoMenu({
           isLink: true,
           href: `/compartido/petcoke/${barco.token_compartido}`,
         }] : []),
+        // Dashboard de Yeso (si el producto está asociado)
+        ...(tieneYeso ? [{
+          icon: Layers,
+          label: 'Dashboard Yeso',
+          color: 'text-emerald-400',
+          hoverBg: 'hover:bg-emerald-500/20',
+          isLink: true,
+          href: `/compartido/yeso/${barco.token_compartido}`,
+        }] : []),
         // Dashboard de Clinker Nicaragua (si el producto está asociado)
         ...(tieneClinkerNica ? [{
           icon: Anchor,
@@ -104,6 +115,15 @@ export default function AccionesBarcoMenu({
           hoverBg: 'hover:bg-orange-500/20',
           isLink: true,
           href: `/barco/${barco.token_compartido}/petcoke`,
+        }] : []),
+        // Registro de Yeso (si el producto está asociado)
+        ...(tieneYeso ? [{
+          icon: Layers,
+          label: 'Registrar Yeso',
+          color: 'text-emerald-400',
+          hoverBg: 'hover:bg-emerald-500/20',
+          isLink: true,
+          href: `/barco/${barco.token_compartido}/yeso`,
         }] : []),
         // Registro de Clinker Nicaragua (si el producto está asociado)
         ...(tieneClinkerNica ? [{
