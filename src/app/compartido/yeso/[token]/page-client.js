@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-  PieChart, Pie, Cell, LineChart, Line
+  PieChart, Pie, Cell, LineChart, Line, ComposedChart
 } from 'recharts'
 import { FiSearch } from 'react-icons/fi'
 
@@ -20,14 +20,15 @@ import {
   FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
-  FiChevronDown, FiChevronUp, FiActivity, FiDatabase
+  FiChevronDown, FiChevronUp, FiActivity, FiDatabase, FiGift, FiStar
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
   FaTrailer, FaMountain, FaChartPie, FaChartLine, FaDatabase,
-  FaClipboardList, FaFileExcel, FaWarehouse, FaShip, FaCubes
+  FaClipboardList, FaFileExcel, FaWarehouse, FaShip, FaCubes,
+  FaRegGem, FaRegClock, FaMedal
 } from 'react-icons/fa'
-import { GiCoalWagon, GiWeightScale, GiMinerals, GiCargoShip, GiCrane } from 'react-icons/gi'
+import { GiCoalWagon, GiWeightScale, GiMinerals, GiCargoShip, GiCrane, GiDiamonds } from 'react-icons/gi'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -542,11 +543,18 @@ export default function ClientPage({ token }) {
 
   if (loading && !barco) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #1e1b4b 100%)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '64px', marginBottom: '20px', animation: 'bounce 1s infinite' }}>🪨</div>
-          <p style={{ color: '#a5b4fc', fontWeight: '500' }}>Cargando datos de Yeso...</p>
-          <div style={{ width: '50px', height: '50px', border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981', borderRadius: '50%', margin: '20px auto', animation: 'spin 1s linear infinite' }} />
+          <div style={{ fontSize: '72px', marginBottom: '24px', animation: 'float 2s ease-in-out infinite' }}>⚓</div>
+          <div style={{ width: '60px', height: '60px', margin: '0 auto 20px' }}>
+            <svg viewBox="0 0 100 100" style={{ animation: 'spin 1s linear infinite' }}>
+              <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(16,185,129,0.1)" strokeWidth="6"/>
+              <path d="M50 5 L50 95 M5 50 L95 50" stroke="rgba(16,185,129,0.2)" strokeWidth="2"/>
+              <path d="M50 5 A45 45 0 0 1 95 50" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <p style={{ color: '#a5b4fc', fontWeight: '500', fontSize: '14px', letterSpacing: '1px' }}>CARGANDO DATOS DE YESO</p>
+          <p style={{ color: '#475569', fontSize: '12px', marginTop: '8px' }}>Por favor espere...</p>
         </div>
       </div>
     )
@@ -554,11 +562,11 @@ export default function ClientPage({ token }) {
 
   if (error || !barco) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', padding: '20px' }}>
-        <div style={{ background: 'rgba(30,41,59,0.9)', backdropFilter: 'blur(10px)', padding: '40px', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', border: '1px solid rgba(239,68,68,0.3)' }}>
-          <div style={{ fontSize: '64px', marginBottom: '20px' }}>⚠️</div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', color: '#f87171' }}>Error</h1>
-          <p style={{ color: '#94a3b8' }}>{error || 'No se pudieron cargar los datos'}</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #1e1b4b 100%)', padding: '20px' }}>
+        <div style={{ background: 'rgba(30,41,59,0.95)', backdropFilter: 'blur(20px)', padding: '48px', borderRadius: '32px', maxWidth: '450px', textAlign: 'center', border: '1px solid rgba(239,68,68,0.3)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+          <div style={{ fontSize: '72px', marginBottom: '24px' }}>⚠️</div>
+          <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '12px', background: 'linear-gradient(135deg, #f87171, #ef4444)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Error de Conexión</h1>
+          <p style={{ color: '#94a3b8', fontSize: '14px' }}>{error || 'No se pudieron cargar los datos. Verifique su conexión.'}</p>
         </div>
       </div>
     )
@@ -572,130 +580,407 @@ export default function ClientPage({ token }) {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root { --bg-dark: #0f172a; --bg-gradient-start: #0f172a; --bg-gradient-end: #1e1b4b; --surface: rgba(30,41,59,0.8); --surface-solid: #1e293b; --border: rgba(51,65,85,0.6); --text: #f1f5f9; --text-2: #94a3b8; --green: #10b981; --green-dark: #059669; --cyan: #06b6d4; --purple: #8b5cf6; }
-        body { background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%); font-family: 'Sora', sans-serif; min-height: 100vh; }
-        .alm-yeso-root { min-height: 100vh; background: radial-gradient(circle at 20% 30%, rgba(16,185,129,0.03) 0%, transparent 50%); }
-        .alm-topbar { background: rgba(15,23,42,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(16,185,129,0.2); padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-        .alm-logo { height: 36px; filter: brightness(0) invert(1); }
-        .alm-ship-name { font-weight: 800; color: white; font-size: 16px; background: linear-gradient(135deg, #fff, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .alm-ship-code { font-size: 10px; color: #64748b; font-family: 'DM Mono', monospace; }
-        .alm-refresh-btn { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 8px 16px; color: #34d399; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; font-weight: 500; }
-        .alm-refresh-btn:hover { background: rgba(16,185,129,0.2); border-color: #10b981; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
-        .alm-excel-btn { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.4); border-radius: 10px; padding: 8px 16px; color: #34d399; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; font-weight: 500; }
-        .alm-excel-btn:hover { background: rgba(16,185,129,0.25); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.15); }
-        .alm-body { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
-        .orden-boton { background: rgba(255,255,255,0.03); border: 1px solid #334155; border-radius: 24px; padding: 6px 16px; font-size: 12px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; font-weight: 500; }
-        .orden-boton:hover { background: rgba(16,185,129,0.12); border-color: #10b981; color: #10b981; }
-        .orden-boton-activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
-        .alm-kpis-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 28px; }
-        .alm-kpi { background: rgba(30,41,59,0.7); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.15); border-radius: 20px; padding: 20px; display: flex; align-items: flex-start; gap: 16px; position: relative; overflow: hidden; transition: all 0.3s ease; }
-        .alm-kpi:hover { transform: translateY(-2px); border-color: rgba(16,185,129,0.4); box-shadow: 0 8px 25px rgba(0,0,0,0.2), 0 0 0 1px rgba(16,185,129,0.1); }
-        .alm-kpi::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); border-radius: 0 0 20px 20px; }
-        .alm-kpi-icon { font-size: 32px; background: linear-gradient(135deg, #10b981, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .alm-kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 6px; }
-        .alm-kpi-value { font-size: 28px; font-weight: 900; color: white; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
-        .alm-kpi-sub { font-size: 11px; color: #64748b; margin-top: 6px; }
-        .alm-alert-card { background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.08)); border: 1px solid rgba(239,68,68,0.4); border-radius: 20px; padding: 18px 24px; margin-bottom: 28px; backdrop-filter: blur(4px); }
-        .alm-alert-title { font-size: 13px; font-weight: bold; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .alm-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
-        .alm-chart-card { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.1); border-radius: 20px; padding: 20px; transition: all 0.3s ease; }
-        .alm-chart-card:hover { border-color: rgba(16,185,129,0.25); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
-        .alm-chart-wide { grid-column: 1 / -1; }
-        .alm-chart-title { font-size: 14px; font-weight: 700; color: white; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.3px; }
-        .alm-table-card { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.1); border-radius: 20px; overflow: hidden; margin-bottom: 28px; transition: all 0.3s ease; }
-        .alm-table-header { padding: 16px 24px; border-bottom: 1px solid rgba(51,65,85,0.5); background: rgba(15,23,42,0.5); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-        .alm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .alm-table th { padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid rgba(51,65,85,0.5); letter-spacing: 0.5px; }
-        .alm-table td { padding: 14px 16px; color: #cbd5e1; border-bottom: 1px solid rgba(51,65,85,0.3); }
-        .alm-table tbody tr:hover { background: rgba(16,185,129,0.05); cursor: pointer; }
-        .alm-table .alm-td-num { text-align: right; font-family: 'DM Mono', monospace; }
-        .alm-table-row-bajo { background: rgba(245,158,11,0.08); border-left: 3px solid #f59e0b; }
-        .alm-table-row-bajo:hover { background: rgba(245,158,11,0.15); }
-        .alm-table-row-sobre { background: rgba(239,68,68,0.08); border-left: 3px solid #ef4444; }
-        .alm-table-row-sobre:hover { background: rgba(239,68,68,0.15); }
-        .alm-footer { text-align: center; padding: 28px; font-size: 11px; color: #64748b; font-family: 'DM Mono', monospace; border-top: 1px solid rgba(51,65,85,0.3); margin-top: 20px; }
-        .alm-badge { background: rgba(16,185,129,0.15); color: #10b981; padding: 4px 12px; border-radius: 999px; font-size: 11px; margin-left: 10px; font-weight: 500; }
-        .alm-badge-warning { background: rgba(239,68,68,0.15); color: #f87171; }
-        .alm-badge-filter { background: rgba(16,185,129,0.25); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
-        .alm-badge-bajo { background: rgba(245,158,11,0.15); color: #fbbf24; }
-        .alm-progress-hero { background: rgba(30,41,59,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(16,185,129,0.2); border-radius: 20px; padding: 24px; margin-bottom: 28px; }
-        .alm-progress-track { height: 12px; background: #1e293b; border-radius: 999px; overflow: hidden; margin: 14px 0; }
-        .alm-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); border-radius: 999px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; }
-        .alm-progress-fill::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 2s infinite; }
-        .alm-progress-fill-warning { background: linear-gradient(90deg, #ef4444, #f97316, #fb923c); }
-        .alm-progress-fill-complete { background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7); }
-        .alm-clear-filter { background: rgba(255,255,255,0.05); border: 1px solid #334155; border-radius: 24px; padding: 6px 14px; font-size: 11px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
-        .alm-clear-filter:hover { background: rgba(255,255,255,0.1); color: white; border-color: #10b981; }
-        .section-title { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; margin-bottom: 16px; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
-        .section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, #334155, transparent); }
-        .destino-badge { background: rgba(59,130,246,0.12); color: #60a5fa; padding: 4px 12px; border-radius: 999px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
-        .destino-badge:hover { background: rgba(59,130,246,0.25); transform: scale(1.02); }
-        .destino-badge-active { background: #10b981; color: white; }
-        .alm-tarjetas-grid-destinos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .tarjeta-destino { background: rgba(30,41,59,0.5); border: 1px solid #334155; border-radius: 14px; padding: 12px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(4px); }
-        .tarjeta-destino:hover { border-color: #10b981; transform: translateY(-2px); background: rgba(30,41,59,0.8); }
-        .tarjeta-destino-selected { background: linear-gradient(135deg, #10b98120, #05966920); border-color: #10b981; }
-        .barra-dia { cursor: pointer; transition: opacity 0.2s; }
-        .barra-dia:hover { opacity: 0.8; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        @media (max-width: 768px) {
-          .alm-charts-row { grid-template-columns: 1fr; }
-          .alm-body { padding: 16px; }
-          .alm-kpis-row { gap: 12px; }
-          .alm-kpi-value { font-size: 22px; }
+        
+        :root {
+          --bg-primary: #0a0f1e;
+          --bg-secondary: #0f172a;
+          --bg-card: rgba(30, 41, 59, 0.7);
+          --bg-card-solid: #1e293b;
+          --border-glow: rgba(16, 185, 129, 0.15);
+          --border-glow-hover: rgba(16, 185, 129, 0.4);
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --accent-green: #10b981;
+          --accent-green-light: #34d399;
+          --accent-cyan: #06b6d4;
+          --accent-purple: #8b5cf6;
+          --accent-orange: #f59e0b;
+          --accent-red: #ef4444;
+        }
+        
+        body {
+          background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, #1a1a3e 100%);
+          font-family: 'Inter', sans-serif;
+          min-height: 100vh;
+        }
+        
+        .alm-yeso-root {
+          min-height: 100vh;
+          position: relative;
+        }
+        
+        .alm-yeso-root::before {
+          content: '';
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: radial-gradient(circle at 20% 30%, rgba(16,185,129,0.03) 0%, transparent 50%);
+          pointer-events: none;
+          z-index: 0;
+        }
+        
+        .alm-topbar {
+          background: rgba(10, 15, 30, 0.85);
+          backdrop-filter: blur(20px);
+          border-bottom: 1px solid var(--border-glow);
+          padding: 0 32px;
+          height: 80px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        
+        .alm-logo {
+          height: 40px;
+          filter: brightness(0) invert(1);
+        }
+        
+        .alm-ship-name {
+          font-weight: 800;
+          font-size: 18px;
+          background: linear-gradient(135deg, #fff, var(--accent-green-light));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        
+        .alm-ship-code {
+          font-size: 11px;
+          color: #64748b;
+          font-family: 'Inter', monospace;
+          letter-spacing: 0.5px;
+        }
+        
+        .alm-glass-btn {
+          background: rgba(16,185,129,0.1);
+          border: 1px solid var(--border-glow);
+          border-radius: 12px;
+          padding: 8px 20px;
+          color: var(--accent-green-light);
+          font-size: 13px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          font-weight: 500;
+          letter-spacing: 0.3px;
+        }
+        
+        .alm-glass-btn:hover {
+          background: rgba(16,185,129,0.2);
+          border-color: var(--accent-green);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(16,185,129,0.2);
+        }
+        
+        .alm-body {
+          max-width: 1440px;
+          margin: 0 auto;
+          padding: 32px;
+          position: relative;
+          z-index: 1;
+        }
+        
+        .alm-kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 24px;
+          margin-bottom: 32px;
+        }
+        
+        .alm-kpi-card {
+          background: var(--bg-card);
+          backdrop-filter: blur(12px);
+          border: 1px solid var(--border-glow);
+          border-radius: 24px;
+          padding: 24px;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .alm-kpi-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, transparent, rgba(16,185,129,0.05));
+          opacity: 0;
+          transition: opacity 0.3s;
+        }
+        
+        .alm-kpi-card:hover {
+          transform: translateY(-4px);
+          border-color: var(--border-glow-hover);
+          box-shadow: 0 20px 40px -12px rgba(0,0,0,0.3);
+        }
+        
+        .alm-kpi-card:hover::before {
+          opacity: 1;
+        }
+        
+        .alm-kpi-icon-wrapper {
+          width: 56px;
+          height: 56px;
+          background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.08));
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .alm-kpi-value {
+          font-size: 32px;
+          font-weight: 800;
+          color: white;
+          letter-spacing: -1px;
+          line-height: 1.2;
+        }
+        
+        .alm-kpi-label {
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-secondary);
+          margin-top: 4px;
+        }
+        
+        .alm-section-title {
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          color: var(--text-secondary);
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        
+        .alm-section-title::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, var(--border-glow), transparent);
+        }
+        
+        .alm-chart-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 24px;
+          margin-bottom: 32px;
+        }
+        
+        .alm-chart-card {
+          background: var(--bg-card);
+          backdrop-filter: blur(12px);
+          border: 1px solid var(--border-glow);
+          border-radius: 24px;
+          padding: 24px;
+          transition: all 0.3s ease;
+        }
+        
+        .alm-chart-card:hover {
+          border-color: var(--border-glow-hover);
+          box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+        
+        .alm-chart-wide {
+          grid-column: 1 / -1;
+        }
+        
+        .alm-table-container {
+          background: var(--bg-card);
+          backdrop-filter: blur(12px);
+          border: 1px solid var(--border-glow);
+          border-radius: 24px;
+          overflow: hidden;
+          margin-bottom: 32px;
+        }
+        
+        .alm-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        
+        .alm-table th {
+          padding: 16px 20px;
+          text-align: left;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: var(--text-secondary);
+          background: rgba(10, 15, 30, 0.5);
+          border-bottom: 1px solid var(--border-glow);
+        }
+        
+        .alm-table td {
+          padding: 14px 20px;
+          color: var(--text-primary);
+          font-size: 13px;
+          border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        }
+        
+        .alm-table tbody tr {
+          transition: all 0.2s;
+        }
+        
+        .alm-table tbody tr:hover {
+          background: rgba(16, 185, 129, 0.05);
+        }
+        
+        .alm-row-bajo {
+          background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent);
+          border-left: 3px solid var(--accent-orange);
+        }
+        
+        .alm-row-sobre {
+          background: linear-gradient(90deg, rgba(239, 68, 68, 0.08), transparent);
+          border-left: 3px solid var(--accent-red);
+        }
+        
+        .alm-badge {
+          background: rgba(16, 185, 129, 0.15);
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          color: var(--accent-green-light);
+          padding: 4px 12px;
+          border-radius: 100px;
+          font-size: 11px;
+          font-weight: 500;
+        }
+        
+        .alm-progress-container {
+          background: var(--bg-card);
+          backdrop-filter: blur(12px);
+          border: 1px solid var(--border-glow);
+          border-radius: 24px;
+          padding: 28px;
+          margin-bottom: 32px;
+        }
+        
+        .alm-progress-bar {
+          height: 12px;
+          background: #1e293b;
+          border-radius: 100px;
+          overflow: hidden;
+          margin: 16px 0;
+        }
+        
+        .alm-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--accent-green), var(--accent-green-light));
+          border-radius: 100px;
+          transition: width 1.2s cubic-bezier(0.34, 1.2, 0.64, 1);
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .alm-progress-fill::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+          animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.8; transform: scale(1.02); }
+        }
+        
+        @media (max-width: 1024px) {
+          .alm-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+          .alm-chart-grid { grid-template-columns: 1fr; }
+          .alm-body { padding: 20px; }
+        }
+        
+        @media (max-width: 640px) {
+          .alm-kpi-grid { grid-template-columns: 1fr; }
+          .alm-topbar { padding: 0 16px; height: 70px; }
+          .alm-kpi-value { font-size: 24px; }
         }
       `}</style>
 
       <div className="alm-yeso-root">
         <header className="alm-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <img src="/logo.png" alt="ALMAPAC" className="alm-logo" />
-            <div style={{ width: '1px', height: '36px', background: 'linear-gradient(180deg, transparent, #10b981, transparent)' }} />
+            <div style={{ width: '1px', height: '40px', background: 'linear-gradient(180deg, transparent, #10b981, transparent)' }} />
             <div>
               <div className="alm-ship-name">{barco.nombre}</div>
-              <div className="alm-ship-code">#{barco.codigo_barco} · Yeso (YE-001)</div>
+              <div className="alm-ship-code">#{barco.codigo_barco} · Yeso YE-001</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button onClick={descargarExcel} className="alm-excel-btn">
+            <button onClick={descargarExcel} className="alm-glass-btn">
               <FaFileExcel size={14} />
-              <span>Exportar Excel</span>
+              Exportar
             </button>
             {(transporteSeleccionado || diaSeleccionado || destinoSeleccionado) && (
-              <button onClick={limpiarTodosLosFiltros} className="alm-clear-filter">
-                <FiX size={12} />
-                Limpiar filtros
+              <button onClick={limpiarTodosLosFiltros} className="alm-glass-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                <FiX size={14} />
+                Limpiar
               </button>
             )}
-            <button onClick={refetch} className="alm-refresh-btn">
+            <button onClick={refetch} className="alm-glass-btn">
               <FiRefreshCw size={14} />
-              <span>Actualizar</span>
+              Actualizar
             </button>
           </div>
         </header>
 
         <div className="alm-body">
-          <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <span className="alm-badge alm-badge-filter" style={{ fontSize: '12px' }}>
-              <FiActivity size={12} style={{ display: 'inline', marginRight: '6px' }} />
+          {/* Filtro activo */}
+          <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="alm-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FiActivity size={12} />
               {filtroActivoTexto}
-            </span>
-            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '4px 12px', borderRadius: '20px' }}>
+            </div>
+            <div style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FiClock size={12} />
-              Última actualización: {lastUpdate?.format('HH:mm:ss') || '...'}
+              Última actualización: {lastUpdate?.format('HH:mm:ss') || '--:--:--'}
             </div>
           </div>
 
-          {/* SECCIÓN DE EXCEDENTE */}
+          {/* Alerta de excedente */}
           {tieneExcedente && (
             <div style={{ 
               marginBottom: '28px', 
-              background: 'linear-gradient(135deg, #ef4444, #dc2626, #b91c1c)', 
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.1))',
+              border: '1px solid rgba(239,68,68,0.5)',
               borderRadius: '20px', 
               padding: '20px 28px',
               display: 'flex',
@@ -703,150 +988,154 @@ export default function ClientPage({ token }) {
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '16px',
-              animation: 'pulse 2s infinite',
-              boxShadow: '0 8px 25px rgba(239,68,68,0.3)'
+              backdropFilter: 'blur(8px)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '12px' }}>
-                  <FiAlertCircle size={32} style={{ color: 'white' }} />
+                <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: '50%', padding: '12px' }}>
+                  <FiAlertCircle size={28} style={{ color: '#f87171' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'rgba(255,255,255,0.9)', letterSpacing: '1px' }}>EXCEDENTE DE DESCARGA</div>
-                  <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#f87171', letterSpacing: '1px' }}>EXCEDENTE DE DESCARGA</div>
+                  <div style={{ fontSize: '28px', fontWeight: '800', color: 'white', fontFamily: 'monospace' }}>
                     +{fmtTM(excedente, 2)} TM
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', textAlign: 'right', maxWidth: '250px' }}>
-                La cantidad descargada supera la meta manifestada
+              <div style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '280px', textAlign: 'right' }}>
+                La cantidad descargada supera la meta manifestada en el contrato
               </div>
             </div>
           )}
 
           {/* KPIs */}
-          <div className="alm-kpis-row">
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><GiWeightScale size={32} /></div>
+          <div className="alm-kpi-grid">
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <GiWeightScale size={28} style={{ color: '#10b981' }} />
+              </div>
               <div>
+                <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto, 1)} <span style={{ fontSize: '16px' }}>TM</span></div>
                 <div className="alm-kpi-label">Total Descargado</div>
-                <div className="alm-kpi-value">{fmtTM(estadisticas.totalNeto, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
-                <div className="alm-kpi-sub">Peso Neto UPDP</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiTruck size={32} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FiTruck size={28} style={{ color: '#34d399' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">Total Viajes</div>
                 <div className="alm-kpi-value">{estadisticas.totalViajes.toLocaleString()}</div>
-                <div className="alm-kpi-sub">Unidades procesadas</div>
+                <div className="alm-kpi-label">Total Viajes</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiBarChart2 size={32} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FiBarChart2 size={28} style={{ color: '#06b6d4' }} />
+              </div>
               <div>
+                <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 1)} <span style={{ fontSize: '16px' }}>TM</span></div>
                 <div className="alm-kpi-label">Promedio por Viaje</div>
-                <div className="alm-kpi-value">{fmtTM(estadisticas.pesoPromedio, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
-                <div className="alm-kpi-sub">VOLQ: 14-18 | TRAIL: 22-25 TM</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FaBuilding size={32} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FaBuilding size={28} style={{ color: '#8b5cf6' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">Transportistas</div>
                 <div className="alm-kpi-value">{promediosPorTransporte.length}</div>
-                <div className="alm-kpi-sub">Empresas diferentes</div>
+                <div className="alm-kpi-label">Transportistas</div>
               </div>
             </div>
           </div>
 
-          <div className="alm-kpis-row">
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiCheckCircle size={32} style={{ color: '#4ade80' }} /></div>
+          <div className="alm-kpi-grid">
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FiCheckCircle size={28} style={{ color: '#4ade80' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">En Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#4ade80' }}>{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
-                <div className="alm-kpi-sub">{estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} viajes OK</div>
+                <div className="alm-kpi-label">En Rango</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiAlertCircle size={32} style={{ color: '#f87171' }} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FiAlertCircle size={28} style={{ color: '#f87171' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">Fuera de Rango</div>
                 <div className="alm-kpi-value" style={{ color: '#f87171' }}>{estadisticas.unidadesFueraDeRango.length}</div>
-                <div className="alm-kpi-sub">Bajo: {estadisticas.bajoPeso} · Sobre: {estadisticas.sobrePeso}</div>
+                <div className="alm-kpi-label">Fuera de Rango</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FiTrendingUp size={32} style={{ color: '#10b981' }} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FiTrendingUp size={28} style={{ color: '#10b981' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">META MANIFESTADA</div>
-                <div className="alm-kpi-value" style={{ color: '#10b981' }}>{fmtTM(meta, 2)} <span style={{ fontSize: '14px' }}>TM</span></div>
-                <div className="alm-kpi-sub">Cantidad contratada</div>
+                <div className="alm-kpi-value">{fmtTM(meta, 1)} <span style={{ fontSize: '16px' }}>TM</span></div>
+                <div className="alm-kpi-label">Meta Manifestada</div>
               </div>
             </div>
-            <div className="alm-kpi">
-              <div className="alm-kpi-icon"><FaWarehouse size={32} style={{ color: '#60a5fa' }} /></div>
+            <div className="alm-kpi-card">
+              <div className="alm-kpi-icon-wrapper">
+                <FaWarehouse size={28} style={{ color: '#60a5fa' }} />
+              </div>
               <div>
-                <div className="alm-kpi-label">DESTINOS</div>
-                <div className="alm-kpi-value" style={{ fontSize: '22px' }}>{Object.keys(estadisticas.porDestino).length}</div>
-                <div className="alm-kpi-sub">Bodegas/Silos/Bins</div>
+                <div className="alm-kpi-value" style={{ fontSize: '24px' }}>{Object.keys(estadisticas.porDestino).length}</div>
+                <div className="alm-kpi-label">Destinos Activos</div>
               </div>
             </div>
           </div>
 
-          {/* META PROGRESS */}
+          {/* Progress Bar Meta */}
           {meta > 0 && (
-            <div className="alm-progress-hero">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="alm-progress-container">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <FiTrendingUp size={18} style={{ color: '#10b981' }} />
-                  Progreso de Descarga vs Meta
-                </span>
-                <span style={{ 
-                  background: tieneExcedente ? 'rgba(239,68,68,0.2)' : (metaCompletada ? 'rgba(74,222,128,0.2)' : 'rgba(16,185,129,0.2)'), 
-                  padding: '4px 12px', 
-                  borderRadius: '20px',
-                  fontWeight: 'bold',
-                  color: tieneExcedente ? '#f87171' : (metaCompletada ? '#4ade80' : '#10b981')
+                  <span style={{ fontWeight: '700', color: 'white' }}>Progreso de Descarga vs Meta</span>
+                </div>
+                <div style={{ 
+                  background: tieneExcedente ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.15)', 
+                  padding: '6px 14px', 
+                  borderRadius: '100px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: tieneExcedente ? '#f87171' : '#4ade80'
                 }}>
-                  {porcentajeMeta.toFixed(1)}% completado
-                </span>
+                  {porcentajeMeta.toFixed(1)}% Completado
+                </div>
               </div>
-              <div className="alm-progress-track">
-                <div 
-                  className={`alm-progress-fill ${tieneExcedente ? 'alm-progress-fill-warning' : ''}`} 
-                  style={{ width: `${Math.min(porcentajeMeta, 100)}%` }} 
-                />
+              <div className="alm-progress-bar">
+                <div className="alm-progress-fill" style={{ width: `${Math.min(porcentajeMeta, 100)}%` }} />
                 {tieneExcedente && (
                   <div style={{ 
-                    position: 'relative',
                     width: `${Math.min(porcentajeMeta - 100, 100)}%`,
                     height: '12px',
                     background: 'linear-gradient(90deg, #ef4444, #f97316)',
-                    borderRadius: '0 999px 999px 0',
+                    borderRadius: '0 100px 100px 0',
                     marginTop: '-12px',
                     marginLeft: '100%',
-                    transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
+                    transition: 'width 1.2s cubic-bezier(0.34, 1.2, 0.64, 1)'
                   }} />
                 )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b' }}>
                 <span>0 TM</span>
-                <span style={{ color: '#10b981', fontWeight: 'bold' }}>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
+                <span style={{ color: '#10b981', fontWeight: '600' }}>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
               </div>
             </div>
           )}
 
-          {/* EMPRESAS TRANSPORTISTAS */}
+          {/* Transportistas */}
           {promediosPorTransporte.length > 0 && (
             <>
-              <div className="section-title">
+              <div className="alm-section-title">
                 <FaBuilding size={14} />
                 Empresas Transportistas
-                <span className="alm-badge">{promediosPorTransporte.length} empresas</span>
+                <span className="alm-badge">{promediosPorTransporte.length} activas</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginBottom: '32px' }}>
                 {promediosPorTransporte.map(empresa => {
                   const isSelected = transporteSeleccionado === empresa.nombre
                   return (
@@ -854,31 +1143,30 @@ export default function ClientPage({ token }) {
                       key={empresa.nombre}
                       onClick={() => handleSeleccionarTransporte(empresa.nombre)}
                       style={{
-                        background: isSelected ? 'linear-gradient(135deg, #10b98120, #05966920)' : 'rgba(30,41,59,0.5)',
-                        backdropFilter: 'blur(8px)',
-                        border: `1px solid ${isSelected ? '#10b981' : '#334155'}`,
-                        borderRadius: '16px',
-                        padding: '16px',
+                        background: isSelected ? 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,182,212,0.1))' : 'var(--bg-card)',
+                        backdropFilter: 'blur(12px)',
+                        border: `1px solid ${isSelected ? '#10b981' : 'var(--border-glow)'}`,
+                        borderRadius: '20px',
+                        padding: '20px',
                         cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        transform: isSelected ? 'scale(1.02)' : 'none',
-                        boxShadow: isSelected ? '0 4px 15px rgba(16,185,129,0.2)' : 'none'
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        transform: isSelected ? 'scale(1.02)' : 'none'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                        <span style={{ fontWeight: 'bold', color: 'white', fontSize: '15px' }}>{empresa.nombre}</span>
-                        <span style={{ fontSize: '20px', fontWeight: 'bold', color: isSelected ? '#10b981' : '#34d399', fontFamily: 'monospace' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={{ fontWeight: '700', color: 'white', fontSize: '16px' }}>{empresa.nombre}</span>
+                        <span style={{ fontSize: '22px', fontWeight: '800', color: '#10b981', fontFamily: 'monospace' }}>
                           {fmtTM(empresa.totalNeto, 1)} TM
                         </span>
                       </div>
-                      <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: '#94a3b8', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#94a3b8', flexWrap: 'wrap' }}>
                         <span>📊 {empresa.totalViajes} viajes</span>
                         {empresa.viajesTraileta > 0 && <span>🚛 Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
                         {empresa.viajesVolqueta > 0 && <span>⛰️ Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
                       </div>
                       {empresa.fueraRango > 0 && (
-                        <div style={{ fontSize: '10px', color: '#f87171', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <FiAlertCircle size={10} /> {empresa.fueraRango} viajes fuera de rango
+                        <div style={{ fontSize: '11px', color: '#f87171', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FiAlertCircle size={11} /> {empresa.fueraRango} viajes fuera del rango óptimo
                         </div>
                       )}
                     </div>
@@ -888,235 +1176,189 @@ export default function ClientPage({ token }) {
             </>
           )}
 
-          {/* GRÁFICOS */}
-          <div className="alm-charts-row">
+          {/* Gráficos */}
+          <div className="alm-chart-grid">
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <FaChartPie size={16} style={{ color: '#10b981' }} />
-                Descarga por Transporte
+              <div className="alm-section-title" style={{ marginBottom: '20px' }}>
+                <FaChartPie size={14} />
+                Distribución por Transporte
               </div>
               {datosGraficoTransporte.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
-                    <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
+                    <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} stroke="none" />)}
                     </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
+              ) : <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Sin datos disponibles</div>}
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <FaWarehouse size={16} style={{ color: '#60a5fa' }} />
-                Descarga por Destino
+              <div className="alm-section-title" style={{ marginBottom: '20px' }}>
+                <FaWarehouse size={14} />
+                Distribución por Destino
               </div>
               {datosGraficoDestino.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
-                    <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => {
-                      const shortName = name.length > 20 ? name.substring(0, 16) + '..' : name.split(' ')[0]
-                      return `${shortName} ${(percent * 100).toFixed(0)}%`
+                    <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({ name, percent }) => {
+                      const short = name.length > 18 ? name.substring(0, 15) + '..' : name.split(' ')[0]
+                      return `${short} ${(percent * 100).toFixed(0)}%`
                     }} labelLine={false}>
-                      {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
+                      {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} stroke="none" />)}
                     </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
+              ) : <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Sin datos disponibles</div>}
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <FiCalendar size={16} style={{ color: '#f59e0b' }} />
+              <div className="alm-section-title" style={{ marginBottom: '20px' }}>
+                <FiCalendar size={14} />
                 Descarga por Día
-                {diaSeleccionado && <span className="alm-badge alm-badge-filter">Filtrado: {diaSeleccionado}</span>}
+                {diaSeleccionado && <span className="alm-badge">Filtro: {diaSeleccionado}</span>}
               </div>
               {datosGraficoDia.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={datosGraficoDia}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="dia" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
-                    <Bar 
-                      dataKey="total" 
-                      fill="#10b981" 
-                      radius={[6, 6, 0, 0]}
-                      onClick={(data) => handleSeleccionarDia(data.dia)}
-                      cursor="pointer"
-                      className="barra-dia"
-                      shape={(props) => {
-                        const { x, y, width, height, payload } = props
-                        const isSelected = diaSeleccionado === payload.dia
-                        return (
-                          <rect
-                            x={x}
-                            y={y}
-                            width={width}
-                            height={height}
-                            fill={isSelected ? '#059669' : '#10b981'}
-                            stroke={isSelected ? '#fbbf24' : 'none'}
-                            strokeWidth={2}
-                            rx={6}
-                            ry={6}
-                            style={{ cursor: 'pointer', transition: 'all 0.2s' }}
-                            onClick={() => handleSeleccionarDia(payload.dia)}
-                          />
-                        )
-                      }}
-                    />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }} />
+                    <Bar dataKey="total" fill="#10b981" radius={[8, 8, 0, 0]} onClick={(data) => handleSeleccionarDia(data.dia)} cursor="pointer">
+                      {datosGraficoDia.map((entry, idx) => (
+                        <Cell key={idx} fill={diaSeleccionado === entry.dia ? '#059669' : '#10b981'} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
-              <div style={{ fontSize: '10px', color: '#64748b', textAlign: 'center', marginTop: '12px' }}>
-                💡 Haz clic en cualquier barra para filtrar por ese día
+              ) : <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Sin datos disponibles</div>}
+              <div style={{ fontSize: '10px', color: '#475569', textAlign: 'center', marginTop: '12px' }}>
+                💡 Haz clic en cualquier barra para filtrar por día
               </div>
             </div>
 
             <div className="alm-chart-card">
-              <div className="alm-chart-title">
-                <FaChartLine size={16} style={{ color: '#8b5cf6' }} />
-                Distribución de Pesos Netos
+              <div className="alm-section-title" style={{ marginBottom: '20px' }}>
+                <FaChartLine size={14} />
+                Distribución de Pesos por Viaje
               </div>
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#10b981', borderRadius: '3px' }}></span> En Rango (14-18 / 22-26 TM)</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#f59e0b', borderRadius: '3px' }}></span> Bajo Peso</span>
-                <span><span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ef4444', borderRadius: '3px' }}></span> Sobrepeso</span>
+              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginBottom: '20px', fontSize: '11px', flexWrap: 'wrap' }}>
+                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#10b981', borderRadius: '2px', marginRight: '6px' }}></span>En Rango</span>
+                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#f59e0b', borderRadius: '2px', marginRight: '6px' }}></span>Bajo Peso</span>
+                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#ef4444', borderRadius: '2px', marginRight: '6px' }}></span>Sobrepeso</span>
               </div>
               {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={estadisticas.acumuladoPorCorrelativo.map(item => ({ ...item, peso: item.peso }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 10 }} interval={Math.floor(estadisticas.acumuladoPorCorrelativo.length / 10)} />
-                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={estadisticas.acumuladoPorCorrelativo.slice(-30)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                    <XAxis dataKey="correlativo" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }} />
                     <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
-                      {estadisticas.acumuladoPorCorrelativo.map((entry, idx) => (
+                      {estadisticas.acumuladoPorCorrelativo.slice(-30).map((entry, idx) => (
                         <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
                       ))}
                     </Bar>
-                    <ReferenceLine y={RANGOS.VOLQUETA.min} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `Volq ${RANGOS.VOLQUETA.min}`, fill: '#f59e0b', fontSize: 8 }} />
-                    <ReferenceLine y={RANGOS.VOLQUETA.max} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `Volq ${RANGOS.VOLQUETA.max}`, fill: '#f59e0b', fontSize: 8 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.min} stroke="#10b981" strokeDasharray="4 4" label={{ value: `Trail ${RANGOS.TRAILETA.min}`, fill: '#10b981', fontSize: 8 }} />
-                    <ReferenceLine y={RANGOS.TRAILETA.max} stroke="#10b981" strokeDasharray="4 4" label={{ value: `Trail ${RANGOS.TRAILETA.max}`, fill: '#10b981', fontSize: 8 }} />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>Sin datos disponibles</div>}
+              ) : <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Sin datos disponibles</div>}
             </div>
           </div>
 
-          {/* FLUJO POR HORA */}
+          {/* Flujo por Hora */}
           <div className="alm-chart-card alm-chart-wide">
-            <div className="alm-chart-title">
-              <FiClock size={16} style={{ color: '#06b6d4' }} />
+            <div className="alm-section-title" style={{ marginBottom: '20px' }}>
+              <FiClock size={14} />
               Flujo de Descarga por Hora
             </div>
             {flujoPorHora.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={flujoPorHora}>
+              <ResponsiveContainer width="100%" height={380}>
+                <ComposedChart data={flujoPorHora}>
                   <defs>
-                    <linearGradient id="flujoGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient id="acumuladoGradient" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="hora" tick={{ fill: '#94a3b8', fontSize: 11 }} angle={-45} textAnchor="end" height={65} />
-                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'TM por Hora', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 10 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} label={{ value: 'TM Acumulado', angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 10 }} />
-                  <Tooltip formatter={(value, name) => {
-                    if (name === 'totalTM') return [`${fmtTM(value, 2)} TM`, 'Descarga por Hora']
-                    if (name === 'acumulado') return [`${fmtTM(value, 2)} TM`, 'Acumulado Total']
-                    return [value, name]
-                  }} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} />
-                  <Bar yAxisId="left" dataKey="totalTM" fill="url(#flujoGradient)" opacity={0.9} radius={[6, 6, 0, 0]} name="Descarga por Hora" />
-                  <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#1e293b' }} name="Acumulado Total" />
-                  <Area yAxisId="right" type="monotone" dataKey="acumulado" fill="url(#acumuladoGradient)" stroke="none" />
-                </LineChart>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis dataKey="hora" tick={{ fill: '#94a3b8', fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
+                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8' }} tickFormatter={(v) => fmtTM(v, 0)} />
+                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }} />
+                  <Bar yAxisId="left" dataKey="totalTM" fill="#10b981" opacity={0.8} radius={[6, 6, 0, 0]} name="TM por Hora" />
+                  <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#f59e0b" strokeWidth={3} dot={false} name="Acumulado Total" />
+                  <Area yAxisId="right" type="monotone" dataKey="acumulado" fill="url(#areaGradient)" stroke="none" />
+                </ComposedChart>
               </ResponsiveContainer>
             ) : (
-              <div style={{ textAlign: 'center', color: '#64748b', padding: '80px 40px' }}>
-                <FiClock size={48} style={{ margin: '0 auto 20px', opacity: 0.4 }} />
-                <p>No hay datos de hora disponibles para mostrar el flujo</p>
+              <div style={{ textAlign: 'center', padding: '80px', color: '#64748b' }}>
+                <FiClock size={48} style={{ marginBottom: '16px', opacity: 0.4 }} />
+                <p>No hay datos horarios disponibles</p>
               </div>
             )}
           </div>
 
-          {/* TABLA DE REGISTROS */}
-          <div className="alm-table-card">
-            <div className="alm-table-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Tabla de Registros */}
+          <div className="alm-table-container">
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-glow)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <FaClipboardList size={14} style={{ color: '#10b981' }} />
-                <span style={{ fontWeight: 'bold', color: 'white' }}>Registros de Descarga - Yeso</span>
-                <span className="alm-badge">{registros.length.toLocaleString()} viajes</span>
-                {destinoSeleccionado && (
-                  <span className="alm-badge alm-badge-filter">
-                    🎯 Destino: {destinos.find(d => d.id === destinoSeleccionado)?.nombre}
-                  </span>
-                )}
+                <span style={{ fontWeight: '700', color: 'white' }}>Registros de Descarga</span>
+                <span className="alm-badge">{registros.length} viajes</span>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className={`orden-boton ${ordenTabla === 'reciente' ? 'orden-boton-activo' : ''}`} onClick={() => setOrdenTabla('reciente')}>
-                  <FiArrowDown size={12} /> Más Reciente
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setOrdenTabla('reciente')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'reciente' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'reciente' ? '#10b981' : '#334155'}`, color: ordenTabla === 'reciente' ? '#10b981' : '#94a3b8' }}>
+                  <FiArrowDown size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Reciente
                 </button>
-                <button className={`orden-boton ${ordenTabla === 'antiguo' ? 'orden-boton-activo' : ''}`} onClick={() => setOrdenTabla('antiguo')}>
-                  <FiArrowUp size={12} /> Más Antiguo
+                <button onClick={() => setOrdenTabla('antiguo')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'antiguo' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'antiguo' ? '#10b981' : '#334155'}`, color: ordenTabla === 'antiguo' ? '#10b981' : '#94a3b8' }}>
+                  <FiArrowUp size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Antiguo
                 </button>
               </div>
             </div>
-            <div style={{ overflowX: 'auto', maxHeight: '550px', overflowY: 'auto' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
               <table className="alm-table">
                 <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 10 }}>
                   <tr>
-                    <th style={{ width: '60px' }}>#</th>
+                    <th>#</th>
                     <th>Placa</th>
                     <th>Transporte</th>
                     <th>Tipo</th>
                     <th>Destino</th>
                     <th>Fecha</th>
                     <th>Hora Entrada</th>
-                    <th>Hora Salida</th>
-                    <th>Tiempo</th>
-                    <th className="alm-td-num">Peso Neto</th>
-                    <th className="alm-td-num">Acumulado</th>
+                    <th>Peso Neto</th>
+                    <th>Acumulado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {registrosOrdenados.map((reg) => {
                     const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
                     let rowClass = ''
-                    if (estado === 'bajo') rowClass = 'alm-table-row-bajo'
-                    if (estado === 'sobre') rowClass = 'alm-table-row-sobre'
+                    if (estado === 'bajo') rowClass = 'alm-row-bajo'
+                    if (estado === 'sobre') rowClass = 'alm-row-sobre'
                     return (
                       <tr key={reg.id} className={rowClass}>
-                        <td style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{reg.correlativo}</td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: '500' }}>{reg.placa}</td>
+                        <td style={{ fontWeight: '700', fontFamily: 'monospace' }}>{reg.correlativo}</td>
+                        <td style={{ fontFamily: 'monospace' }}>{reg.placa}</td>
                         <td>{reg.transporte || '—'}</td>
-                        <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
+                        <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
                         <td>
                           {reg.destino_info && (
-                            <span className="destino-badge" onClick={() => handleSeleccionarDestino(reg.destino_id)}>
-                              <FiMapPin size={10} />
-                              {reg.destino_info.codigo} - {reg.destino_info.nombre}
+                            <span style={{ background: 'rgba(59,130,246,0.1)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>
+                              {reg.destino_info.codigo}
                             </span>
                           )}
                         </td>
                         <td>{reg.fecha}</td>
-                                                <td>{reg.hora_salida || '—'}</td>
-                        <td style={{ color: '#4ade80', fontFamily: 'monospace' }}>{reg.tiempo_atencion || '—'}</td>
-                        <td className="alm-td-num" style={{ 
-                          color: estado === 'bajo' ? '#f59e0b' : (estado === 'sobre' ? '#f87171' : '#4ade80'),
-                          fontWeight: 'bold'
-                        }}>
-                          {reg.peso_neto_updp_tm?.toFixed(3)} TM
+                        <td>{reg.hora_entrada || '—'}</td>
+                        <td style={{ fontWeight: '700', color: estado === 'bajo' ? '#f59e0b' : (estado === 'sobre' ? '#f87171' : '#4ade80') }}>
+                          {reg.peso_neto_updp_tm?.toFixed(2)} TM
                         </td>
-                        <td className="alm-td-num" style={{ color: '#fbbf24', fontFamily: 'monospace' }}>{reg.acumulado_updp_tm?.toFixed(3)} TM</td>
+                        <td style={{ fontFamily: 'monospace', color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
                       </tr>
                     )
                   })}
@@ -1125,22 +1367,23 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          <div className="alm-footer">
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', marginBottom: '12px' }}>
-              <span><FiRefreshCw size={10} style={{ display: 'inline', marginRight: '6px' }} /> auto-refresh cada 30s</span>
-              <span><GiCargoShip size={10} style={{ display: 'inline', marginRight: '6px' }} /> {barco.nombre}</span>
-              <span><GiMinerals size={10} style={{ display: 'inline', marginRight: '6px' }} /> YESO (YE-001)</span>
-              <span><FaDatabase size={10} style={{ display: 'inline', marginRight: '6px' }} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 2)} TM</span>
+          {/* Footer */}
+          <div style={{ textAlign: 'center', padding: '28px 20px', borderTop: '1px solid rgba(51,65,85,0.3)', marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '28px', flexWrap: 'wrap', marginBottom: '16px', fontSize: '11px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><FiRefreshCw size={11} /> Auto-refresh 30s</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><GiCargoShip size={11} /> {barco.nombre}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><GiMinerals size={11} /> Yeso YE-001</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><FaDatabase size={11} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 1)} TM</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '10px' }}>
-              <span style={{ color: '#f59e0b' }}>🟡 VOLQUETA: 14-18 TM</span>
-              <span style={{ color: '#10b981' }}>🟢 TRAILETA: 22-26 TM</span>
-              <span style={{ color: '#f87171' }}>🔴 Rojo = Sobrepeso</span>
-              <span style={{ color: '#f59e0b' }}>🟡 Amarillo = Bajo peso</span>
-              <span style={{ color: '#4ade80' }}>🟢 Verde = En rango</span>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', fontSize: '10px' }}>
+              <span>🟡 VOLQUETA: 14-18 TM</span>
+              <span>🟢 TRAILETA: 22-26 TM</span>
+              <span style={{ color: '#f87171' }}>🔴 Sobrepeso</span>
+              <span style={{ color: '#f59e0b' }}>🟡 Bajo peso</span>
+              <span style={{ color: '#4ade80' }}>🟢 En rango</span>
             </div>
-            <div style={{ marginTop: '12px', fontSize: '9px', color: '#475569' }}>
-              ALMAPAC - Sistema de Gestión de Descarga de Yeso
+            <div style={{ marginTop: '16px', fontSize: '10px', color: '#334155' }}>
+              ALMAPAC · Sistema de Gestión de Descarga de Yeso
             </div>
           </div>
         </div>
