@@ -631,7 +631,7 @@ export default function ClientPage({ token }) {
 
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
-    limpiarFiltrosTabla() // Limpiar filtros de tabla al cambiar filtro principal
+    limpiarFiltrosTabla()
   }
 
   const handleSeleccionarDia = (dia) => {
@@ -1163,7 +1163,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPIs - Segundo grupo con Flujo Promedio por Hora CORREGIDO */}
+          {/* KPIs - Segundo grupo */}
           <div className="alm-kpi-grid">
             <div className="alm-kpi-card">
               <div className="alm-kpi-icon-wrapper">
@@ -1192,7 +1192,6 @@ export default function ClientPage({ token }) {
                 <div className="alm-kpi-label">Meta Manifestada</div>
               </div>
             </div>
-            {/* 🔥 TARJETA DE FLUJO PROMEDIO POR HORA CORREGIDA */}
             <div className="alm-kpi-card" style={{ 
               background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(16,185,129,0.08))',
               border: '1px solid rgba(6,182,212,0.4)'
@@ -1205,8 +1204,7 @@ export default function ClientPage({ token }) {
                   {flujoPromedioPorHora.toFixed(1)} 
                   <span style={{ fontSize: '16px' }}> TM/h</span>
                 </div>
-                <div className="alm-kpi-label">Flujo Promedio por Hora</div>
-               
+                <div className="alm-kpi-label">Ritmo de Descarga</div>
               </div>
             </div>
           </div>
@@ -1285,9 +1283,9 @@ export default function ClientPage({ token }) {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#94a3b8', flexWrap: 'wrap' }}>
-                        <span>📊 {empresa.totalViajes} viajes</span>
-                        {empresa.viajesTraileta > 0 && <span>🚛 Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
-                        {empresa.viajesVolqueta > 0 && <span>⛰️ Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
+                        <span><FiTruck size={12} style={{ display: 'inline', marginRight: '4px' }} /> {empresa.totalViajes} viajes</span>
+                        {empresa.viajesTraileta > 0 && <span><FaTrailer size={12} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
+                        {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={12} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
                       </div>
                       {empresa.fueraRango > 0 && (
                         <div style={{ fontSize: '11px', color: '#f87171', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1362,7 +1360,7 @@ export default function ClientPage({ token }) {
                 </ResponsiveContainer>
               ) : <div style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>Sin datos disponibles</div>}
               <div style={{ fontSize: '10px', color: '#475569', textAlign: 'center', marginTop: '12px' }}>
-                💡 Haz clic en cualquier barra para filtrar por día
+                <FiCalendar size={10} style={{ display: 'inline', marginRight: '4px' }} /> Haz clic en cualquier barra para filtrar por día
               </div>
             </div>
 
@@ -1540,11 +1538,11 @@ export default function ClientPage({ token }) {
                 <div style={{ fontSize: '11px', color: '#06b6d4', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <FiFilter size={10} />
                   <span>Filtros activos:</span>
-                  {busquedaTabla && <span className="alm-badge" style={{ fontSize: '10px' }}>🔍 {busquedaTabla}</span>}
-                  {filtroFechaInicio && <span className="alm-badge" style={{ fontSize: '10px' }}>📅 Desde: {filtroFechaInicio}</span>}
-                  {filtroFechaFin && <span className="alm-badge" style={{ fontSize: '10px' }}>📅 Hasta: {filtroFechaFin}</span>}
-                  {filtroHoraInicio && <span className="alm-badge" style={{ fontSize: '10px' }}>⏰ Hora ≥ {filtroHoraInicio}</span>}
-                  {filtroHoraFin && <span className="alm-badge" style={{ fontSize: '10px' }}>⏰ Hora ≤ {filtroHoraFin}</span>}
+                  {busquedaTabla && <span className="alm-badge" style={{ fontSize: '10px' }}><FiSearchIcon size={10} style={{ display: 'inline', marginRight: '4px' }} /> {busquedaTabla}</span>}
+                  {filtroFechaInicio && <span className="alm-badge" style={{ fontSize: '10px' }}><FaCalendarAlt size={10} style={{ display: 'inline', marginRight: '4px' }} /> Desde: {filtroFechaInicio}</span>}
+                  {filtroFechaFin && <span className="alm-badge" style={{ fontSize: '10px' }}><FaCalendarAlt size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hasta: {filtroFechaFin}</span>}
+                  {filtroHoraInicio && <span className="alm-badge" style={{ fontSize: '10px' }}><FiClock size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hora ≥ {filtroHoraInicio}</span>}
+                  {filtroHoraFin && <span className="alm-badge" style={{ fontSize: '10px' }}><FiClock size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hora ≤ {filtroHoraFin}</span>}
                 </div>
               )}
             </div>
@@ -1616,11 +1614,11 @@ export default function ClientPage({ token }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><FaDatabase size={11} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 1)} TM</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', fontSize: '10px' }}>
-              <span>🟡 VOLQUETA: 14-18 TM</span>
-              <span>🟢 TRAILETA: 22-26 TM</span>
-              <span style={{ color: '#f87171' }}>🔴 Sobrepeso</span>
-              <span style={{ color: '#f59e0b' }}>🟡 Bajo peso</span>
-              <span style={{ color: '#4ade80' }}>🟢 En rango</span>
+              <span><GiCoalWagon size={10} style={{ display: 'inline', marginRight: '4px' }} /> VOLQUETA: 14-18 TM</span>
+              <span><FaTrailer size={10} style={{ display: 'inline', marginRight: '4px' }} /> TRAILETA: 22-26 TM</span>
+              <span style={{ color: '#f87171' }}><FiAlertCircle size={10} style={{ display: 'inline', marginRight: '4px' }} /> Sobrepeso</span>
+              <span style={{ color: '#f59e0b' }}><FiAlertCircle size={10} style={{ display: 'inline', marginRight: '4px' }} /> Bajo peso</span>
+              <span style={{ color: '#4ade80' }}><FiCheckCircle size={10} style={{ display: 'inline', marginRight: '4px' }} /> En rango</span>
             </div>
             <div style={{ marginTop: '16px', fontSize: '10px', color: '#334155' }}>
               ALMAPAC · Sistema de Gestión de Descarga de Yeso
