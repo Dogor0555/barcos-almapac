@@ -21,7 +21,7 @@ import {
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
   FiChevronDown, FiChevronUp, FiActivity, FiDatabase, FiGift, FiStar,
-  FiSearch as FiSearchIcon, FiFilter
+  FiSearch as FiSearchIcon, FiFilter, FiChevronLeft, FiChevronRight
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
@@ -297,6 +297,526 @@ const calcularEstadisticas = (registros) => {
     };
 };
 
+// 🔥 COMPONENTE: Selector de Rango de Fechas con CALENDARIO VISUAL
+const DateRangePicker = ({ startDate, endDate, onStartChange, onEndChange, onClear }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(dayjs())
+  const [tempStart, setTempStart] = useState(startDate)
+  const [tempEnd, setTempEnd] = useState(endDate)
+  const [hoverDate, setHoverDate] = useState(null)
+
+  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const weekDays = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
+
+  const getDaysInMonth = (date) => {
+    const startOfMonth = date.startOf('month')
+    const endOfMonth = date.endOf('month')
+    const startDay = startOfMonth.day()
+    const days = []
+    
+    // Días del mes anterior
+    for (let i = startDay; i > 0; i--) {
+      const prevDate = startOfMonth.subtract(i, 'day')
+      days.push({
+        date: prevDate,
+        isCurrentMonth: false,
+        isSelected: false,
+        isInRange: false,
+        isStart: false,
+        isEnd: false
+      })
+    }
+    
+    // Días del mes actual
+    for (let i = 0; i < endOfMonth.date(); i++) {
+      const currentDate = startOfMonth.add(i, 'day')
+      days.push({
+        date: currentDate,
+        isCurrentMonth: true,
+        isSelected: false,
+        isInRange: false,
+        isStart: false,
+        isEnd: false
+      })
+    }
+    
+    // Días del mes siguiente (para completar 6 filas = 42 días)
+    const remainingDays = 42 - days.length
+    for (let i = 1; i <= remainingDays; i++) {
+      const nextDate = endOfMonth.add(i, 'day')
+      days.push({
+        date: nextDate,
+        isCurrentMonth: false,
+        isSelected: false,
+        isInRange: false,
+        isStart: false,
+        isEnd: false
+      })
+    }
+    
+    return days
+  }
+
+  const updateDayStyles = (days, start, end, hover) => {
+    if (!start && !end) return days
+    
+    return days.map(day => {
+      const dateStr = day.date.format('YYYY-MM-DD')
+      const isStart = start === dateStr
+      const isEnd = end === dateStr
+      let isInRange = false
+      
+      if (start && end) {
+        isInRange = day.date.isAfter(dayjs(start)) && day.date.isBefore(dayjs(end))
+      } else if (start && hover && !end) {
+        isInRange = day.date.isAfter(dayjs(start)) && day.date.isBefore(dayjs(hover))
+      }
+      
+      return {
+        ...day,
+        isSelected: isStart || isEnd,
+        isStart,
+        isEnd,
+        isInRange
+      }
+    })
+  }
+
+  const days = updateDayStyles(getDaysInMonth(currentMonth), tempStart, tempEnd, hoverDate)
+
+  const handleDateClick = (date) => {
+    const dateStr = date.format('YYYY-MM-DD')
+    
+    if (!tempStart || (tempStart && tempEnd)) {
+      // Iniciar nueva selección
+      setTempStart(dateStr)
+      setTempEnd(null)
+    } else {
+      // Completar rango
+      if (dayjs(dateStr).isBefore(tempStart)) {
+        setTempEnd(tempStart)
+        setTempStart(dateStr)
+      } else {
+        setTempEnd(dateStr)
+      }
+    }
+  }
+
+  const handleMouseEnter = (date) => {
+    if (tempStart && !tempEnd) {
+      setHoverDate(date.format('YYYY-MM-DD'))
+    }
+  }
+
+  const handleApply = () => {
+    if (tempStart && tempEnd) {
+      onStartChange(tempStart)
+      onEndChange(tempEnd)
+    } else if (tempStart && !tempEnd) {
+      onStartChange(tempStart)
+      onEndChange(tempStart)
+    }
+    setIsOpen(false)
+  }
+
+  const handleClear = () => {
+    setTempStart(null)
+    setTempEnd(null)
+    setHoverDate(null)
+    onStartChange('')
+    onEndChange('')
+    if (onClear) onClear()
+    setIsOpen(false)
+  }
+
+  const formatDisplayDate = (date) => {
+    if (!date) return 'Seleccionar'
+    return dayjs(date).format('DD/MM/YYYY')
+  }
+
+  const prevMonth = () => setCurrentMonth(currentMonth.subtract(1, 'month'))
+  const nextMonth = () => setCurrentMonth(currentMonth.add(1, 'month'))
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: 'rgba(15, 23, 42, 0.8)',
+          border: `1px solid ${startDate || endDate ? '#10b981' : 'var(--border-glow)'}`,
+          borderRadius: '12px',
+          padding: '10px 16px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          minWidth: '300px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', color: 'white' }}>
+          <FiCalendar size={14} style={{ color: '#10b981' }} />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <span style={{ color: startDate ? 'white' : '#64748b' }}>
+              {startDate ? formatDisplayDate(startDate) : 'Fecha Desde'}
+            </span>
+            <span style={{ color: '#475569' }}>—</span>
+            <span style={{ color: endDate ? 'white' : '#64748b' }}>
+              {endDate ? formatDisplayDate(endDate) : 'Fecha Hasta'}
+            </span>
+          </div>
+        </div>
+        <FiChevronDown size={14} style={{ color: '#64748b', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </div>
+      
+      {isOpen && (
+        <>
+          <div 
+            onClick={() => setIsOpen(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 998,
+              background: 'transparent'
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            left: 0,
+            zIndex: 999,
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '20px',
+            padding: '20px',
+            width: '340px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+          }}>
+            {/* Cabecera del calendario */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <button
+                onClick={prevMonth}
+                style={{
+                  background: 'rgba(16,185,129,0.1)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  color: '#10b981',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <FiChevronLeft size={16} />
+              </button>
+              <div style={{ fontWeight: '600', color: 'white', fontSize: '14px' }}>
+                {months[currentMonth.month()]} {currentMonth.year()}
+              </div>
+              <button
+                onClick={nextMonth}
+                style={{
+                  background: 'rgba(16,185,129,0.1)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  color: '#10b981',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <FiChevronRight size={16} />
+              </button>
+            </div>
+
+            {/* Días de la semana */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '12px' }}>
+              {weekDays.map(day => (
+                <div key={day} style={{ textAlign: 'center', fontSize: '11px', color: '#64748b', fontWeight: '600', padding: '8px 0' }}>
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Días del mes */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '20px' }}>
+              {days.map((day, idx) => {
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => handleDateClick(day.date)}
+                    onMouseEnter={() => handleMouseEnter(day.date)}
+                    style={{
+                      textAlign: 'center',
+                      padding: '8px 4px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      background: day.isStart || day.isEnd 
+                        ? 'linear-gradient(135deg, #10b981, #059669)'
+                        : day.isInRange 
+                          ? 'rgba(16, 185, 129, 0.25)'
+                          : 'transparent',
+                      color: !day.isCurrentMonth 
+                        ? '#475569' 
+                        : day.isStart || day.isEnd 
+                          ? 'white'
+                          : '#e2e8f0',
+                      fontWeight: day.isStart || day.isEnd ? '600' : '400',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {day.date.date()}
+                    {day.isStart && !day.isEnd && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '4px',
+                        height: '4px',
+                        background: 'white',
+                        borderRadius: '50%'
+                      }} />
+                    )}
+                    {day.isEnd && !day.isStart && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '4px',
+                        height: '4px',
+                        background: 'white',
+                        borderRadius: '50%'
+                      }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Rango seleccionado */}
+            {(tempStart || tempEnd) && (
+              <div style={{ 
+                marginBottom: '20px', 
+                padding: '10px', 
+                background: 'rgba(16,185,129,0.08)', 
+                borderRadius: '12px',
+                fontSize: '11px',
+                color: '#94a3b8',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#10b981', fontWeight: '500' }}>
+                  {tempStart ? formatDisplayDate(tempStart) : '—'}
+                </span>
+                {' → '}
+                <span style={{ color: '#10b981', fontWeight: '500' }}>
+                  {tempEnd ? formatDisplayDate(tempEnd) : tempStart ? 'Selecciona fecha final' : '—'}
+                </span>
+              </div>
+            )}
+
+            {/* Botones */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', paddingTop: '12px', borderTop: '1px solid #334155' }}>
+              <button
+                onClick={handleClear}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  background: 'rgba(239,68,68,0.1)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#f87171',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.2)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+              >
+                Limpiar
+              </button>
+              <button
+                onClick={handleApply}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
+// 🔥 COMPONENTE: TimePicker - SUTIL Y OPERATIVO
+const TimeRangePicker = ({ startTime, endTime, onStartChange, onEndChange, onClear }) => {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const formatTime = (time) => {
+    if (!time) return '--:--'
+    return time
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: 'rgba(15, 23, 42, 0.8)',
+          border: `1px solid ${startTime || endTime ? '#10b981' : '#334155'}`,
+          borderRadius: '12px',
+          padding: '10px 16px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          minWidth: '220px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'white' }}>
+          <FiClock size={14} style={{ color: '#10b981' }} />
+          <span>
+            {startTime || endTime ? (
+              <>
+                <span>{formatTime(startTime)}</span>
+                <span style={{ margin: '0 4px', color: '#475569' }}>-</span>
+                <span>{formatTime(endTime)}</span>
+              </>
+            ) : (
+              'Horario'
+            )}
+          </span>
+        </div>
+        <FiChevronDown size={14} style={{ color: '#64748b' }} />
+      </div>
+      
+      {isOpen && (
+        <>
+          <div onClick={() => setIsOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} />
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 999,
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '16px',
+            padding: '16px',
+            width: '280px',
+            marginTop: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '6px' }}>🟢 Desde</div>
+                <input
+                  type="time"
+                  step="1800"
+                  value={startTime || ''}
+                  onChange={(e) => onStartChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    color: '#4ade80',
+                    fontSize: '14px',
+                    fontFamily: 'monospace',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '6px' }}>🔴 Hasta</div>
+                <input
+                  type="time"
+                  step="1800"
+                  value={endTime || ''}
+                  onChange={(e) => onEndChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    color: '#fbbf24',
+                    fontSize: '14px',
+                    fontFamily: 'monospace',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  onStartChange('')
+                  onEndChange('')
+                  onClear?.()
+                  setIsOpen(false)
+                }}
+                style={{
+                  flex: 1,
+                  padding: '6px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  background: 'rgba(239,68,68,0.1)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#f87171',
+                  cursor: 'pointer'
+                }}
+              >
+                Limpiar
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                style={{
+                  flex: 1,
+                  padding: '6px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  background: '#10b981',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function ClientPage({ token }) {
   const [transporteSeleccionado, setTransporteSeleccionado] = useState(null)
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
@@ -423,7 +943,6 @@ export default function ClientPage({ token }) {
   const flujoPromedioPorHora = useMemo(() => {
     if (registrosConFiltrosTabla.length === 0) return 0
     
-    // Obtener la hora más temprana y más tarde
     let horaMin = null
     let horaMax = null
     
@@ -440,31 +959,11 @@ export default function ClientPage({ token }) {
     
     if (!horaMin || !horaMax) return 0
     
-    // Calcular diferencia en horas
     const horasTranscurridas = horaMax.diff(horaMin, 'minutes') / 60
     if (horasTranscurridas <= 0) return estadisticas.totalNeto
     
-    // Flujo = TM totales / horas transcurridas
     return estadisticas.totalNeto / horasTranscurridas
   }, [registrosConFiltrosTabla, estadisticas.totalNeto])
-
-  // 🔥 HORA PICO (la hora con más TM)
-  const horaPico = useMemo(() => {
-    if (flujoPorHora.length === 0) return null
-    return flujoPorHora.reduce((max, hora) => hora.totalTM > max.totalTM ? hora : max, flujoPorHora[0])
-  }, [flujoPorHora])
-
-  // Calcular horas activas
-  const horasActivas = useMemo(() => {
-    if (!registrosConFiltrosTabla.length) return 0
-    const horas = new Set()
-    registrosConFiltrosTabla.forEach(reg => {
-      if (reg.hora_entrada) {
-        horas.add(reg.hora_entrada.split(':')[0])
-      }
-    })
-    return horas.size
-  }, [registrosConFiltrosTabla])
 
   const meta = barco?.metas_json?.limites?.['YE-001'] || 0
   const faltante = Math.max(0, meta - estadisticas.totalNeto)
@@ -688,7 +1187,6 @@ export default function ClientPage({ token }) {
     )
   }
 
-  const datosGraficoAcumulado   = estadisticas.acumuladoPorCorrelativo.map(item => ({ correlativo: `#${item.correlativo}`, peso: item.peso, acumulado: item.acumulado, estado: item.estado }))
   const datosGraficoTransporte  = Object.entries(estadisticas.porTransporte).map(([name, value]) => ({ name, value }))
   const datosGraficoDia         = Object.entries(estadisticas.porDia).sort((a, b) => a[0].localeCompare(b[0])).map(([dia, total]) => ({ dia, total }))
   const datosGraficoDestino     = Object.entries(estadisticas.porDestino).map(([name, value]) => ({ name, value }))
@@ -1035,20 +1533,6 @@ export default function ClientPage({ token }) {
           box-shadow: 0 0 0 2px rgba(16,185,129,0.2);
         }
         
-        .alm-filter-input {
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid var(--border-glow);
-          border-radius: 10px;
-          padding: 8px 12px;
-          color: white;
-          font-size: 12px;
-          outline: none;
-        }
-        
-        .alm-filter-input:focus {
-          border-color: var(--accent-green);
-        }
-        
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
@@ -1246,6 +1730,106 @@ export default function ClientPage({ token }) {
                 <span>0 TM</span>
                 <span style={{ color: '#10b981', fontWeight: '600' }}>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
                 <span>{fmtTM(meta, 0)} TM</span>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================ */}
+          {/* 🔥 NUEVA TARJETA: PREDICCIÓN DE HORA DE FINALIZACIÓN */}
+          {/* ============================================ */}
+          {meta > 0 && faltante > 0 && flujoPromedioPorHora > 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(16, 185, 129, 0.08))',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(139, 92, 246, 0.3)',
+              borderRadius: '24px',
+              padding: '20px 28px',
+              marginBottom: '32px',
+              transition: 'all 0.3s ease',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(16, 185, 129, 0.2))',
+                    borderRadius: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <FiClock size={24} style={{ color: '#a78bfa' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#a78bfa', marginBottom: '4px' }}>
+                      PREDICCIÓN APROXIMADA
+                    </div>
+                    <div style={{ fontSize: '20px', fontWeight: '700', color: 'white' }}>
+                      Finalización estimada: {' '}
+                      <span style={{ 
+                        background: 'linear-gradient(135deg, #a78bfa, #34d399)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        fontWeight: '800'
+                      }}>
+                        {(() => {
+                          const horasRestantes = faltante / flujoPromedioPorHora
+                          const ahora = dayjs().tz(ZONA_HORARIA_SV)
+                          const horaEstimada = ahora.add(horasRestantes, 'hour')
+                          return horaEstimada.format('HH:mm [hrs] · DD/MM/YYYY')
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#fbbf24' }}>
+                      {faltante.toFixed(1)} <span style={{ fontSize: '12px', fontWeight: '400' }}>TM</span>
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Faltante por descargar</div>
+                  </div>
+                  <div style={{ width: '1px', background: 'rgba(139, 92, 246, 0.3)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#4ade80' }}>
+                      {flujoPromedioPorHora.toFixed(1)} <span style={{ fontSize: '12px', fontWeight: '400' }}>TM/h</span>
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Ritmo actual de descarga</div>
+                  </div>
+                  <div style={{ width: '1px', background: 'rgba(139, 92, 246, 0.3)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#a78bfa' }}>
+                      {(faltante / flujoPromedioPorHora).toFixed(1)} <span style={{ fontSize: '12px', fontWeight: '400' }}>hrs</span>
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Tiempo restante estimado</div>
+                  </div>
+                </div>
+              </div>
+              
+             
+            </div>
+          )}
+
+          {/* Si ya se alcanzó la meta, mostrar mensaje de éxito */}
+          {meta > 0 && faltante <= 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.08))',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              borderRadius: '24px',
+              padding: '20px 28px',
+              marginBottom: '32px',
+              textAlign: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                <FiCheckCircle size={28} style={{ color: '#4ade80' }} />
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#4ade80' }}>¡META ALCANZADA!</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                    Se ha completado la descarga de {fmtTM(meta, 0)} TM de Yeso
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1469,80 +2053,74 @@ export default function ClientPage({ token }) {
                 </div>
               </div>
 
-              {/* FILTROS AVANZADOS (Fecha y Hora) */}
+              {/* FILTROS AVANZADOS - Con calendario visual */}
               {mostrarFiltros && (
                 <div style={{ 
                   marginBottom: '20px', 
-                  padding: '16px', 
+                  padding: '20px', 
                   background: 'rgba(15, 23, 42, 0.6)', 
                   borderRadius: '16px',
                   border: '1px solid var(--border-glow)'
                 }}>
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#06b6d4', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FaCalendarAlt size={12} /> Filtros por Fecha y Hora
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#06b6d4', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FaCalendarAlt size={14} /> Filtros Avanzados
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+                    {/* Selector de Rango de Fechas con CALENDARIO VISUAL */}
                     <div>
-                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Fecha desde</label>
-                      <input
-                        type="date"
-                        value={filtroFechaInicio}
-                        onChange={(e) => setFiltroFechaInicio(e.target.value)}
-                        className="alm-filter-input"
-                        style={{ width: '100%' }}
+                      <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '8px' }}>Rango de Fechas</label>
+                      <DateRangePicker
+                        startDate={filtroFechaInicio}
+                        endDate={filtroFechaFin}
+                        onStartChange={setFiltroFechaInicio}
+                        onEndChange={setFiltroFechaFin}
+                        onClear={() => {
+                          setFiltroFechaInicio('')
+                          setFiltroFechaFin('')
+                        }}
                       />
                     </div>
+                    
+                    {/* Selector de Rango de Horas */}
                     <div>
-                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Fecha hasta</label>
-                      <input
-                        type="date"
-                        value={filtroFechaFin}
-                        onChange={(e) => setFiltroFechaFin(e.target.value)}
-                        className="alm-filter-input"
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hora desde</label>
-                      <input
-                        type="time"
-                        value={filtroHoraInicio}
-                        onChange={(e) => setFiltroHoraInicio(e.target.value)}
-                        className="alm-filter-input"
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hora hasta</label>
-                      <input
-                        type="time"
-                        value={filtroHoraFin}
-                        onChange={(e) => setFiltroHoraFin(e.target.value)}
-                        className="alm-filter-input"
-                        style={{ width: '100%' }}
+                      <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '8px' }}>Rango de Horas</label>
+                      <TimeRangePicker
+                        startTime={filtroHoraInicio}
+                        endTime={filtroHoraFin}
+                        onStartChange={setFiltroHoraInicio}
+                        onEndChange={setFiltroHoraFin}
+                        onClear={() => {
+                          setFiltroHoraInicio('')
+                          setFiltroHoraFin('')
+                        }}
                       />
                     </div>
                   </div>
-                  {(filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
-                    <div style={{ marginTop: '12px', textAlign: 'right' }}>
-                      <button onClick={limpiarFiltrosTabla} style={{ fontSize: '11px', color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                        Limpiar filtros
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
               {/* Indicador de filtros activos */}
               {(busquedaTabla || filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
-                <div style={{ fontSize: '11px', color: '#06b6d4', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '11px', color: '#06b6d4', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <FiFilter size={10} />
                   <span>Filtros activos:</span>
                   {busquedaTabla && <span className="alm-badge" style={{ fontSize: '10px' }}><FiSearchIcon size={10} style={{ display: 'inline', marginRight: '4px' }} /> {busquedaTabla}</span>}
-                  {filtroFechaInicio && <span className="alm-badge" style={{ fontSize: '10px' }}><FaCalendarAlt size={10} style={{ display: 'inline', marginRight: '4px' }} /> Desde: {filtroFechaInicio}</span>}
-                  {filtroFechaFin && <span className="alm-badge" style={{ fontSize: '10px' }}><FaCalendarAlt size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hasta: {filtroFechaFin}</span>}
-                  {filtroHoraInicio && <span className="alm-badge" style={{ fontSize: '10px' }}><FiClock size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hora ≥ {filtroHoraInicio}</span>}
-                  {filtroHoraFin && <span className="alm-badge" style={{ fontSize: '10px' }}><FiClock size={10} style={{ display: 'inline', marginRight: '4px' }} /> Hora ≤ {filtroHoraFin}</span>}
+                  {filtroFechaInicio && filtroFechaFin && (
+                    <span className="alm-badge" style={{ fontSize: '10px' }}>
+                      <FaCalendarAlt size={10} style={{ display: 'inline', marginRight: '4px' }} /> 
+                      {dayjs(filtroFechaInicio).format('DD/MM/YYYY')} - {dayjs(filtroFechaFin).format('DD/MM/YYYY')}
+                    </span>
+                  )}
+                  {(filtroHoraInicio || filtroHoraFin) && (
+                    <span className="alm-badge" style={{ fontSize: '10px' }}>
+                      <FiClock size={10} style={{ display: 'inline', marginRight: '4px' }} /> 
+                      {filtroHoraInicio || '00:00'} - {filtroHoraFin || '23:59'}
+                    </span>
+                  )}
+                  <button onClick={limpiarFiltrosTabla} style={{ fontSize: '10px', color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer', marginLeft: '8px' }}>
+                    Limpiar todo
+                  </button>
                 </div>
               )}
             </div>
