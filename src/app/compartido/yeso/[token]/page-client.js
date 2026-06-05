@@ -517,6 +517,19 @@ export default function ClientPage({ token }) {
     return flujoArray
   }, [registros])
 
+  // Calcular flujo promedio por hora para la tarjeta KPI
+  const flujoPromedioPorHora = useMemo(() => {
+    if (flujoPorHora.length === 0) return 0
+    const sumaPromedios = flujoPorHora.reduce((sum, hora) => sum + hora.promedio, 0)
+    return sumaPromedios / flujoPorHora.length
+  }, [flujoPorHora])
+
+  // Encontrar hora pico
+  const horaPico = useMemo(() => {
+    if (flujoPorHora.length === 0) return null
+    return flujoPorHora.reduce((max, hora) => hora.promedio > max.promedio ? hora : max, flujoPorHora[0])
+  }, [flujoPorHora])
+
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
   }
@@ -1007,7 +1020,7 @@ export default function ClientPage({ token }) {
             </div>
           )}
 
-          {/* KPIs */}
+          {/* KPIs - Primer grupo */}
           <div className="alm-kpi-grid">
             <div className="alm-kpi-card">
               <div className="alm-kpi-icon-wrapper">
@@ -1047,6 +1060,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
+          {/* KPIs - Segundo grupo con Flujo Promedio por Hora */}
           <div className="alm-kpi-grid">
             <div className="alm-kpi-card">
               <div className="alm-kpi-icon-wrapper">
@@ -1075,13 +1089,25 @@ export default function ClientPage({ token }) {
                 <div className="alm-kpi-label">Meta Manifestada</div>
               </div>
             </div>
-            <div className="alm-kpi-card">
-              <div className="alm-kpi-icon-wrapper">
-                <FaWarehouse size={28} style={{ color: '#60a5fa' }} />
+            {/* 🔥 NUEVA TARJETA: Flujo Promedio por Hora */}
+            <div className="alm-kpi-card" style={{ 
+              background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(16,185,129,0.08))',
+              border: '1px solid rgba(6,182,212,0.4)'
+            }}>
+              <div className="alm-kpi-icon-wrapper" style={{ background: 'rgba(6,182,212,0.2)' }}>
+                <FiClock size={28} style={{ color: '#06b6d4' }} />
               </div>
               <div>
-                <div className="alm-kpi-value" style={{ fontSize: '24px' }}>{Object.keys(estadisticas.porDestino).length}</div>
-                <div className="alm-kpi-label">Destinos Activos</div>
+                <div className="alm-kpi-value">
+                  {flujoPromedioPorHora.toFixed(1)} 
+                  <span style={{ fontSize: '16px' }}> TM/h</span>
+                </div>
+                <div className="alm-kpi-label">Flujo Promedio por Hora</div>
+                {horaPico && (
+                  <div style={{ fontSize: '10px', color: '#f59e0b', marginTop: '4px' }}>
+                    Pico: {horaPico.hora} ({horaPico.promedio.toFixed(1)} TM/h)
+                  </div>
+                )}
               </div>
             </div>
           </div>
