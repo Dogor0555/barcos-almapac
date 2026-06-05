@@ -20,13 +20,14 @@ import {
   FiRefreshCw, FiDownload, FiX, FiTruck, FiBarChart2, FiHome, 
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
-  FiChevronDown, FiChevronUp, FiActivity, FiDatabase, FiGift, FiStar
+  FiChevronDown, FiChevronUp, FiActivity, FiDatabase, FiGift, FiStar,
+  FiSearch as FiSearchIcon, FiFilter
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
   FaTrailer, FaMountain, FaChartPie, FaChartLine, FaDatabase,
   FaClipboardList, FaFileExcel, FaWarehouse, FaShip, FaCubes,
-  FaRegGem, FaRegClock, FaMedal
+  FaRegGem, FaRegClock, FaMedal, FaCalendarAlt, FaHourglassHalf
 } from 'react-icons/fa'
 import { GiCoalWagon, GiWeightScale, GiMinerals, GiCargoShip, GiCrane, GiDiamonds } from 'react-icons/gi'
 
@@ -46,12 +47,6 @@ const RANGOS = {
 }
 
 const COLORES = ["#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5", "#059669", "#047857"]
-const COLORES_DESTINO = {
-  "bodega": "#3b82f6",
-  "silo": "#22c55e", 
-  "bin": "#f59e0b",
-  "modulo": "#8b5cf6"
-}
 
 const fmtTM = (tm, d = 3) => {
   if (tm == null || isNaN(tm)) return "0.000"
@@ -307,167 +302,74 @@ export default function ClientPage({ token }) {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [destinoSeleccionado, setDestinoSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
-  const [ordenTabla, setOrdenTabla] = useState('reciente')
+  const [ordenTabla, setOrdenTabla] = useState('correlativo_desc')
+  
+  // 🔥 NUEVOS ESTADOS PARA FILTROS DE TABLA
+  const [busquedaTabla, setBusquedaTabla] = useState('')
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
+  const [filtroFechaFin, setFiltroFechaFin] = useState('')
+  const [filtroHoraInicio, setFiltroHoraInicio] = useState('')
+  const [filtroHoraFin, setFiltroHoraFin] = useState('')
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
   const { barco, producto, registros, destinos, loading, error, lastUpdate, refetch } = useYesoData(
     token, transporteSeleccionado, diaSeleccionado, destinoSeleccionado
   )
 
-  const estadisticas = useMemo(() => calcularEstadisticas(registros), [registros]);
-
-  const meta = barco?.metas_json?.limites?.['YE-001'] || 0
-  const faltante = Math.max(0, meta - estadisticas.totalNeto)
-  const excedente = Math.max(0, estadisticas.totalNeto - meta)
-  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
-  const metaCompletada = porcentajeMeta >= 100
-  const tieneExcedente = excedente > 0
-
-  const registrosOrdenados = useMemo(() => {
+  // 🔥 APLICAR FILTROS DE TABLA A LOS REGISTROS PARA LOS KPIs
+  const registrosConFiltrosTabla = useMemo(() => {
     if (!registros.length) return []
     
-    const registrosConFecha = registros.map(reg => ({
-      ...reg,
-      fechaHoraValue: dayjs(`${reg.fecha} ${reg.hora_entrada || '00:00:00'}`)
-    }))
+    let filtrados = [...registros]
     
-    if (ordenTabla === 'reciente') {
-      return [...registrosConFecha].sort((a, b) => {
-        if (b.fechaHoraValue.isValid() && a.fechaHoraValue.isValid()) {
-          return b.fechaHoraValue.valueOf() - a.fechaHoraValue.valueOf()
-        }
-        return b.correlativo - a.correlativo
+    // Búsqueda por placa o correlativo
+    if (busquedaTabla.trim()) {
+      const busqueda = busquedaTabla.trim().toLowerCase()
+      filtrados = filtrados.filter(r => 
+        r.placa?.toLowerCase().includes(busqueda) ||
+        r.correlativo?.toString().includes(busqueda)
+      )
+    }
+    
+    // Filtro por fecha inicio
+    if (filtroFechaInicio) {
+      filtrados = filtrados.filter(r => r.fecha >= filtroFechaInicio)
+    }
+    
+    // Filtro por fecha fin
+    if (filtroFechaFin) {
+      filtrados = filtrados.filter(r => r.fecha <= filtroFechaFin)
+    }
+    
+    // Filtro por hora inicio
+    if (filtroHoraInicio) {
+      filtrados = filtrados.filter(r => {
+        if (!r.hora_entrada) return false
+        return r.hora_entrada >= filtroHoraInicio
       })
-    } else {
-      return [...registrosConFecha].sort((a, b) => {
-        if (a.fechaHoraValue.isValid() && b.fechaHoraValue.isValid()) {
-          return a.fechaHoraValue.valueOf() - b.fechaHoraValue.valueOf()
-        }
-        return a.correlativo - b.correlativo
+    }
+    
+    // Filtro por hora fin
+    if (filtroHoraFin) {
+      filtrados = filtrados.filter(r => {
+        if (!r.hora_entrada) return false
+        return r.hora_entrada <= filtroHoraFin
       })
     }
-  }, [registros, ordenTabla])
+    
+    return filtrados
+  }, [registros, busquedaTabla, filtroFechaInicio, filtroFechaFin, filtroHoraInicio, filtroHoraFin])
 
-  useEffect(() => {
-    const cargarTodosRegistros = async () => {
-      try {
-        const { data: barcoData } = await supabase
-          .from('barcos')
-          .select('id')
-          .eq('token_compartido', token)
-          .single()
+  // 🔥 ESTADÍSTICAS CON LOS FILTROS DE TABLA APLICADOS
+  const estadisticas = useMemo(() => calcularEstadisticas(registrosConFiltrosTabla), [registrosConFiltrosTabla]);
 
-        if (barcoData) {
-          const { data: destinosData } = await supabase
-            .from('destinos')
-            .select('*')
-            .eq('activo', true)
-          
-          const destinosMap = new Map()
-          destinosData?.forEach(d => destinosMap.set(d.id, d))
-          
-          const registrosGlobales = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', 'barco_id', barcoData.id)
-
-          if (registrosGlobales) {
-            const completados = registrosGlobales.filter(r => r.estado === 'COMPLETADO')
-            const normalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados, destinosMap))
-            setTodosLosRegistros(normalizados)
-          }
-        }
-      } catch (error) {
-        console.error('Error cargando todos los registros:', error)
-      }
-    }
-    cargarTodosRegistros()
-  }, [token])
-
-  const descargarExcel = () => {
-    if (!registros.length) {
-      alert('No hay datos para exportar')
-      return
-    }
-
-    const wb = XLSX.utils.book_new()
-
-    const resumenData = [
-      ['BARCO', barco?.nombre || 'N/A'],
-      ['CÓDIGO BARCO', barco?.codigo_barco || 'N/A'],
-      ['PRODUCTO', 'YESO (YE-001)'],
-      ['TOTAL DESCARGADO (TM)', fmtTM(estadisticas.totalNeto, 2)],
-      ['TOTAL VIAJES', estadisticas.totalViajes],
-      ['PROMEDIO POR VIAJE (TM)', fmtTM(estadisticas.pesoPromedio, 2)],
-      ['VIAJES EN RANGO', `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)`],
-      ['VIAJES BAJO PESO', estadisticas.bajoPeso],
-      ['VIAJES SOBREPESO', estadisticas.sobrePeso],
-      ['META MANIFESTADA (TM)', fmtTM(meta, 2)],
-      ['FALTANTE (TM)', fmtTM(faltante, 2)],
-      ['EXCEDENTE (TM)', fmtTM(excedente, 2)],
-      ['PORCENTAJE DE META', `${porcentajeMeta.toFixed(1)}%`],
-      ['FECHA EXPORTACION', dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss')],
-    ]
-    const wsResumen = XLSX.utils.aoa_to_sheet([['RESUMEN GENERAL'], ...resumenData.map(r => r)])
-    XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
-
-    const registrosData = registros.map(r => ({
-      'CORRELATIVO': r.correlativo,
-      'PLACA': r.placa,
-      'TRANSPORTE': r.transporte,
-      'TIPO UNIDAD': r.tipo_unidad,
-      'DESTINO': r.destino_info ? `${r.destino_info.codigo} - ${r.destino_info.nombre}` : '—',
-      'PESO NETO (TM)': r.peso_neto_updp_tm?.toFixed(3),
-      'FECHA': r.fecha,
-      'HORA ENTRADA': r.hora_entrada,
-      'HORA SALIDA': r.hora_salida,
-      'TIEMPO': r.tiempo_atencion,
-      'ACUMULADO (TM)': r.acumulado_updp_tm?.toFixed(3)
-    }))
-    const wsRegistros = XLSX.utils.json_to_sheet(registrosData)
-    XLSX.utils.book_append_sheet(wb, wsRegistros, 'TODOS_LOS_REGISTROS')
-
-    const nombreArchivo = `Yeso_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
-    XLSX.writeFile(wb, nombreArchivo)
-  }
-
-  const promediosPorTransporte = useMemo(() => {
-    const mapa = {}
-
-    todosLosRegistros.forEach(r => {
-      const empresa = r.transporte || 'DESCONOCIDO'
-      if (!mapa[empresa]) {
-        mapa[empresa] = { nombre: empresa, viajes: [], traileta: [], volqueta: [] }
-      }
-      mapa[empresa].viajes.push(r)
-
-      const tipo = (r.tipo_unidad || '').toUpperCase()
-      if (tipo === 'TRAILETA') mapa[empresa].traileta.push(r)
-      else if (tipo === 'VOLQUETA') mapa[empresa].volqueta.push(r)
-    })
-
-    return Object.values(mapa).map(e => {
-      const totalNeto      = e.viajes.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-      const totalTraileta  = e.traileta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-      const totalVolqueta  = e.volqueta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
-
-      return {
-        nombre:           e.nombre,
-        totalViajes:      e.viajes.length,
-        totalNeto,
-        viajesTraileta:   e.traileta.length,
-        viajesVolqueta:   e.volqueta.length,
-        totalTraileta,
-        totalVolqueta,
-        promedioTraileta: e.traileta.length > 0 ? totalTraileta / e.traileta.length : null,
-        promedioVolqueta: e.volqueta.length > 0 ? totalVolqueta / e.volqueta.length : null,
-        fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad)).length,
-      }
-    }).sort((a, b) => b.totalNeto - a.totalNeto)
-  }, [todosLosRegistros])
-
+  // 🔥 FLUJO POR HORA CON FILTROS DE TABLA APLICADOS
   const flujoPorHora = useMemo(() => {
-    if (!registros.length) return []
+    if (!registrosConFiltrosTabla.length) return []
 
     const flujoMap = new Map()
 
-    registros.forEach(reg => {
+    registrosConFiltrosTabla.forEach(reg => {
       let horaKey = ''
       let horaMostrar = ''
       
@@ -515,37 +417,238 @@ export default function ClientPage({ token }) {
     })
 
     return flujoArray
-  }, [registros])
+  }, [registrosConFiltrosTabla])
 
-  // Calcular flujo promedio por hora para la tarjeta KPI
+  // 🔥 FLUJO PROMEDIO POR HORA CORREGIDO (TM totales / horas totales)
   const flujoPromedioPorHora = useMemo(() => {
-    if (flujoPorHora.length === 0) return 0
-    const sumaPromedios = flujoPorHora.reduce((sum, hora) => sum + hora.promedio, 0)
-    return sumaPromedios / flujoPorHora.length
-  }, [flujoPorHora])
+    if (registrosConFiltrosTabla.length === 0) return 0
+    
+    // Obtener la hora más temprana y más tarde
+    let horaMin = null
+    let horaMax = null
+    
+    registrosConFiltrosTabla.forEach(reg => {
+      if (reg.hora_entrada) {
+        const horaStr = `${reg.fecha} ${reg.hora_entrada}`
+        const horaDate = dayjs(horaStr)
+        if (horaDate.isValid()) {
+          if (!horaMin || horaDate.isBefore(horaMin)) horaMin = horaDate
+          if (!horaMax || horaDate.isAfter(horaMax)) horaMax = horaDate
+        }
+      }
+    })
+    
+    if (!horaMin || !horaMax) return 0
+    
+    // Calcular diferencia en horas
+    const horasTranscurridas = horaMax.diff(horaMin, 'minutes') / 60
+    if (horasTranscurridas <= 0) return estadisticas.totalNeto
+    
+    // Flujo = TM totales / horas transcurridas
+    return estadisticas.totalNeto / horasTranscurridas
+  }, [registrosConFiltrosTabla, estadisticas.totalNeto])
 
-  // Encontrar hora pico
+  // 🔥 HORA PICO (la hora con más TM)
   const horaPico = useMemo(() => {
     if (flujoPorHora.length === 0) return null
-    return flujoPorHora.reduce((max, hora) => hora.promedio > max.promedio ? hora : max, flujoPorHora[0])
+    return flujoPorHora.reduce((max, hora) => hora.totalTM > max.totalTM ? hora : max, flujoPorHora[0])
   }, [flujoPorHora])
+
+  // Calcular horas activas
+  const horasActivas = useMemo(() => {
+    if (!registrosConFiltrosTabla.length) return 0
+    const horas = new Set()
+    registrosConFiltrosTabla.forEach(reg => {
+      if (reg.hora_entrada) {
+        horas.add(reg.hora_entrada.split(':')[0])
+      }
+    })
+    return horas.size
+  }, [registrosConFiltrosTabla])
+
+  const meta = barco?.metas_json?.limites?.['YE-001'] || 0
+  const faltante = Math.max(0, meta - estadisticas.totalNeto)
+  const excedente = Math.max(0, estadisticas.totalNeto - meta)
+  const porcentajeMeta = meta > 0 ? (estadisticas.totalNeto / meta) * 100 : 0
+  const tieneExcedente = excedente > 0
+
+  // 🔥 ORDENAMIENTO DE LA TABLA
+  const registrosOrdenados = useMemo(() => {
+    if (!registrosConFiltrosTabla.length) return []
+    
+    const registrosConFecha = registrosConFiltrosTabla.map(reg => ({
+      ...reg,
+      fechaHoraValue: dayjs(`${reg.fecha} ${reg.hora_entrada || '00:00:00'}`)
+    }))
+    
+    switch(ordenTabla) {
+      case 'correlativo_asc':
+        return [...registrosConFecha].sort((a, b) => a.correlativo - b.correlativo)
+      case 'correlativo_desc':
+        return [...registrosConFecha].sort((a, b) => b.correlativo - a.correlativo)
+      case 'fecha_asc':
+        return [...registrosConFecha].sort((a, b) => {
+          if (a.fechaHoraValue.isValid() && b.fechaHoraValue.isValid()) {
+            return a.fechaHoraValue.valueOf() - b.fechaHoraValue.valueOf()
+          }
+          return a.correlativo - b.correlativo
+        })
+      case 'fecha_desc':
+        return [...registrosConFecha].sort((a, b) => {
+          if (b.fechaHoraValue.isValid() && a.fechaHoraValue.isValid()) {
+            return b.fechaHoraValue.valueOf() - a.fechaHoraValue.valueOf()
+          }
+          return b.correlativo - a.correlativo
+        })
+      default:
+        return [...registrosConFecha].sort((a, b) => b.correlativo - a.correlativo)
+    }
+  }, [registrosConFiltrosTabla, ordenTabla])
+
+  useEffect(() => {
+    const cargarTodosRegistros = async () => {
+      try {
+        const { data: barcoData } = await supabase
+          .from('barcos')
+          .select('id')
+          .eq('token_compartido', token)
+          .single()
+
+        if (barcoData) {
+          const { data: destinosData } = await supabase
+            .from('destinos')
+            .select('*')
+            .eq('activo', true)
+          
+          const destinosMap = new Map()
+          destinosData?.forEach(d => destinosMap.set(d.id, d))
+          
+          const registrosGlobales = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', 'barco_id', barcoData.id)
+
+          if (registrosGlobales) {
+            const completados = registrosGlobales.filter(r => r.estado === 'COMPLETADO')
+            const normalizados = completados.map((r, idx) => normalizarRegistro(r, idx, completados, destinosMap))
+            setTodosLosRegistros(normalizados)
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando todos los registros:', error)
+      }
+    }
+    cargarTodosRegistros()
+  }, [token])
+
+  const descargarExcel = () => {
+    if (!registrosConFiltrosTabla.length) {
+      alert('No hay datos para exportar')
+      return
+    }
+
+    const wb = XLSX.utils.book_new()
+
+    const resumenData = [
+      ['BARCO', barco?.nombre || 'N/A'],
+      ['CÓDIGO BARCO', barco?.codigo_barco || 'N/A'],
+      ['PRODUCTO', 'YESO (YE-001)'],
+      ['TOTAL DESCARGADO (TM)', fmtTM(estadisticas.totalNeto, 2)],
+      ['TOTAL VIAJES', estadisticas.totalViajes],
+      ['PROMEDIO POR VIAJE (TM)', fmtTM(estadisticas.pesoPromedio, 2)],
+      ['VIAJES EN RANGO', `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)`],
+      ['VIAJES BAJO PESO', estadisticas.bajoPeso],
+      ['VIAJES SOBREPESO', estadisticas.sobrePeso],
+      ['META MANIFESTADA (TM)', fmtTM(meta, 2)],
+      ['FALTANTE (TM)', fmtTM(faltante, 2)],
+      ['EXCEDENTE (TM)', fmtTM(excedente, 2)],
+      ['PORCENTAJE DE META', `${porcentajeMeta.toFixed(1)}%`],
+      ['FLUJO PROMEDIO (TM/h)', fmtTM(flujoPromedioPorHora, 1)],
+      ['FECHA EXPORTACION', dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss')],
+    ]
+    const wsResumen = XLSX.utils.aoa_to_sheet([['RESUMEN GENERAL'], ...resumenData.map(r => r)])
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
+
+    const registrosData = registrosConFiltrosTabla.map(r => ({
+      'CORRELATIVO': r.correlativo,
+      'PLACA': r.placa,
+      'TRANSPORTE': r.transporte,
+      'TIPO UNIDAD': r.tipo_unidad,
+      'DESTINO': r.destino_info ? `${r.destino_info.codigo} - ${r.destino_info.nombre}` : '—',
+      'PESO NETO (TM)': r.peso_neto_updp_tm?.toFixed(3),
+      'FECHA': r.fecha,
+      'HORA ENTRADA': r.hora_entrada,
+      'HORA SALIDA': r.hora_salida,
+      'TIEMPO': r.tiempo_atencion,
+      'ACUMULADO (TM)': r.acumulado_updp_tm?.toFixed(3)
+    }))
+    const wsRegistros = XLSX.utils.json_to_sheet(registrosData)
+    XLSX.utils.book_append_sheet(wb, wsRegistros, 'REGISTROS_FILTRADOS')
+
+    const nombreArchivo = `Yeso_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
+    XLSX.writeFile(wb, nombreArchivo)
+  }
+
+  const promediosPorTransporte = useMemo(() => {
+    const mapa = {}
+
+    todosLosRegistros.forEach(r => {
+      const empresa = r.transporte || 'DESCONOCIDO'
+      if (!mapa[empresa]) {
+        mapa[empresa] = { nombre: empresa, viajes: [], traileta: [], volqueta: [] }
+      }
+      mapa[empresa].viajes.push(r)
+
+      const tipo = (r.tipo_unidad || '').toUpperCase()
+      if (tipo === 'TRAILETA') mapa[empresa].traileta.push(r)
+      else if (tipo === 'VOLQUETA') mapa[empresa].volqueta.push(r)
+    })
+
+    return Object.values(mapa).map(e => {
+      const totalNeto      = e.viajes.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+      const totalTraileta  = e.traileta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+      const totalVolqueta  = e.volqueta.reduce((s, r) => s + (r.peso_neto_updp_tm || 0), 0)
+
+      return {
+        nombre:           e.nombre,
+        totalViajes:      e.viajes.length,
+        totalNeto,
+        viajesTraileta:   e.traileta.length,
+        viajesVolqueta:   e.volqueta.length,
+        totalTraileta,
+        totalVolqueta,
+        promedioTraileta: e.traileta.length > 0 ? totalTraileta / e.traileta.length : null,
+        promedioVolqueta: e.volqueta.length > 0 ? totalVolqueta / e.volqueta.length : null,
+        fueraRango:       e.viajes.filter(r => estaFueraDeRango(r.peso_neto_updp_tm, r.tipo_unidad)).length,
+      }
+    }).sort((a, b) => b.totalNeto - a.totalNeto)
+  }, [todosLosRegistros])
+
+  const limpiarFiltrosTabla = () => {
+    setBusquedaTabla('')
+    setFiltroFechaInicio('')
+    setFiltroFechaFin('')
+    setFiltroHoraInicio('')
+    setFiltroHoraFin('')
+  }
 
   const handleSeleccionarTransporte = (transporte) => {
     setTransporteSeleccionado(prev => prev === transporte ? null : transporte)
+    limpiarFiltrosTabla() // Limpiar filtros de tabla al cambiar filtro principal
   }
 
   const handleSeleccionarDia = (dia) => {
     setDiaSeleccionado(prev => prev === dia ? null : dia)
+    limpiarFiltrosTabla()
   }
 
   const handleSeleccionarDestino = (destinoId) => {
     setDestinoSeleccionado(prev => prev === destinoId ? null : destinoId)
+    limpiarFiltrosTabla()
   }
 
   const limpiarTodosLosFiltros = () => {
     setTransporteSeleccionado(null)
     setDiaSeleccionado(null)
     setDestinoSeleccionado(null)
+    limpiarFiltrosTabla()
   }
 
   const filtroActivoTexto = [
@@ -915,6 +1018,37 @@ export default function ClientPage({ token }) {
           animation: shimmer 2s infinite;
         }
         
+        .alm-search-input {
+          background: rgba(15, 23, 42, 0.8);
+          border: 1px solid var(--border-glow);
+          border-radius: 12px;
+          padding: 10px 16px;
+          color: white;
+          font-size: 13px;
+          width: 250px;
+          outline: none;
+          transition: all 0.2s;
+        }
+        
+        .alm-search-input:focus {
+          border-color: var(--accent-green);
+          box-shadow: 0 0 0 2px rgba(16,185,129,0.2);
+        }
+        
+        .alm-filter-input {
+          background: rgba(15, 23, 42, 0.8);
+          border: 1px solid var(--border-glow);
+          border-radius: 10px;
+          padding: 8px 12px;
+          color: white;
+          font-size: 12px;
+          outline: none;
+        }
+        
+        .alm-filter-input:focus {
+          border-color: var(--accent-green);
+        }
+        
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
@@ -929,11 +1063,6 @@ export default function ClientPage({ token }) {
           to { transform: rotate(360deg); }
         }
         
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.02); }
-        }
-        
         @media (max-width: 1024px) {
           .alm-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
           .alm-chart-grid { grid-template-columns: 1fr; }
@@ -944,6 +1073,7 @@ export default function ClientPage({ token }) {
           .alm-kpi-grid { grid-template-columns: 1fr; }
           .alm-topbar { padding: 0 16px; height: 70px; }
           .alm-kpi-value { font-size: 24px; }
+          .alm-search-input { width: 100%; }
         }
       `}</style>
 
@@ -962,10 +1092,10 @@ export default function ClientPage({ token }) {
               <FaFileExcel size={14} />
               Exportar
             </button>
-            {(transporteSeleccionado || diaSeleccionado || destinoSeleccionado) && (
+            {(transporteSeleccionado || diaSeleccionado || destinoSeleccionado || busquedaTabla || filtroFechaInicio || filtroFechaFin) && (
               <button onClick={limpiarTodosLosFiltros} className="alm-glass-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}>
                 <FiX size={14} />
-                Limpiar
+                Limpiar todo
               </button>
             )}
             <button onClick={refetch} className="alm-glass-btn">
@@ -981,44 +1111,17 @@ export default function ClientPage({ token }) {
             <div className="alm-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FiActivity size={12} />
               {filtroActivoTexto}
+              {(busquedaTabla || filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
+                <span style={{ color: '#06b6d4', marginLeft: '8px' }}>
+                  · + filtros de tabla
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FiClock size={12} />
               Última actualización: {lastUpdate?.format('HH:mm:ss') || '--:--:--'}
             </div>
           </div>
-
-          {/* Alerta de excedente */}
-          {tieneExcedente && (
-            <div style={{ 
-              marginBottom: '28px', 
-              background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.1))',
-              border: '1px solid rgba(239,68,68,0.5)',
-              borderRadius: '20px', 
-              padding: '20px 28px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '16px',
-              backdropFilter: 'blur(8px)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: '50%', padding: '12px' }}>
-                  <FiAlertCircle size={28} style={{ color: '#f87171' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#f87171', letterSpacing: '1px' }}>EXCEDENTE DE DESCARGA</div>
-                  <div style={{ fontSize: '28px', fontWeight: '800', color: 'white', fontFamily: 'monospace' }}>
-                    +{fmtTM(excedente, 2)} TM
-                  </div>
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '280px', textAlign: 'right' }}>
-                La cantidad descargada supera la meta manifestada en el contrato
-              </div>
-            </div>
-          )}
 
           {/* KPIs - Primer grupo */}
           <div className="alm-kpi-grid">
@@ -1060,7 +1163,7 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* KPIs - Segundo grupo con Flujo Promedio por Hora */}
+          {/* KPIs - Segundo grupo con Flujo Promedio por Hora CORREGIDO */}
           <div className="alm-kpi-grid">
             <div className="alm-kpi-card">
               <div className="alm-kpi-icon-wrapper">
@@ -1089,7 +1192,7 @@ export default function ClientPage({ token }) {
                 <div className="alm-kpi-label">Meta Manifestada</div>
               </div>
             </div>
-            {/* 🔥 NUEVA TARJETA: Flujo Promedio por Hora */}
+            {/* 🔥 TARJETA DE FLUJO PROMEDIO POR HORA CORREGIDA */}
             <div className="alm-kpi-card" style={{ 
               background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(16,185,129,0.08))',
               border: '1px solid rgba(6,182,212,0.4)'
@@ -1103,11 +1206,7 @@ export default function ClientPage({ token }) {
                   <span style={{ fontSize: '16px' }}> TM/h</span>
                 </div>
                 <div className="alm-kpi-label">Flujo Promedio por Hora</div>
-                {horaPico && (
-                  <div style={{ fontSize: '10px', color: '#f59e0b', marginTop: '4px' }}>
-                    Pico: {horaPico.hora} ({horaPico.promedio.toFixed(1)} TM/h)
-                  </div>
-                )}
+               
               </div>
             </div>
           </div>
@@ -1328,23 +1427,129 @@ export default function ClientPage({ token }) {
             )}
           </div>
 
-          {/* Tabla de Registros */}
+          {/* TABLA DE REGISTROS CON FILTROS */}
           <div className="alm-table-container">
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-glow)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <FaClipboardList size={14} style={{ color: '#10b981' }} />
-                <span style={{ fontWeight: '700', color: 'white' }}>Registros de Descarga</span>
-                <span className="alm-badge">{registros.length} viajes</span>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-glow)' }}>
+              {/* Fila superior: Título y ordenamiento */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <FaClipboardList size={14} style={{ color: '#10b981' }} />
+                  <span style={{ fontWeight: '700', color: 'white' }}>Registros de Descarga</span>
+                  <span className="alm-badge">{registrosConFiltrosTabla.length} / {registros.length} viajes</span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => setOrdenTabla('correlativo_desc')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'correlativo_desc' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'correlativo_desc' ? '#10b981' : '#334155'}`, color: ordenTabla === 'correlativo_desc' ? '#10b981' : '#94a3b8' }}>
+                    <FiArrowDown size={12} style={{ display: 'inline', marginRight: '6px' }} /> Correlativo ↓
+                  </button>
+                  <button onClick={() => setOrdenTabla('correlativo_asc')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'correlativo_asc' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'correlativo_asc' ? '#10b981' : '#334155'}`, color: ordenTabla === 'correlativo_asc' ? '#10b981' : '#94a3b8' }}>
+                    <FiArrowUp size={12} style={{ display: 'inline', marginRight: '6px' }} /> Correlativo ↑
+                  </button>
+                  <button onClick={() => setOrdenTabla('fecha_desc')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'fecha_desc' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'fecha_desc' ? '#10b981' : '#334155'}`, color: ordenTabla === 'fecha_desc' ? '#10b981' : '#94a3b8' }}>
+                    <FiCalendar size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Reciente
+                  </button>
+                  <button onClick={() => setOrdenTabla('fecha_asc')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'fecha_asc' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'fecha_asc' ? '#10b981' : '#334155'}`, color: ordenTabla === 'fecha_asc' ? '#10b981' : '#94a3b8' }}>
+                    <FiCalendar size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Antiguo
+                  </button>
+                  <button onClick={() => setMostrarFiltros(!mostrarFiltros)} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: mostrarFiltros ? 'rgba(6,182,212,0.2)' : 'transparent', border: `1px solid ${mostrarFiltros ? '#06b6d4' : '#334155'}`, color: mostrarFiltros ? '#06b6d4' : '#94a3b8' }}>
+                    <FiFilter size={12} style={{ display: 'inline', marginRight: '6px' }} /> Filtros
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setOrdenTabla('reciente')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'reciente' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'reciente' ? '#10b981' : '#334155'}`, color: ordenTabla === 'reciente' ? '#10b981' : '#94a3b8' }}>
-                  <FiArrowDown size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Reciente
-                </button>
-                <button onClick={() => setOrdenTabla('antiguo')} style={{ padding: '6px 14px', borderRadius: '100px', fontSize: '12px', cursor: 'pointer', background: ordenTabla === 'antiguo' ? 'rgba(16,185,129,0.2)' : 'transparent', border: `1px solid ${ordenTabla === 'antiguo' ? '#10b981' : '#334155'}`, color: ordenTabla === 'antiguo' ? '#10b981' : '#94a3b8' }}>
-                  <FiArrowUp size={12} style={{ display: 'inline', marginRight: '6px' }} /> Más Antiguo
-                </button>
+
+              {/* BARRA DE BÚSQUEDA */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ position: 'relative', maxWidth: '350px' }}>
+                  <FiSearchIcon size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="text"
+                    placeholder="Buscar por placa o correlativo..."
+                    value={busquedaTabla}
+                    onChange={(e) => setBusquedaTabla(e.target.value)}
+                    className="alm-search-input"
+                    style={{ paddingLeft: '38px', width: '100%' }}
+                  />
+                </div>
               </div>
+
+              {/* FILTROS AVANZADOS (Fecha y Hora) */}
+              {mostrarFiltros && (
+                <div style={{ 
+                  marginBottom: '20px', 
+                  padding: '16px', 
+                  background: 'rgba(15, 23, 42, 0.6)', 
+                  borderRadius: '16px',
+                  border: '1px solid var(--border-glow)'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#06b6d4', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FaCalendarAlt size={12} /> Filtros por Fecha y Hora
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Fecha desde</label>
+                      <input
+                        type="date"
+                        value={filtroFechaInicio}
+                        onChange={(e) => setFiltroFechaInicio(e.target.value)}
+                        className="alm-filter-input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Fecha hasta</label>
+                      <input
+                        type="date"
+                        value={filtroFechaFin}
+                        onChange={(e) => setFiltroFechaFin(e.target.value)}
+                        className="alm-filter-input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hora desde</label>
+                      <input
+                        type="time"
+                        value={filtroHoraInicio}
+                        onChange={(e) => setFiltroHoraInicio(e.target.value)}
+                        className="alm-filter-input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Hora hasta</label>
+                      <input
+                        type="time"
+                        value={filtroHoraFin}
+                        onChange={(e) => setFiltroHoraFin(e.target.value)}
+                        className="alm-filter-input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                  {(filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
+                    <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                      <button onClick={limpiarFiltrosTabla} style={{ fontSize: '11px', color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                        Limpiar filtros
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Indicador de filtros activos */}
+              {(busquedaTabla || filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
+                <div style={{ fontSize: '11px', color: '#06b6d4', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <FiFilter size={10} />
+                  <span>Filtros activos:</span>
+                  {busquedaTabla && <span className="alm-badge" style={{ fontSize: '10px' }}>🔍 {busquedaTabla}</span>}
+                  {filtroFechaInicio && <span className="alm-badge" style={{ fontSize: '10px' }}>📅 Desde: {filtroFechaInicio}</span>}
+                  {filtroFechaFin && <span className="alm-badge" style={{ fontSize: '10px' }}>📅 Hasta: {filtroFechaFin}</span>}
+                  {filtroHoraInicio && <span className="alm-badge" style={{ fontSize: '10px' }}>⏰ Hora ≥ {filtroHoraInicio}</span>}
+                  {filtroHoraFin && <span className="alm-badge" style={{ fontSize: '10px' }}>⏰ Hora ≤ {filtroHoraFin}</span>}
+                </div>
+              )}
             </div>
+
+            {/* TABLA */}
             <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
               <table className="alm-table">
                 <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 10 }}>
@@ -1361,33 +1566,42 @@ export default function ClientPage({ token }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {registrosOrdenados.map((reg) => {
-                    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-                    let rowClass = ''
-                    if (estado === 'bajo') rowClass = 'alm-row-bajo'
-                    if (estado === 'sobre') rowClass = 'alm-row-sobre'
-                    return (
-                      <tr key={reg.id} className={rowClass}>
-                        <td style={{ fontWeight: '700', fontFamily: 'monospace' }}>{reg.correlativo}</td>
-                        <td style={{ fontFamily: 'monospace' }}>{reg.placa}</td>
-                        <td>{reg.transporte || '—'}</td>
-                        <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
-                        <td>
-                          {reg.destino_info && (
-                            <span style={{ background: 'rgba(59,130,246,0.1)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>
-                              {reg.destino_info.codigo}
-                            </span>
-                          )}
-                        </td>
-                        <td>{reg.fecha}</td>
-                        <td>{reg.hora_entrada || '—'}</td>
-                        <td style={{ fontWeight: '700', color: estado === 'bajo' ? '#f59e0b' : (estado === 'sobre' ? '#f87171' : '#4ade80') }}>
-                          {reg.peso_neto_updp_tm?.toFixed(2)} TM
-                        </td>
-                        <td style={{ fontFamily: 'monospace', color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
-                      </tr>
-                    )
-                  })}
+                  {registrosOrdenados.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '60px', color: '#64748b' }}>
+                        <FiSearchIcon size={32} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                        <p>No se encontraron registros con los filtros aplicados</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    registrosOrdenados.map((reg) => {
+                      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+                      let rowClass = ''
+                      if (estado === 'bajo') rowClass = 'alm-row-bajo'
+                      if (estado === 'sobre') rowClass = 'alm-row-sobre'
+                      return (
+                        <tr key={reg.id} className={rowClass}>
+                          <td style={{ fontWeight: '700', fontFamily: 'monospace' }}>{reg.correlativo}</td>
+                          <td style={{ fontFamily: 'monospace' }}>{reg.placa}</td>
+                          <td>{reg.transporte || '—'}</td>
+                          <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
+                          <td>
+                            {reg.destino_info && (
+                              <span style={{ background: 'rgba(59,130,246,0.1)', padding: '4px 10px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>
+                                {reg.destino_info.codigo}
+                              </span>
+                            )}
+                          </td>
+                          <td>{reg.fecha}</td>
+                          <td>{reg.hora_entrada || '—'}</td>
+                          <td style={{ fontWeight: '700', color: estado === 'bajo' ? '#f59e0b' : (estado === 'sobre' ? '#f87171' : '#4ade80') }}>
+                            {reg.peso_neto_updp_tm?.toFixed(2)} TM
+                          </td>
+                          <td style={{ fontFamily: 'monospace', color: '#fbbf24' }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
