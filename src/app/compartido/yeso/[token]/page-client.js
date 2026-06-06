@@ -21,7 +21,8 @@ import {
   FiMapPin, FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiUsers, FiAnchor, FiShield, FiArrowDown, FiArrowUp,
   FiChevronDown, FiChevronUp, FiActivity, FiDatabase, FiGift, FiStar,
-  FiSearch as FiSearchIcon, FiFilter, FiChevronLeft, FiChevronRight
+  FiSearch as FiSearchIcon, FiFilter, FiChevronLeft, FiChevronRight,
+  FiGrid, FiList
 } from 'react-icons/fi'
 import { 
   FaWeightHanging, FaIndustry, FaBuilding, FaTachometerAlt,
@@ -451,6 +452,7 @@ export default function ClientPage({ token }) {
   const [destinoSeleccionado, setDestinoSeleccionado] = useState(null)
   const [todosLosRegistros, setTodosLosRegistros] = useState([])
   const [ordenTabla, setOrdenTabla] = useState('correlativo_desc')
+  const [seccionActiva, setSeccionActiva] = useState('resumen')
   
   const [busquedaTabla, setBusquedaTabla] = useState('')
   const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
@@ -701,10 +703,44 @@ export default function ClientPage({ token }) {
         
         .alm-body { max-width: 1440px; margin: 0 auto; padding: 32px; }
         
-        /* KPI Grid - Más compacto */
+        /* Botón de alternar sección */
+        .section-toggle {
+          display: flex;
+          background: var(--azul-100);
+          border-radius: 40px;
+          padding: 4px;
+          gap: 4px;
+        }
+        
+        .toggle-btn {
+          padding: 8px 20px;
+          border-radius: 32px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: none;
+          background: transparent;
+          color: var(--azul-500);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .toggle-btn.active {
+          background: var(--azul-500);
+          color: var(--blanco);
+          box-shadow: 0 2px 8px rgba(0,0,163,0.2);
+        }
+        
+        .toggle-btn:not(.active):hover {
+          background: rgba(0,0,163,0.1);
+        }
+        
+        /* KPI Grid - Compacto */
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
         
-        /* KPI Card - Más delgado, contenido en una sola línea */
+        /* KPI Card - Horizontal */
         .kpi-card {
           background: linear-gradient(135deg, #0000A3, #182A6E);
           border-radius: 20px;
@@ -721,7 +757,6 @@ export default function ClientPage({ token }) {
         
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,163,0.2); }
         
-        /* Patrón de triángulos */
         .kpi-card::after {
           content: '';
           position: absolute;
@@ -735,7 +770,6 @@ export default function ClientPage({ token }) {
           pointer-events: none;
         }
         
-        /* Círculo de glow */
         .kpi-card::before {
           content: '';
           position: absolute;
@@ -762,22 +796,14 @@ export default function ClientPage({ token }) {
           flex-shrink: 0;
         }
         
-        .kpi-content {
-          flex: 1;
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          gap: 12px;
-          position: relative;
-          z-index: 1;
-        }
-        
         .kpi-value {
           font-size: 26px;
           font-weight: 800;
           letter-spacing: -0.5px;
           line-height: 1;
           white-space: nowrap;
+          position: relative;
+          z-index: 1;
         }
         
         .kpi-value small {
@@ -793,33 +819,142 @@ export default function ClientPage({ token }) {
           letter-spacing: 0.5px;
           font-weight: 500;
           white-space: nowrap;
+          position: relative;
+          z-index: 1;
+          margin-left: auto;
         }
         
-        /* Prediction Card */
-        .prediction-card {
+        /* Grid de 2 columnas para Progress + Prediction */
+        .stats-two-columns {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 28px;
+        }
+        
+        /* Progress Card */
+        .progress-card {
           background: linear-gradient(135deg, #0000A3, #182A6E);
-          border-radius: 24px;
-          padding: 28px 32px;
-          margin-bottom: 32px;
+          border-radius: 20px;
+          padding: 16px 20px;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
           color: var(--blanco);
-          box-shadow: 0 8px 20px rgba(0,0,0,0.1);
           position: relative;
           overflow: hidden;
         }
         
-        .prediction-card::before {
+        .progress-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,163,0.2); }
+        
+        .progress-card::after {
           content: '';
           position: absolute;
-          top: -50%;
-          right: -20%;
-          width: 200px;
-          height: 200px;
+          bottom: 0;
+          right: 0;
+          width: 0;
+          height: 0;
+          border-style: solid;
+          border-width: 0 0 60px 60px;
+          border-color: transparent transparent rgba(255,255,255,0.06) transparent;
+          pointer-events: none;
+        }
+        
+        .progress-card::before {
+          content: '';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          width: 80px;
+          height: 80px;
           border-radius: 50%;
           background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%);
           pointer-events: none;
         }
         
-        /* Triángulo decorativo también para la predicción */
+        .progress-title {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 12px;
+          position: relative;
+          z-index: 1;
+        }
+        
+        .progress-title span {
+          font-weight: 600;
+          color: var(--blanco);
+          font-size: 13px;
+        }
+        
+        .progress-percent {
+          background: rgba(255,255,255,0.15);
+          padding: 4px 12px;
+          border-radius: 100px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--blanco);
+        }
+        
+        .progress-bar {
+          height: 8px;
+          background: rgba(255,255,255,0.2);
+          border-radius: 100px;
+          overflow: hidden;
+          margin: 12px 0 10px;
+          position: relative;
+          z-index: 1;
+        }
+        
+        .progress-fill {
+          height: 100%;
+          background: rgba(255,255,255,0.9);
+          border-radius: 100px;
+          transition: width 1.2s cubic-bezier(0.34, 1.2, 0.64, 1);
+        }
+        
+        .progress-labels {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+          color: rgba(255,255,255,0.7);
+          position: relative;
+          z-index: 1;
+        }
+        
+        .progress-current {
+          color: var(--blanco);
+          font-weight: 600;
+        }
+        
+        /* Prediction Card */
+        .prediction-card {
+          background: linear-gradient(135deg, #0000A3, #182A6E);
+          border-radius: 20px;
+          padding: 16px 20px;
+          color: var(--blanco);
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .prediction-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(0,0,163,0.2);
+        }
+        
+        .prediction-card::before {
+          content: '';
+          position: absolute;
+          top: -30px;
+          right: -30px;
+          width: 100px;
+          height: 100px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%);
+          pointer-events: none;
+        }
+        
         .prediction-card::after {
           content: '';
           position: absolute;
@@ -828,45 +963,53 @@ export default function ClientPage({ token }) {
           width: 0;
           height: 0;
           border-style: solid;
-          border-width: 0 0 100px 100px;
-          border-color: transparent transparent rgba(255,255,255,0.04) transparent;
+          border-width: 0 0 60px 60px;
+          border-color: transparent transparent rgba(255,255,255,0.05) transparent;
           pointer-events: none;
         }
         
         .prediction-title {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 2px;
           opacity: 0.7;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
+          position: relative;
+          z-index: 1;
         }
         
         .prediction-time {
-          font-size: 28px;
+          font-size: 22px;
           font-weight: 800;
           letter-spacing: -0.5px;
-          margin-bottom: 4px;
+          line-height: 1.2;
+          position: relative;
+          z-index: 1;
         }
         
         .prediction-date {
-          font-size: 13px;
+          font-size: 11px;
           opacity: 0.7;
+          position: relative;
+          z-index: 1;
         }
         
         .prediction-stats {
           display: flex;
-          gap: 40px;
+          gap: 24px;
+          margin-top: 8px;
+          position: relative;
+          z-index: 1;
         }
         
         .prediction-stat-value {
-          font-size: 28px;
+          font-size: 20px;
           font-weight: 800;
-          letter-spacing: -0.5px;
         }
         
         .prediction-stat-label {
-          font-size: 11px;
+          font-size: 9px;
           opacity: 0.7;
           text-transform: uppercase;
           letter-spacing: 1px;
@@ -889,9 +1032,28 @@ export default function ClientPage({ token }) {
         .alm-chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 32px; }
         .alm-chart-card { background: var(--blanco); border: 1px solid var(--border); border-radius: 20px; padding: 24px; transition: all 0.2s ease; }
         .alm-chart-card:hover { border-color: var(--azul-500); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
-        .alm-chart-wide { grid-column: 1 / -1; }
         
-        .alm-table-container { background: var(--blanco); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; margin-bottom: 32px; }
+        /* Contenedor de gráfico de flujo y tabla en la misma sección */
+        .detalle-container {
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+        }
+        
+        .flujo-card {
+          background: var(--blanco);
+          border: 1px solid var(--border);
+          border-radius: 20px;
+          padding: 24px;
+          transition: all 0.2s ease;
+        }
+        
+        .flujo-card:hover {
+          border-color: var(--azul-500);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+        }
+        
+        .alm-table-container { background: var(--blanco); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
         .alm-table { width: 100%; border-collapse: collapse; }
         .alm-table th { padding: 16px 20px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--texto-secondary); background: var(--gris-fondo); border-bottom: 1px solid var(--border); }
         .alm-table td { padding: 14px 20px; color: var(--texto-primary); font-size: 13px; border-bottom: 1px solid var(--gris-fondo); }
@@ -902,18 +1064,58 @@ export default function ClientPage({ token }) {
         
         .alm-badge { background: var(--azul-100); border: 1px solid var(--azul-500); color: var(--azul-500); padding: 4px 12px; border-radius: 100px; font-size: 11px; font-weight: 500; }
         
-        .alm-progress-container { background: var(--blanco); border: 1px solid var(--border); border-radius: 20px; padding: 24px; margin-bottom: 32px; }
-        .alm-progress-bar { height: 10px; background: var(--gris-fondo); border-radius: 100px; overflow: hidden; margin: 16px 0; }
-        .alm-progress-fill { height: 100%; background: linear-gradient(90deg, var(--azul-500), var(--azul-400)); border-radius: 100px; transition: width 1.2s cubic-bezier(0.34, 1.2, 0.64, 1); }
-        
         .alm-search-input { background: var(--blanco); border: 1px solid var(--border); border-radius: 12px; padding: 10px 16px; font-size: 13px; width: 250px; outline: none; }
         .alm-search-input:focus { border-color: var(--azul-500); box-shadow: 0 0 0 3px rgba(0,0,163,0.1); }
+        
+        /* Tarjeta de empresa transportista */
+        .transportista-card {
+          background: var(--blanco);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 16px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .transportista-card:hover {
+          border-color: var(--azul-500);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        .transportista-card.selected {
+          background: var(--azul-100);
+          border-color: var(--azul-500);
+        }
+        
+        /* Animación de entrada */
+        .fade-enter {
+          animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         
         @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } .alm-chart-grid { grid-template-columns: 1fr; } .alm-body { padding: 20px; } }
-        @media (max-width: 640px) { .kpi-grid { grid-template-columns: 1fr; } .alm-topbar { padding: 0 16px; height: 70px; } .kpi-value { font-size: 28px; } .prediction-stats { flex-direction: column; gap: 20px; } }
+        @media (max-width: 1024px) { 
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+          .stats-two-columns { grid-template-columns: 1fr; gap: 16px; }
+          .alm-chart-grid { grid-template-columns: 1fr; }
+          .alm-body { padding: 20px; }
+        }
+        
+        @media (max-width: 640px) { 
+          .kpi-grid { grid-template-columns: 1fr; }
+          .alm-topbar { padding: 0 16px; height: 70px; }
+          .kpi-value { font-size: 22px; }
+          .kpi-label { font-size: 10px; }
+          .section-toggle { width: 100%; justify-content: center; }
+          .toggle-btn { padding: 6px 16px; font-size: 12px; }
+        }
       `}</style>
 
       <div className="alm-yeso-root">
@@ -936,7 +1138,7 @@ export default function ClientPage({ token }) {
         </header>
 
         <div className="alm-body">
-          <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div className="alm-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FiActivity size={12} /> {filtroActivoTexto}
             </div>
@@ -945,157 +1147,166 @@ export default function ClientPage({ token }) {
             </div>
           </div>
 
-          {/* PRIMERA FILA DE KPIs - TODOS con el mismo fondo y patrón de triángulos */}
+          {/* PRIMERA FILA DE KPIs - Horizontal */}
           <div className="kpi-grid">
             <div className="kpi-card">
-              <div className="kpi-icon"><GiWeightScale size={26} /></div>
-              <div className="kpi-value">{fmtTM(estadisticas.totalNeto, 1)} <span style={{ fontSize: '14px', fontWeight: '500' }}>TM</span></div>
+              <div className="kpi-icon"><GiWeightScale size={22} /></div>
+              <div className="kpi-value">{fmtTM(estadisticas.totalNeto, 1)}<small> TM</small></div>
               <div className="kpi-label">Total Descargado</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FiTruck size={26} /></div>
+              <div className="kpi-icon"><FiTruck size={22} /></div>
               <div className="kpi-value">{estadisticas.totalViajes.toLocaleString()}</div>
               <div className="kpi-label">Total Viajes</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FiBarChart2 size={26} /></div>
-              <div className="kpi-value">{fmtTM(estadisticas.pesoPromedio, 1)} <span style={{ fontSize: '14px', fontWeight: '500' }}>TM</span></div>
+              <div className="kpi-icon"><FiBarChart2 size={22} /></div>
+              <div className="kpi-value">{fmtTM(estadisticas.pesoPromedio, 1)}<small> TM</small></div>
               <div className="kpi-label">Promedio por Viaje</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FaBuilding size={26} /></div>
+              <div className="kpi-icon"><FaBuilding size={22} /></div>
               <div className="kpi-value">{promediosPorTransporte.length}</div>
               <div className="kpi-label">Transportistas</div>
             </div>
           </div>
 
-          {/* SEGUNDA FILA DE KPIs - Mismo estilo unificado */}
+          {/* SEGUNDA FILA DE KPIs */}
           <div className="kpi-grid">
             <div className="kpi-card">
-              <div className="kpi-icon"><FiCheckCircle size={26} /></div>
-              <div className="kpi-value">{estadisticas.porcentajeDentroRango.toFixed(1)}%</div>
+              <div className="kpi-icon"><FiCheckCircle size={22} /></div>
+              <div className="kpi-value">{estadisticas.porcentajeDentroRango.toFixed(1)}<small>%</small></div>
               <div className="kpi-label">En Rango</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FiAlertCircle size={26} /></div>
+              <div className="kpi-icon"><FiAlertCircle size={22} /></div>
               <div className="kpi-value">{estadisticas.unidadesFueraDeRango.length}</div>
               <div className="kpi-label">Fuera de Rango</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FiTrendingUp size={26} /></div>
-              <div className="kpi-value">{fmtTM(meta, 1)} <span style={{ fontSize: '14px', fontWeight: '500' }}>TM</span></div>
+              <div className="kpi-icon"><FiTrendingUp size={22} /></div>
+              <div className="kpi-value">{fmtTM(meta, 1)}<small> TM</small></div>
               <div className="kpi-label">Meta Manifestada</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-icon"><FiClock size={26} /></div>
-              <div className="kpi-value">{flujoPromedioPorHora.toFixed(1)} <span style={{ fontSize: '14px', fontWeight: '500' }}>TM/h</span></div>
+              <div className="kpi-icon"><FiClock size={22} /></div>
+              <div className="kpi-value">{flujoPromedioPorHora.toFixed(1)}<small> TM/h</small></div>
               <div className="kpi-label">Ritmo de Descarga</div>
             </div>
           </div>
 
-          {/* Progress Bar Meta */}
-          {meta > 0 && (
-            <div className="alm-progress-container">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <FiTrendingUp size={18} style={{ color: COLOR_AZUL_PRINCIPAL }} />
-                  <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO }}>Progreso de Descarga vs Meta</span>
+          {/* PROGRESS + PREDICCIÓN EN 2 COLUMNAS */}
+          <div className="stats-two-columns">
+            {meta > 0 && (
+              <div className="progress-card">
+                <div className="progress-title">
+                  <FiTrendingUp size={16} style={{ color: COLOR_BLANCO }} />
+                  <span>Progreso de Descarga vs Meta</span>
+                  <div className="progress-percent">{porcentajeMeta.toFixed(1)}% Completado</div>
                 </div>
-                <div style={{ background: COLOR_AZUL_SUAVE, padding: '6px 14px', borderRadius: '100px', fontSize: '13px', fontWeight: '700', color: COLOR_AZUL_PRINCIPAL }}>
-                  {porcentajeMeta.toFixed(1)}% Completado
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${Math.min(porcentajeMeta, 100)}%` }} />
+                  {tieneExcedente && (
+                    <div style={{ 
+                      width: `${Math.min(porcentajeMeta - 100, 100)}%`,
+                      height: '8px',
+                      background: `linear-gradient(90deg, ${COLOR_ROJO}, ${COLOR_NARANJA})`,
+                      borderRadius: '0 100px 100px 0',
+                      marginTop: '-8px',
+                      marginLeft: '100%'
+                    }} />
+                  )}
+                </div>
+                <div className="progress-labels">
+                  <span>0 TM</span>
+                  <span className="progress-current">{fmtTM(estadisticas.totalNeto, 0)} TM</span>
+                  <span>{fmtTM(meta, 0)} TM</span>
                 </div>
               </div>
-              <div className="alm-progress-bar">
-                <div className="alm-progress-fill" style={{ width: `${Math.min(porcentajeMeta, 100)}%` }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: COLOR_TEXTO_SECUNDARIO }}>
-                <span>0 TM</span>
-                <span style={{ color: COLOR_AZUL_PRINCIPAL, fontWeight: '600' }}>{fmtTM(estadisticas.totalNeto, 0)} TM</span>
-                <span>{fmtTM(meta, 0)} TM</span>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* TARJETA DE PREDICCIÓN */}
-          {meta > 0 && faltante > 0 && flujoPromedioPorHora > 0 && (
-            <div className="prediction-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px' }}>
-                <div>
-                  <div className="prediction-title">PREDICCIÓN</div>
-                  <div className="prediction-time">
-                    {(() => {
-                      const horasRestantes = faltante / flujoPromedioPorHora
-                      const ahora = dayjs().tz(ZONA_HORARIA_SV)
-                      const horaEstimada = ahora.add(horasRestantes, 'hour')
-                      return horaEstimada.format('HH:mm [hrs]')
-                    })()}
-                  </div>
-                  <div className="prediction-date">
-                    {(() => {
-                      const horasRestantes = faltante / flujoPromedioPorHora
-                      const ahora = dayjs().tz(ZONA_HORARIA_SV)
-                      const horaEstimada = ahora.add(horasRestantes, 'hour')
-                      return horaEstimada.format('• DD/MM/YYYY')
-                    })()}
-                  </div>
-                </div>
-                <div className="prediction-stats">
+            {meta > 0 && faltante > 0 && flujoPromedioPorHora > 0 ? (
+              <div className="prediction-card">
+                <div className="prediction-title">PREDICCIÓN</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <div className="prediction-stat-value">{faltante.toFixed(1)} <span style={{ fontSize: '16px' }}>TM</span></div>
-                    <div className="prediction-stat-label">Faltante</div>
+                    <div className="prediction-time">
+                      {(() => {
+                        const horasRestantes = faltante / flujoPromedioPorHora
+                        const ahora = dayjs().tz(ZONA_HORARIA_SV)
+                        const horaEstimada = ahora.add(horasRestantes, 'hour')
+                        return horaEstimada.format('HH:mm [hrs]')
+                      })()}
+                    </div>
+                    <div className="prediction-date">
+                      {(() => {
+                        const horasRestantes = faltante / flujoPromedioPorHora
+                        const ahora = dayjs().tz(ZONA_HORARIA_SV)
+                        const horaEstimada = ahora.add(horasRestantes, 'hour')
+                        return horaEstimada.format('• DD/MM/YYYY')
+                      })()}
+                    </div>
                   </div>
+                  <div className="prediction-stats">
+                    <div>
+                      <div className="prediction-stat-value">{faltante.toFixed(1)}<span style={{ fontSize: '11px' }}> TM</span></div>
+                      <div className="prediction-stat-label">Faltante</div>
+                    </div>
+                    <div>
+                      <div className="prediction-stat-value">{flujoPromedioPorHora.toFixed(1)}<span style={{ fontSize: '11px' }}> TM/h</span></div>
+                      <div className="prediction-stat-label">Ritmo actual</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : meta > 0 && faltante <= 0 ? (
+              <div className="prediction-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', textAlign: 'center', height: '100%' }}>
+                  <FiCheckCircle size={24} />
                   <div>
-                    <div className="prediction-stat-value">{flujoPromedioPorHora.toFixed(1)} <span style={{ fontSize: '16px' }}>TM/h</span></div>
-                    <div className="prediction-stat-label">Ritmo actual</div>
+                    <div style={{ fontSize: '16px', fontWeight: '700' }}>¡META ALCANZADA!</div>
+                    <div style={{ fontSize: '11px', opacity: 0.9 }}>Descarga completada de {fmtTM(meta, 0)} TM</div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {meta > 0 && faltante <= 0 && (
-            <div className="prediction-card" style={{ background: 'linear-gradient(135deg, #82907F, #6B7A68)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', textAlign: 'center' }}>
-                <FiCheckCircle size={32} />
-                <div>
-                  <div style={{ fontSize: '20px', fontWeight: '700' }}>¡META ALCANZADA!</div>
-                  <div style={{ fontSize: '13px', opacity: 0.9 }}>Descarga completada de {fmtTM(meta, 0)} TM de Yeso</div>
+            ) : (
+              <div className="progress-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <FiClock size={24} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                  <p style={{ fontSize: '12px', opacity: 0.8 }}>Esperando datos para predicción</p>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* El resto del código continúa igual... */}
-          {/* Transportistas, Gráficos, Tabla, Footer */}
-
-          {/* Transportistas */}
+          {/* EMPRESAS TRANSPORTISTAS - RESTAURADO */}
           {promediosPorTransporte.length > 0 && (
             <>
-              <div className="alm-section-title"><FaBuilding size={14} /> Empresas Transportistas <span className="alm-badge">{promediosPorTransporte.length} activas</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+              <div className="alm-section-title">
+                <FaBuilding size={14} /> Empresas Transportistas
+                <span className="alm-badge">{promediosPorTransporte.length} activas</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px', marginBottom: '28px' }}>
                 {promediosPorTransporte.map(empresa => {
                   const isSelected = transporteSeleccionado === empresa.nombre
                   return (
-                    <div key={empresa.nombre} onClick={() => handleSeleccionarTransporte(empresa.nombre)} style={{
-                      background: isSelected ? COLOR_AZUL_SUAVE : COLOR_BLANCO,
-                      border: `1px solid ${isSelected ? COLOR_AZUL_PRINCIPAL : COLOR_BORDE}`,
-                      borderRadius: '16px',
-                      padding: '20px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO, fontSize: '16px' }}>{empresa.nombre}</span>
-                        <span style={{ fontSize: '22px', fontWeight: '800', color: COLOR_AZUL_PRINCIPAL }}>{fmtTM(empresa.totalNeto, 1)} TM</span>
+                    <div
+                      key={empresa.nombre}
+                      onClick={() => handleSeleccionarTransporte(empresa.nombre)}
+                      className={`transportista-card ${isSelected ? 'selected' : ''}`}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO, fontSize: '15px' }}>{empresa.nombre}</span>
+                        <span style={{ fontSize: '20px', fontWeight: '800', color: COLOR_AZUL_PRINCIPAL }}>{fmtTM(empresa.totalNeto, 1)} TM</span>
                       </div>
-                      <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: COLOR_TEXTO_SECUNDARIO, flexWrap: 'wrap' }}>
-                        <span><FiTruck size={12} style={{ display: 'inline', marginRight: '4px' }} /> {empresa.totalViajes} viajes</span>
-                        {empresa.viajesTraileta > 0 && <span><FaTrailer size={12} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
-                        {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={12} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO, flexWrap: 'wrap' }}>
+                        <span><FiTruck size={11} style={{ display: 'inline', marginRight: '4px' }} /> {empresa.totalViajes} viajes</span>
+                        {empresa.viajesTraileta > 0 && <span><FaTrailer size={11} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
+                        {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={11} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
                       </div>
                       {empresa.fueraRango > 0 && (
-                        <div style={{ fontSize: '11px', color: COLOR_NARANJA, marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <FiAlertCircle size={11} /> {empresa.fueraRango} fuera del rango óptimo
+                        <div style={{ fontSize: '10px', color: COLOR_NARANJA, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FiAlertCircle size={10} /> {empresa.fueraRango} fuera del rango óptimo
                         </div>
                       )}
                     </div>
@@ -1105,213 +1316,257 @@ export default function ClientPage({ token }) {
             </>
           )}
 
-          {/* Gráficos */}
-          <div className="alm-chart-grid">
-            <div className="alm-chart-card">
-              <div className="alm-section-title"><FaChartPie size={14} /> Distribución por Transporte</div>
-              {datosGraficoTransporte.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[i % COLORES_GRAFICOS.length]} stroke="none" />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', padding: '60px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
-            </div>
-
-            <div className="alm-chart-card">
-              <div className="alm-section-title"><FaWarehouse size={14} /> Distribución por Destino</div>
-              {datosGraficoDestino.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[(i+2) % COLORES_GRAFICOS.length]} stroke="none" />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', padding: '60px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
-            </div>
-
-            <div className="alm-chart-card">
-              <div className="alm-section-title"><FiCalendar size={14} /> Descarga por Día {diaSeleccionado && <span className="alm-badge">Filtro: {diaSeleccionado}</span>}</div>
-              {datosGraficoDia.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={datosGraficoDia}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
-                    <XAxis dataKey="dia" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
-                    <Bar dataKey="total" fill={COLOR_AZUL_PRINCIPAL} radius={[6, 6, 0, 0]} onClick={(data) => handleSeleccionarDia(data.dia)} cursor="pointer">
-                      {datosGraficoDia.map((entry, idx) => (
-                        <Cell key={idx} fill={diaSeleccionado === entry.dia ? COLOR_NARANJA : COLOR_AZUL_PRINCIPAL} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', padding: '60px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
-              <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, textAlign: 'center', marginTop: '12px' }}>Haz clic en cualquier barra para filtrar por día</div>
-            </div>
-
-            <div className="alm-chart-card">
-              <div className="alm-section-title"><FaChartLine size={14} /> Distribución de Pesos por Viaje</div>
-              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginBottom: '20px', fontSize: '11px', flexWrap: 'wrap' }}>
-                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_AZUL_MARINO, borderRadius: '2px', marginRight: '6px' }}></span>En Rango</span>
-                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_NARANJA, borderRadius: '2px', marginRight: '6px' }}></span>Bajo Peso</span>
-                <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_ROJO, borderRadius: '2px', marginRight: '6px' }}></span>Sobrepeso</span>
-              </div>
-              {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={estadisticas.acumuladoPorCorrelativo.slice(-30)}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
-                    <XAxis dataKey="correlativo" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
-                    <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
-                      {estadisticas.acumuladoPorCorrelativo.slice(-30).map((entry, idx) => (
-                        <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <div style={{ textAlign: 'center', padding: '60px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
+          {/* BOTÓN PARA ALTERNAR ENTRE SECCIONES */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+            <div className="section-toggle">
+              <button 
+                className={`toggle-btn ${seccionActiva === 'resumen' ? 'active' : ''}`}
+                onClick={() => setSeccionActiva('resumen')}
+              >
+                <FiGrid size={14} /> Vista General
+              </button>
+              <button 
+                className={`toggle-btn ${seccionActiva === 'detalle' ? 'active' : ''}`}
+                onClick={() => setSeccionActiva('detalle')}
+              >
+                <FiList size={14} /> Detalle de Viajes
+              </button>
             </div>
           </div>
 
-          {/* Flujo por Hora */}
-          <div className="alm-chart-card alm-chart-wide">
-            <div className="alm-section-title"><FiClock size={14} /> Flujo de Descarga por Hora</div>
-            {flujoPorHora.length > 0 ? (
-              <ResponsiveContainer width="100%" height={360}>
-                <ComposedChart data={flujoPorHora}>
-                  <defs>
-                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0.2} />
-                      <stop offset="95%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
-                  <XAxis dataKey="hora" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
-                  <YAxis yAxisId="left" tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} />
-                  <Tooltip contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
-                  <Bar yAxisId="left" dataKey="totalTM" fill={COLOR_AZUL_PRINCIPAL} opacity={0.7} radius={[6, 6, 0, 0]} name="TM por Hora" />
-                  <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke={COLOR_NARANJA} strokeWidth={3} dot={false} name="Acumulado Total" />
-                  <Area yAxisId="right" type="monotone" dataKey="acumulado" fill="url(#areaGradient)" stroke="none" />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '80px', color: COLOR_TEXTO_SECUNDARIO }}>
-                <FiClock size={48} style={{ marginBottom: '16px', opacity: 0.4 }} />
-                <p>No hay datos horarios disponibles</p>
-              </div>
-            )}
-          </div>
-
-          {/* Tabla de Registros */}
-          <div className="alm-table-container">
-            <div style={{ padding: '20px 24px', borderBottom: `1px solid ${COLOR_BORDE}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <FaClipboardList size={14} style={{ color: COLOR_AZUL_PRINCIPAL }} />
-                  <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO }}>Registros de Descarga</span>
-                  <span className="alm-badge">{registrosConFiltrosTabla.length} / {registros.length} viajes</span>
+          {/* SECCIÓN DE RESUMEN (Gráficos - SIN el Flujo de Descarga) */}
+          {seccionActiva === 'resumen' && (
+            <div className="fade-enter">
+              <div className="alm-chart-grid">
+                <div className="alm-chart-card">
+                  <div className="alm-section-title"><FaChartPie size={14} /> Distribución por Transporte</div>
+                  {datosGraficoTransporte.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                          {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[i % COLORES_GRAFICOS.length]} stroke="none" />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button onClick={() => setOrdenTabla('correlativo_desc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'correlativo_desc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiArrowDown size={12} style={{ display: 'inline', marginRight: '4px' }} /> Correlativo ↓</button>
-                  <button onClick={() => setOrdenTabla('correlativo_asc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'correlativo_asc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiArrowUp size={12} style={{ display: 'inline', marginRight: '4px' }} /> Correlativo ↑</button>
-                  <button onClick={() => setOrdenTabla('fecha_desc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'fecha_desc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiCalendar size={12} style={{ display: 'inline', marginRight: '4px' }} /> Más Reciente</button>
-                  <button onClick={() => setMostrarFiltros(!mostrarFiltros)} className="alm-badge" style={{ cursor: 'pointer', background: mostrarFiltros ? COLOR_AZUL_SUAVE : 'transparent' }}><FiFilter size={12} style={{ display: 'inline', marginRight: '4px' }} /> Filtros</button>
-                </div>
-              </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ position: 'relative', maxWidth: '350px' }}>
-                  <FiSearchIcon size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: COLOR_TEXTO_SECUNDARIO }} />
-                  <input type="text" placeholder="Buscar por placa o correlativo..." value={busquedaTabla} onChange={(e) => setBusquedaTabla(e.target.value)} className="alm-search-input" style={{ paddingLeft: '38px', width: '100%' }} />
+                <div className="alm-chart-card">
+                  <div className="alm-section-title"><FaWarehouse size={14} /> Distribución por Destino</div>
+                  {datosGraficoDestino.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                          {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[(i+2) % COLORES_GRAFICOS.length]} stroke="none" />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
                 </div>
-              </div>
 
-              {mostrarFiltros && (
-                <div style={{ marginBottom: '20px', padding: '20px', background: COLOR_GRIS_FONDO, borderRadius: '16px', border: `1px solid ${COLOR_BORDE}` }}>
-                  <div style={{ fontSize: '13px', fontWeight: '600', color: COLOR_AZUL_PRINCIPAL, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FaCalendarAlt size={14} /> Filtros Avanzados
+                <div className="alm-chart-card">
+                  <div className="alm-section-title"><FiCalendar size={14} /> Descarga por Día {diaSeleccionado && <span className="alm-badge">Filtro: {diaSeleccionado}</span>}</div>
+                  {datosGraficoDia.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={datosGraficoDia}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
+                        <XAxis dataKey="dia" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Bar dataKey="total" fill={COLOR_AZUL_PRINCIPAL} radius={[6, 6, 0, 0]} onClick={(data) => handleSeleccionarDia(data.dia)} cursor="pointer">
+                          {datosGraficoDia.map((entry, idx) => (
+                            <Cell key={idx} fill={diaSeleccionado === entry.dia ? COLOR_NARANJA : COLOR_AZUL_PRINCIPAL} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
+                  <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, textAlign: 'center', marginTop: '10px' }}>Haz clic en cualquier barra para filtrar por día</div>
+                </div>
+
+                <div className="alm-chart-card">
+                  <div className="alm-section-title"><FaChartLine size={14} /> Distribución de Pesos por Viaje</div>
+                  <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', marginBottom: '16px', fontSize: '10px', flexWrap: 'wrap' }}>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_AZUL_MARINO, borderRadius: '2px', marginRight: '6px' }}></span>En Rango</span>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_NARANJA, borderRadius: '2px', marginRight: '6px' }}></span>Bajo Peso</span>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: COLOR_ROJO, borderRadius: '2px', marginRight: '6px' }}></span>Sobrepeso</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO, display: 'block', marginBottom: '8px' }}>Rango de Fechas</label>
-                      <DateRangePicker startDate={filtroFechaInicio} endDate={filtroFechaFin} onStartChange={setFiltroFechaInicio} onEndChange={setFiltroFechaFin} onClear={() => { setFiltroFechaInicio(''); setFiltroFechaFin(''); }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO, display: 'block', marginBottom: '8px' }}>Rango de Horas</label>
-                      <TimeRangePicker startTime={filtroHoraInicio} endTime={filtroHoraFin} onStartChange={setFiltroHoraInicio} onEndChange={setFiltroHoraFin} onClear={() => { setFiltroHoraInicio(''); setFiltroHoraFin(''); }} />
-                    </div>
-                  </div>
+                  {estadisticas.acumuladoPorCorrelativo.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={estadisticas.acumuladoPorCorrelativo.slice(-30)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
+                        <XAxis dataKey="correlativo" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
+                          {estadisticas.acumuladoPorCorrelativo.slice(-30).map((entry, idx) => (
+                            <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
                 </div>
-              )}
-
-              {(busquedaTabla || filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
-                <div style={{ fontSize: '11px', color: COLOR_AZUL_PRINCIPAL, marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <FiFilter size={10} /> <span>Filtros activos:</span>
-                  {busquedaTabla && <span className="alm-badge" style={{ fontSize: '10px' }}>{busquedaTabla}</span>}
-                  {filtroFechaInicio && filtroFechaFin && <span className="alm-badge" style={{ fontSize: '10px' }}>{dayjs(filtroFechaInicio).format('DD/MM/YYYY')} - {dayjs(filtroFechaFin).format('DD/MM/YYYY')}</span>}
-                  <button onClick={limpiarFiltrosTabla} style={{ fontSize: '10px', color: COLOR_ROJO, background: 'transparent', border: 'none', cursor: 'pointer' }}>Limpiar todo</button>
-                </div>
-              )}
+              </div>
             </div>
+          )}
 
-            <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
-              <table className="alm-table">
-                <thead style={{ position: 'sticky', top: 0, background: COLOR_GRIS_FONDO, zIndex: 10 }}>
-                  <tr><th>#</th><th>Placa</th><th>Transporte</th><th>Tipo</th><th>Destino</th><th>Fecha</th><th>Hora Entrada</th><th>Peso Neto</th><th>Acumulado</th></tr>
-                </thead>
-                <tbody>
-                  {registrosOrdenados.length === 0 ? (
-                    <tr><td colSpan="9" style={{ textAlign: 'center', padding: '60px', color: COLOR_TEXTO_SECUNDARIO }}><FiSearchIcon size={32} style={{ marginBottom: '12px', opacity: 0.5 }} /><p>No se encontraron registros</p></td></tr>
+          {/* SECCIÓN DE DETALLE (Flujo de Descarga + Tabla juntos) */}
+          {seccionActiva === 'detalle' && (
+            <div className="fade-enter">
+              <div className="detalle-container">
+                {/* Flujo de Descarga por Hora */}
+                <div className="flujo-card">
+                  <div className="alm-section-title"><FiClock size={14} /> Flujo de Descarga por Hora</div>
+                  {flujoPorHora.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={320}>
+                      <ComposedChart data={flujoPorHora}>
+                        <defs>
+                          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0.2} />
+                            <stop offset="95%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
+                        <XAxis dataKey="hora" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} angle={-45} textAnchor="end" height={55} />
+                        <YAxis yAxisId="left" tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} />
+                        <Tooltip contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Bar yAxisId="left" dataKey="totalTM" fill={COLOR_AZUL_PRINCIPAL} opacity={0.7} radius={[6, 6, 0, 0]} name="TM por Hora" />
+                        <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke={COLOR_NARANJA} strokeWidth={3} dot={false} name="Acumulado Total" />
+                        <Area yAxisId="right" type="monotone" dataKey="acumulado" fill="url(#areaGradient)" stroke="none" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
                   ) : (
-                    registrosOrdenados.map((reg) => {
-                      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
-                      let rowClass = ''
-                      if (estado === 'bajo') rowClass = 'alm-row-bajo'
-                      if (estado === 'sobre') rowClass = 'alm-row-sobre'
-                      return (
-                        <tr key={reg.id} className={rowClass}>
-                          <td style={{ fontWeight: '700' }}>{reg.correlativo}</td>
-                          <td>{reg.placa}</td>
-                          <td>{reg.transporte || '—'}</td>
-                          <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? `${COLOR_NARANJA}15` : `${COLOR_AZUL_PRINCIPAL}10`, padding: '4px 10px', borderRadius: '100px', fontSize: '11px' }}>{reg.tipo_unidad || '—'}</span></td>
-                          <td>{reg.destino_info && <span style={{ background: COLOR_AZUL_SUAVE, padding: '4px 10px', borderRadius: '100px', fontSize: '11px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>{reg.destino_info.codigo}</span>}</td>
-                          <td>{reg.fecha}</td>
-                          <td>{reg.hora_entrada || '—'}</td>
-                          <td style={{ fontWeight: '700', color: estado === 'bajo' ? COLOR_NARANJA : (estado === 'sobre' ? COLOR_ROJO : COLOR_AZUL_PRINCIPAL) }}>{reg.peso_neto_updp_tm?.toFixed(2)} TM</td>
-                          <td style={{ fontFamily: 'monospace', color: COLOR_AZUL_PRINCIPAL }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
-                        </tr>
-                      )
-                    })
+                    <div style={{ textAlign: 'center', padding: '70px', color: COLOR_TEXTO_SECUNDARIO }}>
+                      <FiClock size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                      <p>No hay datos horarios disponibles</p>
+                    </div>
                   )}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Tabla de Registros */}
+                <div className="alm-table-container">
+                  <div style={{ padding: '16px 20px', borderBottom: `1px solid ${COLOR_BORDE}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <FaClipboardList size={14} style={{ color: COLOR_AZUL_PRINCIPAL }} />
+                        <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO }}>Registros de Descarga</span>
+                        <span className="alm-badge">{registrosConFiltrosTabla.length} / {registros.length} viajes</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => setOrdenTabla('correlativo_desc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'correlativo_desc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiArrowDown size={11} style={{ display: 'inline', marginRight: '4px' }} /> Correlativo ↓</button>
+                        <button onClick={() => setOrdenTabla('correlativo_asc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'correlativo_asc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiArrowUp size={11} style={{ display: 'inline', marginRight: '4px' }} /> Correlativo ↑</button>
+                        <button onClick={() => setOrdenTabla('fecha_desc')} className="alm-badge" style={{ cursor: 'pointer', background: ordenTabla === 'fecha_desc' ? COLOR_AZUL_SUAVE : 'transparent' }}><FiCalendar size={11} style={{ display: 'inline', marginRight: '4px' }} /> Más Reciente</button>
+                        <button onClick={() => setMostrarFiltros(!mostrarFiltros)} className="alm-badge" style={{ cursor: 'pointer', background: mostrarFiltros ? COLOR_AZUL_SUAVE : 'transparent' }}><FiFilter size={11} style={{ display: 'inline', marginRight: '4px' }} /> Filtros</button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '14px' }}>
+                      <div style={{ position: 'relative', maxWidth: '320px' }}>
+                        <FiSearchIcon size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: COLOR_TEXTO_SECUNDARIO }} />
+                        <input type="text" placeholder="Buscar por placa o correlativo..." value={busquedaTabla} onChange={(e) => setBusquedaTabla(e.target.value)} className="alm-search-input" style={{ paddingLeft: '36px', width: '100%' }} />
+                      </div>
+                    </div>
+
+                    {mostrarFiltros && (
+                      <div style={{ marginBottom: '16px', padding: '16px', background: COLOR_GRIS_FONDO, borderRadius: '14px', border: `1px solid ${COLOR_BORDE}` }}>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: COLOR_AZUL_PRINCIPAL, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <FaCalendarAlt size={12} /> Filtros Avanzados
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                          <div>
+                            <label style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, display: 'block', marginBottom: '6px' }}>Rango de Fechas</label>
+                            <DateRangePicker startDate={filtroFechaInicio} endDate={filtroFechaFin} onStartChange={setFiltroFechaInicio} onEndChange={setFiltroFechaFin} onClear={() => { setFiltroFechaInicio(''); setFiltroFechaFin(''); }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, display: 'block', marginBottom: '6px' }}>Rango de Horas</label>
+                            <TimeRangePicker startTime={filtroHoraInicio} endTime={filtroHoraFin} onStartChange={setFiltroHoraInicio} onEndChange={setFiltroHoraFin} onClear={() => { setFiltroHoraInicio(''); setFiltroHoraFin(''); }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(busquedaTabla || filtroFechaInicio || filtroFechaFin || filtroHoraInicio || filtroHoraFin) && (
+                      <div style={{ fontSize: '10px', color: COLOR_AZUL_PRINCIPAL, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <FiFilter size={9} /> <span>Filtros activos:</span>
+                        {busquedaTabla && <span className="alm-badge" style={{ fontSize: '9px' }}>{busquedaTabla}</span>}
+                        {filtroFechaInicio && filtroFechaFin && <span className="alm-badge" style={{ fontSize: '9px' }}>{dayjs(filtroFechaInicio).format('DD/MM/YYYY')} - {dayjs(filtroFechaFin).format('DD/MM/YYYY')}</span>}
+                        <button onClick={limpiarFiltrosTabla} style={{ fontSize: '9px', color: COLOR_ROJO, background: 'transparent', border: 'none', cursor: 'pointer' }}>Limpiar todo</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
+                    <table className="alm-table">
+                      <thead style={{ position: 'sticky', top: 0, background: COLOR_GRIS_FONDO, zIndex: 10 }}>
+                        <tr>
+                          <th>#</th>
+                          <th>Placa</th>
+                          <th>Transporte</th>
+                          <th>Tipo</th>
+                          <th>Destino</th>
+                          <th>Fecha</th>
+                          <th>Hora Entrada</th>
+                          <th>Peso Neto</th>
+                          <th>Acumulado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {registrosOrdenados.length === 0 ? (
+                          <tr>
+                            <td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>
+                              <FiSearchIcon size={28} style={{ marginBottom: '10px', opacity: 0.5 }} />
+                              <p>No se encontraron registros</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          registrosOrdenados.map((reg) => {
+                            const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+                            let rowClass = ''
+                            if (estado === 'bajo') rowClass = 'alm-row-bajo'
+                            if (estado === 'sobre') rowClass = 'alm-row-sobre'
+                            return (
+                              <tr key={reg.id} className={rowClass}>
+                                <td style={{ fontWeight: '700' }}>{reg.correlativo}</td>
+                                <td>{reg.placa}</td>
+                                <td>{reg.transporte || '—'}</td>
+                                <td><span style={{ background: reg.tipo_unidad === 'TRAILETA' ? `${COLOR_NARANJA}15` : `${COLOR_AZUL_PRINCIPAL}10`, padding: '4px 10px', borderRadius: '100px', fontSize: '10px' }}>{reg.tipo_unidad || '—'}</span></td>
+                                <td>{reg.destino_info && <span style={{ background: COLOR_AZUL_SUAVE, padding: '4px 10px', borderRadius: '100px', fontSize: '10px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>{reg.destino_info.codigo}</span>}</td>
+                                <td>{reg.fecha}</td>
+                                <td>{reg.hora_entrada || '—'}</td>
+                                <td style={{ fontWeight: '700', color: estado === 'bajo' ? COLOR_NARANJA : (estado === 'sobre' ? COLOR_ROJO : COLOR_AZUL_PRINCIPAL) }}>{reg.peso_neto_updp_tm?.toFixed(2)} TM</td>
+                                <td style={{ fontFamily: 'monospace', color: COLOR_AZUL_PRINCIPAL }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Footer */}
-          <div style={{ textAlign: 'center', padding: '28px 20px', borderTop: `1px solid ${COLOR_BORDE}`, marginTop: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '28px', flexWrap: 'wrap', marginBottom: '16px', fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO }}>
-              <span><FiRefreshCw size={11} /> Auto-refresh 30s</span>
-              <span><GiCargoShip size={11} /> {barco.nombre}</span>
-              <span><GiMinerals size={11} /> Yeso YE-001</span>
-              <span><FaDatabase size={11} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 1)} TM</span>
+          <div style={{ textAlign: 'center', padding: '24px 20px', borderTop: `1px solid ${COLOR_BORDE}`, marginTop: '28px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', marginBottom: '14px', fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO }}>
+              <span><FiRefreshCw size={10} /> Auto-refresh 30s</span>
+              <span><GiCargoShip size={10} /> {barco.nombre}</span>
+              <span><GiMinerals size={10} /> Yeso YE-001</span>
+              <span><FaDatabase size={10} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 1)} TM</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', fontSize: '10px' }}>
-              <span><GiCoalWagon size={10} style={{ color: COLOR_AZUL_PRINCIPAL }} /> VOLQUETA: 14-18 TM</span>
-              <span><FaTrailer size={10} style={{ color: COLOR_AZUL_PRINCIPAL }} /> TRAILETA: 22-26 TM</span>
-              <span style={{ color: COLOR_ROJO }}><FiAlertCircle size={10} /> Sobrepeso</span>
-              <span style={{ color: COLOR_NARANJA }}><FiAlertCircle size={10} /> Bajo peso</span>
-              <span style={{ color: COLOR_VERDE_GRIS }}><FiCheckCircle size={10} /> En rango</span>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '9px' }}>
+              <span><GiCoalWagon size={9} style={{ color: COLOR_AZUL_PRINCIPAL }} /> VOLQUETA: 14-18 TM</span>
+              <span><FaTrailer size={9} style={{ color: COLOR_AZUL_PRINCIPAL }} /> TRAILETA: 22-26 TM</span>
+              <span style={{ color: COLOR_ROJO }}><FiAlertCircle size={9} /> Sobrepeso</span>
+              <span style={{ color: COLOR_NARANJA }}><FiAlertCircle size={9} /> Bajo peso</span>
+              <span style={{ color: COLOR_VERDE_GRIS }}><FiCheckCircle size={9} /> En rango</span>
             </div>
-            <div style={{ marginTop: '16px', fontSize: '10px', color: COLOR_AZUL_PRINCIPAL, fontWeight: '500' }}>
+            <div style={{ marginTop: '14px', fontSize: '9px', color: COLOR_AZUL_PRINCIPAL, fontWeight: '500' }}>
               ALMACENADORA DEL PACÍFICO · Sistema de Gestión de Descarga de Yeso
             </div>
           </div>
