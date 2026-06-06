@@ -1029,8 +1029,8 @@ export default function ClientPage({ token }) {
         
         .alm-section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
         
-        .alm-chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 32px; }
-        .alm-chart-card { background: var(--blanco); border: 1px solid var(--border); border-radius: 20px; padding: 24px; transition: all 0.2s ease; }
+        .alm-chart-grid { background: var(--blanco); display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 32px; }
+        .alm-chart-card { background: var(--blanco); border-radius: 20px; padding: 24px; transition: all 0.2s ease; }
         .alm-chart-card:hover { border-color: var(--azul-500); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
         
         /* Contenedor de gráfico de flujo y tabla en la misma sección */
