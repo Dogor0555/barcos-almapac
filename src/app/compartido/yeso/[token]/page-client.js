@@ -556,27 +556,574 @@ export default function ClientPage({ token }) {
   }, [token])
 
   const descargarExcel = () => {
-    if (!registrosConFiltrosTabla.length) { alert('No hay datos para exportar'); return }
-    const wb = XLSX.utils.book_new()
-    const resumenData = [
-      ['BARCO', barco?.nombre || 'N/A'], ['CÓDIGO BARCO', barco?.codigo_barco || 'N/A'], ['PRODUCTO', 'YESO (YE-001)'],
-      ['TOTAL DESCARGADO (TM)', fmtTM(estadisticas.totalNeto, 2)], ['TOTAL VIAJES', estadisticas.totalViajes],
-      ['PROMEDIO POR VIAJE (TM)', fmtTM(estadisticas.pesoPromedio, 2)], ['VIAJES EN RANGO', `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)`],
-      ['VIAJES BAJO PESO', estadisticas.bajoPeso], ['VIAJES SOBREPESO', estadisticas.sobrePeso], ['META MANIFESTADA (TM)', fmtTM(meta, 2)],
-      ['FALTANTE (TM)', fmtTM(faltante, 2)], ['EXCEDENTE (TM)', fmtTM(excedente, 2)], ['PORCENTAJE DE META', `${porcentajeMeta.toFixed(1)}%`],
-      ['FLUJO PROMEDIO (TM/h)', fmtTM(flujoPromedioPorHora, 1)], ['FECHA EXPORTACION', dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss')],
-    ]
-    const wsResumen = XLSX.utils.aoa_to_sheet([['RESUMEN GENERAL'], ...resumenData.map(r => r)])
-    XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
-    const registrosData = registrosConFiltrosTabla.map(r => ({
-      'CORRELATIVO': r.correlativo, 'PLACA': r.placa, 'TRANSPORTE': r.transporte, 'TIPO UNIDAD': r.tipo_unidad,
-      'DESTINO': r.destino_info ? `${r.destino_info.codigo} - ${r.destino_info.nombre}` : '—', 'PESO NETO (TM)': r.peso_neto_updp_tm?.toFixed(3),
-      'FECHA': r.fecha, 'HORA ENTRADA': r.hora_entrada, 'HORA SALIDA': r.hora_salida, 'TIEMPO': r.tiempo_atencion, 'ACUMULADO (TM)': r.acumulado_updp_tm?.toFixed(3)
-    }))
-    const wsRegistros = XLSX.utils.json_to_sheet(registrosData)
-    XLSX.utils.book_append_sheet(wb, wsRegistros, 'REGISTROS_FILTRADOS')
-    XLSX.writeFile(wb, `Yeso_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`)
+  if (!registros.length) {
+    alert('No hay datos para exportar')
+    return
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // HELPERS DE ESTILO
+  // ─────────────────────────────────────────────────────────────
+  const S = {
+    header: (align = 'center') => ({
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FF6600' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center', wrapText: false },
+      border: {
+        top: { style: 'thin', color: { rgb: 'CC4400' } },
+        bottom: { style: 'thin', color: { rgb: 'CC4400' } },
+        left: { style: 'thin', color: { rgb: 'CC4400' } },
+        right: { style: 'thin', color: { rgb: 'CC4400' } },
+      }
+    }),
+    data: (align = 'left', bold = false) => ({
+      font: { bold, color: { rgb: '000000' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right: { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    total: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFFF00' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top: { style: 'medium', color: { rgb: '999900' } },
+        bottom: { style: 'medium', color: { rgb: '999900' } },
+        left: { style: 'thin', color: { rgb: '999900' } },
+        right: { style: 'thin', color: { rgb: '999900' } },
+      }
+    }),
+    transportTitle: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 12, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'ADD8E6' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top: { style: 'medium', color: { rgb: '4A90C4' } },
+        bottom: { style: 'medium', color: { rgb: '4A90C4' } },
+        left: { style: 'medium', color: { rgb: '4A90C4' } },
+        right: { style: 'medium', color: { rgb: '4A90C4' } },
+      }
+    }),
+    subtypeTitle: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 11, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'BDD7EE' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: '4A90C4' } },
+        bottom: { style: 'thin', color: { rgb: '4A90C4' } },
+        left: { style: 'thin', color: { rgb: '4A90C4' } },
+        right: { style: 'thin', color: { rgb: '4A90C4' } },
+      }
+    }),
+    colHeader: (align = 'center') => ({
+      font: { bold: true, color: { rgb: '000000' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' },
+      alignment: { horizontal: align, vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: '999999' } },
+        bottom: { style: 'thin', color: { rgb: '999999' } },
+        left: { style: 'thin', color: { rgb: '999999' } },
+        right: { style: 'thin', color: { rgb: '999999' } },
+      }
+    }),
+    empty: () => ({
+      fill: { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' }
+    }),
+    separator: () => ({
+      fill: { fgColor: { rgb: 'F2F2F2' }, patternType: 'solid' }
+    }),
+    bajoPeso: () => ({
+      font: { bold: true, color: { rgb: '7D5100' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFF2CC' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right: { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    sobrePeso: () => ({
+      font: { bold: true, color: { rgb: '9C0006' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'FFCCCC' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right: { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+    enRango: () => ({
+      font: { bold: false, color: { rgb: '276221' }, sz: 10, name: 'Calibri' },
+      fill: { fgColor: { rgb: 'E2EFDA' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        left: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        right: { style: 'thin', color: { rgb: 'DDDDDD' } },
+      }
+    }),
+  }
+
+  const C = (v, style) => ({ v, s: style, t: typeof v === 'number' ? 'n' : 's' })
+  const writeRow = (ws, rowIdx, cols, cells) => {
+    cells.forEach((cell, c) => {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx, c })
+      ws[addr] = cell
+    })
+    if (!ws['!ref']) {
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rowIdx, c: cols - 1 } })
+    } else {
+      const cur = XLSX.utils.decode_range(ws['!ref'])
+      cur.e.r = Math.max(cur.e.r, rowIdx)
+      cur.e.c = Math.max(cur.e.c, cols - 1)
+      ws['!ref'] = XLSX.utils.encode_range(cur)
+    }
+  }
+
+  const wb = XLSX.utils.book_new()
+
+  // ─────────────────────────────────────────────────────────────
+  // CALCULAR DATOS PARA RESUMEN_TRANSPORTES
+  // ─────────────────────────────────────────────────────────────
+  const resumenTransporte = promediosPorTransporte.map(emp => ({
+    'TRANSPORTE': emp.nombre,
+    'TOTAL VIAJES': emp.totalViajes,
+    'TOTAL (TM)': emp.totalNeto.toFixed(2),
+    'VIAJES TRAILETA': emp.viajesTraileta,
+    'TRAILETA TOTAL (TM)': emp.totalTraileta.toFixed(2),
+    'PROMEDIO TRAILETA (TM)': emp.promedioTraileta ? emp.promedioTraileta.toFixed(2) : 'N/A',
+    'VIAJES VOLQUETA': emp.viajesVolqueta,
+    'VOLQUETA TOTAL (TM)': emp.totalVolqueta.toFixed(2),
+    'PROMEDIO VOLQUETA (TM)': emp.promedioVolqueta ? emp.promedioVolqueta.toFixed(2) : 'N/A',
+    'FUERA DE RANGO': emp.fueraRango,
+    '% OK': ((emp.totalViajes - emp.fueraRango) / emp.totalViajes * 100).toFixed(1) + '%'
+  }))
+
+  // ─────────────────────────────────────────────────────────────
+  // CALCULAR DATOS PARA RESUMEN_POR_PLACA
+  // ─────────────────────────────────────────────────────────────
+  const resumenPlacaMap = {}
+  registros.forEach(reg => {
+    const placa = reg.placa || 'SIN PLACA'
+    if (!resumenPlacaMap[placa]) {
+      resumenPlacaMap[placa] = {
+        PLACA: placa,
+        TRANSPORTE: reg.transporte || 'DESCONOCIDO',
+        TIPO_UNIDAD: reg.tipo_unidad || 'VOLQUETA',
+        VIAJES: 0,
+        TOTAL_TM: 0,
+        MIN_TM: Infinity,
+        MAX_TM: -Infinity,
+        FUERA_RANGO: 0
+      }
+    }
+    const item = resumenPlacaMap[placa]
+    const peso = reg.peso_neto_updp_tm || 0
+    item.VIAJES++
+    item.TOTAL_TM += peso
+    item.MIN_TM = Math.min(item.MIN_TM, peso)
+    item.MAX_TM = Math.max(item.MAX_TM, peso)
+    if (estaFueraDeRango(peso, reg.tipo_unidad)) {
+      item.FUERA_RANGO++
+    }
+  })
+
+  const resumenPlaca = Object.values(resumenPlacaMap).map(item => ({
+    ...item,
+    PROMEDIO_TM: (item.TOTAL_TM / item.VIAJES).toFixed(2),
+    MIN_TM: item.MIN_TM === Infinity ? 0 : item.MIN_TM.toFixed(2),
+    MAX_TM: item.MAX_TM === -Infinity ? 0 : item.MAX_TM.toFixed(2)
+  }))
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 1: RESUMEN_POR_UNIDAD
+  // ─────────────────────────────────────────────────────────────
+  const porTransporte = {}
+  registros.forEach(reg => {
+    const t = reg.transporte || 'DESCONOCIDO'
+    const tipo = (reg.tipo_unidad || 'VOLQUETA').toUpperCase()
+    const placa = reg.placa || 'SIN PLACA'
+    const peso = reg.peso_neto_updp_tm || 0
+
+    if (!porTransporte[t]) porTransporte[t] = { TRAILETA: {}, VOLQUETA: {} }
+    const bucket = tipo === 'TRAILETA' ? porTransporte[t].TRAILETA : porTransporte[t].VOLQUETA
+    if (!bucket[placa]) bucket[placa] = { viajes: 0, toneladas: 0 }
+    bucket[placa].viajes++
+    bucket[placa].toneladas += peso
+  })
+
+  const COLS_UNIDAD = 3
+  const ws1 = { '!ref': 'A1:C1', '!cols': [{ wch: 18 }, { wch: 10 }, { wch: 16 }], '!rows': [] }
+  let row = 0
+
+  Object.entries(porTransporte)
+    .sort((a, b) => {
+      const sumA = Object.values(a[1].TRAILETA).reduce((s, v) => s + v.toneladas, 0) + Object.values(a[1].VOLQUETA).reduce((s, v) => s + v.toneladas, 0)
+      const sumB = Object.values(b[1].TRAILETA).reduce((s, v) => s + v.toneladas, 0) + Object.values(b[1].VOLQUETA).reduce((s, v) => s + v.toneladas, 0)
+      return sumB - sumA
+    })
+    .forEach(([transporteName, tipos]) => {
+      const trailetas = Object.entries(tipos.TRAILETA).sort((a, b) => b[1].toneladas - a[1].toneladas)
+      const volquetas = Object.entries(tipos.VOLQUETA).sort((a, b) => b[1].toneladas - a[1].toneladas)
+      const totalTraiVj = trailetas.reduce((s, [, v]) => s + v.viajes, 0)
+      const totalTraiTm = trailetas.reduce((s, [, v]) => s + v.toneladas, 0)
+      const totalVolvj = volquetas.reduce((s, [, v]) => s + v.viajes, 0)
+      const totalVolTm = volquetas.reduce((s, [, v]) => s + v.toneladas, 0)
+      const totalVj = totalTraiVj + totalVolvj
+      const totalTm = totalTraiTm + totalVolTm
+
+      ws1['!rows'][row] = { hpt: 22 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C(transporteName, S.transportTitle('center')),
+        C('', S.transportTitle('center')),
+        C('', S.transportTitle('center')),
+      ])
+      row++
+
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TRAILETAS', S.subtypeTitle()),
+        C('', S.subtypeTitle()),
+        C('', S.subtypeTitle()),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('UNIDAD', S.colHeader('left')),
+        C('VIAJES', S.colHeader('center')),
+        C('TONELADAS', S.colHeader('center')),
+      ])
+      row++
+
+      if (trailetas.length === 0) {
+        writeRow(ws1, row, COLS_UNIDAD, [
+          C('Sin registros', S.data('center')),
+          C('', S.data('center')),
+          C('', S.data('center')),
+        ])
+        row++
+      } else {
+        trailetas.forEach(([placa, v]) => {
+          writeRow(ws1, row, COLS_UNIDAD, [
+            C(placa, S.data('left')),
+            C(v.viajes, S.data('center')),
+            C(Math.round(v.toneladas), S.data('right')),
+          ])
+          row++
+        })
+      }
+
+      ws1['!rows'][row] = { hpt: 20 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL', S.total('left')),
+        C(totalTraiVj, S.total('center')),
+        C(Math.round(totalTraiTm), S.total('right')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.separator()), C('', S.separator()), C('', S.separator())])
+      row++
+
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('VOLQUETAS', S.subtypeTitle()),
+        C('', S.subtypeTitle()),
+        C('', S.subtypeTitle()),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('UNIDAD', S.colHeader('left')),
+        C('VIAJES', S.colHeader('center')),
+        C('TONELADAS', S.colHeader('center')),
+      ])
+      row++
+
+      if (volquetas.length === 0) {
+        writeRow(ws1, row, COLS_UNIDAD, [
+          C('Sin registros', S.data('center')),
+          C('', S.data('center')),
+          C('', S.data('center')),
+        ])
+        row++
+      } else {
+        volquetas.forEach(([placa, v]) => {
+          writeRow(ws1, row, COLS_UNIDAD, [
+            C(placa, S.data('left')),
+            C(v.viajes, S.data('center')),
+            C(Math.round(v.toneladas), S.data('right')),
+          ])
+          row++
+        })
+      }
+
+      ws1['!rows'][row] = { hpt: 20 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL', S.total('left')),
+        C(totalVolvj, S.total('center')),
+        C(Math.round(totalVolTm), S.total('right')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.separator()), C('', S.separator()), C('', S.separator())])
+      row++
+
+      ws1['!rows'][row] = { hpt: 18 }
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('TOTAL VOLQUETAS Y TRAILETAS', S.transportTitle('center')),
+        C('', S.transportTitle('center')),
+        C('', S.transportTitle('center')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C('VIAJES', S.colHeader('center')),
+        C('TONELADAS (TM)', S.colHeader('center')),
+        C('', S.colHeader('center')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [
+        C(totalVj, S.data('center')),
+        C(Math.round(totalTm), S.data('right')),
+        C('', S.data('center')),
+      ])
+      row++
+
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.empty()), C('', S.empty()), C('', S.empty())])
+      row++
+      writeRow(ws1, row, COLS_UNIDAD, [C('', S.empty()), C('', S.empty()), C('', S.empty())])
+      row++
+    })
+
+  ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row - 1, c: COLS_UNIDAD - 1 } })
+  XLSX.utils.book_append_sheet(wb, ws1, 'RESUMEN_POR_UNIDAD')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 2: RESUMEN_TRANSPORTES
+  // ─────────────────────────────────────────────────────────────
+  const wsTransporte = XLSX.utils.json_to_sheet(resumenTransporte)
+  wsTransporte['!cols'] = [
+    { wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
+    { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 10 }
+  ]
+  const range = XLSX.utils.decode_range(wsTransporte['!ref'])
+  for (let C_ = range.s.c; C_ <= range.e.c; ++C_) {
+    const ca = XLSX.utils.encode_cell({ r: range.s.r, c: C_ })
+    if (wsTransporte[ca]) wsTransporte[ca].s = S.header()
+  }
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    for (let C_ = range.s.c; C_ <= range.e.c; ++C_) {
+      const ca = XLSX.utils.encode_cell({ r: R, c: C_ })
+      if (wsTransporte[ca]) wsTransporte[ca].s = S.data('left')
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, wsTransporte, 'RESUMEN_TRANSPORTES')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 3: RESUMEN_POR_PLACA
+  // ─────────────────────────────────────────────────────────────
+  const wsPlaca = XLSX.utils.json_to_sheet(resumenPlaca)
+  wsPlaca['!cols'] = [
+    { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 12 },
+    { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }
+  ]
+  const rangePlaca = XLSX.utils.decode_range(wsPlaca['!ref'])
+  for (let C_ = rangePlaca.s.c; C_ <= rangePlaca.e.c; ++C_) {
+    const ca = XLSX.utils.encode_cell({ r: rangePlaca.s.r, c: C_ })
+    if (wsPlaca[ca]) wsPlaca[ca].s = S.header()
+  }
+  for (let R = rangePlaca.s.r + 1; R <= rangePlaca.e.r; ++R) {
+    for (let C_ = rangePlaca.s.c; C_ <= rangePlaca.e.c; ++C_) {
+      const ca = XLSX.utils.encode_cell({ r: R, c: C_ })
+      if (wsPlaca[ca]) wsPlaca[ca].s = S.data('left')
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, wsPlaca, 'RESUMEN_POR_PLACA')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 4: RESUMEN_GENERAL
+  // ─────────────────────────────────────────────────────────────
+  const filtrosActivos = []
+  if (transporteSeleccionado) filtrosActivos.push(`Transporte: ${transporteSeleccionado}`)
+  if (diaSeleccionado) filtrosActivos.push(`Dia: ${diaSeleccionado}`)
+  if (destinoSeleccionado) {
+    const destinoNombre = destinos.find(d => d.id === destinoSeleccionado)?.nombre || destinoSeleccionado
+    filtrosActivos.push(`Destino: ${destinoNombre}`)
+  }
+  const filtroTexto = filtrosActivos.length ? filtrosActivos.join(' · ') : 'Todos los datos'
+
+  const resumenData = [
+    { 'METRICA': 'BARCO', 'VALOR': barco?.nombre || 'N/A' },
+    { 'METRICA': 'CODIGO BARCO', 'VALOR': barco?.codigo_barco || 'N/A' },
+    { 'METRICA': 'TOTAL DESCARGADO (TM)', 'VALOR': fmtTM(estadisticas.totalNeto, 2) },
+    { 'METRICA': 'TOTAL VIAJES', 'VALOR': estadisticas.totalViajes },
+    { 'METRICA': 'PROMEDIO POR VIAJE (TM)', 'VALOR': fmtTM(estadisticas.pesoPromedio, 2) },
+    { 'METRICA': 'VIAJES EN RANGO', 'VALOR': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
+    { 'METRICA': 'VIAJES BAJO PESO', 'VALOR': estadisticas.bajoPeso },
+    { 'METRICA': 'VIAJES SOBREPESO', 'VALOR': estadisticas.sobrePeso },
+    { 'METRICA': 'TOTAL POR DESTINO (TM)', 'VALOR': Object.entries(estadisticas.porDestino).map(([k,v]) => `${k}: ${fmtTM(v, 2)}`).join(' · ') || '0' },
+    { 'METRICA': 'META MANIFESTADA (TM)', 'VALOR': fmtTM(meta, 2) },
+    { 'METRICA': 'FALTANTE (TM)', 'VALOR': fmtTM(faltante, 2) },
+    { 'METRICA': 'EXCEDENTE (TM)', 'VALOR': fmtTM(excedente, 2) },
+    { 'METRICA': 'PORCENTAJE DE META', 'VALOR': `${porcentajeMeta.toFixed(1)}%` },
+    { 'METRICA': 'RITMO DE DESCARGA (TM/h)', 'VALOR': fmtTM(flujoPromedioPorHora, 1) },
+    { 'METRICA': 'FILTRO APLICADO', 'VALOR': filtroTexto },
+    { 'METRICA': 'FECHA EXPORTACION', 'VALOR': dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD HH:mm:ss') },
+  ]
+  const wsResumen = XLSX.utils.json_to_sheet(resumenData)
+  wsResumen['!cols'] = [{ wch: 32 }, { wch: 45 }]
+  const rangeResumen = XLSX.utils.decode_range(wsResumen['!ref'])
+  for (let C_ = rangeResumen.s.c; C_ <= rangeResumen.e.c; ++C_) {
+    const ca = XLSX.utils.encode_cell({ r: rangeResumen.s.r, c: C_ })
+    if (wsResumen[ca]) wsResumen[ca].s = S.header()
+  }
+  for (let R = rangeResumen.s.r + 1; R <= rangeResumen.e.r; ++R) {
+    for (let C_ = rangeResumen.s.c; C_ <= rangeResumen.e.c; ++C_) {
+      const ca = XLSX.utils.encode_cell({ r: R, c: C_ })
+      if (wsResumen[ca]) wsResumen[ca].s = S.data('left')
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN_GENERAL')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJA 5: TODOS_LOS_REGISTROS
+  // ─────────────────────────────────────────────────────────────
+  const wsRegistros = { '!ref': 'A1:P1', '!rows': [], '!cols': [
+    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 12 },
+    { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 },
+    { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+  ] }
+  const COLS_REG = 16
+  const HEADERS_REG = [
+    'CORRELATIVO', 'PLACA', 'TRANSPORTE', 'TIPO UNIDAD',
+    'RANGO MIN', 'RANGO MAX', 'ESTADO', 'FECHA',
+    'HORA ENTRADA', 'HORA SALIDA', 'TIEMPO', 'DESTINO',
+    'BODEGA', 'PESO BRUTO (TM)', 'PESO NETO (TM)', 'ACUMULADO (TM)'
+  ]
+  let rRow = 0
+  wsRegistros['!rows'][rRow] = { hpt: 22 }
+  writeRow(wsRegistros, rRow, COLS_REG, HEADERS_REG.map(h => C(h, S.header('center'))))
+  rRow++
+
+  registros.forEach(reg => {
+    const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+    const rango = RANGOS[reg.tipo_unidad?.toUpperCase()] || { min: '-', max: '-' }
+    const estadoTexto = estado === 'bajo' ? 'BAJO PESO' : estado === 'sobre' ? 'SOBREPESO' : 'EN RANGO'
+    const estadoStyle = estado === 'bajo' ? S.bajoPeso() : estado === 'sobre' ? S.sobrePeso() : S.enRango()
+    const rowBase = estado === 'bajo' ? S.data('left') : estado === 'sobre' ? {
+      ...S.data('left'),
+      fill: { fgColor: { rgb: 'FFF0F0' }, patternType: 'solid' }
+    } : S.data('left')
+    const destinoNombre = reg.destino_info ? `${reg.destino_info.codigo} - ${reg.destino_info.nombre}` : (reg.destino_id || '—')
+
+    writeRow(wsRegistros, rRow, COLS_REG, [
+      C(reg.correlativo, { ...rowBase, alignment: { horizontal: 'center' } }),
+      C(reg.placa || '', rowBase),
+      C(reg.transporte || '—', rowBase),
+      C(reg.tipo_unidad || '—', rowBase),
+      C(rango.min, rowBase),
+      C(rango.max, rowBase),
+      C(estadoTexto, estadoStyle),
+      C(reg.fecha || '—', rowBase),
+      C(reg.hora_entrada || '—', rowBase),
+      C(reg.hora_salida || '—', rowBase),
+      C(reg.tiempo_atencion || '—', rowBase),
+      C(destinoNombre, rowBase),
+      C(reg.bodega_barco || '—', rowBase),
+      C(parseFloat((reg.peso_bruto_updp_tm || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(2)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.acumulado_updp_tm || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
+    ])
+    rRow++
+  })
+  wsRegistros['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rRow - 1, c: COLS_REG - 1 } })
+  XLSX.utils.book_append_sheet(wb, wsRegistros, 'TODOS_LOS_REGISTROS')
+
+  // ─────────────────────────────────────────────────────────────
+  // HOJAS POR CADA TRANSPORTE
+  // ─────────────────────────────────────────────────────────────
+  const transportesUnicos = [...new Set(registros.map(reg => reg.transporte || 'DESCONOCIDO'))]
+
+  transportesUnicos.forEach(transporteNombre => {
+    const viajes = registros.filter(r => (r.transporte || 'DESCONOCIDO') === transporteNombre)
+    const totalTm = viajes.reduce((s, v) => s + (v.peso_neto_updp_tm || 0), 0)
+
+    const COLS_T = 10
+    const wsTr = {
+      '!ref': 'A1:J1',
+      '!rows': [],
+      '!cols': [
+        { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }
+      ]
+    }
+    let tRow = 0
+
+    wsTr['!rows'][tRow] = { hpt: 22 }
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `TRANSPORTE: ${transporteNombre}` : '', S.transportTitle(i === 0 ? 'left' : 'center'))
+    ))
+    tRow++
+
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `TOTAL: ${totalTm.toFixed(2)} TM` : '', S.data('left'))
+    ))
+    tRow++
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
+      C(i === 0 ? `VIAJES: ${viajes.length}` : '', S.data('left'))
+    ))
+    tRow++
+
+    writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map(() => C('', S.separator())))
+    tRow++
+
+    const hdrLabels = ['CORRELATIVO', 'PLACA', 'PESO NETO (TM)', 'TIPO UNIDAD', 'ESTADO', 'FECHA', 'HORA ENTRADA', 'HORA SALIDA', 'DESTINO', 'BODEGA']
+    wsTr['!rows'][tRow] = { hpt: 20 }
+    writeRow(wsTr, tRow, COLS_T, hdrLabels.map(h => C(h, S.header('center'))))
+    tRow++
+
+    viajes.forEach(reg => {
+      const estado = getEstadoPeso(reg.peso_neto_updp_tm, reg.tipo_unidad)
+      const estadoTexto = estado === 'bajo' ? 'BAJO PESO' : estado === 'sobre' ? 'SOBREPESO' : 'EN RANGO'
+      const estadoStyle = estado === 'bajo' ? S.bajoPeso() : estado === 'sobre' ? S.sobrePeso() : S.enRango()
+      const destinoNombre = reg.destino_info ? `${reg.destino_info.codigo} - ${reg.destino_info.nombre}` : (reg.destino_id || '—')
+      
+      writeRow(wsTr, tRow, COLS_T, [
+        C(reg.correlativo, S.data('center')),
+        C(reg.placa || '', S.data('center')),
+        C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(2)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
+        C(reg.tipo_unidad || '', S.data('center')),
+        C(estadoTexto, estadoStyle),
+        C(reg.fecha || '', S.data('center')),
+        C(reg.hora_entrada || '—', S.data('center')),
+        C(reg.hora_salida || '—', S.data('center')),
+        C(destinoNombre, S.data('center')),
+        C(reg.bodega_barco || '—', S.data('center')),
+      ])
+      tRow++
+    })
+
+    wsTr['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tRow - 1, c: COLS_T - 1 } })
+    const nombreHoja = transporteNombre.replace(/[\\/*?:[\]]/g, '').substring(0, 31)
+    XLSX.utils.book_append_sheet(wb, wsTr, nombreHoja)
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // GUARDAR ARCHIVO
+  // ─────────────────────────────────────────────────────────────
+  const nombreArchivo = `Yeso_${barco?.nombre || 'descarga'}_${dayjs().tz(ZONA_HORARIA_SV).format('YYYY-MM-DD_HHmm')}.xlsx`
+  XLSX.writeFile(wb, nombreArchivo)
+}
 
   const promediosPorTransporte = useMemo(() => {
     const mapa = {}
