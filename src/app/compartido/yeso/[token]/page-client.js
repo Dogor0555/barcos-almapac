@@ -64,6 +64,7 @@ const COLOR_BORDE = "#E5E5E5"
 // Paleta para gráficos
 const COLORES_GRAFICOS = [COLOR_AZUL_PRINCIPAL, COLOR_AZUL_MARINO, COLOR_VERDE_GRIS, COLOR_NARANJA, "#3B82F6", "#6B7280"]
 
+// ✅ Función formateadora con 3 decimales
 const fmtTM = (tm, d = 3) => {
   if (tm == null || isNaN(tm)) return "0.000"
   const valor = Number(tm).toFixed(d)
@@ -696,13 +697,13 @@ export default function ClientPage({ token }) {
   const resumenTransporte = promediosPorTransporte.map(emp => ({
     'TRANSPORTE': emp.nombre,
     'TOTAL VIAJES': emp.totalViajes,
-    'TOTAL (TM)': emp.totalNeto.toFixed(2),
+    'TOTAL (TM)': emp.totalNeto.toFixed(3),
     'VIAJES TRAILETA': emp.viajesTraileta,
-    'TRAILETA TOTAL (TM)': emp.totalTraileta.toFixed(2),
-    'PROMEDIO TRAILETA (TM)': emp.promedioTraileta ? emp.promedioTraileta.toFixed(2) : 'N/A',
+    'TRAILETA TOTAL (TM)': emp.totalTraileta.toFixed(3),
+    'PROMEDIO TRAILETA (TM)': emp.promedioTraileta ? emp.promedioTraileta.toFixed(3) : 'N/A',
     'VIAJES VOLQUETA': emp.viajesVolqueta,
-    'VOLQUETA TOTAL (TM)': emp.totalVolqueta.toFixed(2),
-    'PROMEDIO VOLQUETA (TM)': emp.promedioVolqueta ? emp.promedioVolqueta.toFixed(2) : 'N/A',
+    'VOLQUETA TOTAL (TM)': emp.totalVolqueta.toFixed(3),
+    'PROMEDIO VOLQUETA (TM)': emp.promedioVolqueta ? emp.promedioVolqueta.toFixed(3) : 'N/A',
     'FUERA DE RANGO': emp.fueraRango,
     '% OK': ((emp.totalViajes - emp.fueraRango) / emp.totalViajes * 100).toFixed(1) + '%'
   }))
@@ -738,9 +739,9 @@ export default function ClientPage({ token }) {
 
   const resumenPlaca = Object.values(resumenPlacaMap).map(item => ({
     ...item,
-    PROMEDIO_TM: (item.TOTAL_TM / item.VIAJES).toFixed(2),
-    MIN_TM: item.MIN_TM === Infinity ? 0 : item.MIN_TM.toFixed(2),
-    MAX_TM: item.MAX_TM === -Infinity ? 0 : item.MAX_TM.toFixed(2)
+    PROMEDIO_TM: (item.TOTAL_TM / item.VIAJES).toFixed(3),
+    MIN_TM: item.MIN_TM === Infinity ? 0 : item.MIN_TM.toFixed(3),
+    MAX_TM: item.MAX_TM === -Infinity ? 0 : item.MAX_TM.toFixed(3)
   }))
 
   // ─────────────────────────────────────────────────────────────
@@ -815,7 +816,7 @@ export default function ClientPage({ token }) {
           writeRow(ws1, row, COLS_UNIDAD, [
             C(placa, S.data('left')),
             C(v.viajes, S.data('center')),
-            C(Math.round(v.toneladas), S.data('right')),
+            C(v.toneladas.toFixed(3), S.data('right')),
           ])
           row++
         })
@@ -825,7 +826,7 @@ export default function ClientPage({ token }) {
       writeRow(ws1, row, COLS_UNIDAD, [
         C('TOTAL', S.total('left')),
         C(totalTraiVj, S.total('center')),
-        C(Math.round(totalTraiTm), S.total('right')),
+        C(totalTraiTm.toFixed(3), S.total('right')),
       ])
       row++
 
@@ -859,7 +860,7 @@ export default function ClientPage({ token }) {
           writeRow(ws1, row, COLS_UNIDAD, [
             C(placa, S.data('left')),
             C(v.viajes, S.data('center')),
-            C(Math.round(v.toneladas), S.data('right')),
+            C(v.toneladas.toFixed(3), S.data('right')),
           ])
           row++
         })
@@ -869,7 +870,7 @@ export default function ClientPage({ token }) {
       writeRow(ws1, row, COLS_UNIDAD, [
         C('TOTAL', S.total('left')),
         C(totalVolvj, S.total('center')),
-        C(Math.round(totalVolTm), S.total('right')),
+        C(totalVolTm.toFixed(3), S.total('right')),
       ])
       row++
 
@@ -893,7 +894,7 @@ export default function ClientPage({ token }) {
 
       writeRow(ws1, row, COLS_UNIDAD, [
         C(totalVj, S.data('center')),
-        C(Math.round(totalTm), S.data('right')),
+        C(totalTm.toFixed(3), S.data('right')),
         C('', S.data('center')),
       ])
       row++
@@ -964,16 +965,16 @@ export default function ClientPage({ token }) {
   const resumenData = [
     { 'METRICA': 'BARCO', 'VALOR': barco?.nombre || 'N/A' },
     { 'METRICA': 'CODIGO BARCO', 'VALOR': barco?.codigo_barco || 'N/A' },
-    { 'METRICA': 'TOTAL DESCARGADO (TM)', 'VALOR': fmtTM(estadisticas.totalNeto, 2) },
+    { 'METRICA': 'TOTAL DESCARGADO (TM)', 'VALOR': fmtTM(estadisticas.totalNeto, 3) },
     { 'METRICA': 'TOTAL VIAJES', 'VALOR': estadisticas.totalViajes },
-    { 'METRICA': 'PROMEDIO POR VIAJE (TM)', 'VALOR': fmtTM(estadisticas.pesoPromedio, 2) },
+    { 'METRICA': 'PROMEDIO POR VIAJE (TM)', 'VALOR': fmtTM(estadisticas.pesoPromedio, 3) },
     { 'METRICA': 'VIAJES EN RANGO', 'VALOR': `${estadisticas.totalViajes - estadisticas.unidadesFueraDeRango.length} (${estadisticas.porcentajeDentroRango.toFixed(1)}%)` },
     { 'METRICA': 'VIAJES BAJO PESO', 'VALOR': estadisticas.bajoPeso },
     { 'METRICA': 'VIAJES SOBREPESO', 'VALOR': estadisticas.sobrePeso },
-    { 'METRICA': 'TOTAL POR DESTINO (TM)', 'VALOR': Object.entries(estadisticas.porDestino).map(([k,v]) => `${k}: ${fmtTM(v, 2)}`).join(' · ') || '0' },
-    { 'METRICA': 'META MANIFESTADA (TM)', 'VALOR': fmtTM(meta, 2) },
-    { 'METRICA': 'FALTANTE (TM)', 'VALOR': fmtTM(faltante, 2) },
-    { 'METRICA': 'EXCEDENTE (TM)', 'VALOR': fmtTM(excedente, 2) },
+    { 'METRICA': 'TOTAL POR DESTINO (TM)', 'VALOR': Object.entries(estadisticas.porDestino).map(([k,v]) => `${k}: ${fmtTM(v, 3)}`).join(' · ') || '0' },
+    { 'METRICA': 'META MANIFESTADA (TM)', 'VALOR': fmtTM(meta, 3) },
+    { 'METRICA': 'FALTANTE (TM)', 'VALOR': fmtTM(faltante, 3) },
+    { 'METRICA': 'EXCEDENTE (TM)', 'VALOR': fmtTM(excedente, 3) },
     { 'METRICA': 'PORCENTAJE DE META', 'VALOR': `${porcentajeMeta.toFixed(1)}%` },
     { 'METRICA': 'RITMO DE DESCARGA (TM/h)', 'VALOR': fmtTM(flujoPromedioPorHora, 1) },
     { 'METRICA': 'FILTRO APLICADO', 'VALOR': filtroTexto },
@@ -1040,9 +1041,9 @@ export default function ClientPage({ token }) {
       C(reg.tiempo_atencion || '—', rowBase),
       C(destinoNombre, rowBase),
       C(reg.bodega_barco || '—', rowBase),
-      C(parseFloat((reg.peso_bruto_updp_tm || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
-      C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(2)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
-      C(parseFloat((reg.acumulado_updp_tm || 0).toFixed(2)), { ...rowBase, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.peso_bruto_updp_tm || 0).toFixed(3)), { ...rowBase, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(3)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
+      C(parseFloat((reg.acumulado_updp_tm || 0).toFixed(3)), { ...rowBase, alignment: { horizontal: 'right' } }),
     ])
     rRow++
   })
@@ -1076,7 +1077,7 @@ export default function ClientPage({ token }) {
     tRow++
 
     writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
-      C(i === 0 ? `TOTAL: ${totalTm.toFixed(2)} TM` : '', S.data('left'))
+      C(i === 0 ? `TOTAL: ${totalTm.toFixed(3)} TM` : '', S.data('left'))
     ))
     tRow++
     writeRow(wsTr, tRow, COLS_T, Array(COLS_T).fill(0).map((_, i) =>
@@ -1101,7 +1102,7 @@ export default function ClientPage({ token }) {
       writeRow(wsTr, tRow, COLS_T, [
         C(reg.correlativo, S.data('center')),
         C(reg.placa || '', S.data('center')),
-        C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(2)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
+        C(parseFloat((reg.peso_neto_updp_tm || 0).toFixed(3)), { ...estadoStyle, alignment: { horizontal: 'right' } }),
         C(reg.tipo_unidad || '', S.data('center')),
         C(estadoTexto, estadoStyle),
         C(reg.fecha || '', S.data('center')),
@@ -1698,7 +1699,7 @@ export default function ClientPage({ token }) {
           <div className="kpi-grid">
             <div className="kpi-card">
               <div className="kpi-icon"><GiWeightScale size={22} /></div>
-              <div className="kpi-value">{fmtTM(estadisticas.totalNeto, 1)}<small> TM</small></div>
+              <div className="kpi-value">{fmtTM(estadisticas.totalNeto, 3)}<small> TM</small></div>
               <div className="kpi-label">Total Descargado</div>
             </div>
             <div className="kpi-card">
@@ -1708,7 +1709,7 @@ export default function ClientPage({ token }) {
             </div>
             <div className="kpi-card">
               <div className="kpi-icon"><FiBarChart2 size={22} /></div>
-              <div className="kpi-value">{fmtTM(estadisticas.pesoPromedio, 1)}<small> TM</small></div>
+              <div className="kpi-value">{fmtTM(estadisticas.pesoPromedio, 3)}<small> TM</small></div>
               <div className="kpi-label">Promedio por Viaje</div>
             </div>
             <div className="kpi-card">
@@ -1732,7 +1733,7 @@ export default function ClientPage({ token }) {
             </div>
             <div className="kpi-card">
               <div className="kpi-icon"><FiTrendingUp size={22} /></div>
-              <div className="kpi-value">{fmtTM(meta, 1)}<small> TM</small></div>
+              <div className="kpi-value">{fmtTM(meta, 3)}<small> TM</small></div>
               <div className="kpi-label">Meta Manifestada</div>
             </div>
             <div className="kpi-card">
@@ -1766,8 +1767,8 @@ export default function ClientPage({ token }) {
                 </div>
                 <div className="progress-labels">
                   <span>0 TM</span>
-                  <span className="progress-current">{fmtTM(estadisticas.totalNeto, 0)} TM</span>
-                  <span>{fmtTM(meta, 0)} TM</span>
+                  <span className="progress-current">{fmtTM(estadisticas.totalNeto, 3)} TM</span>
+                  <span>{fmtTM(meta, 3)} TM</span>
                 </div>
               </div>
             )}
@@ -1796,7 +1797,7 @@ export default function ClientPage({ token }) {
                   </div>
                   <div className="prediction-stats">
                     <div>
-                      <div className="prediction-stat-value">{faltante.toFixed(1)}<span style={{ fontSize: '11px' }}> TM</span></div>
+                      <div className="prediction-stat-value">{faltante.toFixed(3)}<span style={{ fontSize: '11px' }}> TM</span></div>
                       <div className="prediction-stat-label">Faltante</div>
                     </div>
                     <div>
@@ -1812,7 +1813,7 @@ export default function ClientPage({ token }) {
                   <FiCheckCircle size={24} />
                   <div>
                     <div style={{ fontSize: '16px', fontWeight: '700' }}>¡META ALCANZADA!</div>
-                    <div style={{ fontSize: '11px', opacity: 0.9 }}>Descarga completada de {fmtTM(meta, 0)} TM</div>
+                    <div style={{ fontSize: '11px', opacity: 0.9 }}>Descarga completada de {fmtTM(meta, 3)} TM</div>
                   </div>
                 </div>
               </div>
@@ -1844,12 +1845,12 @@ export default function ClientPage({ token }) {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                         <span style={{ fontWeight: '700', color: COLOR_TEXTO_PRIMARIO, fontSize: '15px' }}>{empresa.nombre}</span>
-                        <span style={{ fontSize: '20px', fontWeight: '800', color: COLOR_AZUL_PRINCIPAL }}>{fmtTM(empresa.totalNeto, 1)} TM</span>
+                        <span style={{ fontSize: '20px', fontWeight: '800', color: COLOR_AZUL_PRINCIPAL }}>{fmtTM(empresa.totalNeto, 3)} TM</span>
                       </div>
                       <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO, flexWrap: 'wrap' }}>
                         <span><FiTruck size={11} style={{ display: 'inline', marginRight: '4px' }} /> {empresa.totalViajes} viajes</span>
-                        {empresa.viajesTraileta > 0 && <span><FaTrailer size={11} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 1)} TM</span>}
-                        {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={11} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 1)} TM</span>}
+                        {empresa.viajesTraileta > 0 && <span><FaTrailer size={11} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 3)} TM</span>}
+                        {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={11} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 3)} TM</span>}
                       </div>
                       {empresa.fueraRango > 0 && (
                         <div style={{ fontSize: '10px', color: COLOR_NARANJA, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1893,7 +1894,7 @@ export default function ClientPage({ token }) {
                         <Pie data={datosGraficoTransporte} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                           {datosGraficoTransporte.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[i % COLORES_GRAFICOS.length]} stroke="none" />)}
                         </Pie>
-                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 3)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
@@ -1907,7 +1908,7 @@ export default function ClientPage({ token }) {
                         <Pie data={datosGraficoDestino} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                           {datosGraficoDestino.map((_, i) => <Cell key={i} fill={COLORES_GRAFICOS[(i+2) % COLORES_GRAFICOS.length]} stroke="none" />)}
                         </Pie>
-                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 3)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : <div style={{ textAlign: 'center', padding: '50px', color: COLOR_TEXTO_SECUNDARIO }}>Sin datos</div>}
@@ -1921,7 +1922,7 @@ export default function ClientPage({ token }) {
                         <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
                         <XAxis dataKey="dia" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 3)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
                         <Bar dataKey="total" fill={COLOR_AZUL_PRINCIPAL} radius={[6, 6, 0, 0]} onClick={(data) => handleSeleccionarDia(data.dia)} cursor="pointer">
                           {datosGraficoDia.map((entry, idx) => (
                             <Cell key={idx} fill={diaSeleccionado === entry.dia ? COLOR_NARANJA : COLOR_AZUL_PRINCIPAL} />
@@ -1946,7 +1947,7 @@ export default function ClientPage({ token }) {
                         <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
                         <XAxis dataKey="correlativo" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO }} tickFormatter={(v) => fmtTM(v, 0)} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v) => `${fmtTM(v, 2)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
+                        <Tooltip formatter={(v) => `${fmtTM(v, 3)} TM`} contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} />
                         <Bar dataKey="peso" radius={[4, 4, 0, 0]}>
                           {estadisticas.acumuladoPorCorrelativo.slice(-30).map((entry, idx) => (
                             <Cell key={idx} fill={getColorPorEstado(entry.estado)} />
@@ -2084,8 +2085,8 @@ export default function ClientPage({ token }) {
                                 <td>{reg.destino_info && <span style={{ background: COLOR_AZUL_SUAVE, padding: '4px 10px', borderRadius: '100px', fontSize: '10px', cursor: 'pointer' }} onClick={() => handleSeleccionarDestino(reg.destino_id)}>{reg.destino_info.codigo}</span>}</td>
                                 <td>{reg.fecha}</td>
                                 <td>{reg.hora_entrada || '—'}</td>
-                                <td style={{ fontWeight: '700', color: estado === 'bajo' ? COLOR_NARANJA : (estado === 'sobre' ? COLOR_ROJO : COLOR_AZUL_PRINCIPAL) }}>{reg.peso_neto_updp_tm?.toFixed(2)} TM</td>
-                                <td style={{ fontFamily: 'monospace', color: COLOR_AZUL_PRINCIPAL }}>{reg.acumulado_updp_tm?.toFixed(2)} TM</td>
+                                <td style={{ fontWeight: '700', color: estado === 'bajo' ? COLOR_NARANJA : (estado === 'sobre' ? COLOR_ROJO : COLOR_AZUL_PRINCIPAL) }}>{reg.peso_neto_updp_tm?.toFixed(3)} TM</td>
+                                <td style={{ fontFamily: 'monospace', color: COLOR_AZUL_PRINCIPAL }}>{reg.acumulado_updp_tm?.toFixed(3)} TM</td>
                               </tr>
                             )
                           })
@@ -2104,7 +2105,7 @@ export default function ClientPage({ token }) {
               <span><FiRefreshCw size={10} /> Auto-refresh 30s</span>
               <span><GiCargoShip size={10} /> {barco.nombre}</span>
               <span><GiMinerals size={10} /> Yeso YE-001</span>
-              <span><FaDatabase size={10} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 1)} TM</span>
+              <span><FaDatabase size={10} /> {estadisticas.totalViajes} viajes · {fmtTM(estadisticas.totalNeto, 3)} TM</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '9px' }}>
               <span><GiCoalWagon size={9} style={{ color: COLOR_AZUL_PRINCIPAL }} /> VOLQUETA: 14-18 TM</span>
