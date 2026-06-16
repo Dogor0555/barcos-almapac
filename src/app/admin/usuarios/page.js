@@ -8,7 +8,7 @@ import {
   Users, Plus, Edit2, Trash2, X, Check, 
   UserPlus, Shield, User as UserIcon, Loader2, AlertCircle,
   RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft, Clock,
-  Truck
+  Truck, Ship
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -167,6 +167,7 @@ const UsuarioModal = ({ user, onClose, onSave }) => {
               <option value="chequerotraslado">Chequero Traslados</option>
               <option value="envasador">Envasador</option>
               <option value="chequeronica">Chequero Clinker Nicaragua</option>
+              <option value="encargado_inventario">Encargado de Inventario</option>
             </select>
           </div>
 
@@ -632,7 +633,7 @@ export default function UsuariosPage() {
             <Shield className="w-4 h-4 text-purple-400" />
             Roles del Sistema
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="flex items-start gap-2">
               <div className="bg-purple-500/20 p-2 rounded-lg">
                 <Shield className="w-4 h-4 text-purple-400" />
@@ -676,6 +677,15 @@ export default function UsuariosPage() {
               <div>
                 <p className="font-bold text-white text-sm">Chequero Traslados</p>
                 <p className="text-slate-500 text-xs">Traslados de azúcar</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="bg-teal-500/20 p-2 rounded-lg">
+                <Ship className="w-4 h-4 text-teal-400" />
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">Encargado Inventario</p>
+                <p className="text-slate-500 text-xs">Panel de lectura de descargas</p>
               </div>
             </div>
           </div>

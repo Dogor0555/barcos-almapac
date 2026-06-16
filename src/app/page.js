@@ -129,7 +129,8 @@ export default function LoginPage() {
         else if (result.user.rol === 'envasador') redirectPath = '/envasador'
         else if (result.user.rol === 'electricista') redirectPath = '/electricista'
         else if (result.user.rol === 'chequero') redirectPath = '/chequero'
-        else if (result.user.rol === 'chequeronica') redirectPath = '/chequeronica'  // NUEVO
+        else if (result.user.rol === 'chequeronica') redirectPath = '/chequeronica'
+        else if (result.user.rol === 'encargado_inventario') redirectPath = '/encargado-inventario'
 
         
         router.push(redirectPath)

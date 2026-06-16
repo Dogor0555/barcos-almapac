@@ -2057,14 +2057,14 @@ const resultadosFiltradosTiempos = useMemo(() => {
   const viajesFiltrados = useMemo(() => {
     if (!productoActivo) return []
 
-    const completos = viajes.filter(v =>
-      v.producto_id === productoActivo.id && v.estado === 'completo'
+    const todos = viajes.filter(v =>
+      v.producto_id === productoActivo.id
     )
 
-    let filtrados = completos
+    let filtrados = todos
     if (searchTerm.trim()) {
       const termino = searchTerm.trim().toLowerCase()
-      filtrados = completos.filter(viaje =>
+      filtrados = todos.filter(viaje =>
         viaje.placa.toLowerCase().includes(termino)
       )
     }
@@ -3026,7 +3026,7 @@ const resultadosFiltradosTiempos = useMemo(() => {
         )}
 
         {/* RESUMEN POR DESTINO CON LÍMITES */}
-        {productoActivo && resumenPorDestino.length > 0 && !vistaGraficos && (
+        {productoActivo && !vistaGraficos && (
           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
             <div className="bg-slate-900 px-6 py-4 border-b border-white/10 flex items-center justify-between">
               <h3 className="font-bold text-white flex items-center gap-2">
@@ -3041,11 +3041,19 @@ const resultadosFiltradosTiempos = useMemo(() => {
               </h3>
               <span className="text-slate-400 text-sm">
                 Total: <span className="text-white font-bold">
-                  {resumenPorDestino.reduce((s, d) => s + d.total_tm, 0).toFixed(3)} TM
+                  {resumenPorDestino.length > 0 ? resumenPorDestino.reduce((s, d) => s + d.total_tm, 0).toFixed(3) : '0.000'} TM
                 </span>
               </span>
             </div>
 
+            {resumenPorDestino.length === 0 ? (
+              <div className="p-12 text-center">
+                <Warehouse className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-400">No hay viajes completos o lecturas de banda con destino asignado</p>
+                <p className="text-sm text-slate-600 mt-1">Completa los viajes (Paso 2) para ver el resumen por destino</p>
+              </div>
+            ) : (
+              <>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {resumenPorDestino.map((dest) => {
                 const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
@@ -3264,6 +3272,8 @@ const resultadosFiltradosTiempos = useMemo(() => {
                 </p>
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
@@ -3990,13 +4000,12 @@ const resultadosFiltradosTiempos = useMemo(() => {
               </div>
             )}
 
-           {viajesCompletos.length > 0 && (
-  <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
+           <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden">
     <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-white flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-green-400" />
-          Viajes Completos - {productoActivo?.nombre} ({viajesFiltrados.length})
+          Viajes - {productoActivo?.nombre} ({viajesFiltrados.length})
           <span className="text-sm font-normal text-slate-500 ml-2">
             Barco: {barco.nombre}
           </span>
@@ -4087,7 +4096,15 @@ const resultadosFiltradosTiempos = useMemo(() => {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {viajesFiltrados.map((viaje, index, array) => {
+            {viajesFiltrados.length === 0 ? (
+              <tr>
+                <td colSpan="15" className="px-6 py-12 text-center">
+                  <Truck className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-400">No hay viajes registrados</p>
+                  <p className="text-sm text-slate-600 mt-1">Usa el formulario "Registrar Viaje" para agregar el primer viaje</p>
+                </td>
+              </tr>
+            ) : viajesFiltrados.map((viaje, index, array) => {
               // Calcular acumulado UPDP
               let acumuladoCorridoUPDP = 0
               if (ordenViajes === 'asc') {
@@ -4200,19 +4217,22 @@ const resultadosFiltradosTiempos = useMemo(() => {
 
     {searchTerm && (
       <div className="bg-slate-800 px-6 py-2 border-t border-white/10 text-sm text-slate-400">
-        Mostrando {viajesFiltrados.length} de {viajesCompletos.length} viajes
-        {viajesFiltrados.length === 0 && (
-          <button
-            onClick={() => setSearchTerm('')}
-            className="ml-2 text-blue-400 hover:text-blue-300"
-          >
-            Limpiar búsqueda
-          </button>
+        {viajesFiltrados.length === 0 ? (
+          <span>
+            No se encontraron viajes con esa placa
+            <button
+              onClick={() => setSearchTerm('')}
+              className="ml-2 text-blue-400 hover:text-blue-300"
+            >
+              Limpiar búsqueda
+            </button>
+          </span>
+        ) : (
+          <span>Mostrando {viajesFiltrados.length} viaje(s)</span>
         )}
       </div>
     )}
   </div>
-)}
           </>
         )}
 

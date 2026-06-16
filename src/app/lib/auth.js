@@ -151,6 +151,11 @@ export const isEnvasador = () => {
   return user?.rol === 'envasador'
 }
 
+export const isEncargadoInventario = () => {
+  const user = getCurrentUser()
+  return user?.rol === 'encargado_inventario'
+}
+
 // Actualizada para incluir chequeronica
 export const isPesadorOrAdmin = () => {
   const user = getCurrentUser()
