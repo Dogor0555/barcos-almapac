@@ -11,7 +11,7 @@ import {
   FiRefreshCw, FiX, FiTruck, FiBarChart2, FiHome,
   FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
   FiCalendar, FiAnchor, FiArrowDown, FiArrowUp,
-  FiChevronDown, FiChevronUp, FiActivity, FiDatabase,
+  FiActivity, FiDatabase,
   FiSearch, FiFilter, FiGrid, FiList, FiLogOut, FiEye,
   FiArrowLeft
 } from 'react-icons/fi'
@@ -98,6 +98,7 @@ const PRODUCTOS_CONOCIDOS = {
 
 const ProductBadge = ({ codigo, nombre, icono, totalTM, metaTM, registros }) => {
   const pct = metaTM > 0 ? Math.min((totalTM / metaTM) * 100, 100) : 0
+  const faltante = metaTM > 0 ? Math.max(metaTM - totalTM, 0) : 0
   return (
     <div style={{
       background: COLOR_BLANCO,
@@ -120,7 +121,8 @@ const ProductBadge = ({ codigo, nombre, icono, totalTM, metaTM, registros }) => 
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontWeight: '800', color: COLOR_AZUL_PRINCIPAL, fontSize: '18px' }}>{fmtTM(totalTM, 3)} TM</div>
-          {metaTM > 0 && <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO }}>Meta: {fmtTM(metaTM, 3)} TM</div>}
+          {metaTM > 0 && <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO }}>Manifestado: {fmtTM(metaTM, 3)} TM</div>}
+          {faltante > 0 && <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: '600' }}>Faltante: {fmtTM(faltante, 3)} TM</div>}
         </div>
       </div>
       {registros > 0 && (
@@ -160,10 +162,112 @@ export default function BarcoDetallePage() {
   const [loading, setLoading] = useState(true)
   const [productos, setProductos] = useState([])
   const [corteDiario, setCorteDiario] = useState([])
-  const [stats, setStats] = useState({ totalTM: 0, totalRegistros: 0 })
+  const [stats, setStats] = useState({ totalTM: 0, totalRegistros: 0, totalMeta: 0 })
   const [registrosDetalle, setRegistrosDetalle] = useState({})
   const [seccionActiva, setSeccionActiva] = useState('resumen')
-  const [productoExpandido, setProductoExpandido] = useState(null)
+  const [productoActivo, setProductoActivo] = useState(null)
+  const [paginasDetalle, setPaginasDetalle] = useState({})
+  const [paginaCorte, setPaginaCorte] = useState(1)
+  const registrosPorPagina = 10
+  const cortesPorPagina = 15
+
+  const setPaginaDetalle = (key, pagina) => {
+    setPaginasDetalle(prev => ({ ...prev, [key]: pagina }))
+  }
+
+  const productosDisponibles = useMemo(() => {
+    const set = new Set()
+    Object.entries(registrosDetalle).forEach(([key, grupo]) => {
+      const codigo = grupo.producto?.codigo || key.replace(/^(viajes_|banda_|export_)/, '')
+      set.add(codigo)
+    })
+    return [...set].sort()
+  }, [registrosDetalle])
+
+  const registrosFiltrados = useMemo(() => {
+    if (!productoActivo) return registrosDetalle
+    const filtrados = {}
+    Object.entries(registrosDetalle).forEach(([key, grupo]) => {
+      const codigo = grupo.producto?.codigo || key.replace(/^(viajes_|banda_|export_)/, '')
+      if (codigo === productoActivo) {
+        if (productoActivo === 'SACOS' && grupo.tipo !== 'sacos') return
+        filtrados[key] = grupo
+      }
+    })
+    return filtrados
+  }, [registrosDetalle, productoActivo])
+
+  const resumenPorDestino = useMemo(() => {
+    const fuente = productoActivo ? registrosFiltrados : registrosDetalle
+    const limitesProductoDestino = barco?.metas_json?.limites_por_producto_destino || {}
+    const limitesProductoActivo = productoActivo ? (limitesProductoDestino[productoActivo] || {}) : {}
+
+    const mapa = {}
+
+    Object.values(fuente).forEach(grupo => {
+      if (grupo.tipo !== 'viajes') return
+      grupo.registros.forEach(v => {
+        if (!v.destino_id && !v.destino) return
+        const key = v.destino_id || v.destino?.id || 'sin-destino'
+        if (!mapa[key]) {
+          mapa[key] = {
+            destino_id: key,
+            nombre: v.destino?.nombre || v.destino_nombre || 'Sin destino',
+            limite_tm: Number(limitesProductoActivo[key]) || 0,
+            viajes_count: 0,
+            viajes_tm: 0,
+            banda_count: 0,
+            banda_tm: 0,
+            total_tm: 0,
+            detalle_viajes: [],
+            detalle_banda: []
+          }
+        }
+        mapa[key].viajes_count++
+        mapa[key].viajes_tm += Number(v.peso_destino_tm || v.peso_neto || v.peso_neto_updp_tm || 0)
+        mapa[key].detalle_viajes.push(v)
+      })
+    })
+
+    Object.values(fuente).forEach(grupo => {
+      if (grupo.tipo !== 'banda') return
+      grupo.registros.forEach(l => {
+        if (!l.destino_id) return
+        const key = l.destino_id
+        if (!mapa[key]) {
+          mapa[key] = {
+            destino_id: key,
+            nombre: `Destino ${key}`,
+            limite_tm: Number(limitesProductoActivo[key]) || 0,
+            viajes_count: 0,
+            viajes_tm: 0,
+            banda_count: 0,
+            banda_tm: 0,
+            total_tm: 0,
+            detalle_viajes: [],
+            detalle_banda: []
+          }
+        }
+        mapa[key].banda_count++
+        mapa[key].detalle_banda.push(l)
+      })
+    })
+
+    Object.values(mapa).forEach(d => {
+      if (d.detalle_banda.length > 0) {
+        const ultima = [...d.detalle_banda].sort((a, b) => dayjs(b.fecha_hora).valueOf() - dayjs(a.fecha_hora).valueOf())[0]
+        d.banda_tm = Number(ultima.acumulado_tm) || 0
+      }
+      d.total_tm = d.viajes_tm + d.banda_tm
+      d.porcentaje = d.limite_tm > 0 ? (d.total_tm / d.limite_tm) * 100 : 0
+      d.faltante_tm = Math.max(0, d.limite_tm - d.total_tm)
+      d.excedente_tm = Math.max(0, d.total_tm - d.limite_tm)
+      d.completado = d.limite_tm > 0 && d.total_tm >= d.limite_tm
+      d.cerca_limite = d.limite_tm > 0 && d.porcentaje >= 90 && d.porcentaje < 100
+    })
+
+    return Object.values(mapa).sort((a, b) => b.total_tm - a.total_tm)
+  }, [registrosDetalle, productoActivo, barco])
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -204,6 +308,7 @@ export default function BarcoDetallePage() {
     const resultados = []
     let totalTM = 0
     let totalRegistros = 0
+    let totalMeta = 0
 
     const { data: catalogo } = await supabase
       .from('productos')
@@ -213,9 +318,40 @@ export default function BarcoDetallePage() {
     const catMap = {}
     catalogo?.forEach(p => { catMap[p.codigo] = p })
 
-    // 1. viajes → agrupar por producto_id
-    const viajes = await CARGAR_TODOS_LOS_REGISTROS('viajes', { barco_id: barco.id, estado: 'completo' })
-    const viajesPorProducto = {}
+    // ─── Identificar tipo de barco ─────────────────────────────
+    const tipoOp = barco.tipo_operacion
+    const metasProductos = barco.metas_json?.productos || []
+    const metasLimites = barco.metas_json?.limites || {}
+    const limitesPorProductoDestino = barco.metas_json?.limites_por_producto_destino || {}
+
+    const metaTMPorCodigo = (codigo) => {
+      if (metasLimites[codigo]) return Number(metasLimites[codigo])
+      const destinos = limitesPorProductoDestino[codigo]
+      if (destinos) return Object.values(destinos).reduce((s, v) => s + Number(v), 0)
+      return 0
+    }
+
+    const esExportacion = tipoOp === 'exportacion'
+    const esSacos = metasProductos.includes('SACOS') || !!metasLimites['SACOS'] || !!limitesPorProductoDestino['SACOS']
+    const esPetCoke = metasProductos.includes('PC-001') || !!metasLimites['PC-001'] || !!limitesPorProductoDestino['PC-001']
+    const esYeso = metasProductos.includes('YE-001') || !!metasLimites['YE-001'] || !!limitesPorProductoDestino['YE-001']
+
+    // ─── Cargar datos según tipo ───────────────────────────────
+    let viajes = [], bandas = [], exportaciones = []
+    let viajesPorProducto = {}, bandaPorProducto = {}, bandaCountPorProducto = {}, exportPorProducto = {}
+
+    if (esExportacion) {
+      exportaciones = await CARGAR_TODOS_LOS_REGISTROS('exportacion_banda', { barco_id: barco.id }, { field: 'fecha_hora', ascending: true })
+      exportaciones.forEach(e => {
+        exportPorProducto[e.producto_id] = Number(e.acumulado_tm) || 0
+      })
+      viajes = await CARGAR_TODOS_LOS_REGISTROS('viajes', { barco_id: barco.id, estado: 'completo' })
+    } else {
+      viajes = await CARGAR_TODOS_LOS_REGISTROS('viajes', { barco_id: barco.id, estado: 'completo' })
+      bandas = await CARGAR_TODOS_LOS_REGISTROS('lecturas_banda', { barco_id: barco.id }, { field: 'fecha_hora', ascending: false })
+      exportaciones = await CARGAR_TODOS_LOS_REGISTROS('exportacion_banda', { barco_id: barco.id }, { field: 'fecha_hora', ascending: true })
+    }
+
     viajes.forEach(v => {
       const pid = v.producto_id
       if (!viajesPorProducto[pid]) viajesPorProducto[pid] = { tm: 0, count: 0 }
@@ -223,23 +359,28 @@ export default function BarcoDetallePage() {
       viajesPorProducto[pid].count++
     })
 
-    // 2. lecturas_banda → agrupar por producto_id
-    const bandas = await CARGAR_TODOS_LOS_REGISTROS('lecturas_banda', { barco_id: barco.id }, { field: 'fecha_hora', ascending: false })
-    const bandaPorProducto = {}
-    const bandaCountPorProducto = {}
     bandas.forEach(b => {
       bandaPorProducto[b.producto_id] = Number(b.acumulado_tm) || 0
       bandaCountPorProducto[b.producto_id] = (bandaCountPorProducto[b.producto_id] || 0) + 1
     })
 
-    // 3. exportacion_banda → agrupar por producto_id
-    const exportaciones = await CARGAR_TODOS_LOS_REGISTROS('exportacion_banda', { barco_id: barco.id }, { field: 'fecha_hora', ascending: true })
-    const exportPorProducto = {}
     exportaciones.forEach(e => {
       exportPorProducto[e.producto_id] = Number(e.acumulado_tm) || 0
     })
 
-    // 4. productos desde catálogo que tengan registros
+    let sacosData = [], petcokeData = [], yesoData = []
+
+    if (esSacos) {
+      sacosData = await CARGAR_TODOS_LOS_REGISTROS('registros_sacos', { barco_id: barco.id })
+    }
+    if (esPetCoke) {
+      petcokeData = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
+    }
+    if (esYeso) {
+      yesoData = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
+    }
+
+    // ─── Detectar productos ────────────────────────────────────
     const codigosConRegistros = new Set()
 
     for (const pid of Object.keys(viajesPorProducto)) {
@@ -255,52 +396,31 @@ export default function BarcoDetallePage() {
       if (prod) codigosConRegistros.add(prod.codigo)
     }
 
-    // 5. Sacos
-    const { count: sacosCount } = await supabase
-      .from('registros_sacos')
-      .select('id', { count: 'exact', head: true })
-      .eq('barco_id', barco.id)
-    if (sacosCount > 0) codigosConRegistros.add('SACOS')
+    if (sacosData.length > 0 || esSacos) codigosConRegistros.add('SACOS')
+    if (petcokeData.length > 0 || esPetCoke) codigosConRegistros.add('PC-001')
+    if (yesoData.length > 0 || esYeso) codigosConRegistros.add('YE-001')
 
-    // 6. Pet Coke
-    const { count: petCount } = await supabase
-      .from('petcoke_viajes')
-      .select('id', { count: 'exact', head: true })
-      .eq('barco_id', barco.id)
-    if (petCount > 0) codigosConRegistros.add('PC-001')
+    metasProductos.forEach(c => codigosConRegistros.add(c))
+    Object.keys(metasLimites).forEach(c => codigosConRegistros.add(c))
 
-    // 7. Yeso
-    const { count: yesoCount } = await supabase
-      .from('yeso_viajes')
-      .select('id', { count: 'exact', head: true })
-      .eq('barco_id', barco.id)
-    if (yesoCount > 0) codigosConRegistros.add('YE-001')
-
-    // 8. También agregar desde metas_json o productos explícitos
-    const explicitos = barco.metas_json?.productos || []
-    explicitos.forEach(c => codigosConRegistros.add(c))
-    if (barco.metas_json?.limites) Object.keys(barco.metas_json.limites).forEach(c => codigosConRegistros.add(c))
-
+    // ─── Calcular TM por producto ──────────────────────────────
     for (const codigo of codigosConRegistros) {
       const info = PRODUCTOS_CONOCIDOS[codigo] || { nombre: codigo, icono: '📦' }
-      const metaTM = barco.metas_json?.limites?.[codigo] || 0
+      const metaTM = metaTMPorCodigo(codigo)
       let tm = 0, registros = 0
 
       if (codigo === 'SACOS') {
-        const sacosData = await CARGAR_TODOS_LOS_REGISTROS('registros_sacos', { barco_id: barco.id })
         tm = sacosData.reduce((sum, v) => {
           const buenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
           return sum + (buenos * (v.peso_saco_kg || 50)) / 1000
         }, 0)
         registros = sacosData.length
       } else if (codigo === 'PC-001') {
-        const data = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
-        tm = data.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
-        registros = data.length
+        tm = petcokeData.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
+        registros = petcokeData.length
       } else if (codigo === 'YE-001') {
-        const data = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
-        tm = data.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
-        registros = data.length
+        tm = yesoData.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
+        registros = yesoData.length
       } else {
         const prod = catalogo?.find(c => c.codigo === codigo)
         if (!prod) continue
@@ -312,7 +432,7 @@ export default function BarcoDetallePage() {
         const bandaCount = bandaCountPorProducto[pid] || 0
         const exportTM = exportPorProducto[pid] || 0
 
-        if (barco.tipo_operacion === 'exportacion') {
+        if (esExportacion) {
           tm = exportTM
           registros = exportaciones.filter(e => e.producto_id === pid).length
         } else if (prod.tipo_registro === 'banda') {
@@ -326,6 +446,7 @@ export default function BarcoDetallePage() {
 
       totalTM += tm
       totalRegistros += registros
+      totalMeta += metaTM
 
       resultados.push({
         codigo,
@@ -339,9 +460,9 @@ export default function BarcoDetallePage() {
 
     resultados.sort((a, b) => b.descargadoTM - a.descargadoTM)
     setProductos(resultados)
-    setStats({ totalTM, totalRegistros })
+    setStats({ totalTM, totalRegistros, totalMeta })
 
-    // Guardar registros detallados para cada producto
+    // ─── Construir detalle de registros ────────────────────────
     const detalle = {}
 
     if (viajes.length > 0) {
@@ -404,36 +525,33 @@ export default function BarcoDetallePage() {
       })
     }
 
-    const sacosDetalle = await CARGAR_TODOS_LOS_REGISTROS('registros_sacos', { barco_id: barco.id })
-    if (sacosDetalle.length > 0) {
+    if (sacosData.length > 0) {
       detalle['sacos_especial'] = {
         tipo: 'sacos',
         producto: { codigo: 'SACOS', nombre: 'Azúcar en Sacos', icono: '📦' },
-        registros: sacosDetalle.sort((a, b) => dayjs(b.fecha).valueOf() - dayjs(a.fecha).valueOf())
+        registros: sacosData.sort((a, b) => dayjs(b.fecha).valueOf() - dayjs(a.fecha).valueOf())
       }
     }
 
-    const petcokeDetalle = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
-    if (petcokeDetalle.length > 0) {
+    if (petcokeData.length > 0) {
       detalle['petcoke_especial'] = {
         tipo: 'petcoke',
         producto: { codigo: 'PC-001', nombre: 'Pet Coke', icono: '🛢️' },
-        registros: petcokeDetalle.sort((a, b) => dayjs(b.fecha_entrada).valueOf() - dayjs(a.fecha_entrada).valueOf())
+        registros: petcokeData.sort((a, b) => dayjs(b.fecha_entrada).valueOf() - dayjs(a.fecha_entrada).valueOf())
       }
     }
 
-    const yesoDetalle = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
-    if (yesoDetalle.length > 0) {
+    if (yesoData.length > 0) {
       detalle['yeso_especial'] = {
         tipo: 'yeso',
         producto: { codigo: 'YE-001', nombre: 'Yeso', icono: '🪨' },
-        registros: yesoDetalle.sort((a, b) => (b.correlativo || 0) - (a.correlativo || 0))
+        registros: yesoData.sort((a, b) => (b.correlativo || 0) - (a.correlativo || 0))
       }
     }
 
     setRegistrosDetalle(detalle)
 
-    // Calcular corte diario (acumulado al corte de las 00:00 de cada día)
+    // ─── Corte diario ──────────────────────────────────────────
     const diario = {}
 
     const agregarAlDiario = (fecha, tm, codigo) => {
@@ -490,20 +608,14 @@ export default function BarcoDetallePage() {
       })
     })
 
-    // Sacos
-    const sacosData = await CARGAR_TODOS_LOS_REGISTROS('registros_sacos', { barco_id: barco.id })
     sacosData.forEach(v => {
       const buenos = (v.cantidad_paquetes || 0) - (v.paquetes_danados || 0)
       const tm = (buenos * (v.peso_saco_kg || 50)) / 1000
       agregarAlDiario(v.fecha, tm, 'SACOS')
     })
 
-    // Pet Coke
-    const petData = await CARGAR_TODOS_LOS_REGISTROS('petcoke_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
-    petData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'PC-001'))
+    petcokeData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'PC-001'))
 
-    // Yeso
-    const yesoData = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
     yesoData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'YE-001'))
 
     const fechas = Object.keys(diario).sort()
@@ -554,7 +666,7 @@ export default function BarcoDetallePage() {
   }
 
   return (
-    <>
+    <div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -653,6 +765,30 @@ export default function BarcoDetallePage() {
               {barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}
             </div>
           </div>
+          {stats.totalMeta > 0 && (
+          <div style={{
+            background: `linear-gradient(135deg, #1a6b3c, ${COLOR_AZUL_MARINO})`,
+            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+          }}>
+            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Cantidad Manifestada</div>
+            <div style={{ fontSize: '26px', fontWeight: '800' }}>{fmtTM(stats.totalMeta, 3)} TM</div>
+          </div>
+          )}
+          {stats.totalMeta > 0 && (
+          <div style={{
+            background: `linear-gradient(135deg, ${stats.totalTM >= stats.totalMeta ? '#22C55E' : '#dc2626'}, ${COLOR_AZUL_MARINO})`,
+            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+          }}>
+            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Faltante</div>
+            <div style={{ fontSize: '26px', fontWeight: '800' }}>
+              {stats.totalTM >= stats.totalMeta ? (
+                <span>Completado</span>
+              ) : (
+                <span>{fmtTM(stats.totalMeta - stats.totalTM, 3)} TM</span>
+              )}
+            </div>
+          </div>
+          )}
         </div>
 
         {/* Toggle: Resumen / Registros Detallados */}
@@ -687,6 +823,36 @@ export default function BarcoDetallePage() {
           </div>
         </div>
 
+        {productosDisponibles.length > 1 && (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setProductoActivo(null)}
+              style={{
+                padding: '6px 16px', borderRadius: '100px', fontSize: '12px', fontWeight: '600',
+                cursor: 'pointer', transition: 'all 0.2s ease', border: 'none',
+                background: !productoActivo ? COLOR_AZUL_PRINCIPAL : COLOR_AZUL_SUAVE,
+                color: !productoActivo ? COLOR_BLANCO : COLOR_AZUL_PRINCIPAL
+              }}
+            >Todos</button>
+            {productosDisponibles.map(cod => {
+              const info = PRODUCTOS_CONOCIDOS[cod] || { nombre: cod, icono: '📦' }
+              const activo = productoActivo === cod
+              return (
+                <button
+                  key={cod}
+                  onClick={() => setProductoActivo(cod)}
+                  style={{
+                    padding: '6px 16px', borderRadius: '100px', fontSize: '12px', fontWeight: '600',
+                    cursor: 'pointer', transition: 'all 0.2s ease', border: 'none',
+                    background: activo ? COLOR_AZUL_PRINCIPAL : COLOR_AZUL_SUAVE,
+                    color: activo ? COLOR_BLANCO : COLOR_AZUL_PRINCIPAL
+                  }}
+                >{info.icono} {info.nombre}</button>
+              )
+            })}
+          </div>
+        )}
+
         {seccionActiva === 'resumen' && (
         <div style={{ marginBottom: '16px' }}>
           <div style={{
@@ -698,7 +864,7 @@ export default function BarcoDetallePage() {
               background: COLOR_AZUL_SUAVE, padding: '2px 12px', borderRadius: '100px',
               fontSize: '11px', color: COLOR_AZUL_PRINCIPAL, letterSpacing: 0
             }}>
-              {productos.length} producto(s)
+              {productoActivo ? `1 de ${productos.length}` : `${productos.length} producto(s)`}
             </span>
           </div>
           {productos.length === 0 ? (
@@ -707,7 +873,7 @@ export default function BarcoDetallePage() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
-              {productos.map((p, idx) => (
+              {(productoActivo ? productos.filter(p => p.codigo === productoActivo) : productos).map((p, idx) => (
                 <ProductBadge
                   key={idx}
                   codigo={p.codigo}
@@ -722,6 +888,191 @@ export default function BarcoDetallePage() {
           )}
         </div>
         )}
+
+        {seccionActiva === 'resumen' && resumenPorDestino.length > 0 && (
+          <div style={{
+            background: COLOR_BLANCO, borderRadius: '16px', padding: '20px',
+            border: `1px solid ${COLOR_BORDE}`, marginTop: '20px'
+          }}>
+            <div style={{
+              fontWeight: '700', color: COLOR_TEXTO_PRIMARIO, marginBottom: '16px',
+              display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px'
+            }}>
+              <FiHome size={13} /> Almacenado por Destino
+              <span style={{
+                background: COLOR_AZUL_SUAVE, padding: '2px 12px', borderRadius: '100px',
+                fontSize: '11px', color: COLOR_AZUL_PRINCIPAL, letterSpacing: 0, fontWeight: '500'
+              }}>
+                {resumenPorDestino.length} destino(s)
+              </span>
+              <span style={{ fontSize: '12px', color: COLOR_TEXTO_SECUNDARIO, marginLeft: 'auto' }}>
+                Total: <span style={{ fontWeight: '700', color: COLOR_AZUL_PRINCIPAL }}>
+                  {resumenPorDestino.length > 0 ? resumenPorDestino.reduce((s, d) => s + d.total_tm, 0).toFixed(3) : '0.000'} TM
+                </span>
+              </span>
+            </div>
+
+            {resumenPorDestino.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: COLOR_TEXTO_SECUNDARIO, fontSize: '14px' }}>
+                No hay viajes completos o lecturas de banda con destino asignado
+              </div>
+            ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+              {resumenPorDestino.map((dest, idx) => {
+                const totalGeneral = resumenPorDestino.reduce((s, d) => s + d.total_tm, 0)
+                const pct = totalGeneral > 0 ? (dest.total_tm / totalGeneral) * 100 : 0
+
+                let borderCol = COLOR_BORDE, bgHeader = COLOR_AZUL_SUAVE, colorBadge = COLOR_AZUL_PRINCIPAL, bgBadge = COLOR_BLANCO
+                let badgeText = `${dest.porcentaje.toFixed(0)}%`
+                if (dest.limite_tm > 0) {
+                  if (dest.completado) { borderCol = '#22C55E'; bgHeader = 'rgba(34,197,94,0.08)'; colorBadge = '#22C55E'; bgBadge = 'rgba(34,197,94,0.12)'; badgeText = 'COMPLETO' }
+                  else if (dest.cerca_limite) { borderCol = '#F59E0B'; bgHeader = 'rgba(245,158,11,0.08)'; colorBadge = '#F59E0B'; bgBadge = 'rgba(245,158,11,0.12)'; badgeText = `${dest.porcentaje.toFixed(0)}%` }
+                }
+
+                return (
+                <div key={dest.destino_id} style={{
+                  background: COLOR_BLANCO, borderRadius: '14px', overflow: 'hidden',
+                  border: `1px solid ${borderCol}`, transition: 'all 0.2s ease'
+                }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', background: bgHeader,
+                    borderBottom: `1px solid ${borderCol}`
+                  }}>
+                    <span style={{ fontWeight: '700', fontSize: '13px', color: COLOR_TEXTO_PRIMARIO }}>
+                      {dest.nombre}
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {dest.limite_tm > 0 && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600', padding: '2px 10px', borderRadius: '100px',
+                          background: bgBadge, color: colorBadge
+                        }}>{badgeText}</span>
+                      )}
+                      <span style={{
+                        fontSize: '10px', fontWeight: '500', padding: '2px 10px', borderRadius: '100px',
+                        background: COLOR_GRIS_FONDO, color: COLOR_TEXTO_SECUNDARIO
+                      }}>{pct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '12px 16px' }}>
+                    <div style={{ height: '6px', background: COLOR_GRIS_FONDO, borderRadius: '100px', overflow: 'hidden', marginBottom: '12px' }}>
+                      <div style={{
+                        height: '100%', borderRadius: '100px', transition: 'all 0.3s ease',
+                        width: `${Math.min(pct, 100)}%`,
+                        background: dest.limite_tm > 0 && dest.completado ? '#22C55E' : dest.limite_tm > 0 && dest.cerca_limite ? '#F59E0B' : COLOR_AZUL_PRINCIPAL
+                      }} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      <div>
+                        <div style={{ fontSize: '22px', fontWeight: '800', color: COLOR_TEXTO_PRIMARIO }}>
+                          {fmtTM(dest.total_tm, 3)} <span style={{ fontSize: '11px', fontWeight: '500', color: COLOR_TEXTO_SECUNDARIO }}>TM</span>
+                        </div>
+                        {dest.limite_tm > 0 && (
+                          <div style={{ fontSize: '11px', color: COLOR_TEXTO_SECUNDARIO, marginTop: '2px' }}>
+                            Manifestado: {fmtTM(dest.limite_tm, 3)} TM
+                          </div>
+                        )}
+                      </div>
+                      {dest.limite_tm > 0 && (
+                        <div style={{ textAlign: 'right', fontSize: '11px' }}>
+                          {dest.completado ? (
+                            <span style={{ color: '#22C55E', fontWeight: '600' }}>COMPLETADO</span>
+                          ) : (
+                            <span style={{ color: dest.cerca_limite ? '#F59E0B' : COLOR_AZUL_PRINCIPAL, fontWeight: '600' }}>
+                              {dest.porcentaje.toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {dest.limite_tm > 0 && dest.faltante_tm > 0 && (
+                      <div style={{ marginTop: '6px', padding: '6px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: '8px', fontSize: '11px', fontWeight: '600', color: '#ef4444' }}>
+                        Faltante: {fmtTM(dest.faltante_tm, 3)} TM
+                      </div>
+                    )}
+                  </div>
+
+                  {dest.limite_tm > 0 && (
+                    <div style={{ padding: '0 16px 8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, marginBottom: '3px' }}>
+                        <span>Progreso vs manifestado</span>
+                        <span style={{ fontWeight: '600', color: dest.completado ? '#22C55E' : dest.cerca_limite ? '#F59E0B' : COLOR_AZUL_PRINCIPAL }}>
+                          {dest.porcentaje.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div style={{ height: '5px', background: COLOR_GRIS_FONDO, borderRadius: '100px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: '100px', transition: 'all 0.3s ease',
+                          width: `${Math.min(dest.porcentaje, 100)}%`,
+                          background: dest.completado ? '#22C55E' : dest.cerca_limite ? '#F59E0B' : COLOR_AZUL_PRINCIPAL
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ padding: '8px 16px 12px', display: 'grid', gridTemplateColumns: dest.viajes_count > 0 && dest.banda_count > 0 ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                    {dest.viajes_count > 0 && (
+                      <div style={{ background: COLOR_GRIS_FONDO, borderRadius: '10px', padding: '10px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: '700', color: COLOR_TEXTO_SECUNDARIO, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          Viajes
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#22C55E' }}>
+                          {fmtTM(dest.viajes_tm, 3)} <span style={{ fontSize: '10px', fontWeight: '500', color: COLOR_TEXTO_SECUNDARIO }}>TM</span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, marginBottom: '4px' }}>
+                          {dest.viajes_count} viaje(s)
+                        </div>
+                        <div style={{ maxHeight: '80px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {dest.detalle_viajes.sort((a, b) => (a.viaje_numero || 0) - (b.viaje_numero || 0)).map(v => (
+                            <div key={v.id} style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, background: COLOR_BLANCO,
+                              padding: '3px 8px', borderRadius: '6px'
+                            }}>
+                              <span>Viaje #{v.viaje_numero} · {v.placa}{v.fecha ? ' (' + dayjs(v.fecha).format('DD-MM') + ')' : ''}</span>
+                              <span style={{ fontWeight: '600', color: '#22C55E' }}>{fmtTM(Number(v.peso_destino_tm), 3)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {dest.banda_count > 0 && (
+                      <div style={{ background: COLOR_GRIS_FONDO, borderRadius: '10px', padding: '10px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: '700', color: COLOR_TEXTO_SECUNDARIO, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          Banda
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: '700', color: COLOR_AZUL_PRINCIPAL }}>
+                          {fmtTM(dest.banda_tm, 3)} <span style={{ fontSize: '10px', fontWeight: '500', color: COLOR_TEXTO_SECUNDARIO }}>TM</span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, marginBottom: '4px' }}>
+                          Ultima de {dest.banda_count} lectura(s)
+                        </div>
+                        <div style={{ maxHeight: '80px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {dest.detalle_banda.sort((a, b) => dayjs(b.fecha_hora).valueOf() - dayjs(a.fecha_hora).valueOf()).slice(0, 5).map(l => (
+                            <div key={l.id} style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              fontSize: '10px', color: COLOR_TEXTO_SECUNDARIO, background: COLOR_BLANCO,
+                              padding: '3px 8px', borderRadius: '6px'
+                            }}>
+                              <span>{l.fecha_hora ? dayjs(l.fecha_hora).format('DD-MM HH:mm') : '—'}</span>
+                              <span style={{ fontWeight: '600', color: COLOR_AZUL_PRINCIPAL }}>{fmtTM(Number(l.acumulado_tm), 3)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                )
+              })}
+            </div>
+            )}
+
+            </div>
+          )}
 
         {seccionActiva === 'resumen' && corteDiario.length > 0 && (
           <div style={{
@@ -745,7 +1096,7 @@ export default function BarcoDetallePage() {
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}` }}>
                     <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', color: COLOR_TEXTO_SECUNDARIO, textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Fecha</th>
-                    {productos.map(p => (
+                    {(productoActivo ? productos.filter(p => p.codigo === productoActivo) : productos).map(p => (
                       <th key={p.codigo} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: COLOR_TEXTO_SECUNDARIO, textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
                         {p.icono} {p.nombre.split(' ')[0]}
                       </th>
@@ -756,38 +1107,83 @@ export default function BarcoDetallePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {corteDiario.map((row, idx) => {
-                    const isLast = idx === corteDiario.length - 1
-                    return (
-                      <tr key={row.fecha} style={{
-                        borderBottom: `1px solid ${COLOR_BORDE}`,
-                        background: isLast ? 'rgba(0,0,163,0.03)' : 'transparent'
-                      }}>
-                        <td style={{ padding: '10px 12px', fontWeight: '600', color: COLOR_TEXTO_PRIMARIO, whiteSpace: 'nowrap' }}>
-                          {dayjs(row.fecha).format('DD/MM/YYYY')}
-                        </td>
-                        {productos.map(p => {
-                          const prodData = row.productos[p.codigo]
-                          return (
-                            <td key={p.codigo} style={{ padding: '10px 12px', textAlign: 'right', color: COLOR_TEXTO_PRIMARIO, whiteSpace: 'nowrap' }}>
-                              <div style={{ fontWeight: '600' }}>{prodData ? fmtTM(prodData.acumulado, 3) : '0.000'}</div>
-                              <div style={{ fontSize: '9px', color: COLOR_TEXTO_SECUNDARIO }}>(+{prodData ? fmtTM(prodData.dia, 3) : '0.000'})</div>
-                            </td>
-                          )
-                        })}
-                        <td style={{
-                          padding: '10px 12px', textAlign: 'right', fontWeight: '800',
-                          color: COLOR_AZUL_PRINCIPAL, whiteSpace: 'nowrap',
-                          borderLeft: `2px solid ${COLOR_BORDE}`
+                  {(() => {
+                    const totalPagCorte = Math.max(1, Math.ceil(corteDiario.length / cortesPorPagina))
+                    const pagCorteSegura = Math.min(paginaCorte, totalPagCorte)
+                    const inicioCorte = (pagCorteSegura - 1) * cortesPorPagina
+                    const cortesPagina = corteDiario.slice(inicioCorte, inicioCorte + cortesPorPagina)
+                    return cortesPagina.map((row, idx) => {
+                      const idxGlobal = inicioCorte + idx
+                      const isLast = idxGlobal === corteDiario.length - 1
+                      return (
+                        <tr key={row.fecha} style={{
+                          borderBottom: `1px solid ${COLOR_BORDE}`,
+                          background: isLast ? 'rgba(0,0,163,0.03)' : 'transparent'
                         }}>
-                          {fmtTM(row.total, 3)} TM
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          <td style={{ padding: '10px 12px', fontWeight: '600', color: COLOR_TEXTO_PRIMARIO, whiteSpace: 'nowrap' }}>
+                            {dayjs(row.fecha).format('DD/MM/YYYY')}
+                          </td>
+                          {(productoActivo ? productos.filter(p => p.codigo === productoActivo) : productos).map(p => {
+                            const prodData = row.productos[p.codigo]
+                            return (
+                              <td key={p.codigo} style={{ padding: '10px 12px', textAlign: 'right', color: COLOR_TEXTO_PRIMARIO, whiteSpace: 'nowrap' }}>
+                                <div style={{ fontWeight: '600' }}>{prodData ? fmtTM(prodData.acumulado, 3) : '0.000'}</div>
+                                <div style={{ fontSize: '9px', color: COLOR_TEXTO_SECUNDARIO }}>(+{prodData ? fmtTM(prodData.dia, 3) : '0.000'})</div>
+                              </td>
+                            )
+                          })}
+                          <td style={{
+                            padding: '10px 12px', textAlign: 'right', fontWeight: '800',
+                            color: COLOR_AZUL_PRINCIPAL, whiteSpace: 'nowrap',
+                            borderLeft: `2px solid ${COLOR_BORDE}`
+                          }}>
+                            {fmtTM(row.total, 3)} TM
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
                 </tbody>
               </table>
             </div>
+            {(() => {
+              const totalPagCorte = Math.max(1, Math.ceil(corteDiario.length / cortesPorPagina))
+              if (totalPagCorte <= 1) return null
+              const pagCorteSegura = Math.min(paginaCorte, totalPagCorte)
+              return (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  paddingTop: '12px', marginTop: '12px', borderTop: `1px solid ${COLOR_BORDE}`,
+                  fontSize: '11px'
+                }}>
+                  <span style={{ color: COLOR_TEXTO_SECUNDARIO }}>
+                    Página {pagCorteSegura} de {totalPagCorte}
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      onClick={() => setPaginaCorte(p => Math.max(1, p - 1))}
+                      disabled={pagCorteSegura <= 1}
+                      style={{
+                        padding: '4px 12px', borderRadius: '6px', border: `1px solid ${COLOR_BORDE}`,
+                        background: COLOR_BLANCO, color: COLOR_TEXTO_PRIMARIO, fontSize: '11px',
+                        cursor: pagCorteSegura > 1 ? 'pointer' : 'not-allowed', opacity: pagCorteSegura > 1 ? 1 : 0.4,
+                        fontWeight: '500'
+                      }}
+                    >Anterior</button>
+                    <button
+                      onClick={() => setPaginaCorte(p => Math.min(totalPagCorte, p + 1))}
+                      disabled={pagCorteSegura >= totalPagCorte}
+                      style={{
+                        padding: '4px 12px', borderRadius: '6px', border: `1px solid ${COLOR_BORDE}`,
+                        background: COLOR_BLANCO, color: COLOR_TEXTO_PRIMARIO, fontSize: '11px',
+                        cursor: pagCorteSegura < totalPagCorte ? 'pointer' : 'not-allowed',
+                        opacity: pagCorteSegura < totalPagCorte ? 1 : 0.4, fontWeight: '500'
+                      }}
+                    >Siguiente</button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -805,30 +1201,31 @@ export default function BarcoDetallePage() {
                 background: COLOR_AZUL_SUAVE, padding: '2px 12px', borderRadius: '100px',
                 fontSize: '11px', color: COLOR_AZUL_PRINCIPAL, letterSpacing: 0, fontWeight: '500'
               }}>
-                {Object.keys(registrosDetalle).length} tabla(s)
+                {Object.keys(registrosFiltrados).length} tabla(s)
               </span>
             </div>
 
-            {Object.keys(registrosDetalle).length === 0 ? (
+            {Object.keys(registrosFiltrados).length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: COLOR_TEXTO_SECUNDARIO, fontSize: '14px' }}>
                 No hay registros detallados disponibles
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {Object.entries(registrosDetalle).map(([key, grupo]) => {
-                  const isOpen = productoExpandido === key
+                {Object.entries(registrosFiltrados).map(([key, grupo]) => {
+                  const pagina = paginasDetalle[key] || 1
+                  const totalPaginas = Math.max(1, Math.ceil(grupo.registros.length / registrosPorPagina))
+                  const paginaSegura = Math.min(pagina, totalPaginas)
+                  const inicio = (paginaSegura - 1) * registrosPorPagina
+                  const registrosPagina = grupo.registros.slice(inicio, inicio + registrosPorPagina)
                   return (
                     <div key={key} style={{
                       border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px', overflow: 'hidden'
                     }}>
-                      <button
-                        onClick={() => setProductoExpandido(isOpen ? null : key)}
-                        style={{
-                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '14px 16px', background: COLOR_AZUL_SUAVE, border: 'none',
-                          cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: COLOR_AZUL_PRINCIPAL
-                        }}
-                      >
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '14px 16px', background: COLOR_AZUL_SUAVE,
+                        fontSize: '13px', fontWeight: '600', color: COLOR_AZUL_PRINCIPAL
+                      }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           {grupo.producto?.icono || '📦'} {grupo.producto?.nombre || key}
                           <span style={{
@@ -844,12 +1241,11 @@ export default function BarcoDetallePage() {
                             {grupo.tipo === 'viajes' ? 'Viajes' : grupo.tipo === 'banda' ? 'Banda' : grupo.tipo === 'exportacion' ? 'Exportación' : grupo.tipo === 'sacos' ? 'Sacos' : grupo.tipo}
                           </span>
                         </span>
-                        {isOpen ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
-                      </button>
+                      </div>
 
-                      {isOpen && (
-                        <div style={{ overflowX: 'auto', padding: '0' }}>
-                          {grupo.tipo === 'viajes' && (
+                      <div style={{ overflowX: 'auto', padding: '0' }}>
+                        {grupo.tipo === 'viajes' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
@@ -865,7 +1261,7 @@ export default function BarcoDetallePage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(v => (
+                                {registrosPagina.map(v => (
                                   <tr key={v.id || v.viaje_numero} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{v.viaje_numero || '—'}</td>
                                     <td style={tdStyle}>{v.placa || '—'}</td>
@@ -882,9 +1278,11 @@ export default function BarcoDetallePage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
 
-                          {grupo.tipo === 'banda' && (
+                        {grupo.tipo === 'banda' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
@@ -893,7 +1291,7 @@ export default function BarcoDetallePage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(b => (
+                                {registrosPagina.map(b => (
                                   <tr key={b.id} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{b.fecha_hora ? dayjs(b.fecha_hora).format('DD/MM/YY HH:mm') : '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(b.acumulado_tm || 0, 3)}</td>
@@ -901,9 +1299,11 @@ export default function BarcoDetallePage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
 
-                          {grupo.tipo === 'exportacion' && (
+                        {grupo.tipo === 'exportacion' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
@@ -912,7 +1312,7 @@ export default function BarcoDetallePage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(e => (
+                                {registrosPagina.map(e => (
                                   <tr key={e.id} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{e.fecha_hora ? dayjs(e.fecha_hora).format('DD/MM/YY HH:mm') : '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(e.acumulado_tm || 0, 3)}</td>
@@ -920,20 +1320,22 @@ export default function BarcoDetallePage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
 
-                          {grupo.tipo === 'sacos' && (
+                        {grupo.tipo === 'sacos' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}>Fecha</th>
-                                  <th style={{ ...thStyle, textAlign: 'right' }}>Cant. Paquetes</th>
+                                  <th style={{ ...thStyle, textAlign: 'right' }}>Cant. Sacos</th>
                                   <th style={{ ...thStyle, textAlign: 'right' }}>Peso / Saco (kg)</th>
                                   <th style={{ ...thStyle, textAlign: 'right' }}>Total (TM)</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(s => {
+                                {registrosPagina.map(s => {
                                   const totalKg = (Number(s.cantidad_paquetes) || 0) * (Number(s.peso_saco_kg) || 0)
                                   return (
                                     <tr key={s.id} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
@@ -946,9 +1348,11 @@ export default function BarcoDetallePage() {
                                 })}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
 
-                          {grupo.tipo === 'petcoke' && (
+                        {grupo.tipo === 'petcoke' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
@@ -960,7 +1364,7 @@ export default function BarcoDetallePage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(p => (
+                                {registrosPagina.map(p => (
                                   <tr key={p.id || p.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{p.correlativo || '—'}</td>
                                     <td style={tdStyle}>{p.placa || '—'}</td>
@@ -971,9 +1375,11 @@ export default function BarcoDetallePage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
 
-                          {grupo.tipo === 'yeso' && (
+                        {grupo.tipo === 'yeso' && (
+                          <div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                               <thead>
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
@@ -985,7 +1391,7 @@ export default function BarcoDetallePage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {grupo.registros.map(y => (
+                                {registrosPagina.map(y => (
                                   <tr key={y.id || y.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{y.correlativo || '—'}</td>
                                     <td style={tdStyle}>{y.placa || '—'}</td>
@@ -996,7 +1402,41 @@ export default function BarcoDetallePage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                          </div>
+                        )}
+                      </div>
+
+                      {totalPaginas > 1 && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 16px', borderTop: `1px solid ${COLOR_BORDE}`,
+                          background: COLOR_GRIS_FONDO, fontSize: '11px'
+                        }}>
+                          <span style={{ color: COLOR_TEXTO_SECUNDARIO }}>
+                            Página {paginaSegura} de {totalPaginas}
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={() => setPaginaDetalle(key, paginaSegura - 1)}
+                              disabled={paginaSegura <= 1}
+                              style={{
+                                padding: '4px 12px', borderRadius: '6px', border: `1px solid ${COLOR_BORDE}`,
+                                background: COLOR_BLANCO, color: COLOR_TEXTO_PRIMARIO, fontSize: '11px',
+                                cursor: paginaSegura > 1 ? 'pointer' : 'not-allowed', opacity: paginaSegura > 1 ? 1 : 0.4,
+                                fontWeight: '500'
+                              }}
+                            >Anterior</button>
+                            <button
+                              onClick={() => setPaginaDetalle(key, paginaSegura + 1)}
+                              disabled={paginaSegura >= totalPaginas}
+                              style={{
+                                padding: '4px 12px', borderRadius: '6px', border: `1px solid ${COLOR_BORDE}`,
+                                background: COLOR_BLANCO, color: COLOR_TEXTO_PRIMARIO, fontSize: '11px',
+                                cursor: paginaSegura < totalPaginas ? 'pointer' : 'not-allowed',
+                                opacity: paginaSegura < totalPaginas ? 1 : 0.4, fontWeight: '500'
+                              }}
+                            >Siguiente</button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1054,6 +1494,6 @@ export default function BarcoDetallePage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
