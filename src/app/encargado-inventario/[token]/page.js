@@ -570,42 +570,66 @@ export default function BarcoDetallePage() {
       agregarAlDiario(v.fecha, Number(v.peso_destino_tm) || 0, codigo)
     })
 
-    const ultimoPorDia = (arr, campoFecha, campoTM) => {
+    const ultimoPorDiaYProducto = (arr, campoFecha, campoTM) => {
       const groups = {}
       arr.forEach(item => {
         const d = dayjs(item[campoFecha]).format('YYYY-MM-DD')
-        if (!groups[d] || dayjs(item[campoFecha]).isAfter(dayjs(groups[d][campoFecha]))) {
-          groups[d] = item
+        const codigo = productosPorId[item.producto_id] || 'OTRO'
+        const key = `${d}_${codigo}`
+        if (!groups[key] || dayjs(item[campoFecha]).isAfter(dayjs(groups[key].fecha_hora))) {
+          groups[key] = { fecha: d, codigo, tm: Number(item[campoTM]) || 0, fecha_hora: item[campoFecha] }
         }
       })
-      const acum = 0
-      const sorted = Object.values(groups).sort((a, b) => dayjs(a[campoFecha]).valueOf() - dayjs(b[campoFecha]).valueOf())
-      let running = 0
-      return sorted.map(item => {
-        const d = dayjs(item[campoFecha]).format('YYYY-MM-DD')
-        running = Number(item[campoTM]) || 0
-        return { fecha: d, tm: running }
-      })
+      return Object.values(groups)
     }
 
-    const bandasDiario = ultimoPorDia(bandas, 'fecha_hora', 'acumulado_tm')
-    bandasDiario.forEach(b => {
-      const bandaEnDia = bandas.filter(bd => dayjs(bd.fecha_hora).format('YYYY-MM-DD') === b.fecha)
-      bandaEnDia.forEach(bd => {
-        const codigo = productosPorId[bd.producto_id] || 'OTRO'
-        if (!diario[b.fecha]) diario[b.fecha] = { fecha: b.fecha, productos: {}, total: 0 }
-        diario[b.fecha].productos[codigo] = Number(bd.acumulado_tm) || 0
+    const primeroPorDiaYProducto = (arr, campoFecha, campoTM) => {
+      const groups = {}
+      arr.forEach(item => {
+        const d = dayjs(item[campoFecha]).format('YYYY-MM-DD')
+        const codigo = productosPorId[item.producto_id] || 'OTRO'
+        const key = `${d}_${codigo}`
+        if (!groups[key] || dayjs(item[campoFecha]).isBefore(dayjs(groups[key].fecha_hora))) {
+          groups[key] = { fecha: d, codigo, tm: Number(item[campoTM]) || 0, fecha_hora: item[campoFecha] }
+        }
       })
+      return Object.values(groups)
+    }
+
+    const bandasUltimos = ultimoPorDiaYProducto(bandas, 'fecha_hora', 'acumulado_tm')
+    const exportUltimos = ultimoPorDiaYProducto(exportaciones, 'fecha_hora', 'acumulado_tm')
+    const bandasPrimeros = primeroPorDiaYProducto(bandas, 'fecha_hora', 'acumulado_tm')
+    const exportPrimeros = primeroPorDiaYProducto(exportaciones, 'fecha_hora', 'acumulado_tm')
+
+    const valoresFinDia = {}
+    ;[...bandasUltimos, ...exportUltimos].forEach(item => {
+      if (!valoresFinDia[item.fecha]) valoresFinDia[item.fecha] = {}
+      valoresFinDia[item.fecha][item.codigo] = { tm: item.tm, fecha_hora: item.fecha_hora }
     })
 
-    const exportDiario = ultimoPorDia(exportaciones, 'fecha_hora', 'acumulado_tm')
-    exportDiario.forEach(b => {
-      const expEnDia = exportaciones.filter(e => dayjs(e.fecha_hora).format('YYYY-MM-DD') === b.fecha)
-      expEnDia.forEach(e => {
-        const codigo = productosPorId[e.producto_id] || 'OTRO'
-        if (!diario[b.fecha]) diario[b.fecha] = { fecha: b.fecha, productos: {}, total: 0 }
-        diario[b.fecha].productos[codigo] = Number(e.acumulado_tm) || 0
+    const valoresInicioDia = {}
+    ;[...bandasPrimeros, ...exportPrimeros].forEach(item => {
+      if (!valoresInicioDia[item.fecha]) valoresInicioDia[item.fecha] = {}
+      const existing = valoresInicioDia[item.fecha][item.codigo]
+      if (!existing || dayjs(item.fecha_hora).isBefore(dayjs(existing.fecha_hora))) {
+        const hora = dayjs(item.fecha_hora).format('HH:mm')
+        valoresInicioDia[item.fecha][item.codigo] = {
+          tm: item.tm,
+          esMedianoche: hora === '00:00'
+        }
+      }
+    })
+
+    const diasBandaExp = Object.keys(valoresFinDia).sort()
+    diasBandaExp.forEach(dia => {
+      if (!diario[dia]) diario[dia] = { fecha: dia, productos: {}, total: 0 }
+      Object.entries(valoresFinDia[dia]).forEach(([codigo, data]) => {
+        diario[dia].productos[codigo] = data.tm
       })
+      diario[dia].total = Object.values(valoresFinDia[dia]).reduce((s, v) => s + v.tm, 0)
+      diario[dia].ultimaHora = Object.values(valoresFinDia[dia]).reduce((latest, v) => {
+        return !latest || dayjs(v.fecha_hora).isAfter(dayjs(latest)) ? v.fecha_hora : latest
+      }, null)
     })
 
     sacosData.forEach(v => {
@@ -619,15 +643,18 @@ export default function BarcoDetallePage() {
     yesoData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'YE-001'))
 
     const fechas = Object.keys(diario).sort()
-    const acumuladoProductos = {}
+    const ultimoValorAnterior = {}
     const corteFinal = fechas.map(f => {
       const entry = diario[f]
-      const row = { fecha: f, total: 0, productos: {} }
+      const row = { fecha: f, total: 0, productos: {}, ultimaHora: entry.ultimaHora }
       Object.entries(entry.productos).forEach(([codigo, tm]) => {
-        acumuladoProductos[codigo] = (acumuladoProductos[codigo] || 0) + tm
-        row.productos[codigo] = { dia: tm, acumulado: acumuladoProductos[codigo] }
+        const inicioInfo = valoresInicioDia[f]?.[codigo]
+        const corte = inicioInfo?.esMedianoche ? inicioInfo.tm : (ultimoValorAnterior[codigo] || 0)
+        const dia = tm - corte
+        ultimoValorAnterior[codigo] = tm
+        row.productos[codigo] = { corte, dia, acumulado: tm }
       })
-      row.total = Object.values(acumuladoProductos).reduce((s, v) => s + v, 0)
+      row.total = Object.values(entry.productos).reduce((s, tm) => s + tm, 0)
       return row
     })
 
@@ -765,6 +792,23 @@ export default function BarcoDetallePage() {
               {barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}
             </div>
           </div>
+          {corteDiario.length > 0 && (() => {
+            const ultimo = corteDiario[corteDiario.length - 1]
+            const temp = productoActivo ? [productoActivo] : Object.keys(ultimo?.productos || {})
+            const corteTotal = temp.reduce((s, c) => s + (ultimo?.productos[c]?.corte || 0), 0)
+            return (
+            <div style={{
+              background: `linear-gradient(135deg, #1a6b3c, ${COLOR_AZUL_MARINO})`,
+              borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+            }}>
+              <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Último Corte / Acumulado</div>
+              <div style={{ fontSize: '26px', fontWeight: '800' }}>{fmtTM(ultimo?.total || 0, 3)} TM</div>
+              <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '4px' }}>
+                Corte 00:00: {fmtTM(corteTotal, 3)} TM
+              </div>
+            </div>
+            )
+          })()}
           {stats.totalMeta > 0 && (
           <div style={{
             background: `linear-gradient(135deg, #1a6b3c, ${COLOR_AZUL_MARINO})`,
@@ -1127,7 +1171,7 @@ export default function BarcoDetallePage() {
                             const prodData = row.productos[p.codigo]
                             return (
                               <td key={p.codigo} style={{ padding: '10px 12px', textAlign: 'right', color: COLOR_TEXTO_PRIMARIO, whiteSpace: 'nowrap' }}>
-                                <div style={{ fontWeight: '600' }}>{prodData ? fmtTM(prodData.acumulado, 3) : '0.000'}</div>
+                                <div style={{ fontWeight: '600' }}>{prodData ? fmtTM(prodData.corte, 3) : '0.000'}</div>
                                 <div style={{ fontSize: '9px', color: COLOR_TEXTO_SECUNDARIO }}>(+{prodData ? fmtTM(prodData.dia, 3) : '0.000'})</div>
                               </td>
                             )
@@ -1137,7 +1181,8 @@ export default function BarcoDetallePage() {
                             color: COLOR_AZUL_PRINCIPAL, whiteSpace: 'nowrap',
                             borderLeft: `2px solid ${COLOR_BORDE}`
                           }}>
-                            {fmtTM(row.total, 3)} TM
+                            <div>{fmtTM(row.total, 3)} TM</div>
+                            {isLast && row.ultimaHora && <div style={{ fontSize: '9px', fontWeight: '500', color: '#92400E' }}>🕐 {dayjs(row.ultimaHora).format('HH:mm DD/MM')}</div>}
                           </td>
                         </tr>
                       )

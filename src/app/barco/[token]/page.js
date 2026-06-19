@@ -366,7 +366,7 @@ const exportarTiemposAPDF = () => {
   doc.setFontSize(18)
   doc.setTextColor(40, 40, 100)
   doc.setFont('helvetica', 'bold')
-  doc.text('📊 REPORTE DE TIEMPOS ENTRE VIAJES', 14, yOffset)
+  doc.text('REPORTE DE TIEMPOS ENTRE VIAJES', 14, yOffset)
   yOffset += 8
   
   // Subtítulo
@@ -478,7 +478,7 @@ const exportarTiemposAPDF = () => {
     doc.setFontSize(11)
     doc.setTextColor(120, 80, 200)
     doc.setFont('helvetica', 'bold')
-    doc.text('🚛', 18, yOffset + 3)
+    doc.text('»', 18, yOffset + 3)
     
     // Nombre de placa
     doc.setFontSize(12)
