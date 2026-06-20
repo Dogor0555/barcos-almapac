@@ -115,33 +115,16 @@ export default function EncargadoInventarioPage() {
   })
 
   const getProductosChips = (barco) => {
-    const chips = []
     const codigos = new Set()
 
     if (barco.sacosCount > 0) codigos.add({ codigo: 'SACOS', nombre: 'Azúcar en Sacos', icono: '📦' })
     if (barco.petcokeCount > 0) codigos.add({ codigo: 'PC-001', nombre: 'Pet Coke', icono: '🛢️' })
     if (barco.yesoCount > 0) codigos.add({ codigo: 'YE-001', nombre: 'Yeso', icono: '🪨' })
     if (barco.viajesCount > 0) codigos.add({ codigo: 'VIAJES', nombre: 'Importación (Viajes)', icono: '🚛' })
-    if (barco.exportCount > 0) codigos.add({ codigo: 'EXPORT', nombre: 'Exportación (Banda)', icono: '📤' })
-
-    const productosBarco = barco.metas_json?.productos || []
-    const nombres = {
-      'AZ-001': { nombre: 'Azúcar', icono: '🍚' },
-      'AZ-002': { nombre: 'Azúcar Refino', icono: '🍚' },
-      'PC-001': { nombre: 'Pet Coke', icono: '🛢️' },
-      'YE-001': { nombre: 'Yeso', icono: '🪨' },
-      'CL-001': { nombre: 'Clinker', icono: '🪨' },
-      'CL-002': { nombre: 'Clinker Nicaragua', icono: '🪨' },
-      'SACOS': { nombre: 'Azúcar en Sacos', icono: '📦' },
-    }
-    productosBarco.forEach(c => {
-      if (nombres[c]) codigos.add({ codigo: c, ...nombres[c] })
-    })
-
-    if (barco.metas_json?.limites) {
-      Object.keys(barco.metas_json.limites).forEach(c => {
-        if (nombres[c]) codigos.add({ codigo: c, ...nombres[c] })
-      })
+    if (barco.exportCount > 0) {
+      const esMelaza = (barco.metas_json?.productos || []).includes('MZ-001') ||
+        Object.keys(barco.metas_json?.limites || {}).includes('MZ-001')
+      codigos.add({ codigo: 'EXPORT', nombre: esMelaza ? 'Exportación (Tubería)' : 'Exportación (Banda)', icono: '📤' })
     }
 
     return [...codigos]

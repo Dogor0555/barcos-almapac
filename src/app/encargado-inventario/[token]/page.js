@@ -1475,7 +1475,7 @@ export default function BarcoDetallePage() {
                             background: COLOR_BLANCO, padding: '1px 10px', borderRadius: '100px',
                             fontSize: '10px', color: COLOR_AZUL_PRINCIPAL, fontWeight: '500'
                           }}>
-                            {grupo.tipo === 'viajes' ? 'Viajes' : grupo.tipo === 'banda' ? 'Banda' : grupo.tipo === 'exportacion' ? 'Exportación' : grupo.tipo === 'sacos' ? 'Sacos' : grupo.tipo}
+                            {grupo.tipo === 'viajes' ? 'Viajes' : grupo.tipo === 'banda' && grupo.producto?.codigo === 'MZ-001' ? 'Tubería' : grupo.tipo === 'banda' ? 'Banda' : grupo.tipo === 'exportacion' ? 'Exportación' : grupo.tipo === 'sacos' ? 'Sacos' : grupo.tipo}
                           </span>
                         </span>
                       </div>
