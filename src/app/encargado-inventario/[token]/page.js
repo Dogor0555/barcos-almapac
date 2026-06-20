@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 import { getCurrentUser, isEncargadoInventario, isAdmin, logout } from '../../lib/auth'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import * as XLSX from 'xlsx'
 import {
   FiRefreshCw, FiX, FiTruck, FiBarChart2, FiHome,
   FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
@@ -174,6 +175,106 @@ export default function BarcoDetallePage() {
   const setPaginaDetalle = (key, pagina) => {
     setPaginasDetalle(prev => ({ ...prev, [key]: pagina }))
   }
+
+  const exportarDetalleAExcel = useCallback(() => {
+    try {
+      toast.loading('Generando Excel...', { id: 'excel-detalle' })
+      const wb = XLSX.utils.book_new()
+
+      Object.entries(registrosDetalle).forEach(([key, grupo]) => {
+        const rows = []
+        const tipo = grupo.tipo
+        const nombre = grupo.producto?.nombre || key
+
+        if (tipo === 'viajes') {
+          rows.push(['# Viaje', 'Placa', 'Destino', 'Fecha', 'Salida UPDP', 'Entrada Almapac', 'Salida Almapac', 'Peso Neto (TM)'])
+          grupo.registros.forEach(v => {
+            rows.push([
+              v.viaje_numero || '—',
+              v.placa || '—',
+              v.destino?.nombre || v.destino_nombre || '—',
+              v.fecha ? dayjs(v.fecha).format('DD/MM/YY') : (v.fecha_entrada ? dayjs(v.fecha_entrada).format('DD/MM/YY') : '—'),
+              v.hora_salida_updp || '—',
+              v.hora_entrada_almapac || '—',
+              v.hora_salida_almapac || '—',
+              Number(v.peso_destino_tm || v.peso_neto || v.peso_neto_updp_tm || 0)
+            ])
+          })
+        } else if (tipo === 'petcoke') {
+          rows.push(['Correlativo', 'Placa', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
+          grupo.registros.forEach(p => {
+            rows.push([
+              p.correlativo || '—',
+              p.placa || '—',
+              p.fecha_entrada ? dayjs(p.fecha_entrada).format('DD/MM/YY') : '—',
+              p.hora_entrada || '—',
+              p.hora_salida || '—',
+              Number(p.peso_neto || 0)
+            ])
+          })
+        } else if (tipo === 'yeso') {
+          rows.push(['Correlativo', 'Placa', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
+          grupo.registros.forEach(y => {
+            rows.push([
+              y.correlativo || '—',
+              y.placa || '—',
+              y.fecha_entrada ? dayjs(y.fecha_entrada).format('DD/MM/YY') : '—',
+              y.hora_entrada || '—',
+              y.hora_salida || '—',
+              Number(y.peso_neto || 0)
+            ])
+          })
+        } else if (tipo === 'banda') {
+          rows.push(['Fecha / Hora', 'Acumulado (TM)'])
+          grupo.registros.forEach(b => {
+            rows.push([
+              b.fecha_hora ? dayjs(b.fecha_hora).format('DD/MM/YY HH:mm') : '—',
+              Number(b.acumulado_tm || 0)
+            ])
+          })
+        } else if (tipo === 'exportacion') {
+          rows.push(['Fecha / Hora', 'Acumulado (TM)'])
+          grupo.registros.forEach(e => {
+            rows.push([
+              e.fecha_hora ? dayjs(e.fecha_hora).format('DD/MM/YY HH:mm') : '—',
+              Number(e.acumulado_tm || 0)
+            ])
+          })
+        } else if (tipo === 'sacos') {
+          rows.push(['Fecha', 'Cantidad Paquetes', 'Paquetes Dañados', 'Buenos', 'Peso Saco (kg)', 'Total (TM)'])
+          grupo.registros.forEach(s => {
+            const buenos = (s.cantidad_paquetes || 0) - (s.paquetes_danados || 0)
+            rows.push([
+              s.fecha ? dayjs(s.fecha).format('DD/MM/YY') : '—',
+              s.cantidad_paquetes || 0,
+              s.paquetes_danados || 0,
+              buenos,
+              s.peso_saco_kg || 50,
+              Number((buenos * (s.peso_saco_kg || 50)) / 1000)
+            ])
+          })
+        }
+
+        if (rows.length > 1) {
+          const ws = XLSX.utils.aoa_to_sheet(rows)
+          ws['!cols'] = rows[0].map(() => ({ wch: 18 }))
+          XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31))
+        }
+      })
+
+      if (wb.SheetNames.length === 0) {
+        toast.error('No hay datos para exportar', { id: 'excel-detalle' })
+        return
+      }
+
+      const nombreBarco = barco?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || 'barco'
+      XLSX.writeFile(wb, `Detalle_${nombreBarco}_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`)
+      toast.success('Excel descargado correctamente', { id: 'excel-detalle' })
+    } catch (err) {
+      console.error(err)
+      toast.error('Error al exportar a Excel', { id: 'excel-detalle' })
+    }
+  }, [registrosDetalle, barco])
 
   const productosDisponibles = useMemo(() => {
     const set = new Set()
@@ -771,17 +872,6 @@ export default function BarcoDetallePage() {
             display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
-              <FaWeightHanging size={12} />
-              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Descargado / Recibido</span>
-            </div>
-            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(stats.totalTM, 3)} TM</div>
-          </div>
-          <div style={{
-            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
-            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
-            display: 'flex', flexDirection: 'column', gap: '6px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
               <FiActivity size={12} />
               <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acumulado UPDP</span>
             </div>
@@ -855,38 +945,36 @@ export default function BarcoDetallePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
               <FiAlertCircle size={12} />
-              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltante</span>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltante UPDP</span>
             </div>
             <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
-              {stats.totalTM >= stats.totalMeta ? (
+              {stats.acumuladoUPDP >= stats.totalMeta ? (
                 <span>Completado</span>
               ) : (
-                <span>{fmtTM(stats.totalMeta - stats.totalTM, 3)} TM</span>
+                <span>{fmtTM(stats.totalMeta - stats.acumuladoUPDP, 3)} TM</span>
               )}
             </div>
           </div>
           )}
-          {corteDiario.length > 0 && (() => {
-            const ultimo = corteDiario[corteDiario.length - 1]
-            const temp = productoActivo ? [productoActivo] : Object.keys(ultimo?.productos || {})
-            const corteTotal = temp.reduce((s, c) => s + (ultimo?.productos[c]?.corte || 0), 0)
-            return (
-            <div style={{
-              background: `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`,
-              borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
-              display: 'flex', flexDirection: 'column', gap: '6px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
-                <FiClock size={12} />
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Último Corte</span>
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(ultimo?.total || 0, 3)} TM</div>
-              <div style={{ fontSize: '11px', opacity: 0.7 }}>
-                Corte 00:00: {fmtTM(corteTotal, 3)} TM
-              </div>
+          {stats.totalMeta > 0 && (
+          <div style={{
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiAlertCircle size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltante Almapac</span>
             </div>
-            )
-          })()}
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+              {stats.acumuladoAlmapac >= stats.totalMeta ? (
+                <span>Completado</span>
+              ) : (
+                <span>{fmtTM(stats.totalMeta - stats.acumuladoAlmapac, 3)} TM</span>
+              )}
+            </div>
+          </div>
+          )}
         </div>
 
         {/* Toggle: Resumen / Registros Detallados */}
@@ -917,6 +1005,17 @@ export default function BarcoDetallePage() {
               }}
             >
               <FiList size={14} /> Registros Detallados
+            </button>
+            <button
+              onClick={exportarDetalleAExcel}
+              style={{
+                padding: '8px 20px', borderRadius: '32px', fontSize: '13px', fontWeight: '500',
+                cursor: 'pointer', transition: 'all 0.2s ease', border: 'none',
+                background: '#22C55E', color: COLOR_BLANCO,
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}
+            >
+              <FaFileExcel size={14} /> Exportar Excel
             </button>
           </div>
         </div>
@@ -1350,8 +1449,6 @@ export default function BarcoDetallePage() {
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}># Viaje</th>
                                   <th style={thStyle}>Placa</th>
-                                  <th style={thStyle}>Transporte</th>
-                                  <th style={thStyle}>Tipo</th>
                                   <th style={thStyle}>Destino</th>
                                   <th style={thStyle}>Fecha</th>
                                   <th style={thStyle}>Salida UPDP</th>
@@ -1365,8 +1462,6 @@ export default function BarcoDetallePage() {
                                   <tr key={v.id || v.viaje_numero} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{v.viaje_numero || '—'}</td>
                                     <td style={tdStyle}>{v.placa || '—'}</td>
-                                    <td style={tdStyle}>{v.transporte || v.transportista || '—'}</td>
-                                    <td style={tdStyle}>{v.tipo || '—'}</td>
                                     <td style={tdStyle}>{v.destino?.nombre || v.destino_nombre || '—'}</td>
                                     <td style={tdStyle}>{v.fecha ? dayjs(v.fecha).format('DD/MM/YY') : (v.fecha_entrada ? dayjs(v.fecha_entrada).format('DD/MM/YY') : '—')}</td>
                                     <td style={tdStyle}>{v.hora_salida_updp || '—'}</td>
@@ -1459,7 +1554,6 @@ export default function BarcoDetallePage() {
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}>Correlativo</th>
                                   <th style={thStyle}>Placa</th>
-                                  <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
                                   <th style={thStyle}>Hora Entrada</th>
                                   <th style={thStyle}>Hora Salida</th>
@@ -1471,7 +1565,6 @@ export default function BarcoDetallePage() {
                                   <tr key={p.id || p.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{p.correlativo || '—'}</td>
                                     <td style={tdStyle}>{p.placa || '—'}</td>
-                                    <td style={tdStyle}>{p.transporte || p.transportista || '—'}</td>
                                     <td style={tdStyle}>{p.fecha_entrada ? dayjs(p.fecha_entrada).format('DD/MM/YY') : '—'}</td>
                                     <td style={tdStyle}>{p.hora_entrada || '—'}</td>
                                     <td style={tdStyle}>{p.hora_salida || '—'}</td>
@@ -1490,7 +1583,6 @@ export default function BarcoDetallePage() {
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}>Correlativo</th>
                                   <th style={thStyle}>Placa</th>
-                                  <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
                                   <th style={thStyle}>Hora Entrada</th>
                                   <th style={thStyle}>Hora Salida</th>
@@ -1502,7 +1594,6 @@ export default function BarcoDetallePage() {
                                   <tr key={y.id || y.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{y.correlativo || '—'}</td>
                                     <td style={tdStyle}>{y.placa || '—'}</td>
-                                    <td style={tdStyle}>{y.transporte || y.transportista || '—'}</td>
                                     <td style={tdStyle}>{y.fecha_entrada ? dayjs(y.fecha_entrada).format('DD/MM/YY') : '—'}</td>
                                     <td style={tdStyle}>{y.hora_entrada || '—'}</td>
                                     <td style={tdStyle}>{y.hora_salida || '—'}</td>
