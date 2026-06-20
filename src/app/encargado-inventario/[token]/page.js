@@ -1300,8 +1300,9 @@ export default function BarcoDetallePage() {
                                   <th style={thStyle}>Tipo</th>
                                   <th style={thStyle}>Destino</th>
                                   <th style={thStyle}>Fecha</th>
-                                  <th style={thStyle}>Hora Entrada</th>
-                                  <th style={thStyle}>Hora Salida</th>
+                                  <th style={thStyle}>Salida UPDP</th>
+                                  <th style={thStyle}>Entrada Almapac</th>
+                                  <th style={thStyle}>Salida Almapac</th>
                                   <th style={{ ...thStyle, textAlign: 'right' }}>Peso Neto (TM)</th>
                                 </tr>
                               </thead>
@@ -1314,8 +1315,9 @@ export default function BarcoDetallePage() {
                                     <td style={tdStyle}>{v.tipo || '—'}</td>
                                     <td style={tdStyle}>{v.destino?.nombre || v.destino_nombre || '—'}</td>
                                     <td style={tdStyle}>{v.fecha ? dayjs(v.fecha).format('DD/MM/YY') : (v.fecha_entrada ? dayjs(v.fecha_entrada).format('DD/MM/YY') : '—')}</td>
-                                    <td style={tdStyle}>{v.hora_entrada || (v.fecha_hora ? dayjs(v.fecha_hora).format('HH:mm') : '—')}</td>
-                                    <td style={tdStyle}>{v.hora_salida || '—'}</td>
+                                    <td style={tdStyle}>{v.hora_salida_updp || '—'}</td>
+                                    <td style={tdStyle}>{v.hora_entrada_almapac || '—'}</td>
+                                    <td style={tdStyle}>{v.hora_salida_almapac || '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>
                                       {fmtTM(v.peso_destino_tm || v.peso_neto || v.peso_neto_updp_tm || 0, 3)}
                                     </td>
@@ -1405,6 +1407,8 @@ export default function BarcoDetallePage() {
                                   <th style={thStyle}>Placa</th>
                                   <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
+                                  <th style={thStyle}>Hora Entrada</th>
+                                  <th style={thStyle}>Hora Salida</th>
                                   <th style={{ ...thStyle, textAlign: 'right' }}>Peso Neto (TM)</th>
                                 </tr>
                               </thead>
@@ -1415,6 +1419,8 @@ export default function BarcoDetallePage() {
                                     <td style={tdStyle}>{p.placa || '—'}</td>
                                     <td style={tdStyle}>{p.transporte || p.transportista || '—'}</td>
                                     <td style={tdStyle}>{p.fecha_entrada ? dayjs(p.fecha_entrada).format('DD/MM/YY') : '—'}</td>
+                                    <td style={tdStyle}>{p.hora_entrada || '—'}</td>
+                                    <td style={tdStyle}>{p.hora_salida || '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(p.peso_neto || 0, 3)}</td>
                                   </tr>
                                 ))}
@@ -1432,6 +1438,8 @@ export default function BarcoDetallePage() {
                                   <th style={thStyle}>Placa</th>
                                   <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
+                                  <th style={thStyle}>Hora Entrada</th>
+                                  <th style={thStyle}>Hora Salida</th>
                                   <th style={{ ...thStyle, textAlign: 'right' }}>Peso Neto (TM)</th>
                                 </tr>
                               </thead>
@@ -1442,6 +1450,8 @@ export default function BarcoDetallePage() {
                                     <td style={tdStyle}>{y.placa || '—'}</td>
                                     <td style={tdStyle}>{y.transporte || y.transportista || '—'}</td>
                                     <td style={tdStyle}>{y.fecha_entrada ? dayjs(y.fecha_entrada).format('DD/MM/YY') : '—'}</td>
+                                    <td style={tdStyle}>{y.hora_entrada || '—'}</td>
+                                    <td style={tdStyle}>{y.hora_salida || '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(y.peso_neto || 0, 3)}</td>
                                   </tr>
                                 ))}
