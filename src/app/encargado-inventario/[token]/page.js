@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { getCurrentUser, isEncargadoInventario, isAdmin, logout } from '../../lib/auth'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import {
   FiRefreshCw, FiX, FiTruck, FiBarChart2, FiHome,
   FiCheckCircle, FiAlertCircle, FiTrendingUp, FiClock,
@@ -181,6 +181,28 @@ export default function BarcoDetallePage() {
       toast.loading('Generando Excel...', { id: 'excel-detalle' })
       const wb = XLSX.utils.book_new()
 
+      const headerStyle = {
+        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11, name: 'Calibri' },
+        fill: { fgColor: { rgb: '0000A3' }, patternType: 'solid' },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: '000080' } },
+          bottom: { style: 'thin', color: { rgb: '000080' } },
+          left: { style: 'thin', color: { rgb: '000080' } },
+          right: { style: 'thin', color: { rgb: '000080' } },
+        }
+      }
+      const dataStyle = {
+        font: { color: { rgb: '000000' }, sz: 10, name: 'Calibri' },
+        alignment: { vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'DDDDDD' } },
+          bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
+          left: { style: 'thin', color: { rgb: 'DDDDDD' } },
+          right: { style: 'thin', color: { rgb: 'DDDDDD' } },
+        }
+      }
+
       Object.entries(registrosDetalle).forEach(([key, grupo]) => {
         const rows = []
         const tipo = grupo.tipo
@@ -201,11 +223,12 @@ export default function BarcoDetallePage() {
             ])
           })
         } else if (tipo === 'petcoke') {
-          rows.push(['Correlativo', 'Placa', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
+          rows.push(['Correlativo', 'Placa', 'Transporte', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
           grupo.registros.forEach(p => {
             rows.push([
               p.correlativo || '—',
               p.placa || '—',
+              p.transporte || p.transportista || '—',
               p.fecha_entrada ? dayjs(p.fecha_entrada).format('DD/MM/YY') : '—',
               p.hora_entrada || '—',
               p.hora_salida || '—',
@@ -213,11 +236,12 @@ export default function BarcoDetallePage() {
             ])
           })
         } else if (tipo === 'yeso') {
-          rows.push(['Correlativo', 'Placa', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
+          rows.push(['Correlativo', 'Placa', 'Transporte', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
           grupo.registros.forEach(y => {
             rows.push([
               y.correlativo || '—',
               y.placa || '—',
+              y.transporte || y.transportista || '—',
               y.fecha_entrada ? dayjs(y.fecha_entrada).format('DD/MM/YY') : '—',
               y.hora_entrada || '—',
               y.hora_salida || '—',
@@ -258,6 +282,21 @@ export default function BarcoDetallePage() {
         if (rows.length > 1) {
           const ws = XLSX.utils.aoa_to_sheet(rows)
           ws['!cols'] = rows[0].map(() => ({ wch: 18 }))
+
+          const range = XLSX.utils.decode_range(ws['!ref'])
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const addr = XLSX.utils.encode_cell({ r: 0, c })
+            if (!ws[addr]) ws[addr] = { t: 's', v: '' }
+            ws[addr].s = headerStyle
+          }
+          for (let r = 1; r <= range.e.r; r++) {
+            for (let c = range.s.c; c <= range.e.c; c++) {
+              const addr = XLSX.utils.encode_cell({ r, c })
+              if (!ws[addr]) ws[addr] = { t: 's', v: '' }
+              if (!ws[addr].s) ws[addr].s = dataStyle
+            }
+          }
+
           XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31))
         }
       })
@@ -1554,6 +1593,7 @@ export default function BarcoDetallePage() {
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}>Correlativo</th>
                                   <th style={thStyle}>Placa</th>
+                                  <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
                                   <th style={thStyle}>Hora Entrada</th>
                                   <th style={thStyle}>Hora Salida</th>
@@ -1565,6 +1605,7 @@ export default function BarcoDetallePage() {
                                   <tr key={p.id || p.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{p.correlativo || '—'}</td>
                                     <td style={tdStyle}>{p.placa || '—'}</td>
+                                    <td style={tdStyle}>{p.transporte || p.transportista || '—'}</td>
                                     <td style={tdStyle}>{p.fecha_entrada ? dayjs(p.fecha_entrada).format('DD/MM/YY') : '—'}</td>
                                     <td style={tdStyle}>{p.hora_entrada || '—'}</td>
                                     <td style={tdStyle}>{p.hora_salida || '—'}</td>
@@ -1583,6 +1624,7 @@ export default function BarcoDetallePage() {
                                 <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
                                   <th style={thStyle}>Correlativo</th>
                                   <th style={thStyle}>Placa</th>
+                                  <th style={thStyle}>Transporte</th>
                                   <th style={thStyle}>Fecha Entrada</th>
                                   <th style={thStyle}>Hora Entrada</th>
                                   <th style={thStyle}>Hora Salida</th>
@@ -1594,6 +1636,7 @@ export default function BarcoDetallePage() {
                                   <tr key={y.id || y.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
                                     <td style={tdStyle}>{y.correlativo || '—'}</td>
                                     <td style={tdStyle}>{y.placa || '—'}</td>
+                                    <td style={tdStyle}>{y.transporte || y.transportista || '—'}</td>
                                     <td style={tdStyle}>{y.fecha_entrada ? dayjs(y.fecha_entrada).format('DD/MM/YY') : '—'}</td>
                                     <td style={tdStyle}>{y.hora_entrada || '—'}</td>
                                     <td style={tdStyle}>{y.hora_salida || '—'}</td>
