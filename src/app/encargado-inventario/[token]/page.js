@@ -458,9 +458,12 @@ export default function BarcoDetallePage() {
       })
     }
 
+    const acumuladoUPDP = viajes.reduce((sum, v) => sum + (Number(v.peso_neto_updp_tm) || 0), 0)
+    const acumuladoAlmapac = viajes.reduce((sum, v) => sum + (Number(v.peso_destino_tm) || 0), 0)
+
     resultados.sort((a, b) => b.descargadoTM - a.descargadoTM)
     setProductos(resultados)
-    setStats({ totalTM, totalRegistros, totalMeta })
+    setStats({ totalTM, totalRegistros, totalMeta, acumuladoUPDP, acumuladoAlmapac })
 
     // ─── Construir detalle de registros ────────────────────────
     const detalle = {}
@@ -758,73 +761,103 @@ export default function BarcoDetallePage() {
       </header>
 
       <div className="alm-body">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: '12px', marginBottom: '28px'
+        }}>
           <div style={{
-            background: `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`,
-            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Total Descargado / Recibido</div>
-            <div style={{ fontSize: '26px', fontWeight: '800' }}>{fmtTM(stats.totalTM, 3)} TM</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FaWeightHanging size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Descargado / Recibido</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(stats.totalTM, 3)} TM</div>
+          </div>
+          <div style={{
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiActivity size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acumulado UPDP</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(stats.acumuladoUPDP, 3)} TM</div>
+          </div>
+          <div style={{
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FaWarehouse size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acumulado Almapac</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(stats.acumuladoAlmapac, 3)} TM</div>
           </div>
           <div style={{
             background: `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`,
-            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Total Registros</div>
-            <div style={{ fontSize: '26px', fontWeight: '800' }}>{stats.totalRegistros.toLocaleString()}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiGrid size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Registros</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{stats.totalRegistros.toLocaleString()}</div>
           </div>
           <div style={{
             background: `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`,
-            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Productos Detectados</div>
-            <div style={{ fontSize: '26px', fontWeight: '800' }}>{productos.length}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FaCubes size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Productos</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{productos.length}</div>
           </div>
           <div style={{
             background: barco.fecha_llegada
               ? `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`
               : COLOR_GRIS_FONDO,
-            borderRadius: '18px', padding: '20px',
-            color: barco.fecha_llegada ? COLOR_BLANCO : COLOR_TEXTO_SECUNDARIO
+            borderRadius: '16px', padding: '18px 20px',
+            color: barco.fecha_llegada ? COLOR_BLANCO : COLOR_TEXTO_SECUNDARIO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Fecha Atraque</div>
-            <div style={{ fontSize: '18px', fontWeight: '800' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiCalendar size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fecha Atraque</span>
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: '800' }}>
               {barco.fecha_llegada ? dayjs(barco.fecha_llegada).format('DD/MM/YYYY') : '—'}
             </div>
           </div>
-          {corteDiario.length > 0 && (() => {
-            const ultimo = corteDiario[corteDiario.length - 1]
-            const temp = productoActivo ? [productoActivo] : Object.keys(ultimo?.productos || {})
-            const corteTotal = temp.reduce((s, c) => s + (ultimo?.productos[c]?.corte || 0), 0)
-            return (
-            <div style={{
-              background: `linear-gradient(135deg, #1a6b3c, ${COLOR_AZUL_MARINO})`,
-              borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
-            }}>
-              <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Último Corte / Acumulado</div>
-              <div style={{ fontSize: '26px', fontWeight: '800' }}>{fmtTM(ultimo?.total || 0, 3)} TM</div>
-              <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '4px' }}>
-                Corte 00:00: {fmtTM(corteTotal, 3)} TM
-              </div>
+          <div style={{
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiTrendingUp size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Manifestado</span>
             </div>
-            )
-          })()}
-          {stats.totalMeta > 0 && (
-          <div style={{
-            background: `linear-gradient(135deg, #1a6b3c, ${COLOR_AZUL_MARINO})`,
-            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
-          }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Cantidad Manifestada</div>
-            <div style={{ fontSize: '26px', fontWeight: '800' }}>{fmtTM(stats.totalMeta, 3)} TM</div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(stats.totalMeta, 3)} TM</div>
           </div>
-          )}
           {stats.totalMeta > 0 && (
           <div style={{
-            background: `linear-gradient(135deg, ${stats.totalTM >= stats.totalMeta ? '#22C55E' : '#dc2626'}, ${COLOR_AZUL_MARINO})`,
-            borderRadius: '18px', padding: '20px', color: COLOR_BLANCO
+            background: `linear-gradient(135deg, ${COLOR_NARANJA}, #d46200)`,
+            borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+            display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
-            <div style={{ fontSize: '10px', opacity: 0.7, marginBottom: '4px' }}>Faltante</div>
-            <div style={{ fontSize: '26px', fontWeight: '800' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+              <FiAlertCircle size={12} />
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltante</span>
+            </div>
+            <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
               {stats.totalTM >= stats.totalMeta ? (
                 <span>Completado</span>
               ) : (
@@ -833,6 +866,27 @@ export default function BarcoDetallePage() {
             </div>
           </div>
           )}
+          {corteDiario.length > 0 && (() => {
+            const ultimo = corteDiario[corteDiario.length - 1]
+            const temp = productoActivo ? [productoActivo] : Object.keys(ultimo?.productos || {})
+            const corteTotal = temp.reduce((s, c) => s + (ultimo?.productos[c]?.corte || 0), 0)
+            return (
+            <div style={{
+              background: `linear-gradient(135deg, ${COLOR_AZUL_PRINCIPAL}, ${COLOR_AZUL_MARINO})`,
+              borderRadius: '16px', padding: '18px 20px', color: COLOR_BLANCO,
+              display: 'flex', flexDirection: 'column', gap: '6px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+                <FiClock size={12} />
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Último Corte</span>
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>{fmtTM(ultimo?.total || 0, 3)} TM</div>
+              <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                Corte 00:00: {fmtTM(corteTotal, 3)} TM
+              </div>
+            </div>
+            )
+          })()}
         </div>
 
         {/* Toggle: Resumen / Registros Detallados */}
