@@ -101,12 +101,11 @@ const ProductBadge = ({ codigo, nombre, icono, totalTM, metaTM, registros }) => 
   const pct = metaTM > 0 ? Math.min((totalTM / metaTM) * 100, 100) : 0
   const faltante = metaTM > 0 ? Math.max(metaTM - totalTM, 0) : 0
   return (
-    <div style={{
+    <div className="alm-product-card" style={{
       background: COLOR_BLANCO,
       border: `1px solid ${COLOR_BORDE}`,
       borderRadius: '14px',
-      padding: '16px',
-      transition: 'all 0.2s ease'
+      padding: '16px'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
         <div style={{
@@ -872,6 +871,20 @@ export default function BarcoDetallePage() {
         .alm-glass-btn:hover { background: #0000A3; color: #FFFFFF; border-color: #0000A3; transform: translateY(-2px); }
         .alm-body { max-width: 1200px; margin: 0 auto; padding: 32px; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes cardEntrance {
+          from { opacity: 0; transform: scale(0.92) translateY(10px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .alm-product-card {
+          animation: cardEntrance 0.4s ease-out;
+          transition: all 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+          cursor: default;
+        }
+        .alm-product-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 8px 25px rgba(0,0,0,0.10);
+          border-color: #0000A3 !important;
+        }
         @media (max-width: 768px) {
           .alm-topbar { padding: 0 16px; height: 70px; flex-wrap: wrap; }
           .alm-body { padding: 16px; }
