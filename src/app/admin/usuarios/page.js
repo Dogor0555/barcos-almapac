@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { getCurrentUser, isAdmin } from '../../lib/auth'
@@ -8,7 +8,7 @@ import {
   Users, Plus, Edit2, Trash2, X, Check, 
   UserPlus, Shield, User as UserIcon, Loader2, AlertCircle,
   RefreshCw, ToggleLeft, ToggleRight, Save, ArrowLeft, Clock,
-  Truck, Ship
+  Truck, Ship, Search, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -284,6 +284,9 @@ export default function UsuariosPage() {
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [usuarioEliminar, setUsuarioEliminar] = useState(null)
   const [accionEnProgreso, setAccionEnProgreso] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [paginaActual, setPaginaActual] = useState(1)
+  const [registrosPorPagina, setRegistrosPorPagina] = useState(10)
 
   useEffect(() => {
     const currentUser = getCurrentUser()
@@ -390,6 +393,31 @@ export default function UsuariosPage() {
     }
   }
 
+  const usuariosFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return usuarios
+    const termino = busqueda.toLowerCase().trim()
+    return usuarios.filter(u =>
+      u.nombre.toLowerCase().includes(termino) ||
+      u.username.toLowerCase().includes(termino) ||
+      u.rol.toLowerCase().includes(termino)
+    )
+  }, [usuarios, busqueda])
+
+  const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / registrosPorPagina))
+  const usuariosPaginados = useMemo(() => {
+    const inicio = (paginaActual - 1) * registrosPorPagina
+    return usuariosFiltrados.slice(inicio, inicio + registrosPorPagina)
+  }, [usuariosFiltrados, paginaActual, registrosPorPagina])
+
+  useEffect(() => {
+    setPaginaActual(1)
+  }, [busqueda])
+
+  const cambiarPagina = (pagina) => {
+    if (pagina < 1 || pagina > totalPaginas) return
+    setPaginaActual(pagina)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
@@ -491,6 +519,20 @@ export default function UsuariosPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda */}
+        <div className="bg-slate-900/50 border border-white/10 rounded-2xl p-4">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre, username o rol..."
+              className="w-full bg-slate-800 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition-all"
+            />
+          </div>
+        </div>
+
         {/* Tabla */}
         <div className="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
           <div className="bg-slate-900 px-6 py-4 border-b border-white/10">
@@ -498,7 +540,7 @@ export default function UsuariosPage() {
               <Users className="w-5 h-5 text-purple-400" />
               Lista de Usuarios
               <span className="text-sm font-normal text-slate-400 ml-2">
-                ({usuarios.length} registros)
+                ({usuariosFiltrados.length} registros{busqueda ? ` filtrados` : ''})
               </span>
             </h2>
           </div>
@@ -516,14 +558,14 @@ export default function UsuariosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {usuarios.length === 0 ? (
+                {usuariosPaginados.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-6 py-12 text-center text-slate-400">
-                      No hay usuarios registrados
+                      {busqueda ? 'No se encontraron usuarios con ese criterio' : 'No hay usuarios registrados'}
                     </td>
                   </tr>
                 ) : (
-                  usuarios.map((user) => {
+                  usuariosPaginados.map((user) => {
                     const currentUser = getCurrentUser()
                     const esUsuarioActual = user.id === currentUser?.id
                     const estaCargando = accionEnProgreso === user.id
@@ -625,6 +667,93 @@ export default function UsuariosPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Paginación */}
+          {usuariosFiltrados.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-slate-900/50 border-t border-white/10">
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <span>Mostrar</span>
+                <select
+                  value={registrosPorPagina}
+                  onChange={(e) => { setRegistrosPorPagina(Number(e.target.value)); setPaginaActual(1) }}
+                  className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-white text-sm"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span>registros</span>
+                <span className="hidden sm:inline ml-2">
+                  | Total: <span className="text-amber-400 font-bold">{usuariosFiltrados.length}</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => cambiarPagina(1)}
+                  disabled={paginaActual === 1}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4 -ml-3" />
+                </button>
+                <button
+                  onClick={() => cambiarPagina(paginaActual - 1)}
+                  disabled={paginaActual === 1}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {(() => {
+                  const pages = []
+                  const maxVisible = 5
+                  let start = Math.max(1, paginaActual - Math.floor(maxVisible / 2))
+                  let end = Math.min(totalPaginas, start + maxVisible - 1)
+                  if (end - start + 1 < maxVisible) {
+                    start = Math.max(1, end - maxVisible + 1)
+                  }
+                  for (let i = start; i <= end; i++) {
+                    pages.push(i)
+                  }
+                  return pages.map(page => (
+                    <button
+                      key={page}
+                      onClick={() => cambiarPagina(page)}
+                      className={`min-w-[36px] h-9 px-2 rounded-lg font-bold text-sm transition-all ${
+                        paginaActual === page
+                          ? 'bg-gradient-to-r from-purple-500 to-purple-700 text-white'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))
+                })()}
+
+                <button
+                  onClick={() => cambiarPagina(paginaActual + 1)}
+                  disabled={paginaActual === totalPaginas}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => cambiarPagina(totalPaginas)}
+                  disabled={paginaActual === totalPaginas}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4 -ml-3" />
+                </button>
+              </div>
+
+              <div className="text-sm text-slate-400">
+                Página {paginaActual} de {totalPaginas}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Leyenda de roles */}
