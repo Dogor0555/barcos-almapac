@@ -92,6 +92,7 @@ const PRODUCTOS_CONOCIDOS = {
   'AZ-002': { nombre: 'Azúcar Refino', icono: '🍚' },
   'PC-001': { nombre: 'Pet Coke', icono: '🛢️' },
   'YE-001': { nombre: 'Yeso', icono: '🪨' },
+  'CLF-001': { nombre: 'Clinker Fortaleza', icono: '🧱' },
   'CL-001': { nombre: 'Clinker', icono: '🪨' },
   'CL-002': { nombre: 'Clinker Nicaragua', icono: '🪨' },
   'SACOS': { nombre: 'Azúcar en Sacos', icono: '📦' },
@@ -245,6 +246,19 @@ export default function BarcoDetallePage() {
               y.hora_entrada || '—',
               y.hora_salida || '—',
               Number(y.peso_neto || 0)
+            ])
+          })
+        } else if (tipo === 'clinker_fortaleza') {
+          rows.push(['Correlativo', 'Placa', 'Transporte', 'Fecha Entrada', 'Hora Entrada', 'Hora Salida', 'Peso Neto (TM)'])
+          grupo.registros.forEach(cf => {
+            rows.push([
+              cf.correlativo || '—',
+              cf.placa || '—',
+              cf.transporte || cf.transportista || '—',
+              cf.fecha_entrada ? dayjs(cf.fecha_entrada).format('DD/MM/YY') : '—',
+              cf.hora_entrada || '—',
+              cf.hora_salida || '—',
+              Number(cf.peso_neto || 0)
             ])
           })
         } else if (tipo === 'banda') {
@@ -474,6 +488,7 @@ export default function BarcoDetallePage() {
     const esSacos = metasProductos.includes('SACOS') || !!metasLimites['SACOS'] || !!limitesPorProductoDestino['SACOS']
     const esPetCoke = metasProductos.includes('PC-001') || !!metasLimites['PC-001'] || !!limitesPorProductoDestino['PC-001']
     const esYeso = metasProductos.includes('YE-001') || !!metasLimites['YE-001'] || !!limitesPorProductoDestino['YE-001']
+    const esClinkerFortaleza = metasProductos.includes('CLF-001') || !!metasLimites['CLF-001'] || !!limitesPorProductoDestino['CLF-001']
 
     // ─── Cargar datos según tipo ───────────────────────────────
     let viajes = [], bandas = [], exportaciones = []
@@ -507,7 +522,7 @@ export default function BarcoDetallePage() {
       exportPorProducto[e.producto_id] = Number(e.acumulado_tm) || 0
     })
 
-    let sacosData = [], petcokeData = [], yesoData = []
+    let sacosData = [], petcokeData = [], yesoData = [], clinkerFortalezaData = []
 
     if (esSacos) {
       sacosData = await CARGAR_TODOS_LOS_REGISTROS('registros_sacos', { barco_id: barco.id })
@@ -517,6 +532,9 @@ export default function BarcoDetallePage() {
     }
     if (esYeso) {
       yesoData = await CARGAR_TODOS_LOS_REGISTROS('yeso_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
+    }
+    if (esClinkerFortaleza) {
+      clinkerFortalezaData = await CARGAR_TODOS_LOS_REGISTROS('clinker_fortaleza_viajes', { barco_id: barco.id, estado: 'COMPLETADO' })
     }
 
     // ─── Detectar productos ────────────────────────────────────
@@ -538,6 +556,7 @@ export default function BarcoDetallePage() {
     if (sacosData.length > 0 || esSacos) codigosConRegistros.add('SACOS')
     if (petcokeData.length > 0 || esPetCoke) codigosConRegistros.add('PC-001')
     if (yesoData.length > 0 || esYeso) codigosConRegistros.add('YE-001')
+    if (clinkerFortalezaData.length > 0 || esClinkerFortaleza) codigosConRegistros.add('CLF-001')
 
     metasProductos.forEach(c => codigosConRegistros.add(c))
     Object.keys(metasLimites).forEach(c => codigosConRegistros.add(c))
@@ -560,6 +579,9 @@ export default function BarcoDetallePage() {
       } else if (codigo === 'YE-001') {
         tm = yesoData.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
         registros = yesoData.length
+      } else if (codigo === 'CLF-001') {
+        tm = clinkerFortalezaData.reduce((sum, v) => sum + (Number(v.peso_neto) || 0), 0)
+        registros = clinkerFortalezaData.length
       } else {
         const prod = catalogo?.find(c => c.codigo === codigo)
         if (!prod) continue
@@ -691,6 +713,14 @@ export default function BarcoDetallePage() {
       }
     }
 
+    if (clinkerFortalezaData.length > 0) {
+      detalle['clinker_fortaleza_especial'] = {
+        tipo: 'clinker_fortaleza',
+        producto: { codigo: 'CLF-001', nombre: 'Clinker Fortaleza', icono: '🧱' },
+        registros: clinkerFortalezaData.sort((a, b) => (b.correlativo || 0) - (a.correlativo || 0))
+      }
+    }
+
     setRegistrosDetalle(detalle)
 
     // ─── Corte diario ──────────────────────────────────────────
@@ -783,6 +813,7 @@ export default function BarcoDetallePage() {
     petcokeData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'PC-001'))
 
     yesoData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'YE-001'))
+    clinkerFortalezaData.forEach(v => agregarAlDiario(v.fecha_entrada, Number(v.peso_neto) || 0, 'CLF-001'))
 
     const fechas = Object.keys(diario).sort()
     const ultimoValorAnterior = {}
@@ -1654,6 +1685,37 @@ export default function BarcoDetallePage() {
                                     <td style={tdStyle}>{y.hora_entrada || '—'}</td>
                                     <td style={tdStyle}>{y.hora_salida || '—'}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(y.peso_neto || 0, 3)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {grupo.tipo === 'clinker_fortaleza' && (
+                          <div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                              <thead>
+                                <tr style={{ borderBottom: `2px solid ${COLOR_BORDE}`, background: COLOR_GRIS_FONDO }}>
+                                  <th style={thStyle}>Correlativo</th>
+                                  <th style={thStyle}>Placa</th>
+                                  <th style={thStyle}>Transporte</th>
+                                  <th style={thStyle}>Fecha Entrada</th>
+                                  <th style={thStyle}>Hora Entrada</th>
+                                  <th style={thStyle}>Hora Salida</th>
+                                  <th style={{ ...thStyle, textAlign: 'right' }}>Peso Neto (TM)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {registrosPagina.map(cf => (
+                                  <tr key={cf.id || cf.correlativo} style={{ borderBottom: `1px solid ${COLOR_BORDE}` }}>
+                                    <td style={tdStyle}>{cf.correlativo || '—'}</td>
+                                    <td style={tdStyle}>{cf.placa || '—'}</td>
+                                    <td style={tdStyle}>{cf.transporte || cf.transportista || '—'}</td>
+                                    <td style={tdStyle}>{cf.fecha_entrada ? dayjs(cf.fecha_entrada).format('DD/MM/YY') : '—'}</td>
+                                    <td style={tdStyle}>{cf.hora_entrada || '—'}</td>
+                                    <td style={tdStyle}>{cf.hora_salida || '—'}</td>
+                                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600' }}>{fmtTM(cf.peso_neto || 0, 3)}</td>
                                   </tr>
                                 ))}
                               </tbody>

@@ -85,6 +85,11 @@ export default function EncargadoInventarioPage() {
           .select('id', { count: 'exact', head: true })
           .eq('barco_id', barco.id)
 
+        const { count: clinkerFortalezaCount } = await supabase
+          .from('clinker_fortaleza_viajes')
+          .select('id', { count: 'exact', head: true })
+          .eq('barco_id', barco.id)
+
         return {
           ...barco,
           viajesCount: viajesCount || 0,
@@ -92,7 +97,8 @@ export default function EncargadoInventarioPage() {
           sacosCount: sacosCount || 0,
           petcokeCount: petcokeCount || 0,
           yesoCount: yesoCount || 0,
-          registrosCount: (viajesCount || 0) + (exportCount || 0) + (sacosCount || 0) + (petcokeCount || 0) + (yesoCount || 0)
+          clinkerFortalezaCount: clinkerFortalezaCount || 0,
+          registrosCount: (viajesCount || 0) + (exportCount || 0) + (sacosCount || 0) + (petcokeCount || 0) + (yesoCount || 0) + (clinkerFortalezaCount || 0)
         }
       }))
 
@@ -120,6 +126,7 @@ export default function EncargadoInventarioPage() {
     if (barco.sacosCount > 0) codigos.add({ codigo: 'SACOS', nombre: 'Azúcar en Sacos', icono: '📦' })
     if (barco.petcokeCount > 0) codigos.add({ codigo: 'PC-001', nombre: 'Pet Coke', icono: '🛢️' })
     if (barco.yesoCount > 0) codigos.add({ codigo: 'YE-001', nombre: 'Yeso', icono: '🪨' })
+    if (barco.clinkerFortalezaCount > 0) codigos.add({ codigo: 'CLF-001', nombre: 'Clinker Fortaleza', icono: '🧱' })
     if (barco.viajesCount > 0) codigos.add({ codigo: 'VIAJES', nombre: 'Importación (Viajes)', icono: '🚛' })
     if (barco.exportCount > 0) {
       const esMelaza = (barco.metas_json?.productos || []).includes('MZ-001') ||

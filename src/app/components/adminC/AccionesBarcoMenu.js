@@ -44,6 +44,8 @@ export default function AccionesBarcoMenu({
   // Verificar si el barco tiene Yeso configurado
   const tieneYeso = barco.metas_json?.productos?.includes('YE-001')
   
+  // Verificar si el barco tiene Clinker Fortaleza configurado
+  const tieneClinkerFortaleza = barco.metas_json?.productos?.includes('CLF-001')
   // Verificar si el barco tiene Clinker Nicaragua configurado
   const tieneClinkerNica = barco.metas_json?.productos?.includes('CLINKER_NICA') || 
                            barco.metas_json?.productos?.includes('CLINKER-NICA') ||
@@ -93,6 +95,15 @@ export default function AccionesBarcoMenu({
           isLink: true,
           href: `/compartido/yeso/${barco.token_compartido}`,
         }] : []),
+        // Dashboard de Clinker Fortaleza (si el producto está asociado)
+        ...(tieneClinkerFortaleza ? [{
+          icon: Anchor,
+          label: 'Dashboard Clinker Fortaleza',
+          color: 'text-teal-400',
+          hoverBg: 'hover:bg-teal-500/20',
+          isLink: true,
+          href: `/compartido/clinker_fortaleza/${barco.token_compartido}`,
+        }] : []),
         // Dashboard de Clinker Nicaragua (si el producto está asociado)
         ...(tieneClinkerNica ? [{
           icon: Anchor,
@@ -124,6 +135,15 @@ export default function AccionesBarcoMenu({
           hoverBg: 'hover:bg-emerald-500/20',
           isLink: true,
           href: `/barco/${barco.token_compartido}/yeso`,
+        }] : []),
+        // Registro de Clinker Fortaleza (si el producto está asociado)
+        ...(tieneClinkerFortaleza ? [{
+          icon: Anchor,
+          label: 'Clinker Fortaleza',
+          color: 'text-teal-400',
+          hoverBg: 'hover:bg-teal-500/20',
+          isLink: true,
+          href: `/barco/${barco.token_compartido}/clinker_fortaleza`,
         }] : []),
         // Registro de Clinker Nicaragua (si el producto está asociado)
         ...(tieneClinkerNica ? [{
