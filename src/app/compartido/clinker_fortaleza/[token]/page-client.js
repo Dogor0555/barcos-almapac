@@ -1852,11 +1852,7 @@ export default function ClientPage({ token }) {
                         {empresa.viajesTraileta > 0 && <span><FaTrailer size={11} style={{ display: 'inline', marginRight: '4px' }} /> Traileta: {fmtTM(empresa.promedioTraileta, 3)} TM</span>}
                         {empresa.viajesVolqueta > 0 && <span><GiCoalWagon size={11} style={{ display: 'inline', marginRight: '4px' }} /> Volqueta: {fmtTM(empresa.promedioVolqueta, 3)} TM</span>}
                       </div>
-                      {empresa.fueraRango > 0 && (
-                        <div style={{ fontSize: '10px', color: COLOR_NARANJA, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <FiAlertCircle size={10} /> {empresa.fueraRango} fuera del rango óptimo
-                        </div>
-                      )}
+                     
                     </div>
                   )
                 })}
