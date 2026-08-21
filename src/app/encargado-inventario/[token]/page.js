@@ -203,6 +203,33 @@ export default function BarcoDetallePage() {
         }
       }
 
+      const nombresUsados = new Set()
+      const nombreUnicoHoja = (nombreBase, tipo) => {
+        const limpio = (nombreBase || 'Hoja').replace(/[:\\/?*[\]]/g, '').trim()
+        let nombreHoja = limpio.slice(0, 31)
+        if (nombresUsados.has(nombreHoja)) {
+          const sufijos = {
+            viajes: 'Viajes',
+            petcoke: 'Petcoke',
+            yeso: 'Yeso',
+            clinker_fortaleza: 'Clinker',
+            banda: 'Banda',
+            exportacion: 'Exportación',
+            sacos: 'Sacos'
+          }
+          const conSufijo = `${limpio} - ${sufijos[tipo] || '2'}`.slice(0, 31)
+          if (!nombresUsados.has(conSufijo)) {
+            nombreHoja = conSufijo
+          } else {
+            let n = 2
+            while (nombresUsados.has(`${conSufijo.slice(0, 29)} ${n}`)) n++
+            nombreHoja = `${conSufijo.slice(0, 29)} ${n}`
+          }
+        }
+        nombresUsados.add(nombreHoja)
+        return nombreHoja
+      }
+
       Object.entries(registrosDetalle).forEach(([key, grupo]) => {
         const rows = []
         const tipo = grupo.tipo
@@ -310,7 +337,7 @@ export default function BarcoDetallePage() {
             }
           }
 
-          XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31))
+          XLSX.utils.book_append_sheet(wb, ws, nombreUnicoHoja(nombre, tipo))
         }
       })
 
