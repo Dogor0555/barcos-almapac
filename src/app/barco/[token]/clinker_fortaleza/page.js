@@ -1686,7 +1686,7 @@ export default function ClinkerFortalezaPage() {
                 <option value="CORPORIN">CORPORIN</option>
                 <option value="ESCOBAR">ESCOBAR</option>
                 <option value="ESMERALDA">ESMERALDA</option>
-                <option value="JOB">JOB</option>
+                <option value="LOPAC">LOPAC</option>
                 <option value="MARTINEZ">MARTINEZ</option>
                 <option value="SANTIMONI">SANTIMONI</option>
               </select>
