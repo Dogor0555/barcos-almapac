@@ -84,6 +84,11 @@ export default function ClinkerFortalezaPage() {
   const paso1Ref = useRef(null)
   const paso2Ref = useRef(null)
 
+  // Refs para evitar recargas duplicadas y cachear destinos entre eventos realtime
+  const cargandoRef = useRef(false)
+  const recargaTimerRef = useRef(null)
+  const destinosMapaRef = useRef(new Map())
+
   const [entrada, setEntrada] = useState({
     correlativo: 1,
     fecha_entrada: '',
@@ -169,39 +174,35 @@ export default function ClinkerFortalezaPage() {
     }
   }
 
-  // 🔥 FUNCIÓN MEJORADA PARA CARGAR DATOS SIEMPRE FRESCOS (SIN LÍMITE DE 1000)
+  // 🔥 CARGA OPTIMIZADA: barco + producto + viajes + destinos en paralelo (SIN N+1)
   const cargarDatos = useCallback(async (mostrarToast = false) => {
-    if (!token) return
-    
+    if (!token || cargandoRef.current) return
+    cargandoRef.current = true
+
     try {
-      // Primero obtener el barco
-      const { data: barcoData, error: barcoError } = await supabase
-        .from('barcos')
-        .select('*')
-        .eq('token_compartido', token)
-        .single()
+      // Barco y producto en paralelo
+      const [barcoRes, productoRes] = await Promise.all([
+        supabase.from('barcos').select('*').eq('token_compartido', token).single(),
+        supabase.from('productos').select('*').eq('codigo', 'CLF-001').single()
+      ])
+
+      const { data: barcoData, error: barcoError } = barcoRes
+      const { data: productoData, error: productoError } = productoRes
 
       if (barcoError || !barcoData) {
         if (mostrarToast) toast.error('Barco no encontrado')
         return
       }
-      
+
       if (!barco || barco.id !== barcoData.id) {
         setBarco(barcoData)
       }
-
-      // Obtener producto CLINKER FORTALEZA (CLF-001)
-      const { data: productoData, error: productoError } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('codigo', 'CLF-001')
-        .single()
 
       if (productoError || !productoData) {
         if (mostrarToast) toast.error('Producto CLINKER FORTALEZA no encontrado')
         return
       }
-      
+
       if (!producto || producto.id !== productoData.id) {
         setProducto(productoData)
       }
@@ -212,36 +213,49 @@ export default function ClinkerFortalezaPage() {
 
       // 🔥 CONSULTA SIN LÍMITE - TRAE TODOS LOS REGISTROS
       const viajesData = await CARGAR_TODOS_LOS_REGISTROS('clinker_fortaleza_viajes', 'barco_id', barcoData.id)
-      
-      // Cargar información de destinos para cada viaje
-      const viajesConDestinos = await Promise.all(viajesData.map(async (viaje) => {
-        if (viaje.destino_id) {
-          const { data: destino } = await supabase
-            .from('destinos')
-            .select('id, codigo, nombre, tipo')
-            .eq('id', viaje.destino_id)
-            .single()
-          return { ...viaje, destino_info: destino }
-        }
-        return { ...viaje, destino_info: null }
-      }))
-      
-      console.log('✅ Datos cargados desde DB:', viajesConDestinos?.length, 'viajes')
-      console.log('Correlativos:', viajesConDestinos?.map(v => v.correlativo).sort((a,b) => a-b))
-      
-      setViajes(viajesConDestinos || [])
-      
-      if (mostrarToast) {
-        toast.success(`Datos actualizados: ${viajesConDestinos?.length || 0} viajes`)
+
+      // 🔥 DESTINOS EN UNA SOLA CONSULTA (antes: 1 consulta por viaje = cientos de peticiones)
+      const destinoIds = [...new Set(viajesData.filter(v => v.destino_id).map(v => v.destino_id))]
+      const mapaDestinos = new Map()
+      if (destinoIds.length > 0) {
+        const { data: destinosData } = await supabase
+          .from('destinos')
+          .select('id, codigo, nombre, tipo')
+          .in('id', destinoIds)
+        ;(destinosData || []).forEach(d => mapaDestinos.set(d.id, d))
       }
-      
+      destinosMapaRef.current = mapaDestinos
+
+      const viajesConDestinos = viajesData.map(viaje => ({
+        ...viaje,
+        destino_info: viaje.destino_id ? (mapaDestinos.get(viaje.destino_id) || null) : null
+      }))
+
+      setViajes(viajesConDestinos)
+
+      if (mostrarToast) {
+        toast.success(`Datos actualizados: ${viajesConDestinos.length} viajes`)
+      }
+
     } catch (err) {
       console.error('Error cargando datos:', err)
       if (mostrarToast) toast.error('Error al cargar datos')
+    } finally {
+      cargandoRef.current = false
     }
   }, [token, barco, producto])
 
-  // 🔥 SUPABASE REALTIME - SINCRONIZACIÓN EN VIVO
+  // Recarga con debounce: si llegan varios eventos seguidos (guardado + realtime),
+  // se agrupan en UNA sola recarga en lugar de duplicar peticiones
+  const programarRecarga = useCallback(() => {
+    if (recargaTimerRef.current) return
+    recargaTimerRef.current = setTimeout(async () => {
+      recargaTimerRef.current = null
+      await cargarDatos(false)
+    }, 300)
+  }, [cargarDatos])
+
+  // 🔥 SUPABASE REALTIME - SINCRONIZACIÓN EN VIVO (patch incremental, sin recargar todo)
   useEffect(() => {
     if (!barco?.id) return
 
@@ -258,14 +272,35 @@ export default function ClinkerFortalezaPage() {
           filter: `barco_id=eq.${barco.id}`
         },
         (payload) => {
-          console.log('📡 Cambio detectado en tiempo real:', payload.eventType, payload.new?.correlativo || payload.old?.correlativo)
-          cargarDatos(false)
-          
-          if (payload.eventType === 'INSERT') {
+          const tipo = payload.eventType
+
+          setViajes(prev => {
+            if (tipo === 'INSERT') {
+              if (prev.some(v => v.id === payload.new.id)) return prev
+              const destinoInfo = payload.new.destino_id ? (destinosMapaRef.current.get(payload.new.destino_id) || null) : null
+              return [...prev, { ...payload.new, destino_info: destinoInfo }]
+            }
+            if (tipo === 'UPDATE') {
+              const prevRow = prev.find(v => v.id === payload.new.id)
+              const destinoInfo = payload.new.destino_id
+                ? (destinosMapaRef.current.get(payload.new.destino_id) || prevRow?.destino_info || null)
+                : null
+              return prev.map(v => v.id === payload.new.id ? { ...payload.new, destino_info: destinoInfo } : v)
+            }
+            if (tipo === 'DELETE') {
+              return prev.filter(v => v.id !== payload.old.id)
+            }
+            return prev
+          })
+
+          // Respaldo silencioso: una sola recarga agrupada para mantener consistencia total
+          programarRecarga()
+
+          if (tipo === 'INSERT') {
             toast.success(`🚚 Nuevo viaje #${payload.new.correlativo} registrado`, { duration: 2000 })
-          } else if (payload.eventType === 'UPDATE') {
+          } else if (tipo === 'UPDATE') {
             toast.info(`✏️ Viaje #${payload.new.correlativo} actualizado`, { duration: 2000 })
-          } else if (payload.eventType === 'DELETE') {
+          } else if (tipo === 'DELETE') {
             toast.warning(`🗑️ Viaje #${payload.old.correlativo} eliminado`, { duration: 2000 })
           }
         }
@@ -278,18 +313,22 @@ export default function ClinkerFortalezaPage() {
       console.log('🔌 Desconectando Realtime')
       supabase.removeChannel(channel)
     }
-  }, [barco?.id, cargarDatos])
+  }, [barco?.id, programarRecarga])
 
-  // Carga inicial
+  // Carga inicial (en paralelo para máxima velocidad)
   useEffect(() => {
     const init = async () => {
       setLoading(true)
-      await cargarDatos(false)
-      await cargarUnidades()
-      await cargarDestinos()
+      await Promise.all([cargarDatos(false), cargarUnidades(), cargarDestinos()])
       setLoading(false)
     }
     init()
+    return () => {
+      if (recargaTimerRef.current) {
+        clearTimeout(recargaTimerRef.current)
+        recargaTimerRef.current = null
+      }
+    }
   }, [token])
 
   const cargarUnidades = async () => {
@@ -671,7 +710,8 @@ export default function ClinkerFortalezaPage() {
         `ENTRADA registrada: Viaje #${entrada.correlativo} - ${entrada.placa} - Peso Bruto: ${pesoBrutoConvertido.toFixed(3)} TM`
       )
 
-      await cargarDatos(false)
+      // No bloquear la interfaz: recarga agrupada en segundo plano (realtime ya actualizó la tabla)
+      programarRecarga()
 
       setEntrada({
         correlativo: siguienteCorrelativo + 1,
@@ -740,7 +780,7 @@ export default function ClinkerFortalezaPage() {
         `SALIDA registrada: ${viajeActivo.placa} - ${salida.hora_salida} - Peso Neto: ${pesoNeto.toFixed(3)} TM`
       )
 
-      await cargarDatos(false)
+      programarRecarga()
 
       setViajeActivo(null)
       setSalida({ hora_salida: '', peso_neto: '' })
@@ -882,7 +922,7 @@ export default function ClinkerFortalezaPage() {
       if (error) throw error
       
       toast.success('Viaje actualizado correctamente')
-      await cargarDatos(false)
+      programarRecarga()
       setModalEdicionAbierto(false)
     } catch (err) {
       console.error('Error guardando edición:', err)
@@ -897,7 +937,7 @@ export default function ClinkerFortalezaPage() {
       if (error) throw error
       
       toast.success('Viaje eliminado')
-      await cargarDatos(false)
+      programarRecarga()
       setModalEdicionAbierto(false)
     } catch (err) {
       console.error('Error eliminando:', err)
@@ -1658,7 +1698,7 @@ export default function ClinkerFortalezaPage() {
                 <option value="CORPORIN">CORPORIN</option>
                 <option value="ESCOBAR">ESCOBAR</option>
                 <option value="ESMERALDA">ESMERALDA</option>
-                <option value="JOB">JOB</option>
+                <option value="LOPAC">LOPAC</option>
                 <option value="MARTINEZ">MARTINEZ</option>
                 <option value="SANTIMONI">SANTIMONI</option>
               </select>
