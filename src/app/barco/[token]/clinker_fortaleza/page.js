@@ -580,6 +580,12 @@ export default function ClinkerFortalezaPage() {
 
   const acumuladoActual = totalDescargado
 
+  const flujoOperativo = useMemo(() => {
+    const fechasUnicas = [...new Set(viajesCompletados.map(v => v.fecha_entrada))]
+    if (fechasUnicas.length === 0) return 0
+    return totalDescargado / fechasUnicas.length
+  }, [viajesCompletados, totalDescargado])
+
   const porcentajeCompletado = meta > 0 ? (totalDescargado / meta) * 100 : 0
   const faltante = Math.max(0, meta - totalDescargado)
   const excedente = Math.max(0, totalDescargado - meta)
@@ -992,6 +998,12 @@ export default function ClinkerFortalezaPage() {
                 <Truck className="w-4 h-4" />
                 Total Descargado: {totalDescargado.toFixed(3)} TM
               </div>
+              {flujoOperativo > 0 && (
+                <div className="bg-cyan-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Flujo: {flujoOperativo.toFixed(2)} TM/día
+                </div>
+              )}
               {excedente > 0 && (
                 <div className="bg-red-500/30 px-4 py-2 rounded-xl font-bold flex items-center gap-2 animate-pulse">
                   <AlertCircle className="w-4 h-4" />

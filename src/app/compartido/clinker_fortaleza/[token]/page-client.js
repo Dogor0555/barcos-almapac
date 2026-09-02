@@ -502,20 +502,31 @@ export default function ClientPage({ token }) {
 
   const flujoPromedioPorHora = useMemo(() => {
     if (registrosConFiltrosTabla.length === 0) return 0
-    let horaMin = null, horaMax = null
-    registrosConFiltrosTabla.forEach(reg => {
-      if (reg.hora_entrada) {
-        const horaDate = dayjs(`${reg.fecha} ${reg.hora_entrada}`)
-        if (horaDate.isValid()) {
-          if (!horaMin || horaDate.isBefore(horaMin)) horaMin = horaDate
-          if (!horaMax || horaDate.isAfter(horaMax)) horaMax = horaDate
-        }
+
+    const registrosConHora = registrosConFiltrosTabla
+      .filter(r => r.hora_entrada)
+      .sort((a, b) => {
+        const da = dayjs(`${a.fecha} ${a.hora_entrada}`)
+        const db = dayjs(`${b.fecha} ${b.hora_entrada}`)
+        return da.valueOf() - db.valueOf()
+      })
+
+    if (registrosConHora.length < 2) return estadisticas.totalNeto
+
+    let minutosActivos = 0
+    for (let i = 1; i < registrosConHora.length; i++) {
+      const fechaAnterior = dayjs(`${registrosConHora[i-1].fecha} ${registrosConHora[i-1].hora_entrada}`)
+      const fechaActual = dayjs(`${registrosConHora[i].fecha} ${registrosConHora[i].hora_entrada}`)
+      const diffMinutos = fechaActual.diff(fechaAnterior, 'minute')
+
+      if (diffMinutos > 0 && diffMinutos <= 24 * 60) {
+        minutosActivos += diffMinutos
       }
-    })
-    if (!horaMin || !horaMax) return 0
-    const horasTranscurridas = horaMax.diff(horaMin, 'minutes') / 60
-    if (horasTranscurridas <= 0) return estadisticas.totalNeto
-    return estadisticas.totalNeto / horasTranscurridas
+    }
+
+    const horasActivas = minutosActivos / 60
+    if (horasActivas <= 0) return estadisticas.totalNeto
+    return estadisticas.totalNeto / horasActivas
   }, [registrosConFiltrosTabla, estadisticas.totalNeto])
 
   const meta = barco?.metas_json?.limites?.['CLF-001'] || 0
