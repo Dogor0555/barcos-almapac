@@ -60,6 +60,8 @@ function calcularEstadisticas(registros) {
       pctDanados: 0,
       promedioUnidadesPorRegistro: 0,
       ritmoJumbosPorHora: 0,
+      ritmoViajesPorHora: 0,
+      velocidadKgPorHora: 0,
       diasOperativos: 0,
       viajesPorDia: 0,
     }
@@ -93,6 +95,8 @@ function calcularEstadisticas(registros) {
   }
   const horasActivas = minutosActivos / 60
   const ritmoJumbosPorHora = horasActivas > 0 ? totalJumbos / horasActivas : 0
+  const ritmoViajesPorHora = horasActivas > 0 ? totalRegistros / horasActivas : 0
+  const velocidadKgPorHora = horasActivas > 0 ? totalPesoKg / horasActivas : 0
 
   // Días operativos: cantidad de fechas distintas
   const diasOperativos = new Set(registros.map((r) => r.fecha).filter(Boolean)).size
@@ -112,6 +116,8 @@ function calcularEstadisticas(registros) {
     pctDanados,
     promedioUnidadesPorRegistro,
     ritmoJumbosPorHora,
+    ritmoViajesPorHora,
+    velocidadKgPorHora,
     diasOperativos,
     viajesPorDia,
   }
@@ -366,19 +372,19 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
 
         .alm-body { max-width: 1440px; margin: 0 auto; padding: 32px; }
 
-        .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 24px; }
         .kpi-card {
           background: linear-gradient(135deg, #0000A3, #182A6E);
-          border-radius: 20px;
-          padding: 14px 18px;
+          border-radius: 18px;
+          padding: 12px 14px;
           color: var(--blanco);
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
           position: relative;
           overflow: hidden;
           box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          min-height: 76px;
+          min-height: 78px;
         }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,163,0.2); }
         .kpi-card::after {
@@ -393,18 +399,18 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
           pointer-events: none;
         }
         .kpi-icon {
-          width: 38px; height: 38px;
+          width: 34px; height: 34px;
           background: rgba(255,255,255,0.12);
-          border-radius: 12px;
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
         }
         .kpi-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-        .kpi-value { font-size: 24px; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .kpi-value small { font-size: 11px; font-weight: 500; opacity: 0.8; margin-left: 2px; }
-        .kpi-label { font-size: 10px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
+        .kpi-value { font-size: 22px; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi-value small { font-size: 10px; font-weight: 500; opacity: 0.8; margin-left: 2px; }
+        .kpi-label { font-size: 9.5px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.2px; font-weight: 600; line-height: 1.2; margin-top: 2px; word-wrap: break-word; }
 
         .alm-section-title {
           font-size: 13px;
@@ -465,6 +471,9 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
 
         .alm-table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; }
 
+        @media (max-width: 1400px) {
+          .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+        }
         @media (max-width: 1200px) {
           .kpi-grid { grid-template-columns: repeat(3, 1fr); }
         }
@@ -545,7 +554,9 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             <KpiCard icon={<MdCheckCircle size={22} />} value={fmtNum(stats.totalBuenEstado)} label="Buen Estado" />
             <KpiCard icon={<GoAlert size={22} />} value={fmtNum(stats.totalDanados)} label={`Dañados (${stats.pctDanados.toFixed(2)}%)`} />
             <KpiCard icon={<MdAccessTime size={22} />} value={stats.duracionPromedioMin.toFixed(1)} suffix="min" label="Duración Promedio" />
-            <KpiCard icon={<FaChartLine size={22} />} value={stats.ritmoJumbosPorHora.toFixed(1)} suffix="und/h" label="Ritmo de Descarga" />
+            <KpiCard icon={<FaChartLine size={22} />} value={stats.ritmoViajesPorHora.toFixed(1)} suffix="viajes/h" label="Ritmo de Descarga" />
+            <KpiCard icon={<FiPackage size={22} />} value={stats.ritmoJumbosPorHora.toFixed(1)} suffix="jumbos/h" label="Ritmo de Jumbos" />
+            <KpiCard icon={<GiWeightScale size={22} />} value={fmtNum(Math.round(stats.velocidadKgPorHora))} suffix="kg/h" label="Velocidad (kg/h)" />
             <KpiCard icon={<FaChartBar size={22} />} value={stats.viajesPorDia.toFixed(1)} label={`Viajes / Día`} />
           </div>
 
