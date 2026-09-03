@@ -9,7 +9,7 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 
 import { FiSearch, FiRefreshCw, FiDownload, FiX, FiClock, FiCalendar, FiTruck, FiBarChart2, FiActivity, FiFilter, FiPackage } from 'react-icons/fi'
-import { FaBuilding, FaFileExcel, FaTachometerAlt, FaWarehouse, FaChartBar, FaChartLine } from 'react-icons/fa'
+import { FaBuilding, FaFileExcel, FaTachometerAlt, FaWarehouse, FaChartBar, FaChartLine, FaCalendarAlt } from 'react-icons/fa'
 import { GiCargoShip, GiWeightScale, GiMinerals } from 'react-icons/gi'
 import { GoAlert } from 'react-icons/go'
 import { MdAccessTime, MdCheckCircle } from 'react-icons/md'
@@ -57,7 +57,11 @@ function calcularEstadisticas(registros) {
       duracionMaxMin: 0,
       registrosDanados: 0,
       pctBuenEstado: 0,
+      pctDanados: 0,
       promedioUnidadesPorRegistro: 0,
+      ritmoJumbosPorHora: 0,
+      diasOperativos: 0,
+      viajesPorDia: 0,
     }
   }
 
@@ -74,7 +78,25 @@ function calcularEstadisticas(registros) {
 
   const registrosDanados = registros.filter((r) => (r.cantidadDanado || 0) > 0).length
   const pctBuenEstado = totalJumbos > 0 ? (totalBuenEstado / totalJumbos) * 100 : 0
+  const pctDanados = totalJumbos > 0 ? (totalDanados / totalJumbos) * 100 : 0
   const promedioUnidadesPorRegistro = totalJumbos / totalRegistros
+
+  // Ritmo de descarga: totalJumbos / horas activas (entre viajes consecutivos)
+  const ordenados = registros
+    .filter((r) => r.inicioDate)
+    .slice()
+    .sort((a, b) => a.inicioDate - b.inicioDate)
+  let minutosActivos = 0
+  for (let i = 1; i < ordenados.length; i++) {
+    const diff = (ordenados[i].inicioDate - ordenados[i - 1].inicioDate) / 60000
+    if (diff > 0 && diff <= 24 * 60) minutosActivos += diff
+  }
+  const horasActivas = minutosActivos / 60
+  const ritmoJumbosPorHora = horasActivas > 0 ? totalJumbos / horasActivas : 0
+
+  // Días operativos: cantidad de fechas distintas
+  const diasOperativos = new Set(registros.map((r) => r.fecha).filter(Boolean)).size
+  const viajesPorDia = diasOperativos > 0 ? totalRegistros / diasOperativos : 0
 
   return {
     totalRegistros,
@@ -87,7 +109,11 @@ function calcularEstadisticas(registros) {
     duracionMaxMin,
     registrosDanados,
     pctBuenEstado,
+    pctDanados,
     promedioUnidadesPorRegistro,
+    ritmoJumbosPorHora,
+    diasOperativos,
+    viajesPorDia,
   }
 }
 
@@ -129,12 +155,13 @@ function recepcionPorBodega(registros) {
 }
 
 function tiempoDeDescarga(registros) {
-  // Histograma de duraciones en buckets de 5 min + serie por registro (ordenada por inicio)
+  // Histograma de duraciones en buckets de 2 min
+  const STEP = 2
   const buckets = new Map()
   registros.forEach((r) => {
     if (r.duracionMin <= 0) return
-    const bucket = Math.floor(r.duracionMin / 5) * 5
-    const key = `${bucket}-${bucket + 5}`
+    const bucket = Math.floor(r.duracionMin / STEP) * STEP
+    const key = `${bucket}-${bucket + STEP}`
     if (!buckets.has(key)) {
       buckets.set(key, { rango: key, bucketMin: bucket, registros: 0, unidades: 0, pesoKg: 0 })
     }
@@ -144,6 +171,18 @@ function tiempoDeDescarga(registros) {
     item.pesoKg += r.pesoNetoKg
   })
   return Array.from(buckets.values()).sort((a, b) => a.bucketMin - b.bucketMin)
+}
+
+function acumuladoPorHora(registros) {
+  // Igual a unidadesPorHora pero con columna 'acumulado' (sum running) y 'pesoAcumulado'
+  const buckets = unidadesPorHora(registros)
+  let acumUnidades = 0
+  let acumPeso = 0
+  return buckets.map((b) => {
+    acumUnidades += b.unidades
+    acumPeso += b.pesoKg
+    return { ...b, acumUnidades, acumPeso }
+  })
 }
 
 function seriePorRegistro(registros) {
@@ -183,7 +222,7 @@ function descargarExcel(registros, stats, datosHora, datosBodega, datosTiempo) {
   rows.push(['Generado', dayjs().format('YYYY-MM-DD HH:mm:ss')])
   rows.push([])
   rows.push(['KPIs'])
-  rows.push(['Total Registros', stats.totalRegistros])
+  rows.push(['Total Viajes', stats.totalRegistros])
   rows.push(['Total Jumbos (Buen Estado)', stats.totalBuenEstado])
   rows.push(['Total Jumbos Dañados', stats.totalDanados])
   rows.push(['Total Peso Neto (kg)', stats.totalPesoKg])
@@ -191,18 +230,18 @@ function descargarExcel(registros, stats, datosHora, datosBodega, datosTiempo) {
   rows.push(['% Buen Estado', stats.pctBuenEstado.toFixed(1) + '%'])
   rows.push([])
   rows.push(['Unidades por Hora'])
-  rows.push(['Hora', 'Registros', 'Unidades', 'Peso (kg)'])
+  rows.push(['Hora', 'Viajes', 'Unidades', 'Peso (kg)'])
   datosHora.forEach((d) => rows.push([d.hora, d.registros, d.unidades, d.pesoKg]))
   rows.push([])
   rows.push(['Recepción por Bodega'])
-  rows.push(['Bodega', 'Registros', 'Unidades', 'Peso (kg)', 'Dañados'])
+  rows.push(['Bodega', 'Viajes', 'Unidades', 'Peso (kg)', 'Dañados'])
   datosBodega.forEach((d) => rows.push([d.bodega, d.registros, d.unidades, d.pesoKg, d.danados]))
   rows.push([])
   rows.push(['Tiempo de Descarga (histograma)'])
-  rows.push(['Rango (min)', 'Registros', 'Unidades', 'Peso (kg)'])
+  rows.push(['Rango (min)', 'Viajes', 'Unidades', 'Peso (kg)'])
   datosTiempo.forEach((d) => rows.push([d.rango, d.registros, d.unidades, d.pesoKg]))
   rows.push([])
-  rows.push(['Detalle de Registros'])
+  rows.push(['Detalle de Viajes'])
   rows.push(['Título', 'Fecha', 'Bodega', 'Placa Camión', 'Placa Remolque', 'Hora Inicio', 'Hora Fin', 'Duración (min)', 'Buen Estado', 'Dañados', 'Peso (kg)'])
   registros.forEach((r) => {
     rows.push([
@@ -249,6 +288,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
 
   const stats = useMemo(() => calcularEstadisticas(registros), [registros])
   const datosHora = useMemo(() => unidadesPorHora(registros), [registros])
+  const datosAcumulado = useMemo(() => acumuladoPorHora(registros), [registros])
   const datosBodega = useMemo(() => recepcionPorBodega(registros), [registros])
   const datosTiempo = useMemo(() => tiempoDeDescarga(registros), [registros])
   const serieTiempo = useMemo(() => seriePorRegistro(registros), [registros])
@@ -324,7 +364,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
 
         .alm-body { max-width: 1440px; margin: 0 auto; padding: 32px; }
 
-        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
         .kpi-card {
           background: linear-gradient(135deg, #0000A3, #182A6E);
           border-radius: 20px;
@@ -421,6 +461,9 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
 
         .alm-table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; }
 
+        @media (max-width: 1200px) {
+          .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+        }
         @media (max-width: 1024px) {
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
           .alm-chart-grid { grid-template-columns: 1fr; }
@@ -441,7 +484,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             <div style={{ width: '2px', height: '35px', background: COLOR_NARANJA }} />
             <div>
               <div className="alm-ship-name">Recepción de Jumbos</div>
-              <div className="alm-ship-code">Barco GANT NEREA · {fmtNum(registrosAll.length)} registros (mock temporal)</div>
+              <div className="alm-ship-code">Barco GANT NEREA · {fmtNum(registrosAll.length)} viajes (mock temporal)</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -483,21 +526,23 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             </div>
             <div>
               <div className="alm-badge" style={{ marginBottom: 0 }}>
-                <FiActivity size={12} /> {fmtNum(registros.length)} / {fmtNum(registrosAll.length)}
+                <FiActivity size={12} /> {fmtNum(registros.length)} / {fmtNum(registrosAll.length)} viajes
               </div>
             </div>
           </div>
 
           {/* KPIs */}
           <div className="kpi-grid">
-            <KpiCard icon={<FiPackage size={22} />} value={fmtNum(stats.totalJumbos)} label="Jumbos Recibidos" />
-            <KpiCard icon={<GiWeightScale size={22} />} value={fmtNum(stats.totalPesoKg)} suffix="kg" label="Peso Neto Total" />
-            <KpiCard icon={<FiTruck size={22} />} value={fmtNum(stats.totalRegistros)} label="Total Registros" />
-            <KpiCard icon={<MdAccessTime size={22} />} value={stats.duracionPromedioMin.toFixed(1)} suffix="min" label="Duración Promedio" />
+            <KpiCard icon={<FiPackage size={22} />} value={fmtNum(stats.totalJumbos)} label="Total Jumbos" />
+            <KpiCard icon={<GiWeightScale size={22} />} value={fmtNum(stats.totalPesoKg)} suffix="kg" label="Acumulado (kg)" />
+            <KpiCard icon={<FiTruck size={22} />} value={fmtNum(stats.totalRegistros)} label="Total de Viajes" />
+            <KpiCard icon={<FaCalendarAlt size={22} />} value={fmtNum(stats.diasOperativos)} label={`Días Operativos`} />
+            <KpiCard icon={<FaTachometerAlt size={22} />} value={fmtNum(Math.round(stats.totalPesoKg / Math.max(stats.totalJumbos, 1)))} suffix="kg" label="Peso Prom. / Jumbo" />
             <KpiCard icon={<MdCheckCircle size={22} />} value={fmtNum(stats.totalBuenEstado)} label="Buen Estado" />
-            <KpiCard icon={<GoAlert size={22} />} value={fmtNum(stats.totalDanados)} label="Dañados" />
-            <KpiCard icon={<FaTachometerAlt size={22} />} value={stats.pctBuenEstado.toFixed(1)} suffix="%" label="% Buen Estado" />
-            <KpiCard icon={<FaChartBar size={22} />} value={stats.promedioUnidadesPorRegistro.toFixed(1)} label="Promedio / Registro" />
+            <KpiCard icon={<GoAlert size={22} />} value={fmtNum(stats.totalDanados)} label={`Dañados (${stats.pctDanados.toFixed(2)}%)`} />
+            <KpiCard icon={<MdAccessTime size={22} />} value={stats.duracionPromedioMin.toFixed(1)} suffix="min" label="Duración Promedio" />
+            <KpiCard icon={<FaChartLine size={22} />} value={stats.ritmoJumbosPorHora.toFixed(1)} suffix="und/h" label="Ritmo de Descarga" />
+            <KpiCard icon={<FaChartBar size={22} />} value={stats.viajesPorDia.toFixed(1)} label={`Viajes / Día`} />
           </div>
 
           {/* 3 GRÁFICOS PRINCIPALES */}
@@ -509,7 +554,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             <div className="alm-chart-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div className="alm-section-title" style={{ margin: 0 }}>
-                  <FiClock size={14} /> Cantidad de unidades por hora
+                  <FiClock size={14} /> Unidades por hora + Acumulado
                 </div>
                 {peakHora && (
                   <div className="alm-badge">
@@ -518,23 +563,45 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
                 )}
               </div>
               <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={datosHora}>
+                <ComposedChart data={datosAcumulado} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="horaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0.4} />
-                      <stop offset="100%" stopColor={COLOR_AZUL_PRINCIPAL} stopOpacity={0.05} />
+                    <linearGradient id="acumGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={COLOR_NARANJA} stopOpacity={0.25} />
+                      <stop offset="100%" stopColor={COLOR_NARANJA} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
-                  <XAxis dataKey="hora" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} interval={1} />
-                  <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} formatter={(v, n) => n === 'unidades' ? `${fmtNum(v)} und` : n === 'pesoKg' ? `${fmtNum(v)} kg` : v} />
-                  <Bar dataKey="unidades" fill="url(#horaGradient)" radius={[6, 6, 0, 0]} name="Unidades">
-                    {datosHora.map((entry, idx) => (
+                  <XAxis
+                    dataKey="hora"
+                    tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 9 }}
+                    interval={0}
+                    angle={-45}
+                    textAnchor="end"
+                    height={50}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }}
+                    label={{ value: 'Unidades / hora', angle: -90, position: 'insideLeft', style: { fill: COLOR_TEXTO_SECUNDARIO, fontSize: 11 } }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: COLOR_NARANJA, fontSize: 10 }}
+                    label={{ value: 'Acumulado', angle: 90, position: 'insideRight', style: { fill: COLOR_NARANJA, fontSize: 11, fontWeight: 600 } }}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }}
+                    formatter={(v, n) => n === 'unidades' ? `${fmtNum(v)} und` : `${fmtNum(v)} und`}
+                    labelFormatter={(l) => `Hora: ${l}`}
+                  />
+                  <Bar yAxisId="left" dataKey="unidades" radius={[6, 6, 0, 0]} name="Unidades / hora">
+                    {datosAcumulado.map((entry, idx) => (
                       <Cell key={idx} fill={peakHora && entry.hora === peakHora.hora ? COLOR_NARANJA : COLOR_AZUL_PRINCIPAL} />
                     ))}
                   </Bar>
-                  <Line type="monotone" dataKey="pesoKg" stroke={COLOR_NARANJA} strokeWidth={2} dot={false} name="Peso (kg)" />
+                  <Line yAxisId="right" type="monotone" dataKey="acumUnidades" stroke={COLOR_NARANJA} strokeWidth={3} dot={false} name="Acumulado" />
+                  <Area yAxisId="right" type="monotone" dataKey="acumUnidades" fill="url(#acumGradient)" stroke="none" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -543,19 +610,33 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             <div className="alm-chart-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div className="alm-section-title" style={{ margin: 0 }}>
-                  <MdAccessTime size={14} /> Tiempo de descargas
+                  <MdAccessTime size={14} /> Tiempo de descargas (minutos por registro)
                 </div>
                 <div className="alm-badge">
                   Min: {stats.duracionMinMin}m · Max: {stats.duracionMaxMin}m
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={datosTiempo}>
+                <BarChart data={datosTiempo} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={COLOR_BORDE} vertical={false} />
-                  <XAxis dataKey="rango" tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} />
-                  <YAxis tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }} formatter={(v) => fmtNum(v)} />
-                  <Bar dataKey="registros" fill={COLOR_AZUL_PRINCIPAL} radius={[6, 6, 0, 0]} name="Cantidad de registros">
+                  <XAxis
+                    dataKey="rango"
+                    tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={50}
+                  />
+                  <YAxis
+                    tick={{ fill: COLOR_TEXTO_SECUNDARIO, fontSize: 10 }}
+                    allowDecimals={false}
+                    label={{ value: 'Viajes', angle: -90, position: 'insideLeft', style: { fill: COLOR_TEXTO_SECUNDARIO, fontSize: 11 } }}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: COLOR_BLANCO, border: `1px solid ${COLOR_BORDE}`, borderRadius: '12px' }}
+                    formatter={(v) => `${fmtNum(v)} viajes`}
+                    labelFormatter={(l) => `Duración: ${l} min`}
+                  />
+                  <Bar dataKey="registros" radius={[6, 6, 0, 0]} name="Cantidad de viajes">
                     {datosTiempo.map((entry, idx) => (
                       <Cell key={idx} fill={entry.bucketMin > 30 ? COLOR_ROJO : entry.bucketMin > 15 ? COLOR_NARANJA : COLOR_AZUL_PRINCIPAL} />
                     ))}
@@ -590,7 +671,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
                       <Cell key={idx} fill={COLORES_BODEGA[idx % COLORES_BODEGA.length]} />
                     ))}
                   </Bar>
-                  <Bar yAxisId="left" dataKey="registros" fill={COLOR_VERDE_GRIS} radius={[6, 6, 0, 0]} name="Registros" />
+                  <Bar yAxisId="left" dataKey="registros" fill={COLOR_VERDE_GRIS} radius={[6, 6, 0, 0]} name="Viajes" />
                   <Line yAxisId="right" type="monotone" dataKey="pesoKg" stroke={COLOR_NARANJA} strokeWidth={3} dot={{ r: 5, fill: COLOR_NARANJA }} name="Peso (kg)" />
                 </BarChart>
               </ResponsiveContainer>
@@ -602,8 +683,8 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${COLOR_BORDE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <FiBarChart2 size={14} style={{ color: COLOR_AZUL_PRINCIPAL }} />
-                <span style={{ fontWeight: 700, color: COLOR_TEXTO_PRIMARIO }}>Detalle de Registros</span>
-                <span className="alm-badge">{fmtNum(registros.length)} registros</span>
+                <span style={{ fontWeight: 700, color: COLOR_TEXTO_PRIMARIO }}>Detalle de Viajes</span>
+                <span className="alm-badge">{fmtNum(registros.length)} viajes</span>
               </div>
               {peakHora && (
                 <div style={{ fontSize: 11, color: COLOR_TEXTO_SECUNDARIO }}>
@@ -656,7 +737,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
             </div>
             {registros.length > 200 && (
               <div style={{ padding: 12, textAlign: 'center', fontSize: 11, color: COLOR_TEXTO_SECUNDARIO, borderTop: `1px solid ${COLOR_BORDE}` }}>
-                Mostrando primeras 200 filas. Exportá a Excel para ver todos los {fmtNum(registros.length)} registros.
+                Mostrando primeras 200 filas. Exportá a Excel para ver todos los {fmtNum(registros.length)} viajes.
               </div>
             )}
           </div>
