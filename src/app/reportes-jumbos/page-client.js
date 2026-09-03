@@ -202,15 +202,17 @@ function seriePorRegistro(registros) {
 // COMPONENTES UI
 // =====================================================================
 
-function KpiCard({ icon, value, label, valueSize = 26, suffix = '' }) {
+function KpiCard({ icon, value, label, valueSize = 24, suffix = '' }) {
   return (
     <div className="kpi-card">
       <div className="kpi-icon">{icon}</div>
-      <div className="kpi-value">
-        {value}
-        {suffix && <small> {suffix}</small>}
+      <div className="kpi-body">
+        <div className="kpi-value">
+          {value}
+          {suffix && <small>{suffix}</small>}
+        </div>
+        <div className="kpi-label">{label}</div>
       </div>
-      <div className="kpi-label">{label}</div>
     </div>
   )
 }
@@ -368,14 +370,15 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
         .kpi-card {
           background: linear-gradient(135deg, #0000A3, #182A6E);
           border-radius: 20px;
-          padding: 14px 20px;
+          padding: 14px 18px;
           color: var(--blanco);
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 12px;
           position: relative;
           overflow: hidden;
           box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          min-height: 76px;
         }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,163,0.2); }
         .kpi-card::after {
@@ -390,7 +393,7 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
           pointer-events: none;
         }
         .kpi-icon {
-          width: 42px; height: 42px;
+          width: 38px; height: 38px;
           background: rgba(255,255,255,0.12);
           border-radius: 12px;
           display: flex;
@@ -398,9 +401,10 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
           justify-content: center;
           flex-shrink: 0;
         }
-        .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; white-space: nowrap; }
-        .kpi-value small { font-size: 12px; font-weight: 500; opacity: 0.8; }
-        .kpi-label { font-size: 11px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; white-space: nowrap; margin-left: auto; }
+        .kpi-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+        .kpi-value { font-size: 24px; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kpi-value small { font-size: 11px; font-weight: 500; opacity: 0.8; margin-left: 2px; }
+        .kpi-label { font-size: 10px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
 
         .alm-section-title {
           font-size: 13px;
