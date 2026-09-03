@@ -271,6 +271,8 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { color-scheme: light; }
+        html, body { color: var(--texto-primary); }
         :root {
           --azul-500: #0000A3;
           --azul-400: #182A6E;
@@ -406,9 +408,16 @@ export default function ReportesJumbosClient({ registros: registrosIniciales }) 
           font-size: 13px;
           outline: none;
           width: 100%;
+          color: var(--texto-primary);
         }
+        .alm-input::placeholder { color: var(--texto-secondary); opacity: 1; }
+        .alm-input::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
+        .alm-select option { color: var(--texto-primary); background: var(--blanco); }
         .alm-input:focus, .alm-select:focus { border-color: var(--azul-500); box-shadow: 0 0 0 3px rgba(0,0,163,0.1); }
         .alm-label { font-size: 10px; color: var(--texto-secondary); display: block; margin-bottom: 6px; text-transform: uppercase; font-weight: 600; }
+        .alm-filters * { color: var(--texto-primary); }
+        .alm-filters .alm-label { color: var(--texto-secondary); }
+        .alm-filters .alm-badge { color: var(--azul-500); }
 
         .alm-table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; }
 
