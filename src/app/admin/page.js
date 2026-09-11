@@ -2419,6 +2419,13 @@ export default function AdminPage() {
               <Users className="w-4 h-4" />
               Usuarios
             </Link>
+            <Link
+              href="/admin/unidades"
+              className="px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all bg-cyan-500 hover:bg-cyan-600 text-white"
+            >
+              <Truck className="w-4 h-4" />
+              Unidades
+            </Link>
             <button
               onClick={() => setVista('estadisticas')}
               className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
