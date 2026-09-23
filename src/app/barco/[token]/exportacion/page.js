@@ -1424,14 +1424,27 @@ const estadisticasProducto = useMemo(() => {
 
     if (diferenciaHoras <= 0) return 0
 
-    const acumuladoInicial = Number(primera.acumulado_tm) || 0
-    const acumuladoFinal = Number(ultima.acumulado_tm) || 0
+    // Sumar el flujo REAL de cada registro:
+    // - primer registro → su valor completo
+    // - si el acumulado baja (reinicio de contador / retorno o cambio de bodega) → el valor completo
+    // - en cualquier otro caso → actual - anterior
+    let totalCargado = 0
 
-    const deltaAcumulado = acumuladoFinal - acumuladoInicial
+    for (let i = 0; i < ordenadas.length; i++) {
+      const valorActual = Number(ordenadas[i].acumulado_tm) || 0
 
-    if (deltaAcumulado <= 0) return 0
+      if (i === 0) {
+        totalCargado += valorActual
+        continue
+      }
 
-    return deltaAcumulado / diferenciaHoras
+      const valorAnterior = Number(ordenadas[i - 1].acumulado_tm) || 0
+      totalCargado += valorActual < valorAnterior ? valorActual : valorActual - valorAnterior
+    }
+
+    if (totalCargado <= 0) return 0
+
+    return totalCargado / diferenciaHoras
   }, [exportaciones, productoActivo])
 
   // =====================================================
@@ -2582,20 +2595,32 @@ const totalGeneral = useMemo(() => {
     
     // CALCULAR FLUJO - Usando el registro cronológico anterior
     const flujoPorRegistro = new Map()
+    const esReinicioContador = new Map()
     
     ascendente.forEach((reg, idx) => {
       const valorActual = Number(reg.acumulado_tm) || 0
       let flujo = 0
+      let reinicio = false
       
       if (idx === 0) {
         flujo = valorActual
+        reinicio = true
       } else {
         const anterior = ascendente[idx - 1]
         const valorAnterior = Number(anterior.acumulado_tm) || 0
-        flujo = Math.max(0, valorActual - valorAnterior)
+        
+        // Si el acumulado baja, el contador se reinició (retorno a la misma bodega
+        // o cambio de bodega): TODO lo registrado es lo que cayó en este ciclo
+        if (valorActual < valorAnterior) {
+          flujo = valorActual
+          reinicio = true
+        } else {
+          flujo = valorActual - valorAnterior
+        }
       }
       
       flujoPorRegistro.set(reg.id, flujo)
+      esReinicioContador.set(reg.id, reinicio)
     })
     
     // Detectar primera vez de cada bodega (para badges)
@@ -2622,21 +2647,30 @@ const totalGeneral = useMemo(() => {
     }
     
     // Detectar retornos - SOLO para productos que NO son melaza
+    // Solo es retorno si la bodega se usó antes Y (hubo otra bodega de por medio
+    // O el contador se reinició). Lecturas consecutivas de la misma bodega NO son retorno.
     const esRetornoBodega = new Map()
     if (!esMelaza) {
-      for (let i = 0; i < ascendente.length; i++) {
-        const actual = ascendente[i]
-        let bodegaVistaAntes = false
-        for (let j = 0; j < i; j++) {
-          if (ascendente[j].bodega_id === actual.bodega_id) {
-            bodegaVistaAntes = true
-            break
+      const ultimoValorPorBodega = new Map()
+      
+      ascendente.forEach((actual, i) => {
+        const valorActual = Number(actual.acumulado_tm) || 0
+        const ultimoValor = ultimoValorPorBodega.get(actual.bodega_id)
+        
+        if (ultimoValor !== undefined) {
+          let huboOtrasBodegas = false
+          for (let j = i - 1; j >= 0; j--) {
+            if (ascendente[j].bodega_id === actual.bodega_id) break
+            huboOtrasBodegas = true
+          }
+          
+          if (huboOtrasBodegas || valorActual < ultimoValor) {
+            esRetornoBodega.set(actual.id, true)
           }
         }
-        if (bodegaVistaAntes) {
-          esRetornoBodega.set(actual.id, true)
-        }
-      }
+        
+        ultimoValorPorBodega.set(actual.bodega_id, valorActual)
+      })
     }
     
     // Orden descendente para mostrar
@@ -2703,7 +2737,9 @@ const totalGeneral = useMemo(() => {
           const idxAscendente = ascendente.findIndex(a => a.id === exp.id)
           if (idxAscendente > 0) {
             const valorAnterior = Number(ascendente[idxAscendente - 1].acumulado_tm) || 0
-            flujoTooltip = `${Number(exp.acumulado_tm).toFixed(3)} - ${valorAnterior.toFixed(3)} = ${flujoCalculado.toFixed(3)} TM`
+            flujoTooltip = esReinicioContador.get(exp.id)
+              ? `Contador reiniciado (${bodega?.nombre || 'bodega'}): ${Number(exp.acumulado_tm).toFixed(3)} TM es lo que cayó en este ciclo (anterior: ${valorAnterior.toFixed(3)} TM)`
+              : `${Number(exp.acumulado_tm).toFixed(3)} - ${valorAnterior.toFixed(3)} = ${flujoCalculado.toFixed(3)} TM`
           }
         } else if (flujoCalculado === 0 && ascendente.findIndex(a => a.id === exp.id) > 0) {
           flujoColor = "text-yellow-400"
@@ -2887,24 +2923,33 @@ const totalGeneral = useMemo(() => {
     // Para Melaza: flujo = valor actual - valor anterior (el registro inmediatamente anterior, sin importar bodega)
     // CALCULAR FLUJO CORRECTAMENTE - Usando el registro cronológico anterior (no por bodega)
 const flujoPorRegistro = new Map()
+const esReinicioContador = new Map()
 
 ascendente.forEach((reg, idx) => {
   const valorActual = Number(reg.acumulado_tm) || 0
   let flujo = 0
+  let reinicio = false
   
   if (idx === 0) {
     // Primer registro: flujo = valor actual
     flujo = valorActual
+    reinicio = true
   } else {
     const anterior = ascendente[idx - 1]
     const valorAnterior = Number(anterior.acumulado_tm) || 0
     
-    // Para TODOS los productos: flujo = ACTUAL - ANTERIOR (registro cronológico inmediato)
-    // Esto funciona para Melaza y para los demás productos
-    flujo = Math.max(0, valorActual - valorAnterior)
+    // Si el acumulado baja, el contador se reinició (retorno a la misma bodega
+    // o cambio de bodega): TODO lo registrado es lo que cayó en este ciclo
+    if (valorActual < valorAnterior) {
+      flujo = valorActual
+      reinicio = true
+    } else {
+      flujo = valorActual - valorAnterior
+    }
   }
   
-  flujoPorRegistro.set(reg.id, flujo)
+  flujoPorRegistro.set(reg.id, { valor: flujo, valorActual })
+  esReinicioContador.set(reg.id, reinicio)
 })
     
     // Detectar primera vez de cada bodega (para badges)
@@ -2931,20 +2976,28 @@ ascendente.forEach((reg, idx) => {
     }
     
     // Detectar retornos (cuando se vuelve a una bodega ya usada)
+    // Solo si hubo otra bodega de por medio o el contador se reinició
     const esRetornoBodega = new Map()
-    for (let i = 0; i < ascendente.length; i++) {
-      const actual = ascendente[i]
-      let bodegaVistaAntes = false
-      for (let j = 0; j < i; j++) {
-        if (ascendente[j].bodega_id === actual.bodega_id) {
-          bodegaVistaAntes = true
-          break
+    const ultimoValorPorBodega = new Map()
+    
+    ascendente.forEach((actual, i) => {
+      const valorActual = Number(actual.acumulado_tm) || 0
+      const ultimoValor = ultimoValorPorBodega.get(actual.bodega_id)
+      
+      if (ultimoValor !== undefined) {
+        let huboOtrasBodegas = false
+        for (let j = i - 1; j >= 0; j--) {
+          if (ascendente[j].bodega_id === actual.bodega_id) break
+          huboOtrasBodegas = true
+        }
+        
+        if (huboOtrasBodegas || valorActual < ultimoValor) {
+          esRetornoBodega.set(actual.id, true)
         }
       }
-      if (bodegaVistaAntes) {
-        esRetornoBodega.set(actual.id, true)
-      }
-    }
+      
+      ultimoValorPorBodega.set(actual.bodega_id, valorActual)
+    })
     
     // Orden descendente para mostrar
     const descendente = [...exportacionesFiltradas].sort(
@@ -3012,7 +3065,9 @@ ascendente.forEach((reg, idx) => {
         flujoIcono = <span className="mr-1">+</span>
         flujoDisplay = `${infoFlujo.valor.toFixed(3)} TM`
         
-        if (esMelaza && valorAnteriorMostrar !== null) {
+        if (esReinicioContador.get(exp.id) && valorAnteriorMostrar !== null && idxAscendente > 0) {
+          flujoTooltip = `Contador reiniciado (${bodega?.nombre || 'bodega'}): ${infoFlujo.valorActual.toFixed(3)} TM es lo que cayó en este ciclo (anterior: ${valorAnteriorMostrar.toFixed(3)} TM)`
+        } else if (esMelaza && valorAnteriorMostrar !== null) {
           flujoTooltip = `📊 ${infoFlujo.valorActual.toFixed(3)} - ${valorAnteriorMostrar.toFixed(3)} = ${infoFlujo.valor.toFixed(3)} TM`
         }
       } else if (infoFlujo && infoFlujo.valor === 0) {
